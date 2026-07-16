@@ -1,0 +1,54 @@
+[package]
+name = "hortcmd"
+version = "0.1.0"
+description = "Dateicommander im Total-Commander-Stil"
+authors = ["you"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "hortcmd_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sysinfo = "0.31"     # Laufwerke / Mountpunkte
+dirs = "5"           # Home-Verzeichnis
+ts-rs = "10"         # generiert TS-Typen aus den Rust-Structs
+base64 = "0.22"      # Bild-Vorschau als data-URL
+opener = "0.7"       # Datei mit Standardprogramm öffnen (F4)
+zip = "2"            # Archiv-Handling ZIP (lesen/entpacken/packen, inkl. AES-Passwort)
+tar = "0.4"          # tar-Archive lesen/entpacken
+flate2 = "1"         # gzip-De-/Kompression (tar.gz)
+xz2 = "0.1"          # xz-Dekompression (tar.xz)
+sevenz-rust = "0.6"  # 7z-Archive lesen/entpacken (inkl. Passwort), reines Rust
+notify = "6"         # Verzeichnisse auf Änderungen überwachen
+trash = "5"          # In den Papierkorb verschieben (statt endgültig löschen)
+kamadak-exif = "0.5" # EXIF-Metadaten aus Bildern lesen (Modulname `exif`)
+sha2 = "0.10"        # Prüfsummen SHA-256
+sha1 = "0.10"        # Prüfsummen SHA-1
+md-5 = "0.10"        # Prüfsummen MD5 (Modulname `md5`)
+hex = "0.4"          # Hex-Kodierung der Prüfsummen
+similar = "2"        # Zeilen-Diff (Myers) für den Dateivergleich
+regex = "1"          # Regex für die Suche (Name + Inhalt)
+
+# Unix-spezifische Rechte-Funktionen (Besitzer, Extended Attributes, ACL).
+# Auf Windows nicht verfügbar → dort liefert das Backend leere/None-Werte.
+[target.'cfg(unix)'.dependencies]
+xattr = "1"          # Extended Attributes lesen
+uzers = "0.12"       # uid/gid ↔ Benutzer-/Gruppennamen auflösen
+exacl = "0.12"       # ACL (Access Control Lists) lesen
+
+# macOS-spezifisch: Finder-Tags liegen als Binär-plist im xattr
+# `com.apple.metadata:_kMDItemUserTags`.
+[target.'cfg(target_os = "macos")'.dependencies]
+plist = "1"          # Binär-plist lesen/schreiben (Finder-Tags)
+
+[features]
+# Standardfeatures für ein reguläres Tauri-Build.
+custom-protocol = ["tauri/custom-protocol"]
