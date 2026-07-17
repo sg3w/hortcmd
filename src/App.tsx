@@ -1,6 +1,6 @@
 // ============================================================
-// Layout-Shell: Menü · Zwei Panels · Kommandozeile · F-Leiste.
-// Initialisiert Laufwerke, Startverzeichnisse und wendet das Theme an.
+// Layout shell: menu · two panels · command line · F-bar.
+// Initializes drives, start directories, and applies the theme.
 // ============================================================
 
 import { useEffect, useRef, useState, type MouseEvent } from "react";
@@ -86,7 +86,7 @@ export default function App() {
     window.addEventListener("mouseup", onUp);
   };
 
-  // Theme auf <html> anwenden. „system" folgt dem OS-Erscheinungsbild live.
+  // Apply the theme to <html>. "system" follows the OS appearance live.
   useEffect(() => {
     if (theme !== "system") {
       document.documentElement.dataset.theme = theme;
@@ -101,21 +101,21 @@ export default function App() {
     return () => mq.removeEventListener("change", apply);
   }, [theme]);
 
-  // Transfer-Events aus dem Backend an den Transfers-Store weiterreichen.
+  // Forward transfer events from the backend to the transfers store.
   useEffect(() => {
     const offProgress = onFsProgress((p) => useTransfers.getState().apply(p));
     const offCollision = onFsCollision((c) =>
       useOps.getState().pushCollision(c),
     );
     const offDone = onFsDone((d) => {
-      // Verschlüsseltes Archiv ohne/mit falschem Passwort → Passwort erfragen.
+      // Encrypted archive without/with a wrong password → ask for the password.
       if (handleExtractDone(d)) return;
       const store = useTransfers.getState();
       store.finish(d);
       void reloadBoth();
-      // Nächsten wartenden Vorgang der Kopier-Queue starten.
+      // Start the next waiting operation of the copy queue.
       startNextQueued();
-      // Erfolgreiche/abgebrochene Vorgänge nach kurzer Anzeige entfernen.
+      // Remove successful/cancelled operations after showing them briefly.
       if (d.errors.length === 0) {
         setTimeout(() => useTransfers.getState().remove(d.id), 900);
       }
@@ -132,7 +132,7 @@ export default function App() {
       void initWindowState(); // Fensterposition/-größe wiederherstellen (Tauri)
       const ds = await listDrives();
       setDrives(ds);
-      // Gespeicherte Sitzung (letzte Tabs) wiederherstellen, sonst Home laden.
+      // Restore the saved session (last tabs), otherwise load home.
       const saved = useSession.getState().session;
       const hasTabs =
         saved && (saved.left.tabs.length > 0 || saved.right.tabs.length > 0);
@@ -146,7 +146,7 @@ export default function App() {
     })();
   }, [loadDir]);
 
-  // Tab-Layout beider Fenster fortlaufend (entprellt) in die Sitzung sichern.
+  // Continuously save the tab layout of both panes to the session (debounced).
   useEffect(() => {
     if (!ready) return;
     let timer: number | undefined;
@@ -164,8 +164,8 @@ export default function App() {
     };
   }, [ready]);
 
-  // Verzeichnis-Watcher: die angezeigten realen Ordner beobachten und bei
-  // externen Änderungen automatisch (entprellt, cursor-schonend) neu laden.
+  // Directory watcher: observe the displayed real folders and reload
+  // automatically on external changes (debounced, cursor-preserving).
   useEffect(() => {
     const timers = new Map<string, number>();
 
@@ -210,26 +210,26 @@ export default function App() {
     };
   }, []);
 
-  // Git-Status wird im Backend asynchron im Hintergrund geladen; sobald ein
-  // Ergebnis eintrifft, auf alle passenden Tabs anwenden.
+  // The Git status is loaded asynchronously in the background in the backend; as soon as a
+  // result arrives, apply it to all matching tabs.
   useEffect(() => {
     return onGitStatusReady((path, git) => {
       usePanes.getState().applyGitStatus(path, git);
     });
   }, []);
 
-  // Fenster-Schließen bei laufenden Transfers abfangen (TICKET-004): statt
-  // stillschweigend abzubrechen, erzwingt ein Modal eine Entscheidung.
+  // Intercept window closing during running transfers (TICKET-004): instead
+  // of aborting silently, a modal forces a decision.
   useEffect(() => {
     if (!hasTauri) return;
     let unlisten = () => {};
     (async () => {
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
       unlisten = await getCurrentWindow().onCloseRequested((event) => {
-        // Nur echte, noch laufende oder in der Queue wartende Vorgänge dürfen
-        // das Schließen blockieren. Ein Transfer, der weder Fortschritt meldet
-        // noch wartet (z. B. ein abgebrochener Passwort-Entpackvorgang, der nie
-        // „done" wird), darf das Fenster nicht dauerhaft am X festhalten.
+        // Only genuinely running or queued operations may block
+        // the close. A transfer that neither reports progress nor
+        // waits (e.g. a cancelled password extraction that never becomes
+        // "done") must not hold the window at the X permanently.
         const active = useTransfers
           .getState()
           .transfers.some(

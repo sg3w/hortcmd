@@ -1,17 +1,17 @@
 // ============================================================
-// Finder-Tags (macOS) anzeigen und bearbeiten.
+// Show and edit Finder tags (macOS).
 //
-// Finder speichert Tags im Extended Attribute
-// `com.apple.metadata:_kMDItemUserTags` als **Binär-plist**: ein Array
-// von Strings, jeweils "Name" oder "Name\nFarbindex" (Farbe 0–7, 0 = keine).
-// Auf Nicht-macOS-Plattformen liefern die Commands leere Werte bzw. einen
-// klaren Fehler.
+// Finder stores tags in the extended attribute
+// `com.apple.metadata:_kMDItemUserTags` as a **binary plist**: an array
+// of strings, each "Name" or "Name\nColorIndex" (color 0–7, 0 = none).
+// On non-macOS platforms the commands return empty values or a
+// clear error.
 // ============================================================
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-/// Ein Finder-Tag: Name plus Farbindex (0 = keine, 1–7 = Finder-Farben).
+/// A Finder tag: name plus color index (0 = none, 1–7 = Finder colors).
 #[derive(Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct Tag {
@@ -23,7 +23,7 @@ pub struct Tag {
 #[cfg(target_os = "macos")]
 const TAGS_ATTR: &str = "com.apple.metadata:_kMDItemUserTags";
 
-/// Liest die Finder-Tags eines Eintrags.
+/// Reads the Finder tags of an entry.
 #[tauri::command]
 pub fn get_tags(path: String) -> Result<Vec<Tag>, String> {
     #[cfg(target_os = "macos")]
@@ -37,7 +37,7 @@ pub fn get_tags(path: String) -> Result<Vec<Tag>, String> {
     }
 }
 
-/// Schreibt die Finder-Tags eines Eintrags (leere Liste entfernt das Attribut).
+/// Writes the Finder tags of an entry (an empty list removes the attribute).
 #[tauri::command]
 pub fn set_tags(path: String, tags: Vec<Tag>) -> Result<(), String> {
     #[cfg(target_os = "macos")]
@@ -57,7 +57,7 @@ mod macos {
     use plist::Value;
     use std::io::Cursor;
 
-    /// Zerlegt einen Tag-String "Name" bzw. "Name\nFarbe" in Name + Farbindex.
+    /// Splits a tag string "Name" or "Name\nColor" into name + color index.
     fn parse_tag(s: &str) -> Tag {
         let mut parts = s.splitn(2, '\n');
         let name = parts.next().unwrap_or("").to_string();
@@ -69,7 +69,7 @@ mod macos {
         Tag { name, color }
     }
 
-    /// Setzt einen Tag wieder in die Finder-Kodierung zusammen.
+    /// Reassembles a tag into the Finder encoding.
     fn encode_tag(t: &Tag) -> String {
         if t.color == 0 {
             t.name.clone()
@@ -97,7 +97,7 @@ mod macos {
 
     pub fn write_tags(path: &str, tags: &[Tag]) -> Result<(), String> {
         if tags.is_empty() {
-            // Attribut entfernen; „nicht vorhanden" ist kein Fehler.
+            // Remove the attribute; "not present" is not an error.
             return match xattr::remove(path, TAGS_ATTR) {
                 Ok(_) => Ok(()),
                 Err(e) if e.raw_os_error() == Some(libc_enoattr()) => Ok(()),
@@ -115,7 +115,7 @@ mod macos {
         xattr::set(path, TAGS_ATTR, &buf).map_err(|e| e.to_string())
     }
 
-    /// ENOATTR ist auf macOS 93 (kein direkter std-Konstantenzugriff ohne libc).
+    /// ENOATTR is 93 on macOS (no direct std constant access without libc).
     fn libc_enoattr() -> i32 {
         93
     }
@@ -136,7 +136,7 @@ mod macos {
         #[test]
         fn roundtrip_tags() {
             let path = tmp("a.txt");
-            // Anfangs keine Tags.
+            // No tags initially.
             assert!(get_tags(path.clone()).unwrap().is_empty());
 
             let tags = vec![
@@ -152,7 +152,7 @@ mod macos {
             assert_eq!(back[1].name, "Projekt");
             assert_eq!(back[1].color, 0);
 
-            // Leere Liste entfernt das Attribut wieder.
+            // An empty list removes the attribute again.
             set_tags(path.clone(), Vec::new()).unwrap();
             assert!(get_tags(path).unwrap().is_empty());
         }

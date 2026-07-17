@@ -1,4 +1,4 @@
-// Plattformneutrale Pfad-Helfer (Frontend-Seite).
+// Platform-neutral path helpers (frontend side).
 
 function sep(p: string): string {
   return p.includes("\\") ? "\\" : "/";
@@ -21,20 +21,20 @@ export function isRoot(p: string): boolean {
   return p === "/" || /^[A-Za-z]:\\?$/.test(p);
 }
 
-/** Wurzel eines Pfads: "/" (POSIX) bzw. "C:\" (Windows). */
+/** Root of a path: "/" (POSIX) or "C:\" (Windows). */
 export function rootOf(p: string): string {
   const win = /^([A-Za-z]:)[\\/]?/.exec(p);
   return win ? `${win[1]}\\` : "/";
 }
 
-/** Letzter Namensbestandteil eines Pfads; für die Wurzel der Pfad selbst. */
+/** Last name component of a path; for the root, the path itself. */
 export function baseName(p: string): string {
   if (isRoot(p)) return p;
   const parts = p.replace(/[\\/]+$/, "").split(/[\\/]/);
   return parts[parts.length - 1] || rootOf(p);
 }
 
-/** Kette von der Wurzel bis zum Pfad (inklusive), z. B. ["/","/Users","/Users/x"]. */
+/** Chain from the root to the path (inclusive), e.g. ["/","/Users","/Users/x"]. */
 export function ancestorChain(path: string): string[] {
   let cur = path.replace(/[\\/]+$/, "") || rootOf(path);
   const chain = [cur];

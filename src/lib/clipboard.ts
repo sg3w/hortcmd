@@ -1,4 +1,4 @@
-// Text in die System-Zwischenablage schreiben (mit Fallback ohne Clipboard-API).
+// Write text to the system clipboard (with a fallback without the Clipboard API).
 
 export async function writeClipboard(text: string): Promise<void> {
   try {
@@ -7,7 +7,7 @@ export async function writeClipboard(text: string): Promise<void> {
       return;
     }
   } catch {
-    // Fällt auf die execCommand-Variante zurück.
+    // Falls back to the execCommand variant.
   }
   const ta = document.createElement("textarea");
   ta.value = text;
@@ -18,7 +18,7 @@ export async function writeClipboard(text: string): Promise<void> {
   try {
     document.execCommand("copy");
   } catch {
-    // ignorieren – ohne Zwischenablage-Zugriff nicht möglich
+    // ignore – not possible without clipboard access
   }
   document.body.removeChild(ta);
 }

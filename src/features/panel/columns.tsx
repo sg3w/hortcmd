@@ -1,6 +1,6 @@
-// Spaltendefinitionen für die Dateitabelle (TanStack Table, headless).
-// Die Spalten hängen von den Einstellungen ab und werden daher über einen
-// Builder erzeugt (buildColumns), nicht als statische Konstante.
+// Column definitions for the file table (TanStack Table, headless).
+// The columns depend on the settings and are therefore produced by a
+// builder (buildColumns), not as a static constant.
 
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import type { Row, SortKey } from "@/store/panesStore";
@@ -17,27 +17,27 @@ export interface ColumnOptions {
   sizeFormat: SizeFormat;
   dateFormat: DateFormat;
   iconSize: number;
-  /** Per Ziehen eingestellte Breiten (px) je Spalten-id. */
+  /** Drag-adjusted widths (px) per column id. */
   widths: Record<string, number>;
 }
 
-/** Breite (px) einer festen Spalte aus den Einstellungen bzw. Standardwert. */
+/** Width (px) of a fixed column from the settings, or the default value. */
 function widthPx(id: string, widths: Record<string, number>): string {
   return `${widths[id] ?? DEFAULT_COLUMN_WIDTHS[id]}px`;
 }
 
-/** Baut die aktiven Spalten samt passendem Grid-Template. */
+/** Builds the active columns along with a matching grid template. */
 export function buildColumns(opts: ColumnOptions): {
   columns: ColumnDef<Row, string>[];
   template: string;
 } {
   const columns: ColumnDef<Row, string>[] = [];
-  // Name füllt den Rest; die übrigen Spalten haben feste, einstellbare Breiten.
+  // Name fills the rest; the other columns have fixed, adjustable widths.
   const parts: string[] = ["minmax(80px, 1fr)"];
 
-  // Ist die Endungs-Spalte aus, zeigt die Namensspalte den vollen Namen.
-  // Anzeige bewusst aus row.original ableiten (nicht getValue): TanStack cacht
-  // Accessor-Werte pro Spalten-id, sonst bliebe beim Umschalten der alte Wert.
+  // When the extension column is off, the name column shows the full name.
+  // Deliberately derive the display from row.original (not getValue): TanStack caches
+  // accessor values per column id, otherwise the old value would remain on toggling.
   columns.push(
     col.accessor((r) => r.name, {
       id: "name",
@@ -103,7 +103,7 @@ export function buildColumns(opts: ColumnOptions): {
   return { columns, template: parts.join(" ") };
 }
 
-/** Nur diese Spalten sind sortierbar; ids entsprechen SortKey. */
+/** Only these columns are sortable; the ids correspond to SortKey. */
 export const SORTABLE: Record<string, SortKey> = {
   name: "name",
   ext: "ext",

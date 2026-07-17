@@ -1,8 +1,8 @@
 // ============================================================
-// Sitzung/Workspace: das minimale Tab-Layout beider Fenster wird
-// in localStorage gehalten und beim nächsten Start wiederhergestellt.
-// Bewusst nur die Ordnerpfade + aktiver Tab + Ansichtsmodus – keine
-// Einträge/Auswahl (die werden beim Laden neu ermittelt).
+// Session/workspace: the minimal tab layout of both panes is
+// kept in localStorage and restored on the next start.
+// Deliberately only the folder paths + active tab + view mode – no
+// entries/selection (those are determined anew on load).
 // ============================================================
 
 import { create } from "zustand";
@@ -28,11 +28,11 @@ export interface SavedSession {
 
 interface SessionStore {
   session: SavedSession | null;
-  /** Aktuelles Layout aus dem panesStore übernehmen. */
+  /** Take over the current layout from the panesStore. */
   capture: () => void;
 }
 
-/** Effektiver Ordnerpfad eines Tabs (Archiv → enthaltender Ordner). */
+/** Effective folder path of a tab (archive → containing folder). */
 function tabFolder(t: { path: string; archive: string | null }): string {
   return t.archive ? parentPath(t.archive) : t.path;
 }

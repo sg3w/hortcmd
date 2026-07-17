@@ -1,6 +1,6 @@
 // ============================================================
-// Kleiner Store für den Dateilisten-Export-Dialog: merkt sich, für
-// welche Seite der Dialog geöffnet ist (null = geschlossen).
+// Small store for the file-list export dialog: remembers for
+// which side the dialog is open (null = closed).
 // ============================================================
 
 import { create } from "zustand";
@@ -18,7 +18,7 @@ export const useExportDialog = create<ExportStore>((set) => ({
   close: () => set({ side: null }),
 }));
 
-/** Öffnet den Dateilisten-Export-Dialog. */
+/** Opens the file-list export dialog. */
 export function openExport(side: Side): void {
   useExportDialog.getState().open(side);
 }

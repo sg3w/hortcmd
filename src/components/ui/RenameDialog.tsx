@@ -1,11 +1,11 @@
 // ============================================================
-// Dialog „Massenumbenennen": Namensschema mit Platzhaltern, Zähler,
-// Suchen/Ersetzen (optional Regex) und Groß-/Kleinschreibung, mit
-// Live-Vorschau (alt → neu) und Konflikterkennung. Das Umbenennen
-// führt das Backend aus (`rename_batch`).
+// "Batch rename" dialog: name scheme with placeholders, counter,
+// search/replace (optionally regex) and letter case, with live preview
+// (old → new) and conflict detection. The renaming itself is performed
+// by the backend (`rename_batch`).
 //
-// Aufbau: oben die Konfiguration, darunter die Vorschau (volle Breite).
-// Das Fenster ist unten rechts mit der Maus größenveränderbar.
+// Layout: configuration on top, preview below (full width). The window
+// can be resized with the mouse at the bottom right.
 // ============================================================
 
 import { useEffect, useMemo, useState } from "react";
@@ -55,7 +55,7 @@ export function RenameDialog() {
   const close = useRenameDialog((s) => s.close);
   const t = useT();
 
-  // Momentaufnahme der aktiven Liste beim Öffnen des Dialogs.
+  // Snapshot of the active list taken when the dialog opens.
   const snapshot = useMemo(() => {
     if (!side) return null;
     const p = panelOf(usePanes.getState(), side);
@@ -113,7 +113,7 @@ export function RenameDialog() {
 
     const res = await renameBatch(snapshot.dir, items);
 
-    // Betroffene Fenster mit diesem Ordner aktualisieren.
+    // Refresh the affected windows showing this folder.
     const s = usePanes.getState();
     (["left", "right"] as const).forEach((sd) => {
       if (panelOf(s, sd).path === snapshot.dir) void s.refresh(sd);
@@ -145,7 +145,7 @@ export function RenameDialog() {
       minSize={{ w: MIN_W, h: MIN_H }}
     >
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4">
-            {/* Konfiguration – kompakt, bricht bei Bedarf um. */}
+            {/* Configuration – compact, wraps when needed. */}
             <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
               <Section label={t("export.scope")}>
                 <div className="flex flex-col gap-1.5">
@@ -282,7 +282,7 @@ export function RenameDialog() {
               </Section>
             </div>
 
-            {/* Vorschau (volle Breite, füllt den restlichen Platz). */}
+            {/* Preview (full width, fills the remaining space). */}
             <div className="flex min-h-0 flex-1 flex-col">
               <span className="mb-1.5 text-[13px] text-text">
                 {t("rename.preview")}
@@ -334,7 +334,7 @@ export function RenameDialog() {
             </div>
           </div>
 
-          {/* Fußzeile */}
+          {/* Footer */}
           <div className="flex items-center gap-3 border-t border-edge px-4 py-2.5">
             <span className="text-[12px] text-dim">
               {t("rename.count")

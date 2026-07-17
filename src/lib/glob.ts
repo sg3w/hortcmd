@@ -1,5 +1,5 @@
-// Wandelt ein einfaches Wildcard-Muster (* und ?) in eine RegExp um.
-// Mehrere Muster durch Leerzeichen oder ";" trennbar (z. B. "*.txt *.md").
+// Converts a simple wildcard pattern (* and ?) into a RegExp.
+// Multiple patterns can be separated by spaces or ";" (e.g. "*.txt *.md").
 
 export function globToRegExp(pattern: string): RegExp {
   const parts = pattern

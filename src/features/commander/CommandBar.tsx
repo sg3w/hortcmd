@@ -1,6 +1,6 @@
 // ============================================================
-// Commandbar: Icon-Leiste für Sonderfunktionen des aktiven
-// Fensters plus Umschalter für den Ansichtsmodus.
+// Command bar: icon bar for special functions of the active
+// pane plus a switcher for the view mode.
 // ============================================================
 
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -42,7 +42,7 @@ import { openEntry } from "./navigate";
 import { runAction } from "./actions";
 import { cn } from "@/lib/cn";
 
-/** Dateivergleich links↔rechts starten; sonst Hinweis anzeigen. */
+/** Start the left↔right file comparison; otherwise show a hint. */
 function runFileCompare(): void {
   if (openFileCompare()) return;
   useOps.getState().requestConfirm({
@@ -52,7 +52,7 @@ function runFileCompare(): void {
   });
 }
 
-/** „Ein Verzeichnis hoch" im aktiven Fenster (nutzt die ".."-Zeile). */
+/** "Up one directory" in the active pane (uses the ".." row). */
 function goUp(): void {
   const s = usePanes.getState();
   const p = panelOf(s, s.active);
@@ -171,7 +171,7 @@ export function CommandBar({ onOpenSettings }: Props) {
   );
 }
 
-/** Dropdown mit den zuletzt besuchten Ordnern (global). */
+/** Dropdown with the recently visited folders (global). */
 function RecentMenu() {
   const recent = useHistory((s) => s.recent);
   const clear = useHistory((s) => s.clear);

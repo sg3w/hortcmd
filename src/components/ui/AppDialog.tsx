@@ -1,18 +1,18 @@
 // ============================================================
-// Zentrale, wiederverwendbare Dialogverwaltung (TICKET-012).
+// Central, reusable dialog management (TICKET-012).
 //
-// Ersetzt die frühere Verwaltung separater Tauri-Fenster: Dialoge
-// werden als React-Komponenten innerhalb des Hauptfensters dargestellt
-// (Radix Dialog), immer zentriert geöffnet, sind per Ziehgriff unten
-// rechts vergrößer-/verkleinerbar (Grenzen: pro Dialog definiertes
-// Minimum bis 90 % der Hauptfenstergröße) und merken sich ihre zuletzt
-// verwendete Größe pro Dialogtyp (`dialogKey`) über Neustarts hinweg
-// (nicht die Position — die wird immer neu zentriert).
+// Replaces the former management of separate Tauri windows: dialogs
+// are rendered as React components inside the main window (Radix
+// Dialog), always opened centered, can be resized via a drag handle at
+// the bottom right (bounds: a per-dialog minimum up to 90 % of the main
+// window size) and remember their last used size per dialog type
+// (`dialogKey`) across restarts (not the position — that is always
+// re-centered).
 //
-// Modalität, Fokus-Falle/-Wiederherstellung und `Esc` zum Schließen
-// kommen von Radix' `Dialog.Root` (Standard `modal={true}`) — nicht
-// modale Dialoge müssten das ausdrücklich mit `modal={false}` abwählen,
-// was aktuell kein Dialog dieser App benötigt.
+// Modality, focus trap/restore and `Esc` to close come from Radix'
+// `Dialog.Root` (default `modal={true}`) — non-modal dialogs would have
+// to opt out explicitly with `modal={false}`, which no dialog of this
+// app currently needs.
 // ============================================================
 
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
@@ -21,24 +21,24 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { useDialogSizeStore, type DialogSize } from "@/store/dialogSizeStore";
 
 interface Props {
-  /** Stabile Kennung des Dialogtyps — Schlüssel für die Größenpersistenz. */
+  /** Stable identifier of the dialog type — key for size persistence. */
   dialogKey: string;
   open: boolean;
   onClose: () => void;
-  /** Inhalt der Titelzeile (Icon + Text + evtl. Badges). */
+  /** Content of the title bar (icon + text + possibly badges). */
   titleBar: ReactNode;
-  /** Optionale Fußzeile (Buttons, Zähler …). */
+  /** Optional footer (buttons, counters …). */
   footer?: ReactNode;
   defaultSize: DialogSize;
-  /** Minimale Größe; Standard = `defaultSize`. */
+  /** Minimum size; default = `defaultSize`. */
   minSize?: DialogSize;
-  /** Kein Ziehgriff — feste Größe (z. B. wenn sich der Inhalt nicht
-   *  sinnvoll skalieren lässt). Standard: vergrößerbar. */
+  /** No drag handle — fixed size (e.g. when the content cannot be
+   *  scaled sensibly). Default: resizable. */
   fixedSize?: boolean;
   children: ReactNode;
 }
 
-const MAX_FRAC = 0.9; // maximal 90 % der Hauptfenstergröße
+const MAX_FRAC = 0.9; // at most 90 % of the main window size
 
 function clamp(size: DialogSize, min: DialogSize): DialogSize {
   const maxW = Math.max(min.w, window.innerWidth * MAX_FRAC);
@@ -78,21 +78,21 @@ export function AppDialog({
   children,
 }: Props) {
   const min = minSize ?? defaultSize;
-  // Bewusst kein reaktiver Store-Hook (`useDialogSizeStore(selector)`) hier:
-  // bei mehreren gleichzeitig gemounteten `AppDialog`-Instanzen (alle Dialoge
-  // hängen unbedingt in App.tsx, nur `open` unterscheidet sie) löst die
-  // Persist-Rehydrierung sonst ein „setState während des Renderns einer
-  // anderen Komponente"-Warning aus — auch bei einem stabilen Actions-
-  // Selektor, da schon das Benachrichtigen aller Subscriber beim
-  // Rehydrieren zählt. `size` wird lokal per `useState` gehalten; der
-  // Store dient nur als reines Lese-/Schreib-Depot über `.getState()`.
+  // Deliberately no reactive store hook (`useDialogSizeStore(selector)`) here:
+  // with several `AppDialog` instances mounted at the same time (all dialogs
+  // are unconditionally mounted in App.tsx, only `open` distinguishes them)
+  // the persist rehydration would otherwise trigger a "setState while
+  // rendering a different component" warning — even with a stable actions
+  // selector, since merely notifying all subscribers on rehydration counts.
+  // `size` is kept locally via `useState`; the store only serves as a plain
+  // read/write depot accessed through `.getState()`.
   const [size, setSize] = useState<DialogSize>(() =>
     clamp(useDialogSizeStore.getState().sizes[dialogKey] ?? defaultSize, min),
   );
 
-  // Beim Öffnen: gespeicherte Größe (auf Hauptfenster/Minimum geklemmt)
-  // übernehmen — ein zu klein gewordenes Hauptfenster setzt den Dialog
-  // vollständig in den sichtbaren Bereich zurück.
+  // On open: adopt the stored size (clamped to main window/minimum) — a main
+  // window that has become too small resets the dialog fully back into the
+  // visible area.
   useEffect(() => {
     if (!open) return;
     const stored = useDialogSizeStore.getState().sizes[dialogKey];
@@ -100,8 +100,8 @@ export function AppDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Hauptfenster wird währenddessen verkleinert: Dialog im sichtbaren
-  // Bereich halten.
+  // Main window is shrunk in the meantime: keep the dialog within the
+  // visible area.
   useEffect(() => {
     if (!open) return;
     const onWindowResize = () => setSize((s) => clamp(s, min));
@@ -110,9 +110,9 @@ export function AppDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Ziehgriff unten rechts. Da der Dialog zentriert ist (translate -50 %),
-  // wächst er um das Doppelte der Mausbewegung, damit die Ecke dem Cursor
-  // folgt. Die Größe wird erst beim Loslassen persistiert.
+  // Drag handle at the bottom right. Since the dialog is centered
+  // (translate -50 %), it grows by twice the mouse movement so that the
+  // corner follows the cursor. The size is persisted only on release.
   const startResize = (e: ReactMouseEvent) => {
     e.preventDefault();
     const sx = e.clientX;

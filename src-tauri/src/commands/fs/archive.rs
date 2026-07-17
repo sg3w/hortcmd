@@ -1,10 +1,10 @@
 // ============================================================
-// Archiv-Handling: browsen, entpacken, packen.
-// Unterstützt beim Lesen/Entpacken: ZIP (inkl. AES/ZipCrypto-
-// Passwort), tar, tar.gz, tar.xz sowie 7z (inkl. Passwort).
-// Packen erzeugt weiterhin ZIP-Archive.
-// Nutzt die Transfer-Infrastruktur (Prog, spawn_op, OpDone) aus
-// dem file-Modul und die Listen-Typen aus dem dir-Modul.
+// Archive handling: browse, extract, pack.
+// Supported for reading/extracting: ZIP (incl. AES/ZipCrypto
+// password), tar, tar.gz, tar.xz, and 7z (incl. password).
+// Packing still produces ZIP archives.
+// Uses the transfer infrastructure (Prog, spawn_op, OpDone) from
+// the file module and the listing types from the dir module.
 // ============================================================
 
 use std::collections::{BTreeSet, HashSet};
@@ -23,13 +23,13 @@ use zip::{ZipArchive, ZipWriter};
 use super::dir::{DirEntry, DirListing};
 use super::file::{spawn_op, OpDone, Prog};
 
-/// Sentinel-Fehler: Archiv/Eintrag ist verschlüsselt, aber es wurde
-/// kein Passwort übergeben. Das Frontend erkennt dies und fragt nach.
+/// Sentinel error: the archive/entry is encrypted, but no password
+/// was provided. The frontend detects this and asks for one.
 const PW_REQUIRED: &str = "PASSWORD_REQUIRED";
-/// Sentinel-Fehler: Das übergebene Passwort ist falsch.
+/// Sentinel error: the provided password is wrong.
 const PW_WRONG: &str = "PASSWORD_WRONG";
 
-/// Unterstützte Archivformate (per Dateiendung erkannt).
+/// Supported archive formats (detected by file extension).
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ArchiveKind {
     Zip,
@@ -39,7 +39,7 @@ enum ArchiveKind {
     SevenZ,
 }
 
-/// Erkennt das Archivformat anhand der (Doppel-)Endung.
+/// Detects the archive format from the (double) extension.
 fn archive_kind(path: &str) -> Option<ArchiveKind> {
     let l = path.to_lowercase();
     if l.ends_with(".zip") {
@@ -57,10 +57,10 @@ fn archive_kind(path: &str) -> Option<ArchiveKind> {
     }
 }
 
-/// Rohes Archivmitglied: Eintragsname (mit „/"-Trennern), Größe, Ordner-Flag.
+/// Raw archive member: entry name (with "/" separators), size, folder flag.
 type RawEntry = (String, u64, bool);
 
-/// Normalisiert einen Innen-Pfad zu einem Präfix ("" oder "sub/").
+/// Normalizes an inner path to a prefix ("" or "sub/").
 fn inner_prefix(inner: &str) -> String {
     let trimmed = inner.trim_matches('/');
     if trimmed.is_empty() {
@@ -70,7 +70,7 @@ fn inner_prefix(inner: &str) -> String {
     }
 }
 
-/// Wandelt `sevenz_rust::Password` aus einem optionalen String.
+/// Builds a `sevenz_rust::Password` from an optional string.
 fn password(opt: &Option<String>) -> sevenz_rust::Password {
     match opt {
         Some(s) => sevenz_rust::Password::from(s.as_str()),
@@ -78,7 +78,7 @@ fn password(opt: &Option<String>) -> sevenz_rust::Password {
     }
 }
 
-/// Übersetzt 7z-Fehler in die Passwort-Sentinels bzw. Klartext.
+/// Translates 7z errors into the password sentinels or plain text.
 fn map_7z_err(e: sevenz_rust::Error) -> String {
     match e {
         sevenz_rust::Error::PasswordRequired => PW_REQUIRED.to_string(),
@@ -87,7 +87,7 @@ fn map_7z_err(e: sevenz_rust::Error) -> String {
     }
 }
 
-/// Öffnet einen streamenden Reader für ein tar-Archiv (ggf. dekomprimierend).
+/// Opens a streaming reader for a tar archive (decompressing if needed).
 fn open_tar_reader(kind: ArchiveKind, archive: &str) -> Result<Box<dyn Read>, String> {
     let f = File::open(archive).map_err(|e| e.to_string())?;
     Ok(match kind {
@@ -98,22 +98,22 @@ fn open_tar_reader(kind: ArchiveKind, archive: &str) -> Result<Box<dyn Read>, St
     })
 }
 
-// ---------- Auflisten ----------
+// ---------- Listing ----------
 
-/// Liest die Mitgliederliste eines ZIP-Archivs (nur Metadaten, ohne Passwort).
+/// Reads the member list of a ZIP archive (metadata only, no password).
 fn zip_raw(archive: &str) -> Result<Vec<RawEntry>, String> {
     let file = File::open(archive).map_err(|e| e.to_string())?;
     let mut zip = ZipArchive::new(file).map_err(|e| e.to_string())?;
     let mut out = Vec::with_capacity(zip.len());
     for i in 0..zip.len() {
-        // by_index_raw liest Metadaten auch bei verschlüsselten Einträgen.
+        // by_index_raw reads metadata even for encrypted entries.
         let e = zip.by_index_raw(i).map_err(|e| e.to_string())?;
         out.push((e.name().to_string(), e.size(), e.is_dir()));
     }
     Ok(out)
 }
 
-/// Liest die Mitgliederliste eines tar-Archivs (Header, ohne Datenströme).
+/// Reads the member list of a tar archive (headers, without data streams).
 fn tar_raw(reader: Box<dyn Read>) -> Result<Vec<RawEntry>, String> {
     let mut ar = tar::Archive::new(reader);
     let mut out = Vec::new();
@@ -131,7 +131,7 @@ fn tar_raw(reader: Box<dyn Read>) -> Result<Vec<RawEntry>, String> {
     Ok(out)
 }
 
-/// Liest die Mitgliederliste eines 7z-Archivs (ggf. mit Passwort).
+/// Reads the member list of a 7z archive (with a password if needed).
 fn sevenz_raw(archive: &str, pw: &Option<String>) -> Result<Vec<RawEntry>, String> {
     let ar = sevenz_rust::Archive::open_with_password(archive, &password(pw)).map_err(map_7z_err)?;
     Ok(ar
@@ -141,7 +141,7 @@ fn sevenz_raw(archive: &str, pw: &Option<String>) -> Result<Vec<RawEntry>, Strin
         .collect())
 }
 
-/// Baut aus der rohen Mitgliederliste die Ansicht der Ebene `inner`.
+/// Builds the view of the level `inner` from the raw member list.
 fn collapse(raw: &[RawEntry], inner: &str) -> DirListing {
     let prefix = inner_prefix(inner);
     let mut dirs = BTreeSet::new();
@@ -157,7 +157,7 @@ fn collapse(raw: &[RawEntry], inner: &str) -> DirListing {
             continue;
         }
         match rest.find('/') {
-            // Untereintrag → oberste Ebene ist ein Ordner.
+            // Sub-entry → the top level is a folder.
             Some(idx) => {
                 dirs.insert(rest[..idx].to_string());
             }
@@ -195,7 +195,7 @@ fn collapse(raw: &[RawEntry], inner: &str) -> DirListing {
     }
 }
 
-/// Listet den Inhalt eines Archivs auf der Ebene `inner`.
+/// Lists the contents of an archive at the level `inner`.
 #[tauri::command]
 pub fn list_archive(
     archive: String,
@@ -213,10 +213,10 @@ pub fn list_archive(
     Ok(collapse(&raw, &inner))
 }
 
-// ---------- Entpacken ----------
+// ---------- Extracting ----------
 
-/// Prüft, ob ein Eintrag zu entpacken ist, und liefert seinen Zielpfad
-/// relativ zur gewählten Ebene (`base`).
+/// Checks whether an entry is to be extracted and returns its target path
+/// relative to the chosen level (`base`).
 fn match_target(name: &str, base: &str, all: bool, targets: &HashSet<String>) -> Option<String> {
     if !name.starts_with(base) {
         return None;
@@ -233,7 +233,7 @@ fn match_target(name: &str, base: &str, all: bool, targets: &HashSet<String>) ->
     }
 }
 
-/// Schreibt einen Datenstrom als Datei nach `out` und meldet Fortschritt.
+/// Writes a data stream as a file to `out` and reports progress.
 fn write_entry(
     reader: &mut dyn Read,
     out: &Path,
@@ -266,7 +266,7 @@ fn write_entry(
     Ok(())
 }
 
-/// Entpackt passende Einträge aus einem ZIP-Archiv.
+/// Extracts matching entries from a ZIP archive.
 fn extract_zip(
     archive: &str,
     base: &str,
@@ -280,7 +280,7 @@ fn extract_zip(
         ZipArchive::new(File::open(archive).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
     };
 
-    // Passage 1: passende Indizes + Summen ermitteln, Verschlüsselung prüfen.
+    // Pass 1: determine matching indices + totals, check encryption.
     let mut zip = open()?;
     let mut indices = Vec::new();
     let mut needs_pw = false;
@@ -304,7 +304,7 @@ fn extract_zip(
     }
     prog.emit("", 0, 0, true);
 
-    // Passage 2: entpacken.
+    // Pass 2: extract.
     let mut zip = open()?;
     let mut ok = 0u32;
     let mut errors = Vec::new();
@@ -314,7 +314,7 @@ fn extract_zip(
         }
         match extract_zip_one(&mut zip, i, base, dest, pw, prog) {
             Ok(()) => ok += 1,
-            // Falsches Passwort ist fatal → sofort abbrechen und melden.
+            // A wrong password is fatal → abort immediately and report.
             Err(e) if e == PW_WRONG || e == PW_REQUIRED => return Err(e),
             Err(e) => errors.push(e),
         }
@@ -330,7 +330,7 @@ fn extract_zip_one(
     pw: &Option<String>,
     prog: &mut Prog,
 ) -> Result<(), String> {
-    // Metadaten in eigenem Scope lesen (getrennter Borrow).
+    // Read metadata in its own scope (separate borrow).
     let (name, encrypted, size) = {
         let e = zip.by_index_raw(index).map_err(|e| e.to_string())?;
         (e.name().to_string(), e.encrypted(), e.size())
@@ -352,7 +352,7 @@ fn extract_zip_one(
     }
 }
 
-/// Entpackt passende Einträge aus einem tar-Archiv (ggf. dekomprimierend).
+/// Extracts matching entries from a tar archive (decompressing if needed).
 fn extract_tar(
     kind: ArchiveKind,
     archive: &str,
@@ -362,7 +362,7 @@ fn extract_tar(
     dest: &Path,
     prog: &mut Prog,
 ) -> Result<(u32, Vec<String>), String> {
-    // Passage 1: Summen aus den Headern.
+    // Pass 1: totals from the headers.
     for (name, size, is_dir) in tar_raw(open_tar_reader(kind, archive)?)? {
         if is_dir {
             continue;
@@ -374,7 +374,7 @@ fn extract_tar(
     }
     prog.emit("", 0, 0, true);
 
-    // Passage 2: entpacken (Reader neu öffnen, tar-Streams sind nicht seekbar).
+    // Pass 2: extract (reopen the reader, tar streams are not seekable).
     let mut ar = tar::Archive::new(open_tar_reader(kind, archive)?);
     let mut ok = 0u32;
     let mut errors = Vec::new();
@@ -413,7 +413,7 @@ fn extract_tar(
     Ok((ok, errors))
 }
 
-/// Entpackt passende Einträge aus einem 7z-Archiv (ggf. mit Passwort).
+/// Extracts matching entries from a 7z archive (with a password if needed).
 fn extract_7z(
     archive: &str,
     base: &str,
@@ -423,7 +423,7 @@ fn extract_7z(
     pw: &Option<String>,
     prog: &mut Prog,
 ) -> Result<(u32, Vec<String>), String> {
-    // Passage 1: Summen aus den Metadaten (öffnet zugleich mit Passwort).
+    // Pass 1: totals from the metadata (also opens with the password).
     let meta =
         sevenz_rust::Archive::open_with_password(archive, &password(pw)).map_err(map_7z_err)?;
     for f in &meta.files {
@@ -438,7 +438,7 @@ fn extract_7z(
     }
     prog.emit("", 0, 0, true);
 
-    // Passage 2: entpacken über den streamenden Reader.
+    // Pass 2: extract via the streaming reader.
     let mut reader =
         sevenz_rust::SevenZReader::open(archive, password(pw)).map_err(map_7z_err)?;
     let mut ok = 0u32;
@@ -467,7 +467,7 @@ fn extract_7z(
     Ok((ok, errors))
 }
 
-/// Entpackt ausgewählte Einträge (oder das ganze Archiv, wenn `names` leer ist).
+/// Extracts selected entries (or the whole archive if `names` is empty).
 fn run_extract(
     app: AppHandle,
     id: String,
@@ -528,9 +528,9 @@ fn run_extract(
     );
 }
 
-// ---------- Packen (ZIP) ----------
+// ---------- Packing (ZIP) ----------
 
-/// Sammelt alle Dateien unter `path` mit ihrem ZIP-Eintragsnamen.
+/// Collects all files under `path` with their ZIP entry name.
 fn collect_files(path: &Path, entry_name: &str, out: &mut Vec<(PathBuf, String)>) {
     if path.is_dir() {
         if let Ok(rd) = fs::read_dir(path) {
@@ -544,7 +544,7 @@ fn collect_files(path: &Path, entry_name: &str, out: &mut Vec<(PathBuf, String)>
     }
 }
 
-/// Packt mehrere Quellen in ein neues ZIP-Archiv.
+/// Packs multiple sources into a new ZIP archive.
 fn run_pack(
     app: AppHandle,
     id: String,
@@ -605,7 +605,7 @@ fn run_pack(
         Err(e) => errors.push(e.to_string()),
     }
 
-    // Bei Abbruch das unvollständige Archiv entfernen.
+    // On abort, remove the incomplete archive.
     if prog.cancelled() {
         let _ = fs::remove_file(&dest_zip);
     }
@@ -653,7 +653,8 @@ fn pack_one(
 
 // ---------- Commands ----------
 
-/// Startet das Entpacken im Hintergrund.
+
+/// Starts the extraction in the background.
 #[tauri::command]
 pub fn extract_entries(
     app: AppHandle,
@@ -670,7 +671,7 @@ pub fn extract_entries(
     });
 }
 
-/// Startet das Packen im Hintergrund.
+/// Starts the packing in the background.
 #[tauri::command]
 pub fn create_archive(app: AppHandle, id: String, sources: Vec<String>, dest_zip: String) {
     let id2 = id.clone();
@@ -682,12 +683,12 @@ mod tests {
     use super::*;
     use std::io::Write;
 
-    // Erwarteter Inhalt der Testarchive: eine Datei in der Wurzel und
-    // eine in einem Unterordner.
+    // Expected contents of the test archives: one file in the root and
+    // one in a subfolder.
     const HELLO: &[u8] = b"Hallo Welt";
     const DEEP: &[u8] = b"tief verschachtelt";
 
-    /// Eindeutiges temporäres Arbeitsverzeichnis für einen Test.
+    /// A unique temporary working directory for a test.
     fn tmp_dir(tag: &str) -> PathBuf {
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -698,7 +699,7 @@ mod tests {
         dir
     }
 
-    /// Schreibt beide Testdateien als tar-Einträge in einen Writer.
+    /// Writes both test files as tar entries into a writer.
     fn write_tar_entries<W: Write>(builder: &mut tar::Builder<W>) {
         for (name, data) in [("hello.txt", HELLO), ("sub/deep.txt", DEEP)] {
             let mut header = tar::Header::new_gnu();
@@ -755,7 +756,7 @@ mod tests {
         w.finish().unwrap();
     }
 
-    /// Prüft, dass Wurzel- und Unterordner-Auflistung für jedes Format stimmen.
+    /// Checks that the root and subfolder listings are correct for each format.
     fn assert_listing(path: &str) {
         let root = list_archive(path.into(), "".into(), None).unwrap();
         let mut names: Vec<_> = root.entries.iter().map(|e| e.name.clone()).collect();
@@ -800,18 +801,18 @@ mod tests {
     fn match_target_selects_within_base() {
         let mut targets = HashSet::new();
         targets.insert("sub".to_string());
-        // Nur Einträge unter "sub/" bei nicht-leerer Zielmenge.
+        // Only entries under "sub/" for a non-empty target set.
         assert_eq!(
             match_target("sub/deep.txt", "", false, &targets),
             Some("sub/deep.txt".to_string())
         );
         assert_eq!(match_target("hello.txt", "", false, &targets), None);
-        // Leere Zielmenge (all) via Aufrufer-Flag: hier all=true.
+        // Empty target set (all) via the caller flag: here all=true.
         assert_eq!(
             match_target("hello.txt", "", true, &targets),
             Some("hello.txt".to_string())
         );
-        // Mit Basis-Präfix wird dieses abgeschnitten.
+        // With a base prefix, that prefix is stripped.
         let empty = HashSet::new();
         assert_eq!(
             match_target("sub/deep.txt", "sub/", true, &empty),

@@ -1,6 +1,6 @@
 // ============================================================
-// Kleiner Store für den Verzeichnisvergleich-Dialog: offen/geschlossen.
-// Der Dialog vergleicht immer das linke gegen das rechte Fenster.
+// Small store for the directory-comparison dialog: open/closed.
+// The dialog always compares the left against the right pane.
 // ============================================================
 
 import { create } from "zustand";
@@ -15,7 +15,7 @@ export const useCompareDialog = create<CompareStore>((set) => ({
   setOpen: (open) => set({ open }),
 }));
 
-/** Öffnet den Verzeichnisvergleich-Dialog. */
+/** Opens the directory-comparison dialog. */
 export function openCompare(): void {
   useCompareDialog.getState().setOpen(true);
 }

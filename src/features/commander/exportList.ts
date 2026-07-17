@@ -1,7 +1,7 @@
 // ============================================================
-// Dateilisten-Export: Aufbereiten der (angezeigten) Einträge als
-// Text/CSV/TSV/JSON/XML. Reine Darstellungslogik – das eigentliche
-// Schreiben auf die Platte übernimmt das Backend (`write_text_file`).
+// File-list export: formatting the (displayed) entries as
+// text/CSV/TSV/JSON/XML. Pure presentation logic – the actual
+// writing to disk is done by the backend (`write_text_file`).
 // ============================================================
 
 import type { Row } from "@/store/panesStore";
@@ -19,7 +19,7 @@ export type ExportField =
   | "type"
   | "perms";
 
-/** Kanonische Feldreihenfolge (unabhängig von der Auswahl-Reihenfolge). */
+/** Canonical field order (independent of the selection order). */
 export const EXPORT_FIELDS: ExportField[] = [
   "path",
   "name",
@@ -30,7 +30,7 @@ export const EXPORT_FIELDS: ExportField[] = [
   "perms",
 ];
 
-/** Dateiendung je Format – für den vorgeschlagenen Dateinamen. */
+/** File extension per format – for the suggested file name. */
 export const FORMAT_EXT: Record<ExportFormat, string> = {
   list: "txt",
   csv: "csv",
@@ -41,15 +41,15 @@ export const FORMAT_EXT: Record<ExportFormat, string> = {
 
 export interface ExportOptions {
   format: ExportFormat;
-  /** Auszugebende Felder (mind. eines), in beliebiger Reihenfolge. */
+  /** Fields to output (at least one), in any order. */
   fields: ExportField[];
-  /** Ordner mit ausgeben. */
+  /** Include folders in the output. */
   includeFolders: boolean;
-  /** Nur markierte Einträge (sonst die ganze Liste). */
+  /** Only selected entries (otherwise the whole list). */
   onlySelected: boolean;
-  /** Kopfzeile mit Spaltennamen (nur CSV/TSV). */
+  /** Header row with column names (CSV/TSV only). */
   header: boolean;
-  /** Größe/Datum menschenlesbar (sonst Rohwerte: Bytes bzw. ISO-8601). */
+  /** Size/date human-readable (otherwise raw values: bytes or ISO-8601). */
   formatValues: boolean;
 }
 
@@ -61,8 +61,8 @@ interface Ctx {
 }
 
 /**
- * Wählt aus den angezeigten Zeilen die zu exportierenden aus: ohne die
- * ".."-Zeile, optional nur markierte, optional ohne Ordner.
+ * Picks the rows to export from the displayed ones: without the
+ * ".." row, optionally only selected ones, optionally without folders.
  */
 export function pickRows(
   rows: Row[],
@@ -77,7 +77,7 @@ export function pickRows(
   });
 }
 
-/** Wert eines Feldes als Zeichenkette (für Text/CSV/TSV/XML). */
+/** Value of a field as a string (for text/CSV/TSV/XML). */
 function fieldValue(field: ExportField, r: Row, ctx: Ctx): string {
   switch (field) {
     case "path":
@@ -103,7 +103,7 @@ function fieldValue(field: ExportField, r: Row, ctx: Ctx): string {
   }
 }
 
-/** JSON-typisierter Wert: Rohwerte bleiben Zahl bzw. ISO-Zeichenkette. */
+/** JSON-typed value: raw values stay a number or an ISO string. */
 function jsonValue(field: ExportField, r: Row, ctx: Ctx): string | number | null {
   if (!ctx.opts.formatValues) {
     if (field === "size") return r.is_dir ? null : r.size;
@@ -164,7 +164,7 @@ function buildXml(rows: Row[], ctx: Ctx): string {
   return lines.join("\n");
 }
 
-/** Baut den Export-Text aus den ausgewählten Zeilen. */
+/** Builds the export text from the selected rows. */
 export function buildExport(
   rows: Row[],
   dir: string,
@@ -187,7 +187,7 @@ export function buildExport(
     case "xml":
       return buildXml(rows, ctx);
     case "list":
-      // Eine Zeile je Eintrag; mehrere Felder mit Tabulator getrennt.
+      // One line per entry; multiple fields separated by a tab.
       return rows
         .map((r) => opts.fields.map((f) => fieldValue(f, r, ctx)).join("\t"))
         .join("\n");

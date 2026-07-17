@@ -1,6 +1,6 @@
 // ============================================================
-// Kleiner Store für den Massenumbenennen-Dialog: merkt sich, für
-// welche Seite der Dialog geöffnet ist (null = geschlossen).
+// Small store for the batch-rename dialog: remembers for
+// which side the dialog is open (null = closed).
 // ============================================================
 
 import { create } from "zustand";
@@ -18,7 +18,7 @@ export const useRenameDialog = create<RenameStore>((set) => ({
   close: () => set({ side: null }),
 }));
 
-/** Öffnet den Massenumbenennen-Dialog. */
+/** Opens the batch-rename dialog. */
 export function openRename(side: Side): void {
   useRenameDialog.getState().open(side);
 }

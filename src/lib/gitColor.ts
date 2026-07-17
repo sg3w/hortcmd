@@ -1,4 +1,4 @@
-// Farb-/Textklassen für den Git-Status eines Eintrags.
+// Color/text classes for the Git status of an entry.
 
 const GIT_TEXT: Record<string, string> = {
   modified: "text-amber-400",
@@ -9,7 +9,7 @@ const GIT_TEXT: Record<string, string> = {
   ignored: "text-dim italic",
 };
 
-/** Textklasse für einen Git-Status (oder undefined, wenn unbekannt/leer). */
+/** Text class for a Git status (or undefined when unknown/empty). */
 export function gitTextClass(status?: string): string | undefined {
   return status ? GIT_TEXT[status] : undefined;
 }

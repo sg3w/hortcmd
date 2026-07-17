@@ -1,12 +1,12 @@
 // ============================================================
-// Dateitabelle: TanStack Table (headless) + TanStack Virtual.
-// Nur sichtbare Zeilen werden gerendert. Cursor/Auswahl kommen
-// aus dem Store und werden als CSS-Klassen abgebildet.
+// File table: TanStack Table (headless) + TanStack Virtual.
+// Only visible rows are rendered. Cursor/selection come
+// from the store and are mapped to CSS classes.
 //
-// Drei Ansichtsmodi teilen sich eine Grid-Virtualisierung:
-//   details      – eine Spalte, volle Detailspalten + Kopfzeile
-//   list         – mehrspaltig, kompakt (Icon + Name)
-//   thumbnails   – mehrspaltig, große Icons mit Name darunter
+// Three view modes share one grid virtualization:
+//   details      – one column, full detail columns + header row
+//   list         – multi-column, compact (icon + name)
+//   thumbnails   – multi-column, large icons with the name below
 // ============================================================
 
 import {
@@ -37,18 +37,18 @@ import { gitTextClass } from "@/lib/gitColor";
 import { buildColumns, SORTABLE } from "./columns";
 import { cn } from "@/lib/cn";
 
-/** Schrift- und Symbolgröße (px) je Skalierungsstufe. */
+/** Font and icon size (px) per scaling step. */
 const FONT_PX = { sm: 11, md: 12, lg: 14 } as const;
 const ICON_PX = { sm: 14, md: 16, lg: 20 } as const;
-/** Feste Höhe der Miniaturansicht (px). */
+/** Fixed height of the thumbnail view (px). */
 const THUMB_HEIGHT = 96;
-/** Mindestbreite einer Kachel in den mehrspaltigen Ansichten (px). */
+/** Minimum width of a tile in the multi-column views (px). */
 const CELL_MIN_WIDTH = { list: 200, thumbnails: 104 } as const;
 
 interface Props {
   side: Side;
   onOpen: (index: number) => void;
-  /** Rechtsklick: Index der getroffenen Zeile (oder null bei Leerraum/Kopf). */
+  /** Right-click: index of the hit row (or null for empty space/header). */
   onContext?: (index: number | null) => void;
 }
 
@@ -58,8 +58,8 @@ export function FileTable({ side, onOpen, onContext }: Props) {
   const selected = usePanes((s) => panelOf(s, side).selected);
   const sort = usePanes((s) => panelOf(s, side).sort);
   const git = usePanes((s) => panelOf(s, side).git);
-  // Im Baum-Modus rendert die Liste selbst als Detailansicht; der Baum steht
-  // daneben (siehe Panel).
+  // In tree mode the list itself renders as the detail view; the tree sits
+  // next to it (see Panel).
   const rawMode = usePanes((s) => s[side].viewMode);
   const viewMode = rawMode === "tree" ? "details" : rawMode;
   const active = usePanes((s) => s.active === side);
@@ -71,7 +71,7 @@ export function FileTable({ side, onOpen, onContext }: Props) {
   const setGridCols = usePanes((s) => s.setGridCols);
   const t = useT();
 
-  // Darstellungs-Einstellungen (Spalten + Größen).
+  // Display settings (columns + sizes).
   const showExtColumn = useSettings((s) => s.showExtColumn);
   const showPermissions = useSettings((s) => s.showPermissions);
   const sizeFormat = useSettings((s) => s.sizeFormat);
@@ -103,9 +103,9 @@ export function FileTable({ side, onOpen, onContext }: Props) {
     ],
   );
 
-  // Spaltenbreite per Ziehen am linken Rand einer festen Spalte einstellen.
-  // Der Griff folgt dem Cursor; die flexible Name-Spalte gleicht die Differenz
-  // aus. Die neue Breite wird sofort persistiert (Settings-Store).
+  // Adjust the column width by dragging the left edge of a fixed column.
+  // The handle follows the cursor; the flexible name column absorbs the
+  // difference. The new width is persisted immediately (settings store).
   const startColResize = (e: MouseEvent, id: string) => {
     e.preventDefault();
     e.stopPropagation();
@@ -125,7 +125,7 @@ export function FileTable({ side, onOpen, onContext }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
 
-  // Breite des Scroll-Containers messen → Spaltenzahl der Grid-Ansichten.
+  // Measure the width of the scroll container → column count of the grid views.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -146,12 +146,12 @@ export function FileTable({ side, onOpen, onContext }: Props) {
         ? fontPx + 10
         : fontPx + 8;
 
-  // Spaltenzahl an den Store melden (Tastaturnavigation im Grid).
+  // Report the column count to the store (keyboard navigation in the grid).
   useEffect(() => {
     setGridCols(side, perRow);
   }, [side, perRow, setGridCols]);
 
-  // Maus-Auswahl: Cmd/Ctrl = einzeln togglen, Shift = Bereich, sonst Cursor.
+  // Mouse selection: Cmd/Ctrl = toggle individually, Shift = range, otherwise cursor.
   const onItemMouseDown = (e: MouseEvent, index: number) => {
     setActive(side);
     if (e.metaKey || e.ctrlKey) toggleMark(side, index);
@@ -159,8 +159,8 @@ export function FileTable({ side, onOpen, onContext }: Props) {
     else setCursor(side, index);
   };
 
-  // Rechtsklick: aktive Seite + Cursor auf die getroffene Zeile setzen und
-  // deren Index melden (für kontextabhängiges Einfügen).
+  // Right-click: set the active side + cursor to the hit row and
+  // report its index (for context-dependent pasting).
   const onContextMenu = (e: MouseEvent) => {
     const el = (e.target as HTMLElement).closest("[data-index]");
     const index = el ? Number((el as HTMLElement).dataset.index) : null;
@@ -184,12 +184,12 @@ export function FileTable({ side, onOpen, onContext }: Props) {
     overscan: 12,
   });
 
-  // Bei Moduswechsel (Höhe/Spalten ändern sich) neu vermessen.
+  // Re-measure on a mode change (height/columns change).
   useEffect(() => {
     virtualizer.measure();
   }, [rowHeight, perRow, virtualizer]);
 
-  // Cursor stets im Sichtfeld halten (Grid: Zeile = Cursor / Spalten).
+  // Always keep the cursor in view (grid: row = cursor / columns).
   useEffect(() => {
     virtualizer.scrollToIndex(Math.floor(cursor / perRow), { align: "auto" });
   }, [cursor, perRow, virtualizer]);
@@ -210,7 +210,7 @@ export function FileTable({ side, onOpen, onContext }: Props) {
             const sortable = SORTABLE[id];
             const isSorted = sort.key === id;
             const alignRight = id === "size" || id === "date";
-            // Feste Spalten sind per Ziehen am linken Rand einstellbar.
+            // Fixed columns are adjustable by dragging their left edge.
             const resizable = id in columnWidths;
             return (
               <div
@@ -262,7 +262,7 @@ export function FileTable({ side, onOpen, onContext }: Props) {
               transform: `translateY(${vItem.start}px)`,
             } as const;
 
-            // ----- Detailansicht: eine Zeile mit Spalten -----
+            // ----- Detail view: one row with columns -----
             if (viewMode === "details") {
               const row = rows[start];
               return (
@@ -284,7 +284,7 @@ export function FileTable({ side, onOpen, onContext }: Props) {
               );
             }
 
-            // ----- Listen-/Miniaturansicht: mehrspaltiges Grid -----
+            // ----- List/thumbnail view: multi-column grid -----
             const items = rows.slice(start, start + perRow);
             return (
               <div
@@ -320,7 +320,7 @@ export function FileTable({ side, onOpen, onContext }: Props) {
   );
 }
 
-/** Gemeinsame Cursor-/Auswahl-Klassen für ein Element. */
+/** Shared cursor/selection classes for an element. */
 function stateClass(isCursor: boolean, isSelected: boolean, active: boolean) {
   return cn(
     isSelected && "!bg-selection text-selection-text",
@@ -328,10 +328,10 @@ function stateClass(isCursor: boolean, isSelected: boolean, active: boolean) {
       (active
         ? "!bg-accent-dim outline outline-1 -outline-offset-1 outline-cursor"
         : cn(
-            // TICKET-008: Cursor-Zeile im inaktiven Panel bekommt eine
-            // dezente grüne Füllung statt nur einem 1px-Outline, damit sie
-            // eindeutig sichtbar bleibt. Bei zusätzlicher Markierung bleibt
-            // die (dominantere) gelbe Auswahlfarbe von oben bestehen.
+            // TICKET-008: the cursor row in the inactive panel gets a
+            // subtle green fill instead of only a 1px outline, so it
+            // stays clearly visible. With an additional selection, the
+            // (more dominant) yellow selection color from above remains.
             "outline outline-1 -outline-offset-1 outline-[color:var(--cursor-inactive)]",
             !isSelected && "!bg-[color:var(--cursor-inactive-marker)]",
           )),
@@ -344,14 +344,14 @@ interface ItemProps {
   active: boolean;
   selected: Set<string>;
   row: Row;
-  /** Git-Status des Eintrags (färbt den Namen; nicht bei Auswahl). */
+  /** Git status of the entry (colors the name; not when selected). */
   gitStatus?: string;
   style?: CSSProperties;
   onMouseDown: (e: MouseEvent, index: number) => void;
   onOpen: (index: number) => void;
 }
 
-/** Eine Detailzeile mit TanStack-Zellen. */
+/** One detail row with TanStack cells. */
 function DetailRow({
   index,
   cursor,
@@ -413,7 +413,7 @@ function DetailRow({
   );
 }
 
-/** Eine Kachel in der Listen- oder Miniaturansicht. */
+/** One tile in the list or thumbnail view. */
 function GridCell({
   index,
   cursor,

@@ -1,5 +1,5 @@
 // ============================================================
-// Verzeichnisse lesen, Laufwerke/Mountpunkte, Home-Verzeichnis.
+// Read directories, drives/mount points, home directory.
 // ============================================================
 
 use serde::Serialize;
@@ -8,10 +8,10 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 use ts_rs::TS;
 
-// Hinweis: ts-rs hängt export_to an ein implizites "<manifest>/bindings/" an,
-// daher "../../src/ipc/bindings/" für das Frontend-Verzeichnis im Repo-Root.
-// u64 wird bewusst als TS-`number` deklariert: über Tauris JSON-IPC kommt ein
-// JS-number an (nicht bigint), passend zum Frontend-Code.
+// Note: ts-rs appends export_to to an implicit "<manifest>/bindings/",
+// hence "../../src/ipc/bindings/" for the frontend directory in the repo root.
+// u64 is deliberately declared as TS `number`: over Tauri's JSON IPC a
+// JS number arrives (not bigint), matching the frontend code.
 #[derive(Serialize, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct DirEntry {
@@ -20,10 +20,10 @@ pub struct DirEntry {
     pub is_symlink: bool,
     #[ts(type = "number")]
     pub size: u64,
-    // Änderungszeit als Unix-Sekunden (0 wenn unbekannt).
+    // Modification time as Unix seconds (0 if unknown).
     #[ts(type = "number")]
     pub modified: u64,
-    // Unix-Rechtebits (st_mode); None auf Nicht-Unix-Plattformen.
+    // Unix permission bits (st_mode); None on non-Unix platforms.
     #[ts(type = "number | null")]
     pub mode: Option<u32>,
 }
@@ -31,7 +31,7 @@ pub struct DirEntry {
 #[derive(Serialize, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct DirListing {
-    // Kanonischer/absoluter Pfad des gelesenen Verzeichnisses.
+    // Canonical/absolute path of the read directory.
     pub path: String,
     pub entries: Vec<DirEntry>,
 }
@@ -47,7 +47,7 @@ pub struct Drive {
     pub free: u64,
 }
 
-/// Liest den Inhalt eines Verzeichnisses.
+/// Reads the contents of a directory.
 #[tauri::command]
 pub fn list_dir(path: String) -> Result<DirListing, String> {
     let p = PathBuf::from(&path);
@@ -90,7 +90,7 @@ pub fn list_dir(path: String) -> Result<DirListing, String> {
     })
 }
 
-/// Listet Laufwerke bzw. Mountpunkte samt Speicherbelegung.
+/// Lists drives or mount points along with their storage usage.
 #[tauri::command]
 pub fn list_drives() -> Vec<Drive> {
     use sysinfo::Disks;
@@ -114,7 +114,7 @@ pub fn list_drives() -> Vec<Drive> {
         })
         .collect();
 
-    // Home als bequemen Schnellzugriff ergänzen.
+    // Add home as a convenient shortcut.
     if let Some(home) = dirs::home_dir() {
         drives.push(Drive {
             name: "~".into(),
@@ -126,7 +126,7 @@ pub fn list_drives() -> Vec<Drive> {
     drives
 }
 
-/// Home-Verzeichnis des aktuellen Nutzers.
+/// Home directory of the current user.
 #[tauri::command]
 pub fn home_dir() -> String {
     dirs::home_dir()

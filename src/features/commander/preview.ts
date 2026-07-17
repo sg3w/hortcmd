@@ -1,6 +1,6 @@
 // ============================================================
-// Datei-Vorschau (F3): liest den Cursor-Eintrag und öffnet den
-// Vorschau-Dialog. Ordner und ".." werden übersprungen.
+// File preview (F3): reads the cursor entry and opens the
+// preview dialog. Folders and ".." are skipped.
 // ============================================================
 
 import { panelOf, usePanes, type Side } from "@/store/panesStore";

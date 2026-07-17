@@ -1,6 +1,6 @@
 // ============================================================
-// Kleine, wiederverwendbare Formular-Bausteine für Dialoge
-// (Export, Massenumbenennen …): Abschnitt, Checkbox, Radio.
+// Small, reusable form building blocks for dialogs
+// (export, batch rename …): section, checkbox, radio.
 // ============================================================
 
 import type { ReactNode } from "react";

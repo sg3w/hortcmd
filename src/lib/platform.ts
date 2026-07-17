@@ -1,6 +1,6 @@
-// Plattform-Erkennung (Frontend-Seite).
+// Platform detection (frontend side).
 
-/** true, wenn die App unter macOS läuft. */
+/** true when the app runs on macOS. */
 export const isMacOS =
   typeof navigator !== "undefined" &&
   /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);

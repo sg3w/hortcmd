@@ -1,7 +1,7 @@
 // ============================================================
-// Store für den Datei-/Binärvergleich-Dialog. Hält die beiden zu
-// vergleichenden Dateipfade (null = geschlossen). Wie beim Verzeichnis-
-// vergleich gilt das Modell „immer links gegen rechts".
+// Store for the file/binary comparison dialog. Holds the two file
+// paths to compare (null = closed). As with the directory
+// comparison, the model is "always left against right".
 // ============================================================
 
 import { create } from "zustand";
@@ -22,7 +22,7 @@ export const useFileCompareDialog = create<FileCompareStore>((set) => ({
   close: () => set({ left: null, right: null }),
 }));
 
-/** Aktuelle Cursor-Datei eines Fensters (voller Pfad) oder null. */
+/** Current cursor file of a pane (full path) or null. */
 function cursorFile(side: "left" | "right"): string | null {
   const p = panelOf(usePanes.getState(), side);
   if (p.archive !== null) return null;
@@ -32,8 +32,8 @@ function cursorFile(side: "left" | "right"): string | null {
 }
 
 /**
- * Öffnet den Vergleich für die Cursor-Datei links gegen die rechts.
- * Gibt false zurück, wenn nicht auf beiden Seiten eine Datei markiert ist.
+ * Opens the comparison of the cursor file on the left against the one on the right.
+ * Returns false if a file is not selected on both sides.
  */
 export function openFileCompare(): boolean {
   const left = cursorFile("left");

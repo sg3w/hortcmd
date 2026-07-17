@@ -2,7 +2,7 @@
 import type { ExifTag } from "./ExifTag";
 
 /**
- * Vorschau-Inhalt einer Datei: Text, Bild (data-URL) oder Hex (binär).
+ * Preview content of a file: text, image (data URL), or hex (binary).
  */
 export type Preview = { 
 /**
@@ -10,22 +10,22 @@ export type Preview = {
  */
 kind: string, name: string, size: number, 
 /**
- * Textfassung des gelesenen Ausschnitts (lossy UTF-8; auch bei Binärdateien).
+ * Text version of the read excerpt (lossy UTF-8; for binary files too).
  */
 text: string | null, 
 /**
- * Hex-Dump (nur bei kind = binary).
+ * Hex dump (only for kind = binary).
  */
 hex: string | null, 
 /**
- * data-URL (bei kind = image)
+ * data URL (for kind = image)
  */
 data_url: string | null, 
 /**
- * EXIF-Metadaten (nur bei Bildern; sonst leer).
+ * EXIF metadata (only for images; otherwise empty).
  */
 exif: Array<ExifTag>, 
 /**
- * true, wenn nur ein Anfangsausschnitt gelesen wurde
+ * true if only an initial excerpt was read
  */
 truncated: boolean, };

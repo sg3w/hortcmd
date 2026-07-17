@@ -1,7 +1,7 @@
 // ============================================================
-// Store für den Such-Dialog: offen/geschlossen plus die Seite,
-// deren aktueller Ordner als Startpunkt dient und in der ein
-// Treffer angezeigt („Reveal") wird.
+// Store for the search dialog: open/closed plus the side
+// whose current folder serves as the starting point and in which a
+// match is revealed.
 // ============================================================
 
 import { create } from "zustand";
@@ -20,17 +20,17 @@ export const useSearchDialog = create<SearchStore>((set) => ({
   close: () => set({ side: null }),
 }));
 
-/** Startordner der Suche: aktueller Ordner der Seite (nicht im Archiv). */
+/** Start folder of the search: current folder of the side (not in an archive). */
 export function searchRoot(side: Side): string {
   return panelOf(usePanes.getState(), side).path;
 }
 
-/** Zeigt einen Treffer im Fenster `side`: Ordner öffnen + Cursor setzen. */
+/** Reveals a match in the pane `side`: open the folder + set the cursor. */
 export async function revealPath(side: Side, path: string): Promise<void> {
   const dir = parentPath(path);
   const s = usePanes.getState();
   await s.loadDir(side, dir);
-  // Nach dem Laden den Eintrag mit passendem Namen fokussieren.
+  // After loading, focus the entry with the matching name.
   const name = path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
   const entries = panelOf(usePanes.getState(), side).entries;
   const idx = entries.findIndex((e) => !e.parent && e.name === name);

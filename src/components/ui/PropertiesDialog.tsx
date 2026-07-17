@@ -1,8 +1,8 @@
 // ============================================================
-// Dialog „Eigenschaften / Rechte" (Alt+Enter bzw. Kontextmenü).
-// Zeigt und bearbeitet Zugriffsrechte (chmod), Besitzer/Gruppe (chown),
-// listet Extended Attributes und ACL und berechnet Prüfsummen.
-// Sämtliche Logik läuft im Backend; hier nur Darstellung/Eingabe.
+// "Properties / permissions" dialog (Alt+Enter or context menu).
+// Shows and edits access permissions (chmod), owner/group (chown),
+// lists extended attributes and ACL and computes checksums.
+// All logic runs in the backend; here only display/input.
 // ============================================================
 
 import { useEffect, useMemo, useState } from "react";
@@ -26,7 +26,7 @@ import type { Checksums, FileProps, Tag } from "@/ipc/bindings";
 import { Section } from "@/components/ui/dialogControls";
 import { cn } from "@/lib/cn";
 
-// Rechte-Bits der drei Klassen (Besitzer/Gruppe/Andere) und der Spezialbits.
+// Permission bits of the three classes (owner/group/other) and the special bits.
 const CLASSES = [
   { key: "props.class.owner" as const, shift: 6 },
   { key: "props.class.group" as const, shift: 3 },
@@ -43,16 +43,16 @@ const SPECIAL = [
   { label: "sticky", bit: 0o1000 },
 ];
 
-// Finder-Tag-Farben (Index 1–7); 0 = keine Farbe (grauer Ring).
+// Finder tag colors (index 1–7); 0 = no color (gray ring).
 const TAG_COLORS: Record<number, string> = {
   0: "transparent",
-  1: "#9aa0a6", // Grau
-  2: "#5fd25b", // Grün
-  3: "#c470de", // Lila
-  4: "#4a9bf5", // Blau
-  5: "#f7cc46", // Gelb
-  6: "#f0524a", // Rot
-  7: "#f5a43c", // Orange
+  1: "#9aa0a6", // gray
+  2: "#5fd25b", // green
+  3: "#c470de", // purple
+  4: "#4a9bf5", // blue
+  5: "#f7cc46", // yellow
+  6: "#f0524a", // red
+  7: "#f5a43c", // orange
 };
 
 export function PropertiesDialog() {
@@ -61,7 +61,7 @@ export function PropertiesDialog() {
   const t = useT();
 
   const [data, setData] = useState<FileProps | null>(null);
-  const [perm, setPerm] = useState(0); // Rechte-Bits (0..0o7777)
+  const [perm, setPerm] = useState(0); // permission bits (0..0o7777)
   const [owner, setOwnerText] = useState("");
   const [group, setGroupText] = useState("");
   const [checks, setChecks] = useState<Checksums | null>(null);
@@ -70,7 +70,7 @@ export function PropertiesDialog() {
   const [copied, setCopied] = useState<string | null>(null);
   const [tags, setTagList] = useState<Tag[]>([]);
 
-  // Beim Öffnen (oder Pfadwechsel) die Eigenschaften laden.
+  // On open (or path change), load the properties.
   useEffect(() => {
     if (!path) return;
     setData(null);
@@ -95,7 +95,7 @@ export function PropertiesDialog() {
     };
   }, [path]);
 
-  // Tags speichern und lokalen Stand aktualisieren.
+  // Save tags and update the local state.
   const persistTags = async (next: Tag[]) => {
     if (!path) return;
     setTagList(next);
@@ -123,7 +123,7 @@ export function PropertiesDialog() {
   const applyOwner = async () => {
     if (!path || !data) return;
     try {
-      // Nur geänderte Felder senden.
+      // Only send changed fields.
       const o = owner !== (data.owner ?? String(data.uid ?? "")) ? owner : null;
       const g = group !== (data.group ?? String(data.gid ?? "")) ? group : null;
       await setOwner(path, o, g);
@@ -133,7 +133,7 @@ export function PropertiesDialog() {
     }
   };
 
-  // Nach einer Änderung: Eigenschaften neu laden und beide Listen auffrischen.
+  // After a change: reload the properties and refresh both lists.
   const refresh = async () => {
     if (!path) return;
     setError(null);
@@ -202,7 +202,7 @@ export function PropertiesDialog() {
 
             {data && (
               <>
-                {/* Kopfdaten */}
+                {/* Header data */}
                 <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[12px]">
                   <span className="text-dim">{t("props.type.file")}</span>
                   <span className="text-text">{typeLabel(data)}</span>
@@ -223,7 +223,7 @@ export function PropertiesDialog() {
                   )}
                 </div>
 
-                {/* Finder-Tags (nur macOS) */}
+                {/* Finder tags (macOS only) */}
                 {isMacOS && (
                   <Section label={t("props.tags")}>
                     <TagEditor
@@ -238,7 +238,7 @@ export function PropertiesDialog() {
                   <p className="text-[12px] text-dim">{t("props.unsupported")}</p>
                 ) : (
                   <>
-                    {/* Zugriffsrechte */}
+                    {/* Access permissions */}
                     <Section label={t("props.perms")}>
                       <div className="overflow-hidden rounded border border-edge">
                         <table className="w-full text-[12px]">
@@ -316,7 +316,7 @@ export function PropertiesDialog() {
                       </div>
                     </Section>
 
-                    {/* Besitzer / Gruppe */}
+                    {/* Owner / group */}
                     <Section label={t("props.owner")}>
                       <div className="flex flex-wrap items-end gap-2">
                         <label className="flex flex-col gap-1 text-[11px] text-dim">
@@ -387,7 +387,7 @@ export function PropertiesDialog() {
                   </>
                 )}
 
-                {/* Prüfsummen (nur für Dateien) */}
+                {/* Checksums (files only) */}
                 {!data.is_dir && (
                   <Section label={t("props.checksums")}>
                     {checks ? (
@@ -462,7 +462,7 @@ function RowSum({
   );
 }
 
-/** Ein farbiger Punkt für einen Finder-Tag (0 = leerer Ring). */
+/** A colored dot for a Finder tag (0 = empty ring). */
 function ColorDot({ color, size = 12 }: { color: number; size?: number }) {
   const c = TAG_COLORS[color] ?? "transparent";
   return (
@@ -479,7 +479,7 @@ function ColorDot({ color, size = 12 }: { color: number; size?: number }) {
   );
 }
 
-/** Anzeige + Bearbeitung der Finder-Tags eines Eintrags. */
+/** Display + editing of an entry's Finder tags. */
 function TagEditor({
   tags,
   onChange,
@@ -495,7 +495,7 @@ function TagEditor({
   const add = () => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    // Vorhandenen Namen nicht doppeln; ggf. nur die Farbe aktualisieren.
+    // Do not duplicate an existing name; update only the color if needed.
     const next = tags.some((t) => t.name === trimmed)
       ? tags.map((t) => (t.name === trimmed ? { name: trimmed, color } : t))
       : [...tags, { name: trimmed, color }];

@@ -1,10 +1,10 @@
 // ============================================================
-// Dialog „Verzeichnisse vergleichen & synchronisieren": vergleicht das
-// linke gegen das rechte Fenster (rekursiv, nach Größe + Änderungszeit),
-// zeigt die Unterschiede als Liste und kopiert ausgewählte Dateien
-// links↔rechts. Vergleich/Kopieren erledigt das Backend.
+// "Compare & synchronize directories" dialog: compares the left against
+// the right window (recursively, by size + modification time), shows the
+// differences as a list and copies selected files left↔right. Comparing/
+// copying is handled by the backend.
 //
-// Aufbau: Formular oben, Liste unten (volle Breite), Fenster resizable.
+// Layout: form on top, list below (full width), window resizable.
 // ============================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -35,12 +35,12 @@ import { AppDialog } from "@/components/ui/AppDialog";
 const DEFAULT_SIZE = { w: 900, h: 620 };
 const MIN_W = 640;
 const MIN_H = 440;
-/** Feste Zeilenhöhe (px) der virtualisierten Vergleichsliste. */
+/** Fixed row height (px) of the virtualized comparison list. */
 const ROW_H = 22;
 
 type Filter = "same" | "diff" | "leftOnly" | "rightOnly";
 
-/** Ordnet einen Status seiner Filter-Kategorie zu. */
+/** Maps a status to its filter category. */
 function category(status: string): Filter {
   if (status === "same") return "same";
   if (status === "left_only") return "leftOnly";
@@ -109,8 +109,8 @@ export function CompareDialog() {
     null,
   );
 
-  // Jeder Lauf bekommt ein Token; verspätete Chargen eines abgelösten
-  // (z. B. durch Neu-vergleichen/Filterwechsel) Laufs werden verworfen.
+  // Every run gets a token; late batches of a superseded run (e.g. through
+  // re-comparing/filter change) are discarded.
   const runToken = useRef(0);
 
   const run = useCallback(async (l: string, r: string, rec: boolean) => {
@@ -122,7 +122,7 @@ export function CompareDialog() {
     setEntries([]);
     try {
       const cut = await compareDirs(l, r, rec, (batch) => {
-        if (runToken.current !== token) return; // veralteter Lauf
+        if (runToken.current !== token) return; // stale run
         setEntries((prev) => [...prev, ...batch]);
       });
       if (runToken.current === token) setTruncated(cut);
@@ -136,15 +136,15 @@ export function CompareDialog() {
     }
   }, []);
 
-  // Beim Öffnen die Pfade beider Fenster übernehmen und vergleichen.
+  // On open, adopt the paths of both windows and compare.
   useEffect(() => {
     if (!open) return;
     const l = panelOf(usePanes.getState(), "left").path;
     const r = panelOf(usePanes.getState(), "right").path;
     setLeft(l);
     setRight(r);
-    // Rekursiv startet bewusst immer deaktiviert (TICKET-007) — ein
-    // vorheriger Zustand darf nicht automatisch übernommen werden.
+    // Recursive deliberately always starts disabled (TICKET-007) — a
+    // previous state must not be adopted automatically.
     setRecursive(false);
     setStatus(null);
     void run(l, r, false);
@@ -167,7 +167,7 @@ export function CompareDialog() {
     [entries, filters],
   );
 
-  // Virtualisierte Liste: nur die im Fenster sichtbaren Zeilen werden gerendert.
+  // Virtualized list: only the rows visible in the window are rendered.
   const scrollRef = useRef<HTMLDivElement>(null);
   const rowVirtualizer = useVirtualizer({
     count: visible.length,
@@ -197,7 +197,7 @@ export function CompareDialog() {
   const toggleFilter = (f: Filter) =>
     setFilters((prev) => ({ ...prev, [f]: !prev[f] }));
 
-  // Anzahl kopierbarer Auswahl je Richtung (Quelle muss vorhanden sein).
+  // Number of copyable selected items per direction (source must exist).
   const selCount = useMemo(() => {
     let toRight = 0;
     let toLeft = 0;
@@ -223,7 +223,7 @@ export function CompareDialog() {
 
     const res = await syncCopy(items);
 
-    // Betroffene Fenster aktualisieren und erneut vergleichen.
+    // Refresh the affected windows and compare again.
     const s = usePanes.getState();
     (["left", "right"] as const).forEach((sd) => {
       const p = panelOf(s, sd).path;
@@ -314,7 +314,7 @@ export function CompareDialog() {
       minSize={{ w: MIN_W, h: MIN_H }}
     >
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4">
-            {/* Formular: Pfade + Aktualisieren + Filter */}
+            {/* Form: paths + refresh + filters */}
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-2 text-[12px]">
                 <span className="shrink-0 font-medium text-dim">
@@ -356,7 +356,7 @@ export function CompareDialog() {
               </div>
             </div>
 
-            {/* Warnhinweis bei abgeschnittenem Ergebnis (Limit erreicht). */}
+            {/* Warning when the result was truncated (limit reached). */}
             {truncated && (
               <div className="flex items-center gap-2 rounded border border-amber-500/50 bg-amber-500/10 px-3 py-1.5 text-[12px] text-amber-400">
                 <AlertTriangle size={14} className="shrink-0" />
@@ -364,9 +364,9 @@ export function CompareDialog() {
               </div>
             )}
 
-            {/* Liste (virtualisiert – nur sichtbare Zeilen im DOM) */}
+            {/* List (virtualized – only visible rows in the DOM) */}
             <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-edge bg-panel-inactive">
-              {/* Kopfzeile */}
+              {/* Header row */}
               <div className="flex items-center gap-2 border-b border-edge px-2 py-1 text-[11px] font-medium text-dim">
                 <input
                   type="checkbox"
@@ -450,7 +450,7 @@ export function CompareDialog() {
                 )}
               </div>
 
-              {/* Streaming-Hinweis, während noch gelesen wird. */}
+              {/* Streaming hint while reading is still in progress. */}
               {loading && entries.length > 0 && (
                 <div className="pointer-events-none absolute bottom-1 right-2 rounded bg-panel/90 px-2 py-0.5 text-[11px] text-dim shadow">
                   {t("compare.loading")}

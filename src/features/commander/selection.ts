@@ -1,6 +1,6 @@
 // ============================================================
-// Multi-Auswahl-Muster: „+" markieren, „-" Markierung aufheben
-// (jeweils per Wildcard), „*" Auswahl invertieren.
+// Multi-selection patterns: "+" select, "-" deselect
+// (each via wildcard), "*" invert the selection.
 // ============================================================
 
 import { panelOf, usePanes, type Side } from "@/store/panesStore";
@@ -8,12 +8,12 @@ import { useOps } from "@/store/opsStore";
 import { translate } from "@/store/settingsStore";
 import { splitName } from "@/lib/format";
 
-/** „*": Auswahl invertieren (alle Nicht-".."-Einträge umschalten). */
+/** "*": invert the selection (toggle all non-".." entries). */
 export function invertSelection(side: Side): void {
   usePanes.getState().invertSelection(side);
 }
 
-/** „+"/„-": Muster abfragen und passende Einträge (ab-)markieren. */
+/** "+"/"-": prompt for a pattern and select/deselect matching entries. */
 export function promptSelect(side: Side, add: boolean): void {
   const p = panelOf(usePanes.getState(), side);
   const cur = p.entries[p.cursor];

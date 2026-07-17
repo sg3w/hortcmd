@@ -1,7 +1,7 @@
 // ============================================================
-// Render-Helfer für die Datei-Vorschau: Anzeigemodi je Format,
-// Markdown-Rendering (sanitisiert), Syntaxhighlighting und ein
-// schlanker CSV-Parser.
+// Render helpers for the file preview: view modes per format,
+// Markdown rendering (sanitized), syntax highlighting, and a
+// lean CSV parser.
 // ============================================================
 
 import { marked } from "marked";
@@ -20,7 +20,7 @@ import python from "highlight.js/lib/languages/python";
 import sql from "highlight.js/lib/languages/sql";
 import ini from "highlight.js/lib/languages/ini";
 
-// Nur eine kuratierte Sprachmenge registrieren (schlankes Bundle).
+// Register only a curated set of languages (lean bundle).
 hljs.registerLanguage("xml", xml);
 hljs.registerLanguage("javascript", javascript);
 hljs.registerLanguage("typescript", typescript);
@@ -36,7 +36,7 @@ hljs.registerLanguage("ini", ini);
 
 marked.setOptions({ async: false, gfm: true, breaks: false });
 
-/** Anzeigemodi der Vorschau. */
+/** View modes of the preview. */
 export type PreviewMode =
   | "rendered"
   | "highlight"
@@ -45,13 +45,13 @@ export type PreviewMode =
   | "hex"
   | "text";
 
-/** Endung eines Dateinamens (klein, ohne Punkt). */
+/** Extension of a file name (lowercase, without the dot). */
 function extOf(name: string): string {
   const dot = name.lastIndexOf(".");
   return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
 }
 
-/** Endung → highlight.js-Sprache (null = keine bekannte Sprache). */
+/** Extension → highlight.js language (null = no known language). */
 export function languageForExt(ext: string): string | null {
   const map: Record<string, string> = {
     html: "xml",
@@ -86,7 +86,7 @@ export function languageForExt(ext: string): string | null {
   return map[ext] ?? null;
 }
 
-/** Verfügbare Modi + Standardmodus für eine Datei. */
+/** Available modes + default mode for a file. */
 export function viewModesFor(
   name: string,
   hasHex: boolean,
@@ -101,13 +101,13 @@ export function viewModesFor(
   return { modes: ["raw"], def: "raw" };
 }
 
-/** Markdown → sanitisiertes HTML. */
+/** Markdown → sanitized HTML. */
 export function renderMarkdown(md: string): string {
   const html = marked.parse(md) as string;
   return DOMPurify.sanitize(html);
 }
 
-/** Quelltext → hervorgehobenes HTML (fällt auf reinen Text zurück). */
+/** Source code → highlighted HTML (falls back to plain text). */
 export function highlightCode(text: string, ext: string): string {
   const lang = languageForExt(ext);
   if (lang && hljs.getLanguage(lang)) {
@@ -123,14 +123,14 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;");
 }
 
-/** Endung eines Namens (öffentlich, für die Sprach-/Modusermittlung). */
+/** Extension of a name (public, for language/mode detection). */
 export function extNameOf(name: string): string {
   return extOf(name);
 }
 
 /**
- * Schlanker CSV/TSV-Parser: berücksichtigt Anführungszeichen ("") und
- * Zeilenumbrüche innerhalb von Feldern. Trennzeichen = Tab bei .tsv, sonst Komma.
+ * Lean CSV/TSV parser: handles quotes ("") and
+ * line breaks inside fields. Separator = tab for .tsv, otherwise comma.
  */
 export function parseCsv(text: string, name: string): string[][] {
   const delim = extOf(name) === "tsv" ? "\t" : ",";
@@ -168,7 +168,7 @@ export function parseCsv(text: string, name: string): string[][] {
       field += c;
     }
   }
-  // Letztes Feld/Zeile anhängen (falls kein abschließender Umbruch).
+  // Append the last field/row (if there is no trailing line break).
   if (field.length > 0 || row.length > 0) {
     row.push(field);
     rows.push(row);

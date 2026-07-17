@@ -1,10 +1,10 @@
 // ============================================================
-// Massenumbenennen: reine Namensberechnung aus einem Regelsatz
-// (Namensschema mit Platzhaltern, Zähler, Suchen/Ersetzen mit
-// optionalem Regex, Groß-/Kleinschreibung). Das eigentliche
-// Umbenennen auf der Platte macht das Backend (`rename_batch`).
+// Batch rename: pure name computation from a rule set
+// (naming scheme with placeholders, counter, search/replace with
+// optional regex, case conversion). The actual
+// renaming on disk is done by the backend (`rename_batch`).
 //
-// Platzhalter in den Masken:  [N] Name ohne Endung · [E] Endung · [C] Zähler
+// Placeholders in the masks:  [N] name without extension · [E] extension · [C] counter
 // ============================================================
 
 import type { Row } from "@/store/panesStore";
@@ -13,23 +13,23 @@ import { splitName } from "@/lib/format";
 export type CaseMode = "keep" | "lower" | "upper" | "title";
 
 export interface RenameRules {
-  /** Maske für den Namensteil (Standard „[N]"). */
+  /** Mask for the name part (default "[N]"). */
   nameMask: string;
-  /** Maske für die Endung (Standard „[E]"). */
+  /** Mask for the extension (default "[E]"). */
   extMask: string;
-  /** Suchtext (leer = kein Ersetzen). */
+  /** Search text (empty = no replacement). */
   search: string;
-  /** Ersetzung (bei Regex sind $1 … nutzbar). */
+  /** Replacement (with regex, $1 … can be used). */
   replace: string;
-  /** Suchtext als regulärer Ausdruck interpretieren. */
+  /** Interpret the search text as a regular expression. */
   regex: boolean;
-  /** Groß-/Kleinschreibung bei der Suche beachten. */
+  /** Respect case sensitivity in the search. */
   caseSensitive: boolean;
-  /** Groß-/Kleinschreibung des Namensteils anpassen. */
+  /** Adjust the case of the name part. */
   caseMode: CaseMode;
   counterStart: number;
   counterStep: number;
-  /** Mindestanzahl Stellen des Zählers (führende Nullen). */
+  /** Minimum number of counter digits (leading zeros). */
   counterDigits: number;
 }
 
@@ -46,7 +46,7 @@ export const DEFAULT_RULES: RenameRules = {
   counterDigits: 1,
 };
 
-/** Ersetzt die Platzhalter einer Maske in einem einzigen Durchlauf. */
+/** Replaces the placeholders of a mask in a single pass. */
 function expand(mask: string, base: string, ext: string, counter: string): string {
   return mask.replace(/\[([NEC])\]/g, (_, key) =>
     key === "N" ? base : key === "E" ? ext : counter,
@@ -66,7 +66,7 @@ function applyCase(name: string, mode: CaseMode): string {
     case "upper":
       return name.toUpperCase();
     case "title":
-      // Ersten Buchstaben je Wort (getrennt durch Leer-/Trennzeichen) groß.
+      // Uppercase the first letter of each word (separated by space/separators).
       return name
         .toLowerCase()
         .replace(/(^|[\s._-])(\p{L})/gu, (_, sep, ch) => sep + ch.toUpperCase());
@@ -75,19 +75,19 @@ function applyCase(name: string, mode: CaseMode): string {
   }
 }
 
-/** Wendet Suchen/Ersetzen auf den fertigen Namen an. */
+/** Applies search/replace to the finished name. */
 function applySearch(name: string, rules: RenameRules, re: RegExp | null): string {
   if (!rules.search) return name;
   if (re) return name.replace(re, rules.replace);
   if (rules.caseSensitive) return name.split(rules.search).join(rules.replace);
-  // Literal, aber ohne Beachtung der Groß-/Kleinschreibung.
+  // Literal, but case-insensitive.
   const escaped = rules.search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return name.replace(new RegExp(escaped, "gi"), rules.replace);
 }
 
 /**
- * Baut aus dem Regelsatz eine Umbenennungsfunktion. Bei ungültigem Regex wird
- * stattdessen ein `error` zurückgegeben (für die Anzeige im Dialog).
+ * Builds a rename function from the rule set. On an invalid regex, an
+ * `error` is returned instead (for display in the dialog).
  */
 export function buildRenamer(rules: RenameRules): {
   rename?: (entry: Row, index: number) => string;
@@ -135,8 +135,8 @@ export interface RenamePreviewItem {
 }
 
 /**
- * Berechnet die Vorschau für die Zielmenge und erkennt Konflikte.
- * `folderNames` = alle real vorhandenen Namen im Ordner (inkl. versteckte).
+ * Computes the preview for the target set and detects conflicts.
+ * `folderNames` = all names actually present in the folder (incl. hidden ones).
  */
 export function buildPreview(
   targets: Row[],
@@ -149,11 +149,11 @@ export function buildPreview(
     isDir: entry.is_dir,
   }));
 
-  // Zielnamen zählen (für Duplikat-Erkennung).
+  // Count the target names (for duplicate detection).
   const toCount = new Map<string, number>();
   for (const it of items) toCount.set(it.to, (toCount.get(it.to) ?? 0) + 1);
 
-  // Namen der beteiligten Quellen (deren alte Plätze werden frei).
+  // Names of the involved sources (their old slots become free).
   const sourceNames = new Set(items.map((it) => it.from));
 
   return items.map((it): RenamePreviewItem => {

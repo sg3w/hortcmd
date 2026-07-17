@@ -1,8 +1,8 @@
 // ============================================================
-// Merkt sich die zuletzt verwendete Breite/Höhe je Dialogtyp
-// (TICKET-012), persistiert über Anwendungsneustarts hinweg.
-// Die Position wird bewusst nicht gespeichert — Dialoge werden
-// immer erneut zentriert geöffnet.
+// Remembers the last-used width/height per dialog type
+// (TICKET-012), persisted across application restarts.
+// The position is deliberately not stored — dialogs are
+// always reopened centered.
 // ============================================================
 
 import { create } from "zustand";

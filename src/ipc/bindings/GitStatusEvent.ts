@@ -2,8 +2,8 @@
 import type { GitStatus } from "./GitStatus";
 
 /**
- * Payload des Events `git-support-ready`: Ordnerpfad + zugehöriger Status,
- * damit das Frontend das Ergebnis dem richtigen Tab zuordnen kann (auch
- * wenn der Ordner inzwischen gewechselt wurde).
+ * Payload of the `git-support-ready` event: folder path + associated status,
+ * so the frontend can assign the result to the correct tab (even
+ * if the folder has changed in the meantime).
  */
 export type GitStatusEvent = { path: string, status: GitStatus, };

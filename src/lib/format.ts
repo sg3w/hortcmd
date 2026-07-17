@@ -1,4 +1,4 @@
-// Formatierung von Größen, Daten und Dateinamen.
+// Formatting of sizes, dates, and file names.
 
 import type { DirEntry } from "@/ipc/bindings";
 import type { DateFormat, SizeFormat } from "@/store/settingsStore";
@@ -44,9 +44,9 @@ export function formatDate(
 }
 
 /**
- * Unix-Rechtebits (st_mode) als Zeichenkette „drwxr-xr-x".
- * Erstes Zeichen aus is_dir/is_symlink, die restlichen neun aus den unteren
- * Bits. Leerer String, wenn keine Rechte bekannt sind (z. B. Windows/Archiv).
+ * Unix permission bits (st_mode) as the string "drwxr-xr-x".
+ * The first character from is_dir/is_symlink, the remaining nine from the lower
+ * bits. Empty string when no permissions are known (e.g. Windows/archive).
  */
 export function formatMode(
   mode: number | null,
@@ -62,7 +62,7 @@ export function formatMode(
   );
 }
 
-/** Zerlegt einen Dateinamen in Basisname und Endung. */
+/** Splits a file name into base name and extension. */
 export function splitName(entry: Pick<DirEntry, "name" | "is_dir">): {
   base: string;
   ext: string;

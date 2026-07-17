@@ -1,11 +1,11 @@
 // ============================================================
-// Rechte & Eigenschaften eines Eintrags: Berechtigungen (chmod),
-// Besitzer/Gruppe (anzeigen + chown), Extended Attributes, ACL und
-// Prüfsummen (MD5/SHA-1/SHA-256).
+// Permissions & properties of an entry: permissions (chmod),
+// owner/group (display + chown), extended attributes, ACL, and
+// checksums (MD5/SHA-1/SHA-256).
 //
-// Unix-spezifische Teile (Besitzer, xattr, ACL) sind hinter `cfg(unix)`
-// gekapselt; auf Nicht-Unix-Plattformen liefern sie leere/None-Werte,
-// damit das Frontend überall dieselbe Struktur erhält.
+// Unix-specific parts (owner, xattr, ACL) are encapsulated behind
+// `cfg(unix)`; on non-Unix platforms they return empty/None values,
+// so the frontend gets the same structure everywhere.
 // ============================================================
 
 use serde::Serialize;
@@ -15,18 +15,18 @@ use std::path::Path;
 use std::time::UNIX_EPOCH;
 use ts_rs::TS;
 
-/// Ein Extended Attribute: Name, Größe des Rohwerts und – sofern der
-/// Wert druckbarer UTF-8-Text ist – eine gekürzte Textvorschau.
+/// An extended attribute: name, size of the raw value, and – if the
+/// value is printable UTF-8 text – a truncated text preview.
 #[derive(Serialize, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct XattrItem {
     pub name: String,
     pub size: u32,
-    /// UTF-8-Vorschau (max. 256 Zeichen) oder None bei Binärdaten.
+    /// UTF-8 preview (max. 256 characters) or None for binary data.
     pub value: Option<String>,
 }
 
-/// Gesammelte Eigenschaften eines Eintrags (Ergebnis von `file_props`).
+/// Collected properties of an entry (result of `file_props`).
 #[derive(Serialize, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct FileProps {
@@ -38,24 +38,24 @@ pub struct FileProps {
     pub size: u64,
     #[ts(type = "number")]
     pub modified: u64,
-    /// Voller st_mode (inkl. Dateityp-Bits); None auf Nicht-Unix.
+    /// Full st_mode (incl. file-type bits); None on non-Unix.
     #[ts(type = "number | null")]
     pub mode: Option<u32>,
     #[ts(type = "number | null")]
     pub uid: Option<u32>,
     #[ts(type = "number | null")]
     pub gid: Option<u32>,
-    /// Aufgelöster Benutzername (oder None, wenn nicht auflösbar/Nicht-Unix).
+    /// Resolved user name (or None if not resolvable/non-Unix).
     pub owner: Option<String>,
     pub group: Option<String>,
     pub xattrs: Vec<XattrItem>,
-    /// ACL-Einträge als Textzeilen (leer, wenn keine/nicht unterstützt).
+    /// ACL entries as text lines (empty if none/not supported).
     pub acl: Vec<String>,
-    /// Ob die Plattform Besitzer/xattr/ACL überhaupt unterstützt.
+    /// Whether the platform supports owner/xattr/ACL at all.
     pub unix: bool,
 }
 
-/// Drei gängige Prüfsummen eines Datei-Inhalts.
+/// Three common checksums of a file's content.
 #[derive(Serialize, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct Checksums {
@@ -64,7 +64,7 @@ pub struct Checksums {
     pub sha256: String,
 }
 
-// ----- Plattformabhängige Helfer -----
+// ----- Platform-dependent helpers -----
 
 #[cfg(unix)]
 fn read_owner(meta: &fs::Metadata) -> (Option<u32>, Option<u32>, Option<String>, Option<String>) {
@@ -105,7 +105,7 @@ fn read_xattrs(_path: &Path) -> Vec<XattrItem> {
     Vec::new()
 }
 
-/// UTF-8-Textvorschau eines Rohwerts, falls er druckbar ist (sonst None).
+/// UTF-8 text preview of a raw value, if it is printable (otherwise None).
 fn printable_preview(raw: &[u8]) -> Option<String> {
     let s = std::str::from_utf8(raw).ok()?;
     if s.chars().any(|c| c.is_control() && c != '\n' && c != '\t' && c != '\r') {
@@ -128,11 +128,11 @@ fn read_acl(_path: &Path) -> Vec<String> {
     Vec::new()
 }
 
-/// Liest alle Eigenschaften eines Eintrags zusammen.
+/// Reads all properties of an entry together.
 #[tauri::command]
 pub fn file_props(path: String) -> Result<FileProps, String> {
     let p = Path::new(&path);
-    // symlink_metadata: den Link selbst beschreiben, nicht das Ziel.
+    // symlink_metadata: describe the link itself, not the target.
     let meta = fs::symlink_metadata(p).map_err(|e| e.to_string())?;
 
     #[cfg(unix)]
@@ -171,8 +171,8 @@ pub fn file_props(path: String) -> Result<FileProps, String> {
     })
 }
 
-/// Setzt die Zugriffsrechte (chmod). `mode` sind die unteren Rechte-Bits
-/// (0..=0o7777, inkl. setuid/setgid/sticky).
+/// Sets the access rights (chmod). `mode` are the lower permission bits
+/// (0..=0o7777, incl. setuid/setgid/sticky).
 #[tauri::command]
 pub fn set_permissions(path: String, mode: u32) -> Result<(), String> {
     #[cfg(unix)]
@@ -188,9 +188,9 @@ pub fn set_permissions(path: String, mode: u32) -> Result<(), String> {
     }
 }
 
-/// Ändert Besitzer und/oder Gruppe (chown). `owner`/`group` dürfen ein
-/// numerischer Wert ("501") oder ein Name ("staff") sein; None lässt den
-/// jeweiligen Wert unverändert. Erfordert i. d. R. Root-Rechte.
+/// Changes owner and/or group (chown). `owner`/`group` may be a
+/// numeric value ("501") or a name ("staff"); None leaves the
+/// respective value unchanged. Usually requires root privileges.
 #[tauri::command]
 pub fn set_owner(path: String, owner: Option<String>, group: Option<String>) -> Result<(), String> {
     #[cfg(unix)]
@@ -232,11 +232,11 @@ fn resolve_gid(value: &str) -> Result<u32, String> {
         .ok_or_else(|| format!("Unbekannte Gruppe: {}", value))
 }
 
-/// Berechnet MD5, SHA-1 und SHA-256 in einem einzigen Lese-Durchgang.
-/// Läuft synchron; für sehr große Dateien entsprechend langsam.
+/// Computes MD5, SHA-1, and SHA-256 in a single read pass.
+/// Runs synchronously; correspondingly slow for very large files.
 #[tauri::command]
 pub fn file_checksums(path: String) -> Result<Checksums, String> {
-    use md5::Digest as _; // gemeinsames Digest-Trait (auch für sha1/sha2)
+    use md5::Digest as _; // shared Digest trait (also for sha1/sha2)
 
     let mut file = fs::File::open(&path).map_err(|e| e.to_string())?;
     let mut md5 = md5::Md5::new();
@@ -276,7 +276,7 @@ mod tests {
 
     #[test]
     fn checksums_of_empty_and_abc() {
-        // Bekannte Referenzwerte.
+        // Known reference values.
         let empty = tmp_file("empty", b"");
         let c = file_checksums(empty.to_string_lossy().into()).unwrap();
         assert_eq!(c.md5, "d41d8cd98f00b204e9800998ecf8427e");

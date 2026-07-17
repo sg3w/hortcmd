@@ -1,33 +1,33 @@
 // ============================================================
-// Passwörter für verschlüsselte Archive: Zwischenspeicher (pro
-// Archivpfad) und ein kleiner Passwort-Abfragedialog.
-// Genutzt beim Browsen (panesStore) und Entpacken (fileOps).
+// Passwords for encrypted archives: a cache (per
+// archive path) and a small password prompt dialog.
+// Used when browsing (panesStore) and extracting (fileOps).
 // ============================================================
 
 import { KeyRound } from "lucide-react";
 import { useOps } from "@/store/opsStore";
 import { translate } from "@/store/settingsStore";
 
-/** Sentinel-Fehler des Backends (siehe archive.rs). */
+/** Sentinel errors of the backend (see archive.rs). */
 export const PW_REQUIRED = "PASSWORD_REQUIRED";
 export const PW_WRONG = "PASSWORD_WRONG";
 
 const passwords = new Map<string, string>();
 
-/** Zuletzt für dieses Archiv verwendetes Passwort (oder undefined). */
+/** The password last used for this archive (or undefined). */
 export function archivePassword(archive: string): string | undefined {
   return passwords.get(archive);
 }
 
-/** Enthält eine Fehlermeldung ein Passwort-Sentinel? */
+/** Does an error message contain a password sentinel? */
 export function isPasswordError(message: string): boolean {
   return message.includes(PW_REQUIRED) || message.includes(PW_WRONG);
 }
 
 /**
- * Fragt ein Passwort für `archive` ab und ruft bei Bestätigung `onOk`
- * mit dem (zwischengespeicherten) Passwort auf. `wrong` = vorheriger
- * Versuch war falsch.
+ * Prompts for a password for `archive` and, on confirmation, calls `onOk`
+ * with the (cached) password. `wrong` = the previous
+ * attempt was incorrect.
  */
 export function promptArchivePassword(
   archive: string,

@@ -1,9 +1,9 @@
 // ============================================================
-// Dateisystem-Commands, thematisch aufgeteilt:
-//   dir     – Verzeichnisse/Laufwerke lesen
-//   file    – Kopieren/Verschieben/Löschen/Ordner + Transfer-Infra
-//   preview – Datei-Vorschau (F3) + Öffnen mit Standardprogramm (F4)
-//   archive – ZIP: browsen, entpacken, packen
+// File-system commands, split by topic:
+//   dir     – read directories/drives
+//   file    – copy/move/delete/folders + transfer infra
+//   preview – file preview (F3) + open with default program (F4)
+//   archive – ZIP: browse, extract, pack
 // ============================================================
 
 pub mod archive;

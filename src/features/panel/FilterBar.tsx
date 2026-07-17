@@ -1,7 +1,7 @@
 // ============================================================
-// Schnellfilter-Leiste: erscheint, sobald für den aktiven Tab ein
-// Filter getippt wurde. Zeigt Filtertext + Trefferzahl und lässt
-// sich per X (oder Esc in der Liste) löschen.
+// Quick-filter bar: appears as soon as a filter has been typed
+// for the active tab. Shows the filter text + match count and can
+// be cleared via X (or Esc in the list).
 // ============================================================
 
 import { Filter, X } from "lucide-react";

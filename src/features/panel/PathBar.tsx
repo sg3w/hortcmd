@@ -1,6 +1,6 @@
 // ============================================================
-// Pfadzeile als Breadcrumb: jedes Segment ist anklickbar und
-// springt in den jeweiligen Ordner (bzw. innerhalb eines Archivs).
+// Path bar as a breadcrumb: every segment is clickable and
+// jumps into the respective folder (or within an archive).
 // ============================================================
 
 import { useEffect, useRef } from "react";
@@ -20,7 +20,7 @@ export function PathBar({ side }: { side: Side }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const segments = ancestorChain(path || "/");
 
-  // Bei tiefen Pfaden das Ende (aktueller Ordner) sichtbar halten.
+  // For deep paths, keep the end (current folder) visible.
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollLeft = el.scrollWidth;

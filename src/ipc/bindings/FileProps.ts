@@ -2,22 +2,22 @@
 import type { XattrItem } from "./XattrItem";
 
 /**
- * Gesammelte Eigenschaften eines Eintrags (Ergebnis von `file_props`).
+ * Collected properties of an entry (result of `file_props`).
  */
 export type FileProps = { path: string, name: string, is_dir: boolean, is_symlink: boolean, size: number, modified: number, 
 /**
- * Voller st_mode (inkl. Dateityp-Bits); None auf Nicht-Unix.
+ * Full st_mode (incl. file-type bits); None on non-Unix.
  */
 mode: number | null, uid: number | null, gid: number | null, 
 /**
- * Aufgelöster Benutzername (oder None, wenn nicht auflösbar/Nicht-Unix).
+ * Resolved user name (or None if not resolvable/non-Unix).
  */
 owner: string | null, group: string | null, xattrs: Array<XattrItem>, 
 /**
- * ACL-Einträge als Textzeilen (leer, wenn keine/nicht unterstützt).
+ * ACL entries as text lines (empty if none/not supported).
  */
 acl: Array<string>, 
 /**
- * Ob die Plattform Besitzer/xattr/ACL überhaupt unterstützt.
+ * Whether the platform supports owner/xattr/ACL at all.
  */
 unix: boolean, };

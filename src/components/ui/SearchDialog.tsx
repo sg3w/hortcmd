@@ -1,9 +1,8 @@
 // ============================================================
-// Dialog „Suche": durchsucht einen Verzeichnisbaum in vier Modi
-// (Dateien nach Name/Inhalt, Duplikate, leere Ordner, große Dateien).
-// Die Suche läuft im Backend (`search`) und streamt Treffer; die
-// Ergebnisliste ist virtualisiert. Doppelklick zeigt den Treffer im
-// aktiven Fenster an.
+// "Search" dialog: searches a directory tree in four modes (files by
+// name/content, duplicates, empty folders, large files). The search
+// runs in the backend (`search`) and streams hits; the result list is
+// virtualized. A double-click reveals the hit in the active window.
 // ============================================================
 
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -62,7 +61,7 @@ export function SearchDialog() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Startordner beim ersten Öffnen übernehmen.
+  // Adopt the start folder on first open.
   const open = side !== null;
   useMemo(() => {
     if (open && side) setRoot(searchRoot(side));
@@ -95,7 +94,7 @@ export function SearchDialog() {
     };
     try {
       const cut = await search(root, options, (batch) => {
-        if (token !== runToken.current) return; // veraltete Charge
+        if (token !== runToken.current) return; // stale batch
         setHits((prev) => (prev.length ? [...prev, ...batch] : batch));
       });
       if (token === runToken.current) setTruncated(cut);
@@ -135,9 +134,9 @@ export function SearchDialog() {
             <span className="text-[13px] font-medium">{t("search.title")}</span>
           </Dialog.Title>
 
-          {/* Formular */}
+          {/* Form */}
           <div className="flex flex-col gap-3 border-b border-edge p-3">
-            {/* Modus-Umschalter */}
+            {/* Mode switch */}
             <div className="inline-flex flex-wrap gap-1">
               {MODES.map(({ mode: m, key, Icon }) => (
                 <button
@@ -156,7 +155,7 @@ export function SearchDialog() {
               ))}
             </div>
 
-            {/* Startordner */}
+            {/* Start folder */}
             <label className="flex items-center gap-2 text-[12px]">
               <span className="w-20 shrink-0 text-dim">{t("search.root")}</span>
               <input
@@ -223,7 +222,7 @@ export function SearchDialog() {
               </label>
             )}
 
-            {/* Ignorierte Ordner + Optionen + Start */}
+            {/* Ignored folders + options + start */}
             <div className="flex flex-wrap items-center gap-2">
               <label className="flex min-w-0 flex-1 items-center gap-2 text-[12px]">
                 <span className="w-20 shrink-0 text-dim">
@@ -257,7 +256,7 @@ export function SearchDialog() {
             </div>
           </div>
 
-          {/* Statuszeile */}
+          {/* Status line */}
           <div className="flex items-center gap-3 border-b border-edge bg-panel-inactive px-3 py-1 text-[11px] text-dim">
             <span>
               {hits.length} {t("search.results")}
@@ -270,7 +269,7 @@ export function SearchDialog() {
             )}
           </div>
 
-          {/* Ergebnisliste */}
+          {/* Result list */}
           <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
             {ran && !running && hits.length === 0 ? (
               <div className="p-4 text-[13px] text-dim">{t("search.empty")}</div>

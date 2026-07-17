@@ -1,6 +1,6 @@
 // ============================================================
-// F-Tasten- und Kontextmenü-Aktionen. Ermitteln die Zielmenge
-// und rufen die Operations-Runner bzw. füllen die Zwischenablage.
+// F-key and context-menu actions. Determine the target set
+// and call the operation runners or fill the clipboard.
 // ============================================================
 
 import { panelOf, usePanes, type Side } from "@/store/panesStore";
@@ -38,7 +38,7 @@ export type ActionId =
   | "clip-cut"
   | "clip-paste";
 
-/** Namen der betroffenen Einträge (Auswahl oder Cursor). */
+/** Names of the affected entries (selection or cursor). */
 export function targetNames(side: Side): string[] {
   const p = panelOf(usePanes.getState(), side);
   if (p.selected.size > 0) return [...p.selected];
@@ -52,11 +52,11 @@ export function runAction(id: ActionId, side: Side): void {
 
   switch (id) {
     case "quit":
-      // window.close() ist ein Browser-API und schließt kein natives
-      // Tauri-Fenster (Rest aus der Zeit vor der Umstellung auf Tauri).
-      // Über getCurrentWindow().close() läuft der Schließen-Vorgang durch
-      // denselben onCloseRequested-Handler wie der native Fenster-Button
-      // (App.tsx, TICKET-004), inklusive Abfrage bei laufenden Transfers.
+      // window.close() is a browser API and does not close a native
+      // Tauri window (a leftover from before the migration to Tauri).
+      // Via getCurrentWindow().close(), the close runs through
+      // the same onCloseRequested handler as the native window button
+      // (App.tsx, TICKET-004), including the prompt for running transfers.
       if (hasTauri) {
         void import("@tauri-apps/api/window").then(({ getCurrentWindow }) =>
           getCurrentWindow().close(),
@@ -66,7 +66,7 @@ export function runAction(id: ActionId, side: Side): void {
       }
       break;
 
-    // ----- Zwischenablage -----
+    // ----- Clipboard -----
     case "clip-copy": {
       const names = targetNames(side);
       if (names.length) useClipboard.getState().set("copy", p.path, names);
@@ -81,7 +81,7 @@ export function runAction(id: ActionId, side: Side): void {
       void runPaste(side);
       break;
 
-    // ----- Dateioperationen -----
+    // ----- File operations -----
     case "copy":
       void runCopy(side);
       break;
@@ -98,7 +98,7 @@ export function runAction(id: ActionId, side: Side): void {
       runDelete(side);
       break;
 
-    // ----- Vorschau (F3) / Bearbeiten (F4) -----
+    // ----- Preview (F3) / edit (F4) -----
     case "view":
       void runView(side);
       break;
@@ -109,7 +109,7 @@ export function runAction(id: ActionId, side: Side): void {
       runEditWith(side);
       break;
 
-    // ----- Archive -----
+    // ----- Archives -----
     case "pack":
       runPack(side);
       break;
@@ -117,7 +117,7 @@ export function runAction(id: ActionId, side: Side): void {
       runExtractArchive(side);
       break;
 
-    // ----- Ordner in neuem Tab öffnen -----
+    // ----- Open folder in a new tab -----
     case "open-tab": {
       if (p.archive) break; // in Archiven nicht sinnvoll
       const cur = p.entries[p.cursor];

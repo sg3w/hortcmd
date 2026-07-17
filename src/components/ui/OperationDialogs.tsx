@@ -1,7 +1,7 @@
 // ============================================================
-// Dialoge & Fortschrittsanzeige für Dateioperationen.
-// Bestätigung (Löschen/Fehler), Eingabe (Neuer Ordner),
-// Fortschritts-Overlay (aus fs-progress-Events gespeist).
+// Dialogs & progress display for file operations.
+// Confirmation (delete/error), input (new folder),
+// progress overlay (fed from fs-progress events).
 // ============================================================
 
 import { useEffect, useRef, useState } from "react";
@@ -25,7 +25,7 @@ export function OperationDialogs() {
   );
 }
 
-// ---------- Namenskonflikt ----------
+// ---------- Name collision ----------
 
 function CollisionDialog() {
   const head = useOps((s) => s.collisions[0] ?? null);
@@ -33,7 +33,7 @@ function CollisionDialog() {
   const t = useT();
   const [applyAll, setApplyAll] = useState(false);
 
-  // Beim Wechsel auf einen neuen Konflikt „Für alle" zurücksetzen.
+  // Reset "for all" when switching to a new collision.
   useEffect(() => {
     setApplyAll(false);
   }, [head?.req_id]);
@@ -99,7 +99,7 @@ function basename(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
-// ---------- Bestätigung ----------
+// ---------- Confirmation ----------
 
 function ConfirmDialog() {
   const confirm = useOps((s) => s.confirm);
@@ -157,7 +157,7 @@ function ConfirmDialog() {
   );
 }
 
-// ---------- Eingabe (Neuer Ordner) ----------
+// ---------- Input (new folder) ----------
 
 function PromptDialog() {
   const prompt = useOps((s) => s.prompt);
@@ -169,7 +169,7 @@ function PromptDialog() {
   useEffect(() => {
     if (prompt) {
       setValue(prompt.initial);
-      // nach dem Öffnen fokussieren und ggf. den angegebenen Bereich vorwählen.
+      // focus after opening and preselect the given range if provided.
       requestAnimationFrame(() => {
         const el = inputRef.current;
         if (!el) return;
@@ -182,8 +182,8 @@ function PromptDialog() {
   }, [prompt]);
 
   const submit = () => {
-    // Erst schließen, dann ausführen: so kann onSubmit selbst einen Folge-
-    // Dialog öffnen (z. B. eine Fehlermeldung), ohne sofort überschrieben zu werden.
+    // Close first, then execute: this way onSubmit can itself open a follow-up
+    // dialog (e.g. an error message) without being overwritten immediately.
     const fn = prompt?.onSubmit;
     closeDialogs();
     fn?.(value);
@@ -239,10 +239,10 @@ function PromptDialog() {
   );
 }
 
-// ---------- Fortschritt ----------
+// ---------- Progress ----------
 
-// Kurze, indeterminate Anzeige für synchrone Operationen (Löschen/Ordner).
-// Kopieren/Verschieben nutzen die eigene, nicht-blockierende Transfer-Ansicht.
+// Short, indeterminate display for synchronous operations (delete/folder).
+// Copy/move use their own, non-blocking transfer view.
 function ProgressOverlay() {
   const busy = useOps((s) => s.busy);
   const t = useT();
@@ -260,7 +260,7 @@ function ProgressOverlay() {
   );
 }
 
-// ---------- Fenster schließen bei laufenden Transfers (TICKET-004) ----------
+// ---------- Closing the window while transfers are running (TICKET-004) ----------
 
 function ForceCloseDialog() {
   const open = useOps((s) => s.forceClose);

@@ -1,8 +1,8 @@
 // ============================================================
-// Basis-Git-Integration: erkennt, ob ein Ordner in einem Git-
-// Repository liegt, und liefert den Status der Einträge dieser
-// Ebene (für farbliche Markierung im Frontend). Nutzt das
-// installierte `git`-CLI; ohne Git wird `is_repo=false` gemeldet.
+// Basic Git integration: detects whether a folder lies in a Git
+// repository and returns the status of the entries at this
+// level (for color marking in the frontend). Uses the
+// installed `git` CLI; without Git, `is_repo=false` is reported.
 // ============================================================
 
 use serde::Serialize;
@@ -17,14 +17,14 @@ use ts_rs::TS;
 pub struct GitStatus {
     pub is_repo: bool,
     pub branch: Option<String>,
-    /// Name (oberste Ebene im Ordner) → Status-Code
+    /// Name (top level in the folder) → status code
     /// ("modified" | "new" | "deleted" | "renamed" | "conflict" | "ignored").
     pub entries: HashMap<String, String>,
 }
 
-/// Payload des Events `git-support-ready`: Ordnerpfad + zugehöriger Status,
-/// damit das Frontend das Ergebnis dem richtigen Tab zuordnen kann (auch
-/// wenn der Ordner inzwischen gewechselt wurde).
+/// Payload of the `git-support-ready` event: folder path + associated status,
+/// so the frontend can assign the result to the correct tab (even
+/// if the folder has changed in the meantime).
 #[derive(Serialize, Clone, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct GitStatusEvent {
@@ -40,7 +40,7 @@ fn empty(is_repo: bool) -> GitStatus {
     }
 }
 
-/// Führt `git -C <dir> <args…>` aus und liefert stdout bei Erfolg.
+/// Runs `git -C <dir> <args…>` and returns stdout on success.
 fn run_git(dir: &Path, args: &[&str]) -> Option<String> {
     let out = Command::new("git")
         .arg("-C")
@@ -54,8 +54,8 @@ fn run_git(dir: &Path, args: &[&str]) -> Option<String> {
     Some(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
-/// Ordnet einen Porcelain-Statuscode einem normalisierten Status zu.
-/// `sub` = die Änderung liegt in einem Unterordner (→ Ordner „modified").
+/// Maps a porcelain status code to a normalized status.
+/// `sub` = the change is in a subfolder (→ folder "modified").
 fn classify(code: &str, sub: bool) -> &'static str {
     if code == "!!" {
         return "ignored";
@@ -81,13 +81,13 @@ fn classify(code: &str, sub: bool) -> &'static str {
     }
 }
 
-/// Ermittelt den Git-Status für die Einträge des Ordners `path` (blockierend,
-/// da über das `git`-CLI). Läuft nur noch auf einem Hintergrund-Thread, s.
+/// Determines the Git status for the entries of the folder `path` (blocking,
+/// since via the `git` CLI). Runs only on a background thread now, see
 /// [`git_status_watch`].
 fn compute_git_status(path: &str) -> GitStatus {
     let dir = Path::new(path);
 
-    // Repo-Wurzel bestimmen; schlägt fehl → kein Repo (oder kein git).
+    // Determine the repo root; fails → no repo (or no git).
     let toplevel = match run_git(dir, &["rev-parse", "--show-toplevel"]) {
         Some(s) if !s.trim().is_empty() => s.trim().to_string(),
         _ => return empty(false),
@@ -98,7 +98,7 @@ fn compute_git_status(path: &str) -> GitStatus {
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty() && s != "HEAD");
 
-    // Ordnerpfad relativ zur Repo-Wurzel (Pathspec + Präfix zum Zuordnen).
+    // Folder path relative to the repo root (pathspec + prefix for matching).
     let dir_abs = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
     let rel = dir_abs
         .strip_prefix(&top)
@@ -110,8 +110,8 @@ fn compute_git_status(path: &str) -> GitStatus {
         format!("{}/", rel)
     };
 
-    // Status an der Wurzel ausführen → Pfade relativ zur Wurzel; per Pathspec
-    // auf den Ordner eingrenzen.
+    // Run status at the root → paths relative to the root; narrow to the
+    // folder via pathspec.
     let mut args = vec![
         "status",
         "--porcelain",
@@ -133,11 +133,11 @@ fn compute_git_status(path: &str) -> GitStatus {
         }
         let code = &rec[..2];
         let path_rel = &rec[3..];
-        // Rename/Copy: der zweite Pfad folgt als eigenes NUL-Feld → überspringen.
+        // Rename/Copy: the second path follows as its own NUL field → skip.
         if code.starts_with('R') || code.starts_with('C') {
             let _ = fields.next();
         }
-        // Nur Einträge unterhalb unseres Ordners betrachten.
+        // Only consider entries below our folder.
         let rest = if prefix.is_empty() {
             Some(path_rel)
         } else {
@@ -153,7 +153,7 @@ fn compute_git_status(path: &str) -> GitStatus {
             continue;
         }
         let status = classify(code, sub);
-        // Vorhandenen Status nur ersetzen, wenn er „ignored" war (sonst behalten).
+        // Only replace an existing status if it was "ignored" (otherwise keep it).
         match entries.get(name.as_str()) {
             Some(cur) if cur != "ignored" => {}
             _ => {
@@ -169,10 +169,10 @@ fn compute_git_status(path: &str) -> GitStatus {
     }
 }
 
-/// Lädt den Git-Status von `path` asynchron im Hintergrund (Tokio-Task +
-/// `spawn_blocking` fürs `git`-CLI) und liefert das Ergebnis per Event
-/// `git-support-ready`. Blockiert dadurch weder das Öffnen des Ordners noch
-/// andere IPC-Aufrufe, auch nicht bei sehr großen Repositories.
+/// Loads the Git status of `path` asynchronously in the background (Tokio task +
+/// `spawn_blocking` for the `git` CLI) and returns the result via the event
+/// `git-support-ready`. This blocks neither the folder opening nor
+/// other IPC calls, even for very large repositories.
 #[tauri::command]
 pub async fn git_status_watch(app: AppHandle, path: String) {
     let status = tauri::async_runtime::spawn_blocking({

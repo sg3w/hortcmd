@@ -1,4 +1,4 @@
-// Funktionstastenleiste F3–F8 im Total-Commander-Stil.
+// Function-key bar F3–F8 in Total Commander style.
 
 import {
   Copy,

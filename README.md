@@ -1,72 +1,71 @@
 # hortcmd
 
-Ein Dateicommander im Stil von Total Commander, umgesetzt mit **Rust** + **Tauri v2**.
-Zwei-Fenster-Layout (Dual-Pane), Funktionstastenleiste (F3–F8), Laufwerks- und Pfadauswahl.
+A file commander in the style of Total Commander, built with **Rust** + **Tauri v2**.
+Dual-pane layout, function-key bar (F3–F8), drive and path selection.
 
-Architektur- und Entwurfsdetails: siehe [Concept.md](Concept.md).
+Architecture and design details: see [Concept.md](Concept.md).
 
-## Tech-Stack
+## Tech stack
 
-| Schicht        | Technologie                                        |
+| Layer          | Technology                                         |
 |----------------|----------------------------------------------------|
-| Backend        | Rust (Tauri v2 Commands, `std::fs`, `sysinfo`)     |
-| Sprache FE     | TypeScript + React                                 |
-| Tabelle        | TanStack Table (headless) + TanStack Virtual       |
+| Backend        | Rust (Tauri v2 commands, `std::fs`, `sysinfo`)     |
+| FE language    | TypeScript + React                                 |
+| Table          | TanStack Table (headless) + TanStack Virtual       |
 | State          | Zustand                                            |
-| Overlays/Menüs | Radix UI (shadcn-Stil) – Kontextmenü, Select        |
+| Overlays/menus | Radix UI (shadcn style) – context menu, select     |
 | Icons          | Lucide (`lucide-react`)                            |
 | Styling        | Tailwind CSS                                        |
-| Typen-Sync     | ts-rs (Rust-Structs → TS-Typen)                    |
+| Type sync      | ts-rs (Rust structs → TS types)                    |
 | Bundler        | Vite                                               |
 
-## Projektstruktur
+## Project structure
 
 ```
 hortcmd/
-├── index.html                  # Einstiegspunkt (lädt src/main.tsx)
-├── package.json                # Skripte & Abhängigkeiten
-├── vite.config.ts · tsconfig*  # Build-/TS-Konfiguration
+├── index.html                  # Entry point (loads src/main.tsx)
+├── package.json                # Scripts & dependencies
+├── vite.config.ts · tsconfig*  # Build / TS configuration
 ├── tailwind.config.js · postcss.config.js
 ├── src/                        # Frontend (React + TS)
-│   ├── main.tsx · App.tsx      # Bootstrap + Layout-Shell
-│   ├── index.css               # Tailwind + TC-Theme-Tokens
-│   ├── ipc/                    # invoke-Client + ts-rs-Typen (bindings/)
-│   ├── store/                  # Zustand-Store (panesStore.ts)
-│   ├── features/panel/         # Panel, FileTable, Spalten, Drive/Path/Status
-│   ├── features/commander/     # Tastatur, Auswahl, Aktionen, F-Leiste
-│   ├── components/ui/          # Radix-Primitive (Kontextmenü …)
+│   ├── main.tsx · App.tsx      # Bootstrap + layout shell
+│   ├── index.css               # Tailwind + TC theme tokens
+│   ├── ipc/                    # invoke client + ts-rs types (bindings/)
+│   ├── store/                  # Zustand store (panesStore.ts)
+│   ├── features/panel/         # Panel, FileTable, columns, drive/path/status
+│   ├── features/commander/     # Keyboard, selection, actions, F-bar
+│   ├── components/ui/          # Radix primitives (context menu …)
 │   └── lib/                    # format, path, cn
-└── src-tauri/                  # Rust-Backend
+└── src-tauri/                  # Rust backend
     ├── Cargo.toml · build.rs · tauri.conf.json
     ├── capabilities/ · icons/
     └── src/
-        ├── main.rs · lib.rs    # Bin-Einstieg + Command-Registrierung
+        ├── main.rs · lib.rs    # Binary entry + command registration
         └── commands/fs.rs      # list_dir, list_drives, home_dir (+ ts-rs)
 ```
 
-## Voraussetzungen
+## Requirements
 
 - **Rust** (stable): https://rustup.rs → `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
-- **Node.js** ≥ 18 (vorhanden: v26)
-- Tauri-CLI: `npm run tauri` (über devDependency)
+- **Node.js** ≥ 18 (installed: v26)
+- Tauri CLI: `npm run tauri` (via devDependency)
 
-## Entwicklung
+## Development
 
 ```bash
 npm install
-npm run dev            # nur Frontend im Browser (Demo-Daten, ohne Rust)
-npm run tauri dev      # native App: Vite + Rust-Backend
+npm run dev            # frontend only in the browser (demo data, no Rust)
+npm run tauri dev      # native app: Vite + Rust backend
 ```
 
-## Skripte
+## Scripts
 
 ```bash
 npm run typecheck      # tsc --noEmit
-npm run build          # Frontend-Produktions-Build
-npm run gen:types      # ts-rs: Rust-Structs → src/ipc/bindings/*.ts
-npm run tauri build    # native App bauen
+npm run build          # frontend production build
+npm run gen:types      # ts-rs: Rust structs → src/ipc/bindings/*.ts
+npm run tauri build    # build native app
 ```
 
-> Ohne laufende Tauri-Runtime (reiner Browser) nutzt der IPC-Client automatisch
-> Demo-Daten – praktisch für Layout-Arbeit ohne Rust-Build.
-
+> Without a running Tauri runtime (pure browser) the IPC client automatically
+> uses demo data – handy for layout work without a Rust build.

@@ -1,5 +1,5 @@
 // ============================================================
-// App-Setup & Registrierung der Tauri-Commands.
+// App setup & registration of the Tauri commands.
 // ============================================================
 
 mod commands;

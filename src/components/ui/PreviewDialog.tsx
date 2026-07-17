@@ -1,7 +1,7 @@
 // ============================================================
-// Datei-Vorschau (F3). Modi je Format:
-//   Bild (+ EXIF) · Markdown gerendert · Syntaxhighlighting ·
-//   CSV-Tabelle · Klartext · Hex – umschaltbar in der Kopfzeile.
+// File preview (F3). Modes per format:
+//   image (+ EXIF) · rendered markdown · syntax highlighting ·
+//   CSV table · plain text · hex – switchable in the header.
 // ============================================================
 
 import { useEffect, useMemo, useState } from "react";
@@ -36,7 +36,7 @@ export function PreviewDialog() {
   const [mode, setMode] = useState<PreviewMode>(def);
   const [showExif, setShowExif] = useState(false);
 
-  // Bei Dateiwechsel Modus auf den Standard zurücksetzen.
+  // Reset the mode to the default when the file changes.
   useEffect(() => {
     setMode(def);
     setShowExif(false);
@@ -47,10 +47,10 @@ export function PreviewDialog() {
   const text = preview?.text ?? "";
 
   return (
-    // Dialog.Root bleibt gemountet und wird nur über `open` gesteuert.
-    // Ein Unmount im offenen Zustand (früher `if (!preview) return null`)
-    // ließe Radix `pointer-events: none` auf <body> zurück → App reagiert
-    // nach dem Schließen nicht mehr.
+    // Dialog.Root stays mounted and is only controlled via `open`.
+    // An unmount while open (formerly `if (!preview) return null`) would
+    // leave Radix' `pointer-events: none` on <body> → the app stops
+    // responding after closing.
     <Dialog.Root open={!!preview} onOpenChange={(o) => !o && setPreview(null)}>
       {preview && (
       <Dialog.Portal>
@@ -63,7 +63,7 @@ export function PreviewDialog() {
               {formatSize(preview.size)}
             </span>
 
-            {/* Modus-Umschalter (Text-Formate) bzw. EXIF-Schalter (Bild) */}
+            {/* Mode switch (text formats) or EXIF toggle (image) */}
             {!isImage && modes.length > 1 && (
               <div className="ml-auto inline-flex overflow-hidden rounded border border-edge">
                 {modes.map((m) => (
@@ -117,7 +117,7 @@ export function PreviewDialog() {
               )}
             </div>
 
-            {/* EXIF-Panel */}
+            {/* EXIF panel */}
             {isImage && showExif && (
               <div className="w-[280px] shrink-0 overflow-y-auto border-l border-edge bg-panel-inactive p-3">
                 {preview.exif.length === 0 ? (
@@ -208,7 +208,7 @@ function PreviewBody({
       </div>
     );
   }
-  // raw / text / hex → Klartext bzw. Hex-Dump.
+  // raw / text / hex → plain text or hex dump.
   const content = mode === "hex" ? (hex ?? "") : text;
   return (
     <pre

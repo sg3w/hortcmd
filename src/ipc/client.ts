@@ -1,7 +1,7 @@
 // ============================================================
-// IPC-Client: typisierte Aufrufe an das Rust-Backend.
-// Fällt auf Demo-Daten zurück, wenn keine Tauri-Runtime da ist
-// (z. B. im reinen Browser während der Layout-Entwicklung).
+// IPC client: typed calls to the Rust backend.
+// Falls back to demo data when no Tauri runtime is present
+// (e.g. in the pure browser during layout development).
 // ============================================================
 
 import type {
@@ -28,8 +28,8 @@ export const hasTauri =
 
 type InvokeFn = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
 
-// Lazy: der Tauri-Core wird erst beim ersten Aufruf geladen
-// (kein Top-Level-await → kompatibel mit dem Build-Target).
+// Lazy: the Tauri core is only loaded on the first call
+// (no top-level await → compatible with the build target).
 let invokePromise: Promise<InvokeFn> | null = null;
 
 function getInvoke(): Promise<InvokeFn> {
@@ -61,7 +61,7 @@ export async function homeDir(): Promise<string> {
   return invoke<string>("home_dir");
 }
 
-// ---------- Dateioperationen ----------
+// ---------- File operations ----------
 
 export async function makeDir(path: string): Promise<string> {
   if (!hasTauri) return path;
@@ -69,9 +69,9 @@ export async function makeDir(path: string): Promise<string> {
 }
 
 /**
- * Schreibt Text in eine Datei (z. B. exportierte Dateiliste).
- * Ohne `overwrite` wird eine vorhandene Datei nicht überschrieben; der
- * Rückgabewert `false` zeigt den Namenskonflikt an (`true` = geschrieben).
+ * Writes text into a file (e.g. an exported file list).
+ * Without `overwrite`, an existing file is not overwritten; the
+ * return value `false` indicates the name conflict (`true` = written).
  */
 export async function writeTextFile(
   path: string,
@@ -85,7 +85,7 @@ export async function writeTextFile(
   return invoke<boolean>("write_text_file", { path, contents, overwrite });
 }
 
-/** Benennt einen Eintrag um (voller Quell- und Zielpfad). */
+/** Renames an entry (full source and target path). */
 export async function renameEntry(from: string, to: string): Promise<void> {
   if (!hasTauri) {
     console.log("[demo] rename_entry", from, to);
@@ -95,9 +95,9 @@ export async function renameEntry(from: string, to: string): Promise<void> {
 }
 
 /**
- * Benennt mehrere Einträge in `dir` um (Massenumbenennen). Die Zielnamen
- * berechnet das Frontend; das Backend führt sie sicher aus (Zwei-Phasen,
- * Konfliktprüfung) und liefert Erfolgszahl + Fehlerliste.
+ * Renames several entries in `dir` (batch rename). The target names are
+ * computed by the frontend; the backend executes them safely (two-phase,
+ * conflict check) and returns the success count + error list.
  */
 export async function renameBatch(
   dir: string,
@@ -115,7 +115,7 @@ export async function deleteEntries(paths: string[]): Promise<OpResult> {
   return invoke<OpResult>("delete_entries", { paths });
 }
 
-/** Verschiebt Einträge in den System-Papierkorb (wiederherstellbar). */
+/** Moves entries to the system trash (restorable). */
 export async function trashEntries(paths: string[]): Promise<OpResult> {
   if (!hasTauri) {
     console.log("[demo] trash_entries", paths);
@@ -124,7 +124,7 @@ export async function trashEntries(paths: string[]): Promise<OpResult> {
   return invoke<OpResult>("trash_entries", { paths });
 }
 
-/** Liest einen Ausschnitt einer Datei für die Vorschau (F3). */
+/** Reads an excerpt of a file for the preview (F3). */
 export async function readPreview(
   path: string,
   maxBytes: number,
@@ -143,7 +143,7 @@ function demoArchive(_archive: string, inner: string): DirListing {
     modified: 0,
     mode: null,
   });
-  // Fiktive Archivstruktur: Wurzel enthält "src/" und Dateien.
+  // Fictional archive structure: the root contains "src/" and files.
   const entries =
     trimmed === ""
       ? [
@@ -191,7 +191,7 @@ function demoPreview(path: string): Preview {
     };
   }
 
-  // Endungsabhängige Demo-Inhalte, damit die Render-Modi testbar sind.
+  // Extension-dependent demo content so the render modes are testable.
   const text = demoContent(name, ext);
   return { ...base, kind: "text", size: text.length, text };
 }
@@ -236,10 +236,10 @@ function demoContent(name: string, ext: string): string {
   ].join("\n");
 }
 
-// ---------- Transfers (Kopieren/Verschieben, nebenläufig) ----------
+// ---------- Transfers (copy/move, concurrent) ----------
 //
-// Interner Event-Bus, den sowohl echte Tauri-Events als auch der
-// Demo-Simulator speisen. So bleibt der Store von Tauri entkoppelt.
+// Internal event bus fed by both real Tauri events and the
+// demo simulator. This keeps the store decoupled from Tauri.
 
 const progressSubs = new Set<(p: OpProgress) => void>();
 const doneSubs = new Set<(d: OpDone) => void>();
@@ -285,14 +285,14 @@ export function onFsCollision(cb: (c: CollisionReq) => void): () => void {
   return () => collisionSubs.delete(cb);
 }
 
-/** Abonniert externe Ordner-Änderungen (Verzeichnis-Watcher). */
+/** Subscribes to external folder changes (directory watcher). */
 export function onFsChanged(cb: (dir: string) => void): () => void {
   changedSubs.add(cb);
   void ensureTauriEvents();
   return () => changedSubs.delete(cb);
 }
 
-/** Legt fest, welche Ordner der Watcher beobachtet (aktuell angezeigte). */
+/** Defines which folders the watcher observes (the currently displayed ones). */
 export function setWatched(paths: string[]): void {
   if (!hasTauri) return;
   void invoke<void>("set_watched", { paths });
@@ -300,8 +300,8 @@ export function setWatched(paths: string[]): void {
 
 export type TransferOp = "copy" | "move" | "extract" | "pack";
 
-/** Startet einen Kopier-/Verschiebe-Transfer (fire-and-forget).
- *  `limit` = Bytes/s (0 = unbegrenzt), `verify` = Prüfsummen nach dem Kopieren. */
+/** Starts a copy/move transfer (fire-and-forget).
+ *  `limit` = bytes/s (0 = unlimited), `verify` = checksums after copying. */
 export function startTransfer(
   op: "copy" | "move",
   id: string,
@@ -320,7 +320,7 @@ export function startTransfer(
   void invoke<void>(cmd, { id, sources, destDir, limit, verify, bufKb, threads });
 }
 
-/** Pausiert oder setzt einen laufenden Transfer fort. */
+/** Pauses or resumes a running transfer. */
 export function pauseTransfer(id: string, paused: boolean): void {
   if (!hasTauri) {
     demoPause(id, paused);
@@ -329,7 +329,7 @@ export function pauseTransfer(id: string, paused: boolean): void {
   void invoke<void>("pause_transfer", { id, paused });
 }
 
-/** Entpackt Einträge aus einem Archiv (fire-and-forget). */
+/** Extracts entries from an archive (fire-and-forget). */
 export function startExtract(
   id: string,
   archive: string,
@@ -352,7 +352,7 @@ export function startExtract(
   });
 }
 
-/** Packt Quellen in ein neues ZIP-Archiv (fire-and-forget). */
+/** Packs sources into a new ZIP archive (fire-and-forget). */
 export function startPack(id: string, sources: string[], destZip: string): void {
   if (!hasTauri) {
     demoTransfer("pack", id, sources, destZip, false);
@@ -361,7 +361,7 @@ export function startPack(id: string, sources: string[], destZip: string): void 
   void invoke<void>("create_archive", { id, sources, destZip });
 }
 
-/** Öffnet eine Datei mit dem Standardprogramm (F4). */
+/** Opens a file with the default program (F4). */
 export function openPath(path: string): void {
   if (!hasTauri) {
     console.log("[demo] open_path", path);
@@ -370,7 +370,7 @@ export function openPath(path: string): void {
   void invoke<void>("open_path", { path });
 }
 
-/** Native macOS-Quick-Look-Vorschau (Leertaste). */
+/** Native macOS Quick Look preview (Space). */
 export function quickLook(path: string): void {
   if (!hasTauri) {
     console.log("[demo] quick_look", path);
@@ -379,7 +379,7 @@ export function quickLook(path: string): void {
   void invoke<void>("quick_look", { path });
 }
 
-/** Öffnet eine Datei mit einem bestimmten Programm (leer = Systemstandard). */
+/** Opens a file with a specific program (empty = system default). */
 export function openWith(path: string, program: string): void {
   if (!hasTauri) {
     console.log("[demo] open_with", path, program);
@@ -388,13 +388,13 @@ export function openWith(path: string, program: string): void {
   void invoke<void>("open_with", { path, program });
 }
 
-// ---------- Verzeichnisvergleich / -synchronisation ----------
+// ---------- Directory comparison / synchronization ----------
 
 /**
- * Vergleicht zwei Verzeichnisbäume (nach Größe + Änderungszeit) und liefert
- * die Ergebnisse **streamend pro Verzeichnis** über `onBatch`, damit große
- * Bäume nicht erst am Ende erscheinen. Löst mit `true` auf, wenn das Ergebnis
- * bei der Obergrenze (200.000 Dateien) abgeschnitten wurde.
+ * Compares two directory trees (by size + modification time) and delivers
+ * the results **streaming per directory** over `onBatch`, so large
+ * trees don't appear only at the end. Resolves with `true` if the result
+ * was truncated at the upper limit (200,000 files).
  */
 export async function compareDirs(
   left: string,
@@ -424,7 +424,7 @@ export async function compareDirs(
   });
 }
 
-/** Kopiert Dateien Quelle→Ziel (Paare absoluter Pfade). */
+/** Copies files source→target (pairs of absolute paths). */
 export async function syncCopy(
   items: [string, string][],
 ): Promise<OpResult> {
@@ -435,7 +435,7 @@ export async function syncCopy(
   return invoke<OpResult>("sync_copy", { items });
 }
 
-/** Vergleicht zwei Dateien inhaltlich (Text-Diff oder Hex-Gegenüberstellung). */
+/** Compares two files by content (text diff or hex comparison). */
 export async function compareFiles(
   left: string,
   right: string,
@@ -444,7 +444,7 @@ export async function compareFiles(
   return invoke<FileDiff>("compare_files", { left, right });
 }
 
-// ---------- Suche ----------
+// ---------- Search ----------
 
 export type SearchMode = "files" | "duplicates" | "empty_dirs" | "large_files";
 
@@ -459,7 +459,7 @@ export interface SearchOptions {
   min_size: number;
 }
 
-/** Durchsucht `root` und streamt Treffer in Chargen. `true` = gekürzt (Limit). */
+/** Searches `root` and streams matches in batches. `true` = truncated (limit). */
 export async function search(
   root: string,
   options: SearchOptions,
@@ -514,7 +514,7 @@ function demoSearch(o: SearchOptions): SearchHit[] {
       mk("/Users/demo/archive.zip", 10_485_760),
     ].filter((h) => h.size >= o.min_size);
   }
-  // files: Name-/Inhaltssuche
+  // files: name/content search
   const base = [
     mk("/Users/demo/notes.txt", 2048, o.content ? "12: TODO: aufräumen" : ""),
     mk("/Users/demo/readme.md", 4096, o.content ? "3: siehe TODO oben" : ""),
@@ -593,7 +593,7 @@ function demoCompare(recursive: boolean): DiffEntry[] {
     mk("src/lib.rs", "left_only", true, false, 2048, 0, now - 30, 0),
     mk("archive.zip", "right_only", false, true, 0, 1048576, 0, now - 900),
   ];
-  // Viele synthetische Einträge, damit die Virtualisierung testbar ist.
+  // Many synthetic entries so the virtualization is testable.
   const STATI = ["different", "newer_left", "newer_right", "same"] as const;
   for (let i = 0; i < 1500; i++) {
     const s = STATI[i % STATI.length];
@@ -610,16 +610,16 @@ function demoCompare(recursive: boolean): DiffEntry[] {
       ),
     );
   }
-  // Ohne Rekursion nur Einträge der obersten Ebene (kein "/" im Pfad).
+  // Without recursion, only top-level entries (no "/" in the path).
   return recursive ? rows : rows.filter((r) => !r.rel.includes("/"));
 }
 
-/** Fordert den Git-Status eines Ordners an; läuft im Backend asynchron im
- *  Hintergrund (blockiert weder Ordneröffnung noch andere IPC-Aufrufe) und
- *  liefert das Ergebnis über `onGitStatusReady` (Event `git-support-ready`). */
+/** Requests the Git status of a folder; runs asynchronously in the backend
+ *  in the background (blocks neither folder opening nor other IPC calls) and
+ *  delivers the result via `onGitStatusReady` (event `git-support-ready`). */
 export function requestGitStatus(path: string): void {
   if (!hasTauri) {
-    // Demo: Ergebnis wie im Original ebenfalls asynchron nachliefern.
+    // Demo: deliver the result asynchronously as well, like the original.
     queueMicrotask(() =>
       gitReadySubs.forEach((f) => f(path, demoGitStatus(path))),
     );
@@ -628,7 +628,7 @@ export function requestGitStatus(path: string): void {
   void invoke<void>("git_status_watch", { path });
 }
 
-/** Abonniert Git-Status-Ergebnisse (siehe requestGitStatus). */
+/** Subscribes to Git status results (see requestGitStatus). */
 export function onGitStatusReady(
   cb: (path: string, status: GitStatus) => void,
 ): () => void {
@@ -638,7 +638,7 @@ export function onGitStatusReady(
 }
 
 function demoGitStatus(path: string): GitStatus {
-  // Nur zur Demo: /Users/demo als Repo mit gemischten Status darstellen.
+  // Demo only: present /Users/demo as a repo with mixed statuses.
   if (!path.includes("/Users/demo")) {
     return { is_repo: false, branch: null, entries: {} };
   }
@@ -656,7 +656,7 @@ function demoGitStatus(path: string): GitStatus {
   };
 }
 
-/** Öffnet ein Terminal im Ordner (leeres `program` = System-Standard). */
+/** Opens a terminal in the folder (empty `program` = system default). */
 export function openTerminal(path: string, program?: string): void {
   const prog = program?.trim() ? program.trim() : null;
   if (!hasTauri) {
@@ -666,15 +666,15 @@ export function openTerminal(path: string, program?: string): void {
   void invoke<void>("open_terminal", { path, program: prog });
 }
 
-// ---------- Rechte & Eigenschaften ----------
+// ---------- Permissions & properties ----------
 
-/** Liest Rechte, Besitzer, Extended Attributes und ACL eines Eintrags. */
+/** Reads permissions, owner, extended attributes, and ACL of an entry. */
 export async function fileProps(path: string): Promise<FileProps> {
   if (!hasTauri) return demoProps(path);
   return invoke<FileProps>("file_props", { path });
 }
 
-/** Setzt die Zugriffsrechte (chmod); `mode` sind die Rechte-Bits (0..0o7777). */
+/** Sets the access rights (chmod); `mode` are the permission bits (0..0o7777). */
 export async function setPermissions(path: string, mode: number): Promise<void> {
   if (!hasTauri) {
     console.log("[demo] set_permissions", path, mode.toString(8));
@@ -683,7 +683,7 @@ export async function setPermissions(path: string, mode: number): Promise<void> 
   return invoke<void>("set_permissions", { path, mode });
 }
 
-/** Ändert Besitzer/Gruppe (chown); Name oder numerische ID, null = unverändert. */
+/** Changes owner/group (chown); name or numeric ID, null = unchanged. */
 export async function setOwner(
   path: string,
   owner: string | null,
@@ -696,7 +696,7 @@ export async function setOwner(
   return invoke<void>("set_owner", { path, owner, group });
 }
 
-/** Berechnet MD5, SHA-1 und SHA-256 einer Datei. */
+/** Computes MD5, SHA-1, and SHA-256 of a file. */
 export async function fileChecksums(path: string): Promise<Checksums> {
   if (!hasTauri) {
     return {
@@ -709,13 +709,13 @@ export async function fileChecksums(path: string): Promise<Checksums> {
   return invoke<Checksums>("file_checksums", { path });
 }
 
-/** Liest die Finder-Tags eines Eintrags (macOS; sonst leer). */
+/** Reads the Finder tags of an entry (macOS; otherwise empty). */
 export async function getTags(path: string): Promise<Tag[]> {
   if (!hasTauri) return demoTags;
   return invoke<Tag[]>("get_tags", { path });
 }
 
-/** Schreibt die Finder-Tags (leere Liste entfernt sie). */
+/** Writes the Finder tags (an empty list removes them). */
 export async function setTags(path: string, tags: Tag[]): Promise<void> {
   if (!hasTauri) {
     demoTags = tags;
@@ -725,7 +725,7 @@ export async function setTags(path: string, tags: Tag[]): Promise<void> {
   return invoke<void>("set_tags", { path, tags });
 }
 
-// Merkt sich Demo-Tags über einen Öffnen/Bearbeiten-Zyklus im Browser.
+// Remembers demo tags across an open/edit cycle in the browser.
 let demoTags: Tag[] = [
   { name: "Wichtig", color: 6 },
   { name: "Projekt", color: 4 },
@@ -751,7 +751,7 @@ function demoProps(path: string): FileProps {
   };
 }
 
-/** Listet den Inhalt eines Archivs auf Ebene `inner` (ggf. mit Passwort). */
+/** Lists the contents of an archive at level `inner` (with a password if needed). */
 export async function listArchive(
   archive: string,
   inner: string,
@@ -765,7 +765,7 @@ export async function listArchive(
   });
 }
 
-/** Bricht einen laufenden Transfer ab. */
+/** Cancels a running transfer. */
 export function cancelTransfer(id: string): void {
   if (!hasTauri) {
     demoCancelled.add(id);
@@ -774,7 +774,7 @@ export function cancelTransfer(id: string): void {
   void invoke<void>("cancel_transfer", { id });
 }
 
-/** Beantwortet einen Namenskonflikt. */
+/** Answers a name conflict. */
 export function resolveCollision(
   reqId: string,
   action: "overwrite" | "rename" | "skip",
@@ -789,7 +789,7 @@ export function resolveCollision(
   void invoke<void>("resolve_collision", { reqId, action, applyAll });
 }
 
-// ---------- Demo-Simulator (nur ohne Tauri) ----------
+// ---------- Demo simulator (only without Tauri) ----------
 
 const demoCancelled = new Set<string>();
 const demoCollisionResume = new Map<string, () => void>();
@@ -824,7 +824,7 @@ function demoTransfer(
     }
     if (paused) return;
 
-    // Pause aus der UI: aktuellen Stand als „pausiert" senden und warten.
+    // Pause from the UI: send the current state as "paused" and wait.
     if (demoPaused.has(id)) {
       const frac = step / steps;
       progressSubs.forEach((f) =>
@@ -844,7 +844,7 @@ function demoTransfer(
       return;
     }
 
-    // Einmalig einen Namenskonflikt simulieren (nur Copy/Move).
+    // Simulate a name conflict once (copy/move only).
     if (collide && !collisionShown && step === 3 && sources.length > 0) {
       collisionShown = true;
       paused = true;

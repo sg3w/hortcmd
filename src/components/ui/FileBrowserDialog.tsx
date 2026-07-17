@@ -1,7 +1,7 @@
 // ============================================================
-// Wiederverwendbarer Dateibrowser-Modal (Radix Dialog).
-// Wird über den fileBrowserStore von überall geöffnet und liefert
-// den gewählten Pfad per onPick zurück.
+// Reusable file browser modal (Radix Dialog).
+// Opened from anywhere via the fileBrowserStore and returns the
+// chosen path through onPick.
 // ============================================================
 
 import { useCallback, useEffect, useState } from "react";
@@ -19,16 +19,16 @@ import { RowIcon } from "@/lib/fileIcon";
 import { isRoot, joinPath, parentPath } from "@/lib/path";
 import { cn } from "@/lib/cn";
 
-/** macOS-App-Bundle (…​.app) – wird wie eine wählbare Datei behandelt. */
+/** macOS app bundle (…​.app) – treated like a selectable file. */
 function isAppBundle(entry: DirEntry): boolean {
   return entry.is_dir && /\.app$/i.test(entry.name);
 }
 
-/** Ob ein Eintrag im gegebenen Modus ausgewählt werden darf. */
+/** Whether an entry may be selected in the given mode. */
 function isSelectable(entry: DirEntry, mode: SelectMode): boolean {
   if (mode === "any") return true;
   if (mode === "folder") return entry.is_dir;
-  // file: Dateien oder App-Bundles
+  // file: files or app bundles
   return !entry.is_dir || isAppBundle(entry);
 }
 
@@ -63,7 +63,7 @@ export function FileBrowserDialog() {
     }
   }, []);
 
-  // Beim Öffnen initialisieren: Startordner laden + Laufwerke holen.
+  // Initialize on open: load the start folder + fetch the drives.
   useEffect(() => {
     if (!request) return;
     setSelected(null);
@@ -107,16 +107,16 @@ export function FileBrowserDialog() {
 
   const confirm = () => {
     if (selected) pick(joinPath(path, selected));
-    else if (mode !== "file") pick(path); // aktuellen Ordner wählen
+    else if (mode !== "file") pick(path); // choose the current folder
   };
 
   const canConfirm = selected !== null || mode !== "file";
 
   return (
-    // Dialog.Root bleibt dauerhaft gemountet und wird nur über `open`
-    // gesteuert. Würde die Komponente im Zustand `open` unmounten (früher
-    // `if (!request) return null`), ließe Radix `pointer-events: none` auf
-    // <body> zurück → gesamte App reagiert nach dem Schließen nicht mehr.
+    // Dialog.Root stays mounted permanently and is only controlled via
+    // `open`. If the component unmounted while in the `open` state (formerly
+    // `if (!request) return null`), Radix would leave `pointer-events: none`
+    // on <body> → the entire app stops responding after closing.
     <Dialog.Root open={!!request} onOpenChange={(o) => !o && close()}>
       {request && (
       <Dialog.Portal>
@@ -130,7 +130,7 @@ export function FileBrowserDialog() {
             {request.title ?? t("fb.title")}
           </Dialog.Title>
 
-          {/* Navigationsleiste */}
+          {/* Navigation bar */}
           <div className="flex items-center gap-1.5 border-b border-edge bg-header px-2 py-1.5">
             <button
               onClick={() => navigate(parentPath(path))}
@@ -174,7 +174,7 @@ export function FileBrowserDialog() {
             />
           </div>
 
-          {/* Einträge */}
+          {/* Entries */}
           <div className="min-h-0 flex-1 overflow-y-auto">
             {error ? (
               <p className="px-3 py-2 text-[12px] text-red-400">{error}</p>
@@ -208,7 +208,7 @@ export function FileBrowserDialog() {
             )}
           </div>
 
-          {/* Fußzeile */}
+          {/* Footer */}
           <div className="flex items-center gap-2 border-t border-edge bg-header px-4 py-2">
             <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-dim">
               {selected ? joinPath(path, selected) : path}

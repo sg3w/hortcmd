@@ -1,9 +1,9 @@
 // ============================================================
-// Verzeichnisbaum neben der Dateiliste (Ansichtsmodus "tree").
-// Verwurzelt an der Laufwerks-/Home-Wurzel und automatisch bis
-// zum aktuellen Pfad aufgeklappt. Unterordner werden lazy per
-// list_dir nachgeladen. Einfachklick wählt aus, Doppelklick
-// (bzw. Enter) lädt den Ordner in die Liste.
+// Directory tree next to the file list (view mode "tree").
+// Rooted at the drive/home root and automatically expanded
+// down to the current path. Subfolders are lazily loaded via
+// list_dir. Single click selects, double click
+// (or Enter) loads the folder into the list.
 // ============================================================
 
 import { useEffect, useReducer, useRef, useState, type KeyboardEvent } from "react";
@@ -30,8 +30,8 @@ export function DirTree({ side }: { side: Side }) {
   const loadDir = usePanes((s) => s.loadDir);
   const setActive = usePanes((s) => s.setActive);
 
-  // Baumzustand in Refs (stabil über asynchrone Ladevorgänge); `force`
-  // löst das Neurendern aus.
+  // Tree state in refs (stable across asynchronous loads); `force`
+  // triggers the re-render.
   const childrenRef = useRef<Map<string, string[]>>(new Map());
   const expandedRef = useRef<Set<string>>(new Set());
   const loadingRef = useRef<Set<string>>(new Set());
@@ -39,7 +39,7 @@ export function DirTree({ side }: { side: Side }) {
   const [selected, setSelected] = useState(path);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  /** Unterordner eines Pfads laden (gecacht). */
+  /** Load the subfolders of a path (cached). */
   async function loadChildren(p: string): Promise<void> {
     if (childrenRef.current.has(p) || loadingRef.current.has(p)) return;
     loadingRef.current.add(p);
@@ -68,7 +68,7 @@ export function DirTree({ side }: { side: Side }) {
     force();
   }
 
-  // Auto-Aufklappen bis zum aktuellen Pfad, sobald dieser wechselt.
+  // Auto-expand down to the current path whenever it changes.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -85,7 +85,7 @@ export function DirTree({ side }: { side: Side }) {
     };
   }, [path]);
 
-  // Sichtbare Knoten flach ausrollen (nur aufgeklappte Zweige).
+  // Flatten the visible nodes (only expanded branches).
   const nodes: TreeNode[] = [];
   const walk = (p: string, depth: number) => {
     nodes.push({ path: p, depth });
@@ -102,7 +102,7 @@ export function DirTree({ side }: { side: Side }) {
     overscan: 12,
   });
 
-  // Ausgewählten Knoten im Sichtfeld halten.
+  // Keep the selected node in view.
   const selIndex = nodes.findIndex((n) => n.path === selected);
   useEffect(() => {
     if (selIndex >= 0) virtualizer.scrollToIndex(selIndex, { align: "auto" });
@@ -164,8 +164,8 @@ export function DirTree({ side }: { side: Side }) {
             const node = nodes[v.index];
             const kids = childrenRef.current.get(node.path);
             const isExpanded = expandedRef.current.has(node.path);
-            // Chevron zeigen, solange nicht geladen (evtl. Unterordner) oder
-            // wenn tatsächlich Unterordner vorhanden sind.
+            // Show the chevron while not loaded (possible subfolders) or
+            // when subfolders actually exist.
             const showChevron = kids === undefined || kids.length > 0;
             const isSelected = node.path === selected;
             const label = baseName(node.path);

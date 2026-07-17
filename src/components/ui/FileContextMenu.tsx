@@ -1,6 +1,6 @@
 // ============================================================
-// Rechtsklick-Kontextmenü über der Dateiliste (Radix UI).
-// Erste Punkte: Kopieren, Ausschneiden, Einfügen.
+// Right-click context menu over the file list (Radix UI).
+// First items: copy, cut, paste.
 // ============================================================
 
 import * as ContextMenu from "@radix-ui/react-context-menu";
@@ -50,7 +50,7 @@ const itemCls =
 
 interface Props {
   side: Side;
-  /** Index der zuletzt rechtsgeklickten Zeile (aus FileTable). */
+  /** Index of the most recently right-clicked row (from FileTable). */
   targetRef: RefObject<number | null>;
   children: ReactNode;
 }
@@ -62,7 +62,7 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
   const terminalProgram = useSettings((s) => s.terminalProgram);
   const programs = useSettings((s) => s.programs);
   const defaultEditor = useSettings((s) => s.defaultEditor);
-  // Ob der aktuelle Cursor-Eintrag eine (öffenbare) Datei ist.
+  // Whether the current cursor entry is an (openable) file.
   const cursorIsFile = usePanes((s) => {
     const p = panelOf(s, side);
     const cur = p.entries[p.cursor];
@@ -70,8 +70,8 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
   });
   const t = useT();
 
-  // Ziel-Ordner: Rechtsklick auf einen Ordner → dieser Ordner, sonst
-  // (Datei/Leerraum) → aktueller Ordner des Fensters.
+  // Target folder: right-click on a folder → that folder, otherwise
+  // (file/empty space) → current folder of the window.
   const targetDir = (): string => {
     const p = panelOf(usePanes.getState(), side);
     const idx = targetRef.current;
@@ -81,8 +81,8 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
       : p.path;
   };
 
-  // Einfügen kontextabhängig: Rechtsklick auf einen Ordner → in diesen Ordner,
-  // sonst (Datei/Leerraum) → in den aktuellen Ordner des aktiven Fensters.
+  // Paste is context-dependent: right-click on a folder → into that folder,
+  // otherwise (file/empty space) → into the current folder of the active window.
   const onPaste = () => {
     const p = panelOf(usePanes.getState(), side);
     const idx = targetRef.current;
@@ -97,7 +97,7 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
   const onTerminal = () => openTerminal(targetDir(), terminalProgram);
   const onOpenFolder = () => openPath(targetDir());
 
-  // Eigenschaften/Rechte des rechtsgeklickten Eintrags (sonst Cursor).
+  // Properties/permissions of the right-clicked entry (otherwise the cursor).
   const onProps = () => {
     const p = panelOf(usePanes.getState(), side);
     const idx = targetRef.current;
@@ -107,12 +107,12 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
     openProps(joinPath(p.path, entry.name));
   };
 
-  // Vollständige Pfade der Zielmenge (Auswahl oder rechtsgeklickter Eintrag).
+  // Full paths of the target set (selection or right-clicked entry).
   const onCopyPath = () => {
     const paths = targetPaths(side);
     if (paths.length) void writeClipboard(paths.join("\n"));
   };
-  // Nur die Datei-/Ordnernamen der Zielmenge.
+  // Only the file/folder names of the target set.
   const onCopyName = () => {
     const names = targetPaths(side).map(baseName);
     if (names.length) void writeClipboard(names.join("\n"));
@@ -139,9 +139,9 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
 
   return (
     <ContextMenu.Root>
-      {/* Trigger muss ein echtes DOM-Element sein, damit Radix seine
-          contextmenu-Behandlung (preventDefault + Öffnen) anhängen kann.
-          Eine Komponente als asChild-Kind würde die Props verschlucken. */}
+      {/* The trigger must be a real DOM element so that Radix can attach its
+          contextmenu handling (preventDefault + open). A component as the
+          asChild child would swallow the props. */}
       <ContextMenu.Trigger asChild>
         <div
           className="flex min-h-0 min-w-0 flex-1 flex-col"

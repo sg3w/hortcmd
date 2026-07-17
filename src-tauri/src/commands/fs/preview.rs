@@ -1,6 +1,6 @@
 // ============================================================
-// Datei-Vorschau (F3): Text, Bild (data-URL) oder Hex (binär).
-// Zusätzlich: Öffnen mit dem Standardprogramm (F4).
+// File preview (F3): text, image (data URL), or hex (binary).
+// Additionally: open with the default program (F4).
 // ============================================================
 
 use base64::Engine as _;
@@ -11,7 +11,7 @@ use std::io::{Cursor, Read};
 use std::path::Path;
 use ts_rs::TS;
 
-/// Ein EXIF-Feld (Anzeigename + formatierter Wert).
+/// An EXIF field (display name + formatted value).
 #[derive(Serialize, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct ExifTag {
@@ -19,7 +19,7 @@ pub struct ExifTag {
     pub value: String,
 }
 
-/// Vorschau-Inhalt einer Datei: Text, Bild (data-URL) oder Hex (binär).
+/// Preview content of a file: text, image (data URL), or hex (binary).
 #[derive(Serialize, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct Preview {
@@ -28,21 +28,21 @@ pub struct Preview {
     pub name: String,
     #[ts(type = "number")]
     pub size: u64,
-    /// Textfassung des gelesenen Ausschnitts (lossy UTF-8; auch bei Binärdateien).
+    /// Text version of the read excerpt (lossy UTF-8; for binary files too).
     pub text: Option<String>,
-    /// Hex-Dump (nur bei kind = binary).
+    /// Hex dump (only for kind = binary).
     pub hex: Option<String>,
-    /// data-URL (bei kind = image)
+    /// data URL (for kind = image)
     pub data_url: Option<String>,
-    /// EXIF-Metadaten (nur bei Bildern; sonst leer).
+    /// EXIF metadata (only for images; otherwise empty).
     pub exif: Vec<ExifTag>,
-    /// true, wenn nur ein Anfangsausschnitt gelesen wurde
+    /// true if only an initial excerpt was read
     pub truncated: bool,
 }
 
 const IMAGE_EXTS: [&str; 7] = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico"];
 
-/// Liest EXIF-Metadaten aus den Bildbytes (leer, wenn keine/nicht lesbar).
+/// Reads EXIF metadata from the image bytes (empty if none/not readable).
 fn read_exif(bytes: &[u8]) -> Vec<ExifTag> {
     let exif = match exif::Reader::new().read_from_container(&mut Cursor::new(bytes)) {
         Ok(e) => e,
@@ -75,7 +75,7 @@ fn hex_dump(bytes: &[u8]) -> String {
     out
 }
 
-/// Liest bis zu `max_bytes` einer Datei für die Vorschau.
+/// Reads up to `max_bytes` of a file for the preview.
 #[tauri::command]
 pub fn read_preview(path: String, max_bytes: u32) -> Result<Preview, String> {
     let p = Path::new(&path);
@@ -93,7 +93,7 @@ pub fn read_preview(path: String, max_bytes: u32) -> Result<Preview, String> {
         .map(|e| e.to_string_lossy().to_lowercase())
         .unwrap_or_default();
 
-    // Bilder als data-URL zurückgeben.
+    // Return images as a data URL.
     if IMAGE_EXTS.contains(&ext.as_str()) {
         let bytes = fs::read(p).map_err(|e| e.to_string())?;
         let mime = match ext.as_str() {
@@ -118,7 +118,7 @@ pub fn read_preview(path: String, max_bytes: u32) -> Result<Preview, String> {
         });
     }
 
-    // Textausschnitt lesen.
+    // Read a text excerpt.
     let cap = (max_bytes as u64).min(size) as usize;
     let mut f = File::open(p).map_err(|e| e.to_string())?;
     let mut buf = vec![0u8; cap];
@@ -126,14 +126,14 @@ pub fn read_preview(path: String, max_bytes: u32) -> Result<Preview, String> {
     buf.truncate(n);
     let truncated = (n as u64) < size;
 
-    // Nullbytes im Anfangsbereich → als binär behandeln (Hex-Ansicht).
+    // Null bytes in the initial region → treat as binary (hex view).
     let is_binary = buf.iter().take(8000).any(|&b| b == 0);
     let text = Some(String::from_utf8_lossy(&buf).into_owned());
     Ok(Preview {
         kind: if is_binary { "binary" } else { "text" }.into(),
         name,
         size,
-        // Text ist immer verfügbar; Hex nur zusätzlich bei Binärdateien.
+        // Text is always available; hex only additionally for binary files.
         text,
         hex: is_binary.then(|| hex_dump(&buf)),
         data_url: None,
@@ -142,19 +142,19 @@ pub fn read_preview(path: String, max_bytes: u32) -> Result<Preview, String> {
     })
 }
 
-/// Öffnet eine Datei/URL mit dem im System hinterlegten Standardprogramm.
+/// Opens a file/URL with the default program registered in the system.
 #[tauri::command]
 pub fn open_path(path: String) -> Result<(), String> {
     opener::open(&path).map_err(|e| e.to_string())
 }
 
-/// Öffnet die native macOS-Quick-Look-Vorschau (Leertaste). Nur macOS.
+/// Opens the native macOS Quick Look preview (Space). macOS only.
 #[tauri::command]
 pub fn quick_look(path: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         use std::process::{Command, Stdio};
-        // `qlmanage -p` öffnet das Quick-Look-Panel; Ausgabe unterdrücken.
+        // `qlmanage -p` opens the Quick Look panel; suppress the output.
         Command::new("qlmanage")
             .args(["-p", &path])
             .stdout(Stdio::null())
@@ -170,8 +170,8 @@ pub fn quick_look(path: String) -> Result<(), String> {
     }
 }
 
-/// Öffnet eine Datei mit einem bestimmten Programm.
-/// Leeres `program` → System-Standard (wie `open_path`).
+/// Opens a file with a specific program.
+/// Empty `program` → system default (like `open_path`).
 #[tauri::command]
 pub fn open_with(path: String, program: String) -> Result<(), String> {
     use std::process::Command;
@@ -183,8 +183,8 @@ pub fn open_with(path: String, program: String) -> Result<(), String> {
 
     #[cfg(target_os = "macos")]
     {
-        // App-Bundle (…​.app) oder bloßer App-Name → über `open -a`.
-        // Ein Pfad auf ein Binary (enthält "/") wird direkt gestartet.
+        // App bundle (….app) or a bare app name → via `open -a`.
+        // A path to a binary (contains "/") is started directly.
         if program.ends_with(".app") || !program.contains('/') {
             Command::new("open")
                 .args(["-a", program, &path])
@@ -210,8 +210,8 @@ pub fn open_with(path: String, program: String) -> Result<(), String> {
     }
 }
 
-/// Öffnet ein Terminal im angegebenen Ordner.
-/// `program` überschreibt das Standard-Terminal (leer/None = Plattform-Standard).
+/// Opens a terminal in the given folder.
+/// `program` overrides the default terminal (empty/None = platform default).
 #[tauri::command]
 pub fn open_terminal(path: String, program: Option<String>) -> Result<(), String> {
     use std::process::Command;
@@ -226,7 +226,7 @@ pub fn open_terminal(path: String, program: Option<String>) -> Result<(), String
 
     #[cfg(target_os = "macos")]
     {
-        // Standard: Terminal.app; sonst die angegebene App (z. B. "iTerm").
+        // Default: Terminal.app; otherwise the given app (e.g. "iTerm").
         let app = prog.unwrap_or_else(|| "Terminal".to_string());
         Command::new("open")
             .args(["-a", &app, &path])
@@ -237,7 +237,7 @@ pub fn open_terminal(path: String, program: Option<String>) -> Result<(), String
 
     #[cfg(target_os = "windows")]
     {
-        // Standard: cmd; startet mit Arbeitsverzeichnis = Ordner.
+        // Default: cmd; starts with the working directory = folder.
         let app = prog.unwrap_or_else(|| "cmd".to_string());
         Command::new(&app)
             .current_dir(dir)
@@ -248,7 +248,7 @@ pub fn open_terminal(path: String, program: Option<String>) -> Result<(), String
 
     #[cfg(all(unix, not(target_os = "macos")))]
     {
-        // Angegebenes Terminal oder gängige Kandidaten der Reihe nach probieren.
+        // Try the given terminal or common candidates in order.
         let candidates: Vec<String> = match prog {
             Some(p) => vec![p],
             None => [

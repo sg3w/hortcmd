@@ -1,9 +1,9 @@
 // ============================================================
-// Verzeichnisvergleich & -synchronisation.
-//   compare_dirs – zwei Bäume rekursiv vergleichen (nach Größe + Zeit)
-//   sync_copy    – ausgewählte Dateien von einer Seite zur anderen kopieren
-// Der Vergleich liefert je Datei einen Status; das Kopieren erledigt
-// das Backend (Zielordner werden bei Bedarf angelegt).
+// Directory comparison & synchronization.
+//   compare_dirs – compare two trees recursively (by size + time)
+//   sync_copy    – copy selected files from one side to the other
+// The comparison returns a status per file; the copying is done
+// by the backend (target folders are created as needed).
 // ============================================================
 
 use super::file::OpResult;
@@ -15,15 +15,15 @@ use std::time::UNIX_EPOCH;
 use tauri::ipc::Channel;
 use ts_rs::TS;
 
-/// Ein Vergleichsergebnis für eine Datei (relativ zu den beiden Wurzeln).
+/// A comparison result for a file (relative to the two roots).
 #[derive(Serialize, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct DiffEntry {
-    /// Relativer Pfad (mit "/" getrennt), identisch auf beiden Seiten.
+    /// Relative path (separated by "/"), identical on both sides.
     pub rel: String,
-    /// Basisname der Datei.
+    /// Base name of the file.
     pub name: String,
-    /// Existiert links / rechts.
+    /// Exists left / right.
     pub left: bool,
     pub right: bool,
     #[ts(type = "number")]
@@ -38,15 +38,15 @@ pub struct DiffEntry {
     pub status: String,
 }
 
-/// Obergrenze der Vergleichseinträge. Verhindert, dass sehr große Bäume
-/// den Speicher / das Frontend überlasten; darüber wird abgeschnitten und
-/// das Frontend zeigt einen Warnhinweis.
+/// Upper limit of comparison entries. Prevents very large trees from
+/// overloading memory / the frontend; beyond it the result is truncated and
+/// the frontend shows a warning.
 const MAX_ENTRIES: usize = 200_000;
 
-type Meta = (u64, u64); // (Größe, mtime in Unix-Sekunden)
+type Meta = (u64, u64); // (size, mtime in Unix seconds)
 
-/// Liest eine Verzeichnisebene: Dateien (Name → Meta) und Unterordner-Namen.
-/// Symlinks werden übersprungen; sortierte Sammlungen für stabile Reihenfolge.
+/// Reads one directory level: files (name → meta) and subfolder names.
+/// Symlinks are skipped; sorted collections for a stable order.
 fn read_level(dir: &Path) -> (BTreeMap<String, Meta>, BTreeSet<String>) {
     let mut files = BTreeMap::new();
     let mut subdirs = BTreeSet::new();
@@ -93,11 +93,11 @@ fn status_of(l: Option<&Meta>, r: Option<&Meta>) -> &'static str {
     }
 }
 
-/// Vergleicht Ebene für Ebene und schickt jede Verzeichnis-Charge sofort
-/// über den Channel ans Frontend (Streaming), bevor in Unterordner
-/// abgestiegen wird. `count` zählt die bereits gesendeten Einträge; bei
-/// Erreichen von `MAX_ENTRIES` wird abgebrochen. Rückgabe `true` = Limit
-/// erreicht (Ergebnis gekürzt).
+/// Compares level by level and sends each directory batch immediately
+/// over the channel to the frontend (streaming), before descending into
+/// subfolders. `count` counts the already-sent entries; on
+/// reaching `MAX_ENTRIES` it aborts. Returns `true` = limit
+/// reached (result truncated).
 fn walk_compare(
     lroot: &Path,
     rroot: &Path,
@@ -119,7 +119,7 @@ fn walk_compare(
     let (lfiles, lsubs) = read_level(&ljoin);
     let (rfiles, rsubs) = read_level(&rjoin);
 
-    // Dateien dieser Ebene vergleichen (Namen beider Seiten, sortiert).
+    // Compare the files of this level (names of both sides, sorted).
     let mut names: BTreeSet<&String> = BTreeSet::new();
     names.extend(lfiles.keys());
     names.extend(rfiles.keys());
@@ -178,10 +178,10 @@ fn walk_compare(
     false
 }
 
-/// Vergleicht zwei Verzeichnisbäume und streamt die Ergebnisse pro
-/// Verzeichnis über `on_batch`. Läuft auf einem Hintergrund-Thread
-/// (`spawn_blocking`), damit große Bäume die UI nicht blockieren.
-/// Rückgabe `true` = Ergebnis wurde bei `MAX_ENTRIES` abgeschnitten.
+/// Compares two directory trees and streams the results per
+/// directory over `on_batch`. Runs on a background thread
+/// (`spawn_blocking`) so large trees don't block the UI.
+/// Returns `true` = the result was truncated at `MAX_ENTRIES`.
 #[tauri::command]
 pub async fn compare_dirs(
     left: String,
@@ -205,7 +205,7 @@ pub async fn compare_dirs(
     .map_err(|e| e.to_string())
 }
 
-/// Kopiert Dateien von Quelle → Ziel (blockierend).
+/// Copies files from source → target (blocking).
 fn sync_copy_impl(items: Vec<(String, String)>) -> OpResult {
     let mut ok = 0u32;
     let mut errors = Vec::new();
@@ -225,9 +225,9 @@ fn sync_copy_impl(items: Vec<(String, String)>) -> OpResult {
     OpResult { ok, errors }
 }
 
-/// Kopiert Dateien von Quelle → Ziel (Paare absoluter Pfade). Fehlende
-/// Zielordner werden angelegt; vorhandene Zieldateien werden überschrieben.
-/// Läuft auf einem Hintergrund-Thread, um die UI nicht zu blockieren.
+/// Copies files from source → target (pairs of absolute paths). Missing
+/// target folders are created; existing target files are overwritten.
+/// Runs on a background thread so as not to block the UI.
 #[tauri::command]
 pub async fn sync_copy(items: Vec<(String, String)>) -> OpResult {
     match tauri::async_runtime::spawn_blocking(move || sync_copy_impl(items)).await {

@@ -1,13 +1,13 @@
 // ============================================================
-// Suche über einen Verzeichnisbaum. Vier Modi:
-//   files        – Name- und/oder Inhaltssuche (Glob oder Regex)
-//   duplicates   – gleiche Dateien finden (Größe, dann SHA-256)
-//   empty_dirs   – leere Ordner
-//   large_files  – Dateien ab einer Mindestgröße (nach Größe sortiert)
+// Search over a directory tree. Four modes:
+//   files        – name and/or content search (glob or regex)
+//   duplicates   – find identical files (size, then SHA-256)
+//   empty_dirs   – empty folders
+//   large_files  – files from a minimum size (sorted by size)
 //
-// Läuft asynchron über `spawn_blocking` und streamt Treffer in Chargen
-// über einen Tauri-`Channel`. Ignorierte Ordner werden übersprungen; ein
-// hartes Trefferlimit schützt Speicher/Frontend.
+// Runs asynchronously via `spawn_blocking` and streams matches in batches
+// over a Tauri `Channel`. Ignored folders are skipped; a
+// hard match limit protects memory/frontend.
 // ============================================================
 
 use serde::{Deserialize, Serialize};
@@ -19,7 +19,7 @@ use std::time::UNIX_EPOCH;
 use tauri::ipc::Channel;
 use ts_rs::TS;
 
-/// Ein Suchtreffer (Datei oder Ordner).
+/// A search hit (file or folder).
 #[derive(Serialize, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct SearchHit {
@@ -30,27 +30,27 @@ pub struct SearchHit {
     pub size: u64,
     #[ts(type = "number")]
     pub modified: u64,
-    /// Zusatzinfo: Trefferzeile (Inhalt), Größe oder Gruppenhinweis.
+    /// Additional info: match line (content), size, or group hint.
     pub detail: String,
-    /// Duplikatgruppe (>0 im Modus „duplicates"; sonst 0).
+    /// Duplicate group (>0 in "duplicates" mode; otherwise 0).
     pub group: u32,
 }
 
-/// Suchoptionen vom Frontend.
+/// Search options from the frontend.
 #[derive(Deserialize)]
 pub struct SearchOptions {
     /// "files" | "duplicates" | "empty_dirs" | "large_files"
     pub mode: String,
-    /// Namensmuster (Glob oder Regex); leer = alle Namen.
+    /// Name pattern (glob or regex); empty = all names.
     pub name: String,
     pub name_regex: bool,
-    /// Inhaltssuche (nur Modus „files"); leer = keine Inhaltssuche.
+    /// Content search (only "files" mode); empty = no content search.
     pub content: String,
     pub content_regex: bool,
     pub case_sensitive: bool,
-    /// Ordnernamen, die (auf jeder Ebene) übersprungen werden.
+    /// Folder names that are skipped (at every level).
     pub ignore_dirs: Vec<String>,
-    /// Mindestgröße in Bytes (nur Modus „large_files").
+    /// Minimum size in bytes (only "large_files" mode).
     #[serde(default)]
     pub min_size: u64,
 }
@@ -70,7 +70,7 @@ fn meta_of(m: &fs::Metadata) -> Meta {
     (m.len(), mtime)
 }
 
-/// Wandelt ein Glob-Muster (`*`, `?`, mehrere durch Leerzeichen/`;`) in Regex.
+/// Converts a glob pattern (`*`, `?`, multiple separated by space/`;`) to regex.
 fn glob_to_regex(pattern: &str, case_sensitive: bool) -> Result<regex::Regex, String> {
     let parts: Vec<String> = pattern
         .split([';', ' ', '\t'])
@@ -107,7 +107,7 @@ fn build_regex(pattern: &str, case_sensitive: bool) -> Result<regex::Regex, Stri
         .map_err(|e| format!("Ungültiger Ausdruck: {}", e))
 }
 
-/// Ein Name-Matcher (Regex oder Glob) bzw. „alles" bei leerem Muster.
+/// A name matcher (regex or glob), or "everything" for an empty pattern.
 enum NameMatch {
     Any,
     Re(regex::Regex),
@@ -133,8 +133,8 @@ impl NameMatch {
     }
 }
 
-/// Sammelt rekursiv alle Dateien und Ordner (ignorierte Ordner übersprungen,
-/// Symlinks nicht verfolgt). Reihenfolge ist die des Dateisystems.
+/// Recursively collects all files and folders (ignored folders skipped,
+/// symlinks not followed). The order is that of the file system.
 fn walk(root: &Path, ignore: &[String], files: &mut Vec<(PathBuf, Meta)>, dirs: &mut Vec<PathBuf>) {
     let Ok(rd) = fs::read_dir(root) else { return };
     for entry in rd.flatten() {
@@ -171,8 +171,8 @@ fn hit(path: &Path, size: u64, modified: u64, detail: String, group: u32) -> Sea
     }
 }
 
-/// Sucht in einer Datei nach der ersten passenden Zeile (Inhaltssuche).
-/// Gibt None zurück, wenn die Datei binär/zu groß ist oder nichts passt.
+/// Searches a file for the first matching line (content search).
+/// Returns None if the file is binary/too large or nothing matches.
 fn content_match(path: &Path, size: u64, needle: &Needle) -> Option<String> {
     if size > MAX_CONTENT_BYTES {
         return None;
@@ -192,7 +192,7 @@ fn content_match(path: &Path, size: u64, needle: &Needle) -> Option<String> {
     None
 }
 
-/// Inhalts-Matcher: Regex oder (case-sensitiv/-insensitiv) Teilstring.
+/// Content matcher: regex or (case-sensitive/-insensitive) substring.
 enum Needle {
     Re(regex::Regex),
     Plain { text: String, case_sensitive: bool },
@@ -213,7 +213,7 @@ impl Needle {
     }
 }
 
-/// SHA-256 einer Datei (für die Duplikaterkennung).
+/// SHA-256 of a file (for duplicate detection).
 fn hash_file(path: &Path) -> Option<Vec<u8>> {
     use sha2::{Digest, Sha256};
     let mut f = fs::File::open(path).ok()?;
@@ -280,7 +280,7 @@ fn run_search(
 
         "duplicates" => Ok(find_duplicates(files, channel)),
 
-        // Standard: Name- und/oder Inhaltssuche.
+        // Default: name and/or content search.
         _ => {
             let needle = if opts.content.trim().is_empty() {
                 None
@@ -327,8 +327,8 @@ fn run_search(
     }
 }
 
-/// Findet Duplikate: nach Größe vorgruppieren, dann innerhalb gleicher Größe
-/// per SHA-256. Nur Gruppen mit ≥2 identischen Dateien werden gemeldet.
+/// Finds duplicates: pre-group by size, then within the same size
+/// by SHA-256. Only groups with ≥2 identical files are reported.
 fn find_duplicates(files: Vec<(PathBuf, Meta)>, channel: &Channel<Vec<SearchHit>>) -> bool {
     let mut by_size: HashMap<u64, Vec<(PathBuf, u64)>> = HashMap::new();
     for (p, (sz, mt)) in files {
@@ -344,7 +344,7 @@ fn find_duplicates(files: Vec<(PathBuf, Meta)>, channel: &Channel<Vec<SearchHit>
         if group.len() < 2 {
             continue;
         }
-        // Innerhalb gleicher Größe per Hash weiter gruppieren.
+        // Group further by hash within the same size.
         let mut by_hash: HashMap<Vec<u8>, Vec<(PathBuf, u64)>> = HashMap::new();
         for (p, mt) in group {
             if let Some(h) = hash_file(&p) {
@@ -387,8 +387,8 @@ fn human_size(bytes: u64) -> String {
     }
 }
 
-/// Startet die Suche und streamt die Treffer über `on_batch`.
-/// Rückgabe `true` = Ergebnis wurde beim Trefferlimit abgeschnitten.
+/// Starts the search and streams the matches over `on_batch`.
+/// Returns `true` = the result was truncated at the match limit.
 #[tauri::command]
 pub async fn search(
     root: String,
@@ -465,7 +465,7 @@ mod tests {
         assert_eq!(files.len(), 2);
         assert_eq!(dirs.len(), 2);
 
-        // „leer" ist leer, „voll" nicht.
+        // "empty" is empty, "full" is not.
         let empty: Vec<_> = dirs
             .iter()
             .filter(|p| fs::read_dir(p).unwrap().next().is_none())
@@ -473,7 +473,7 @@ mod tests {
         assert_eq!(empty.len(), 1);
         assert!(empty[0].ends_with("leer"));
 
-        // Große Datei ≥ 1 KB: nur big.bin.
+        // Large file ≥ 1 KB: only big.bin.
         let large: Vec<_> = files.iter().filter(|(_, (sz, _))| *sz >= 1024).collect();
         assert_eq!(large.len(), 1);
 

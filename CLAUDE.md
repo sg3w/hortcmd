@@ -2,61 +2,61 @@
 
 # hortcmd
 
-hortcmd ist ein plattformübergreifender Dateimanager im Stil von Total Commander, entwickelt mit **Rust**, **Tauri v2**, **React** und **TypeScript**.
+hortcmd is a cross-platform file manager in the style of Total Commander, built with **Rust**, **Tauri v2**, **React**, and **TypeScript**.
 
-## Grundsätze
+## Principles
 
-- Bevorzuge **Rust** für alle Dateisystem-, System- und Backend-Funktionen.
-- Das Frontend dient ausschließlich der Darstellung und Benutzerinteraktion.
-- Kommunikation zwischen Frontend und Backend erfolgt ausschließlich über **Tauri Commands**.
-- Bestehende Architektur und Projektstruktur beibehalten.
-- Änderungen sollen klein, nachvollziehbar und wartbar sein.
+- Prefer **Rust** for all file-system, system, and backend functionality.
+- The frontend serves solely for presentation and user interaction.
+- Communication between frontend and backend happens exclusively via **Tauri commands**.
+- Keep the existing architecture and project structure.
+- Changes should be small, comprehensible, and maintainable.
 
-## Architektur
+## Architecture
 
 ```
 src/          React + TypeScript
 src-tauri/    Rust + Tauri
 ```
 
-Geschäftslogik gehört ins Backend. Das Frontend enthält keine duplizierte Dateisystemlogik.
+Business logic belongs in the backend. The frontend contains no duplicated file-system logic.
 
 ## Backend
 
-- Robuster und idiomatischer Rust-Code
-- Fehler über `Result` behandeln, keine unnötigen `panic!`
-- Plattformunterschiede (Windows, macOS, Linux) berücksichtigen
-- Komplexe Logik in Services auslagern, Commands möglichst schlank halten
-- IPC-Datentypen über **ts-rs** exportieren
+- Robust and idiomatic Rust code
+- Handle errors via `Result`, no unnecessary `panic!`
+- Account for platform differences (Windows, macOS, Linux)
+- Move complex logic into services, keep commands as thin as possible
+- Export IPC data types via **ts-rs**
 
 ## Frontend
 
-- React Functional Components
-- TypeScript strikt verwenden
-- Zustand für State Management
-- TanStack Table und Virtual für große Verzeichnisse
-- Radix UI für Dialoge und Menüs
-- Tailwind CSS für Styling
+- React function components
+- Use TypeScript strictly
+- Zustand for state management
+- TanStack Table and Virtual for large directories
+- Radix UI for dialogs and menus
+- Tailwind CSS for styling
 
-## Codequalität
+## Code quality
 
-Bevorzuge:
+Prefer:
 
-- kleine, gut strukturierte Funktionen
-- sprechende Namen
-- möglichst wenig Code-Duplizierung
-- saubere Fehlerbehandlung
-- Performance ohne unnötige Optimierung
+- small, well-structured functions
+- expressive names
+- as little code duplication as possible
+- clean error handling
+- performance without unnecessary optimization
 
-Vermeide:
+Avoid:
 
-- unnötige Abstraktionen
-- große Dateien mit vielen Verantwortlichkeiten
-- Logik im Frontend, die ins Backend gehört
+- unnecessary abstractions
+- large files with many responsibilities
+- logic in the frontend that belongs in the backend
 
-## Entwicklung
+## Development
 
-Nach Änderungen prüfen:
+Check after changes:
 
 ```bash
 cargo check
@@ -64,16 +64,16 @@ npm run typecheck
 npm run build
 ```
 
-Bei Änderungen an IPC-Typen zusätzlich:
+For changes to IPC types additionally:
 
 ```bash
 npm run gen:types
 ```
 
-## Prioritäten
+## Priorities
 
-1. Stabilität
-2. Datensicherheit
-3. Wartbarkeit
+1. Stability
+2. Data safety
+3. Maintainability
 4. Performance
-5. Plattformübergreifende Kompatibilität
+5. Cross-platform compatibility

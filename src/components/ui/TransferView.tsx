@@ -1,10 +1,10 @@
 // ============================================================
-// Anzeige laufender Transfers (Kopieren/Verschieben).
+// Display of running transfers (copy/move).
 //
-// TransferWindow: nicht-blockierendes Fenster mit zwei Balken
-//   (oben aktuelle Datei, unten Gesamtvorgang) + „In den
-//   Hintergrund". TransferTray: minimierte Vorgänge in der
-//   Statusleiste; Klick stellt das Fenster wieder her.
+// TransferWindow: non-blocking window with two bars (top: current
+//   file, bottom: overall operation) + "send to background".
+//   TransferTray: minimized operations in the status bar; a click
+//   restores the window.
 // ============================================================
 
 import {
@@ -51,7 +51,7 @@ function opLabel(op: Transfer["op"]): TransKey {
   return OP_LABEL[op];
 }
 
-// ---------- Fenster (Vordergrund) ----------
+// ---------- Window (foreground) ----------
 
 export function TransferWindow() {
   const transfers = useTransfers((s) => s.transfers);
@@ -75,13 +75,13 @@ function TransferCard({ t }: { t: Transfer }) {
   const Icon = OP_ICON[t.op];
   const hasErrors = t.done && t.errors.length > 0;
 
-  // Pause/Fortsetzen umschalten (optimistisch + Backend informieren).
+  // Toggle pause/resume (optimistically + inform the backend).
   const togglePause = () => {
     const next = !t.paused;
     setPaused(t.id, next);
     pauseTransfer(t.id, next);
   };
-  // Abbrechen: wartende Vorgänge nur aus der Queue nehmen (kein Backend-Op).
+  // Cancel: only remove waiting operations from the queue (no backend op).
   const onCancel = () => (t.queued ? dequeueTransfer(t.id) : cancelTransfer(t.id));
 
   const statusText = t.cancelled
@@ -94,7 +94,7 @@ function TransferCard({ t }: { t: Transfer }) {
 
   return (
     <div className="w-[380px] max-w-[92vw] rounded-lg border border-edge bg-panel shadow-2xl">
-      {/* Kopf */}
+      {/* Header */}
       <div className="flex items-center gap-2 border-b border-edge px-3 py-2 text-text">
         {t.cancelled ? (
           <Ban size={15} className="text-dim" />
@@ -159,7 +159,7 @@ function TransferCard({ t }: { t: Transfer }) {
         </div>
       </div>
 
-      {/* Balken */}
+      {/* Bars */}
       <div className="flex flex-col gap-3 px-3 py-3">
         <Bar
           label={tr("op.currentFile")}
@@ -212,7 +212,7 @@ function Bar({
   );
 }
 
-// ---------- Tray (minimiert, in der Statusleiste) ----------
+// ---------- Tray (minimized, in the status bar) ----------
 
 export function TransferTray() {
   const transfers = useTransfers((s) => s.transfers);
@@ -232,7 +232,7 @@ export function TransferTray() {
             className="flex items-center gap-1.5 rounded border border-edge bg-panel px-2 py-0.5 hover:border-accent"
           >
             <Icon size={12} className="shrink-0 text-accent" />
-            {/* zwei schmale Balken übereinander */}
+            {/* two narrow bars stacked on top of each other */}
             <span className="flex w-16 flex-col gap-0.5">
               <MiniBar value={pct(t.fileDone, t.fileTotal)} className="bg-emerald-400" />
               <MiniBar value={pct(t.bytesDone, t.bytesTotal)} className="bg-accent" />

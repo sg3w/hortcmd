@@ -1,7 +1,7 @@
 // ============================================================
-// Einstellungs-Modal (Radix Dialog).
-// Links Kategoriebaum, rechts Formulare. Trennung standardmäßig
-// 1:3, per Ziehen bis 1:1 verschiebbar.
+// Settings modal (Radix Dialog).
+// Category tree on the left, forms on the right. The split defaults
+// to 1:3 and can be dragged up to 1:1.
 // ============================================================
 
 import {
@@ -71,7 +71,7 @@ type Category =
   | "programs"
   | "favorites";
 
-/** Optionen für die Größen-Segmentierung (Klein/Mittel/Groß). */
+/** Options for the size segmentation (small/medium/large). */
 const SCALE_OPTIONS: { value: Scale; key: TransKey }[] = [
   { value: "sm", key: "settings.scale.sm" },
   { value: "md", key: "settings.scale.md" },
@@ -137,7 +137,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
       minSize={{ w: 560, h: 400 }}
     >
       <div ref={bodyRef} className="flex min-h-0 flex-1">
-            {/* Kategoriebaum */}
+            {/* Category tree */}
             <div
               className="shrink-0 overflow-y-auto border-r border-edge bg-panel-inactive p-2"
               style={{ width: `${leftFrac * 100}%` }}
@@ -159,7 +159,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
               ))}
             </div>
 
-            {/* Ziehgriff */}
+            {/* Drag handle */}
             <div
               onMouseDown={startResize}
               className="flex w-1.5 shrink-0 cursor-col-resize items-center justify-center bg-edge hover:bg-accent"
@@ -167,7 +167,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
               <GripVertical size={12} className="text-dim" />
             </div>
 
-            {/* Formular */}
+            {/* Form */}
             <div className="min-w-0 flex-1 overflow-y-auto p-4">
               {category === "general" && <GeneralForm />}
               {category === "view" && <ViewForm />}
@@ -190,7 +190,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
   );
 }
 
-// ---------- Formular: Allgemein ----------
+// ---------- Form: general ----------
 
 function GeneralForm() {
   const t = useT();
@@ -269,7 +269,7 @@ function GeneralForm() {
   );
 }
 
-// ---------- Formular: Dateiansicht ----------
+// ---------- Form: file view ----------
 
 function ViewForm() {
   const t = useT();
@@ -291,7 +291,7 @@ function ViewForm() {
         checked={foldersFirst}
         onChange={(v) => {
           setFoldersFirst(v);
-          rebuildAll(); // Sortierung sofort neu aufbauen.
+          rebuildAll(); // rebuild the sorting immediately.
         }}
         icon={FolderTree}
         label={t("settings.foldersFirst")}
@@ -338,7 +338,7 @@ function ViewForm() {
   );
 }
 
-// ---------- Formular: Dateien ----------
+// ---------- Form: files ----------
 
 function FilesForm() {
   const t = useT();
@@ -355,7 +355,7 @@ function FilesForm() {
         checked={hide}
         onChange={(v) => {
           setHide(v);
-          rebuildAll(); // Angezeigte Listen sofort neu aufbauen.
+          rebuildAll(); // rebuild the displayed lists immediately.
         }}
         icon={EyeOff}
         label={t("settings.hideSystem")}
@@ -365,7 +365,7 @@ function FilesForm() {
         checked={gitEnabled}
         onChange={(v) => {
           setGitEnabled(v);
-          reloadGit(); // Git-Status in beiden Fenstern neu laden/leeren.
+          reloadGit(); // reload/clear the git status in both windows.
         }}
         icon={GitBranch}
         label={t("settings.git")}
@@ -375,7 +375,7 @@ function FilesForm() {
   );
 }
 
-// ---------- Formular: Dateioperationen ----------
+// ---------- Form: file operations ----------
 
 function OperationsForm() {
   const t = useT();
@@ -415,7 +415,7 @@ function OperationsForm() {
         label={t("settings.verify")}
         hint={t("settings.verify.hint")}
       />
-      {/* Geschwindigkeitslimit (0 = unbegrenzt). */}
+      {/* Speed limit (0 = unlimited). */}
       <label className="flex items-start gap-3">
         <Gauge size={15} className="mt-0.5 shrink-0 text-dim" />
         <span className="flex flex-col gap-1">
@@ -436,7 +436,7 @@ function OperationsForm() {
         </span>
       </label>
 
-      {/* Buffergröße (KB). */}
+      {/* Buffer size (KB). */}
       <label className="flex items-start gap-3">
         <HardDriveDownload size={15} className="mt-0.5 shrink-0 text-dim" />
         <span className="flex flex-col gap-1">
@@ -455,7 +455,7 @@ function OperationsForm() {
         </span>
       </label>
 
-      {/* Parallele Kopier-Threads (1 = sequenziell). */}
+      {/* Parallel copy threads (1 = sequential). */}
       <label className="flex items-start gap-3">
         <Cpu size={15} className="mt-0.5 shrink-0 text-dim" />
         <span className="flex flex-col gap-1">
@@ -516,12 +516,12 @@ function Toggle({
   );
 }
 
-// ---------- Formular: Öffnen mit / Editoren ----------
+// ---------- Form: open with / editors ----------
 
 const smallBtn =
   "flex items-center gap-1 rounded border border-edge bg-panel px-2 py-1 text-[12px] text-text hover:border-accent";
 
-/** Programmname aus einem Pfad ableiten (.app/Endung entfernt). */
+/** Derive the program name from a path (.app/extension removed). */
 function programNameFromPath(path: string): string {
   const base = path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? path;
   return base.replace(/\.app$/i, "").replace(/\.[^.]+$/, "") || base;
@@ -601,7 +601,7 @@ function ProgramsForm() {
   );
 }
 
-/** Programm-Auswahl (native Select über die konfigurierten Programme). */
+/** Program selection (native select over the configured programs). */
 function ProgramSelect({
   value,
   onChange,
@@ -627,7 +627,7 @@ function ProgramSelect({
   );
 }
 
-/** Sicht „Nach Endung": Zuordnung Endung → Programm. */
+/** "By extension" view: mapping extension → program. */
 function ByExtensionView() {
   const t = useT();
   const programs = useSettings((s) => s.programs);
@@ -704,7 +704,7 @@ function ByExtensionView() {
   );
 }
 
-/** Sicht „Nach Programm": Programme mit ihren Endungen. */
+/** "By program" view: programs with their extensions. */
 function ByProgramView() {
   const t = useT();
   const programs = useSettings((s) => s.programs);
@@ -789,7 +789,7 @@ function ByProgramView() {
   );
 }
 
-/** Endungs-Chips eines Programms mit Hinzufügen/Entfernen. */
+/** A program's extension chips with add/remove. */
 function ExtensionTags({
   exts,
   onAdd,
@@ -840,7 +840,7 @@ function ExtensionTags({
   );
 }
 
-// ---------- Formular: Favoriten ----------
+// ---------- Form: favorites ----------
 
 function basename(path: string): string {
   if (!path || path === "/") return path || "/";
@@ -872,7 +872,7 @@ function FavoritesForm() {
     <div className="flex flex-col gap-4">
       <p className="text-[11px] text-dim">{t("settings.favorites.hint")}</p>
 
-      {/* Vorhandene Favoriten */}
+      {/* Existing favorites */}
       {favorites.length === 0 ? (
         <p className="text-[12px] text-dim">{t("settings.favorites.empty")}</p>
       ) : (
@@ -901,7 +901,7 @@ function FavoritesForm() {
         </ul>
       )}
 
-      {/* Neuen Favoriten hinzufügen */}
+      {/* Add a new favorite */}
       <div className="flex flex-col gap-2 border-t border-edge pt-3">
         <input
           value={path}
@@ -931,7 +931,7 @@ function FavoritesForm() {
   );
 }
 
-// ---------- kleine Bausteine ----------
+// ---------- small building blocks ----------
 
 function Field({
   icon: Icon,

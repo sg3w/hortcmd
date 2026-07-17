@@ -1,7 +1,7 @@
 // ============================================================
-// Zwischenablage für Datei-Operationen (Copy/Cut → Paste).
-// Hält nur Metadaten; die eigentliche Ausführung folgt über die
-// Rust-Commands (copy_entries / move_entries).
+// Clipboard for file operations (copy/cut → paste).
+// Holds only metadata; the actual execution follows via the
+// Rust commands (copy_entries / move_entries).
 // ============================================================
 
 import { create } from "zustand";

@@ -1,24 +1,24 @@
 // ============================================================
-// Wiederverwendbarer Dateibrowser-Modal: kleiner Store, über den
-// von überall im Programm ein Auswahl-Dialog geöffnet werden kann.
+// Reusable file-browser modal: a small store through which
+// a selection dialog can be opened from anywhere in the program.
 //   openFileBrowser({ selectMode, onPick, ... })
 // ============================================================
 
 import { create } from "zustand";
 
-/** Was im Dateibrowser auswählbar sein soll. */
+/** What should be selectable in the file browser. */
 export type SelectMode = "file" | "folder" | "any";
 
 export interface FileBrowserRequest {
-  /** Titel des Dialogs (Standard: „Auswählen"). */
+  /** Title of the dialog (default: "Select"). */
   title?: string;
-  /** Was ausgewählt werden darf. */
+  /** What may be selected. */
   selectMode: SelectMode;
-  /** Startordner (Standard: Home-Verzeichnis). */
+  /** Start folder (default: home directory). */
   initialPath?: string;
-  /** Beschriftung des Bestätigen-Buttons. */
+  /** Label of the confirm button. */
   confirmLabel?: string;
-  /** Callback mit dem gewählten vollständigen Pfad. */
+  /** Callback with the chosen full path. */
   onPick: (path: string) => void;
 }
 
@@ -34,7 +34,7 @@ export const useFileBrowser = create<FileBrowserStore>((set) => ({
   close: () => set({ request: null }),
 }));
 
-/** Bequemer Aufruf von außerhalb von React. */
+/** Convenience call from outside React. */
 export function openFileBrowser(r: FileBrowserRequest): void {
   useFileBrowser.getState().open(r);
 }

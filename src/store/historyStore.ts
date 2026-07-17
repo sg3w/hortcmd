@@ -1,6 +1,6 @@
 // ============================================================
-// Globaler Verlauf zuletzt besuchter Ordner (persistiert).
-// Neueste zuerst, dedupliziert, begrenzt auf MAX Einträge.
+// Global history of recently visited folders (persisted).
+// Newest first, deduplicated, limited to MAX entries.
 // ============================================================
 
 import { create } from "zustand";
@@ -33,7 +33,7 @@ export const useHistory = create<HistoryStore>()(
   ),
 );
 
-/** Verlauf-Eintrag außerhalb von React ergänzen (z. B. im panesStore). */
+/** Add a history entry from outside React (e.g. in the panesStore). */
 export function pushRecent(path: string): void {
   useHistory.getState().push(path);
 }

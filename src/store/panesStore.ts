@@ -1,7 +1,7 @@
 // ============================================================
-// Zentraler Zustand für beide Dateifenster.
-// Jede Seite hat mehrere Tabs; der aktive Tab ist die Arbeits-
-// und Zielfläche. Aktionen wirken immer auf den aktiven Tab.
+// Central state for both file panes.
+// Each side has several tabs; the active tab is the working
+// and target surface. Actions always affect the active tab.
 // ============================================================
 
 import { create } from "zustand";
@@ -23,30 +23,30 @@ import {
 
 export type Side = "left" | "right";
 export type SortKey = "name" | "ext" | "size" | "date";
-/** Darstellung der Dateiliste (pro Fenster). */
+/** Rendering of the file list (per pane). */
 export type ViewMode = "details" | "list" | "thumbnails" | "tree";
 
-/** Eine Zeile in der Liste – DirEntry plus optionale ".."-Markierung. */
+/** A row in the list – DirEntry plus an optional ".." marker. */
 export interface Row extends DirEntry {
   parent?: boolean;
 }
 
 export interface TabState {
   path: string;
-  /** Beim Browsen in einem Archiv: Pfad der .zip-Datei, sonst null. */
+  /** While browsing an archive: path of the .zip file, otherwise null. */
   archive: string | null;
   raw: DirEntry[]; // ungefiltert, wie vom Backend geliefert
   entries: Row[]; // gefiltert + sortiert (+ ".." als erste Zeile)
-  /** Schnellfilter (Teilstring des Namens); leer = kein Filter. */
+  /** Quick filter (substring of the name); empty = no filter. */
   filter: string;
   cursor: number;
   selected: Set<string>;
   anchor: number; // Ankerzeile für Bereichsauswahl
   shiftBase: Set<string> | null; // Auswahl-Snapshot während einer Shift-Sitzung
   sort: { key: SortKey; asc: boolean };
-  /** Git-Status des Ordners (null = noch nicht geladen / deaktiviert). */
+  /** Git status of the folder (null = not loaded yet / disabled). */
   git: GitStatus | null;
-  /** Navigations-Verlauf dieses Tabs (Zurück/Vor). */
+  /** Navigation history of this tab (back/forward). */
   history: string[];
   historyIndex: number;
 }
@@ -54,9 +54,9 @@ export interface TabState {
 export interface SideState {
   tabs: TabState[];
   activeTab: number;
-  /** Ansichtsmodus dieses Fensters (Detail/Liste/Miniaturansicht). */
+  /** View mode of this pane (detail/list/thumbnails). */
   viewMode: ViewMode;
-  /** Vom FileTable gemeldete Spaltenzahl (für Grid-Tastaturnavigation). */
+  /** Column count reported by the FileTable (for grid keyboard navigation). */
   gridCols: number;
 }
 
@@ -67,7 +67,7 @@ interface PanesStore {
 
   setActive: (side: Side) => void;
   setViewMode: (side: Side, mode: ViewMode) => void;
-  /** Aktuelle Spaltenzahl der Grid-Ansicht melden (idempotent). */
+  /** Report the current column count of the grid view (idempotent). */
   setGridCols: (side: Side, cols: number) => void;
 
   // Tabs
@@ -75,44 +75,44 @@ interface PanesStore {
   closeTab: (side: Side, index: number) => void;
   selectTab: (side: Side, index: number) => void;
 
-  // Navigation (aktiver Tab)
-  /** Ordner laden; `record` (Standard true) trägt ihn in den Verlauf ein. */
+  // Navigation (active tab)
+  /** Load a folder; `record` (default true) adds it to the history. */
   loadDir: (side: Side, path: string, record?: boolean) => Promise<void>;
   loadArchive: (side: Side, archive: string, inner: string) => Promise<void>;
   goBack: (side: Side) => void;
   goForward: (side: Side) => void;
-  /** Aktuellen Ordner neu einlesen, Cursor/Auswahl bewahren (Watcher).
-   *  Mit `reveal: true` (nach eigenen Dateioperationen) werden neu
-   *  hinzugekommene Einträge stattdessen markiert und der Cursor auf den
-   *  ersten davon gesetzt (scrollt nur, falls dieser nicht schon sichtbar
-   *  ist — siehe `FileTable`s `scrollToIndex(…, {align:"auto"})`). */
+  /** Re-read the current folder, preserving cursor/selection (watcher).
+   *  With `reveal: true` (after our own file operations), newly
+   *  added entries are selected instead and the cursor is set to the
+   *  first of them (scrolls only if it is not already visible
+   *  — see `FileTable`'s `scrollToIndex(…, {align:"auto"})`). */
   refresh: (side: Side, opts?: { reveal?: boolean }) => Promise<void>;
-  /** Git-Status des aktiven Tabs anfordern (bzw. leeren, wenn deaktiviert).
-   *  Läuft asynchron im Backend; Ergebnis kommt über applyGitStatus zurück. */
+  /** Request the Git status of the active tab (or clear it when disabled).
+   *  Runs asynchronously in the backend; the result comes back via applyGitStatus. */
   loadGit: (side: Side) => void;
-  /** Git-Status beider Fenster neu laden (nach Settings-Umschaltung). */
+  /** Reload the Git status of both panes (after a settings toggle). */
   reloadGit: () => void;
-  /** Per Event geliefertes Git-Ergebnis auf alle passenden Tabs anwenden
-   *  (beide Fenster, alle Tabs mit gleichem Pfad – keine Race Conditions). */
+  /** Apply a Git result delivered by event to all matching tabs
+   *  (both panes, all tabs with the same path – no race conditions). */
   applyGitStatus: (path: string, git: GitStatus) => void;
   moveCursor: (side: Side, delta: number) => void;
   setCursor: (side: Side, index: number) => void;
   jumpCursor: (side: Side, to: "top" | "bottom") => void;
 
-  // Markierung
+  // Selection
   toggleMark: (side: Side, index: number, advance?: boolean) => void;
   shiftMove: (side: Side, delta: number) => void;
   shiftTo: (side: Side, index: number) => void;
   invertSelection: (side: Side) => void;
   selectPattern: (side: Side, pattern: string, add: boolean) => void;
   setSort: (side: Side, key: SortKey) => void;
-  /** Schnellfilter des aktiven Tabs setzen (Filtern beim Tippen). */
+  /** Set the quick filter of the active tab (filter while typing). */
   setFilter: (side: Side, filter: string) => void;
 
-  // nach Settings-Änderung (z. B. Systemdateien ausblenden)
+  // after a settings change (e.g. hide system files)
   rebuildAll: () => void;
 
-  /** Gespeicherte Sitzung (Tabs beider Fenster) wiederherstellen. */
+  /** Restore a saved session (tabs of both panes). */
   restoreSession: (session: SavedSession) => Promise<void>;
 }
 
@@ -140,7 +140,7 @@ function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
 }
 
-/** Sortiert echte Einträge in-place; Ordner zuerst je nach Einstellung. */
+/** Sorts real entries in place; folders first depending on the setting. */
 export function sortEntries(entries: Row[], key: SortKey, asc: boolean): void {
   const dir = asc ? 1 : -1;
   const foldersFirst = useSettings.getState().foldersFirst;
@@ -165,7 +165,7 @@ export function sortEntries(entries: Row[], key: SortKey, asc: boolean): void {
   });
 }
 
-/** Rohdaten → angezeigte Zeilen (Filter „Systemdateien"/Schnellfilter, Sortierung, ".."). */
+/** Raw data → displayed rows ("system files"/quick filter, sorting, ".."). */
 function rebuildEntries(
   raw: DirEntry[],
   path: string,
@@ -183,7 +183,7 @@ function rebuildEntries(
 
   const rows: Row[] = list.map((e) => ({ ...e }));
   sortEntries(rows, sort.key, sort.asc);
-  // Im Archiv immer eine "..“-Zeile (auch auf Wurzelebene → verlässt das Archiv).
+  // Inside an archive always a ".." row (also at root level → leaves the archive).
   if (inArchive || !isRoot(path)) {
     rows.unshift({
       name: "..",
@@ -198,7 +198,7 @@ function rebuildEntries(
   return rows;
 }
 
-/** Ersetzt den aktiven Tab einer Seite über eine Transformationsfunktion. */
+/** Replaces the active tab of a side via a transformation function. */
 function withActiveTab(
   state: PanesStore,
   side: Side,
@@ -210,7 +210,7 @@ function withActiveTab(
   return { [side]: { ...s, tabs } } as Pick<PanesStore, Side>;
 }
 
-/** Selektor-Helfer: aktiver Tab einer Seite. */
+/** Selector helper: active tab of a side. */
 export function panelOf(state: PanesStore, side: Side): TabState {
   return state[side].tabs[state[side].activeTab];
 }
@@ -273,14 +273,15 @@ export const usePanes = create<PanesStore>((set, get) => ({
 
   // ---------- Navigation ----------
 
+
   loadDir: async (side, path, record = true) => {
     const res = await listDir(path);
     set(
       withActiveTab(get(), side, (t) => {
         let history = t.history;
         let historyIndex = t.historyIndex;
-        // Neuen Ordner in den Verlauf legen (Vorwärts-Zweig verwerfen);
-        // gleichen Pfad (z. B. Refresh) nicht doppeln.
+        // Put the new folder into the history (discard the forward branch);
+        // don't duplicate the same path (e.g. a refresh).
         if (record && res.path !== history[historyIndex]) {
           history = [...history.slice(0, historyIndex + 1), res.path];
           historyIndex = history.length - 1;
@@ -333,7 +334,7 @@ export const usePanes = create<PanesStore>((set, get) => ({
     } catch (e) {
       const msg = String(e);
       if (isPasswordError(msg)) {
-        // Verschlüsseltes Archiv: Passwort erfragen und erneut laden.
+        // Encrypted archive: ask for the password and load again.
         promptArchivePassword(archive, msg.includes(PW_WRONG), () => {
           void get().loadArchive(side, archive, inner);
         });
@@ -372,9 +373,9 @@ export const usePanes = create<PanesStore>((set, get) => ({
       withActiveTab(get(), side, (t) => {
         const entries = rebuildEntries(res.entries, res.path, t.sort, false, t.filter);
         const names = new Set(entries.map((e) => e.name));
-        // Neu hinzugekommene Einträge ggf. markieren und in den Blick rücken
-        // (Ziel eines Kopier-/Verschiebe-/Einfüge-Vorgangs), statt einfach
-        // nur Cursor/Auswahl wie beim Watcher-Refresh zu bewahren.
+        // Select newly added entries if applicable and bring them into view
+        // (target of a copy/move/paste operation), instead of simply
+        // preserving cursor/selection as with the watcher refresh.
         if (opts?.reveal) {
           const oldNames = new Set(t.raw.map((e) => e.name));
           const added = entries.filter((e) => !e.parent && !oldNames.has(e.name));
@@ -412,8 +413,8 @@ export const usePanes = create<PanesStore>((set, get) => ({
       }
       return;
     }
-    // Fire-and-forget: läuft im Backend im Hintergrund, Ergebnis kommt
-    // über das Event "git-support-ready" → applyGitStatus.
+    // Fire-and-forget: runs in the background in the backend, the result comes
+    // via the "git-support-ready" event → applyGitStatus.
     requestGitStatus(tab.path);
   },
 
@@ -423,7 +424,7 @@ export const usePanes = create<PanesStore>((set, get) => ({
   },
 
   applyGitStatus: (path, git) => {
-    // Nach dem Deaktivieren eingetroffene Ergebnisse verwerfen.
+    // Discard results that arrived after disabling.
     if (!useSettings.getState().gitEnabled) return;
     const applySide = (side: SideState): SideState => ({
       ...side,
@@ -458,7 +459,7 @@ export const usePanes = create<PanesStore>((set, get) => ({
       }),
     ),
 
-  // ---------- Markierung ----------
+  // ---------- Selection ----------
 
   toggleMark: (side, index, advance = false) =>
     set(
@@ -544,7 +545,7 @@ export const usePanes = create<PanesStore>((set, get) => ({
           t.archive !== null,
           filter,
         );
-        // Cursor auf den ersten echten Treffer (nach einer evtl. "..“-Zeile).
+        // Cursor to the first real match (after a possible ".." row).
         const first = entries.findIndex((e) => !e.parent);
         return {
           ...t,
@@ -582,7 +583,7 @@ export const usePanes = create<PanesStore>((set, get) => ({
   },
 
   restoreSession: async (session) => {
-    // Einen geladenen Tab aus einem Ordnerpfad bauen (null bei Fehler).
+    // Build a loaded tab from a folder path (null on error).
     const buildTab = async (path: string): Promise<TabState | null> => {
       try {
         const res = await listDir(path);
@@ -601,7 +602,7 @@ export const usePanes = create<PanesStore>((set, get) => ({
     ): Promise<SideState> => {
       const built = await Promise.all(saved.tabs.map((t) => buildTab(t.path)));
       let tabs = built.filter((t): t is TabState => t !== null);
-      // Kein Tab wiederherstellbar → Home als Rückfall.
+      // No tab restorable → home as a fallback.
       if (tabs.length === 0) {
         const fallback = await buildTab(home);
         tabs = [fallback ?? newTab(home)];
@@ -626,8 +627,8 @@ export const usePanes = create<PanesStore>((set, get) => ({
 }));
 
 /**
- * Bereichsauswahl auf Basis eines Snapshots (shiftBase) + Anker.
- * Erlaubt korrektes Wachsen und Schrumpfen beim Richtungswechsel.
+ * Range selection based on a snapshot (shiftBase) + anchor.
+ * Allows correct growing and shrinking when the direction changes.
  */
 function applyShiftSelection(t: TabState, cursor: number): TabState {
   const base = t.shiftBase ?? new Set(t.selected);

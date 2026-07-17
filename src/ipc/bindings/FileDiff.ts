@@ -3,7 +3,7 @@ import type { DiffLine } from "./DiffLine";
 import type { HexRow } from "./HexRow";
 
 /**
- * Gesamtergebnis eines Dateivergleichs.
+ * Overall result of a file comparison.
  */
 export type FileDiff = { 
 /**
@@ -11,18 +11,18 @@ export type FileDiff = {
  */
 mode: string, 
 /**
- * Ob beide Dateien byte-identisch sind.
+ * Whether both files are byte-identical.
  */
 identical: boolean, 
 /**
- * Ob das Ergebnis wegen der Größenobergrenzen gekürzt wurde.
+ * Whether the result was truncated due to the size limits.
  */
 truncated: boolean, left_size: number, right_size: number, 
 /**
- * Zeilen im Textmodus (sonst leer).
+ * Lines in text mode (otherwise empty).
  */
 lines: Array<DiffLine>, 
 /**
- * Zeilen im Binärmodus (sonst leer).
+ * Lines in binary mode (otherwise empty).
  */
 hex: Array<HexRow>, };

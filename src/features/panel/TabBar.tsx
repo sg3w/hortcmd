@@ -1,8 +1,8 @@
 // ============================================================
-// Tab-Leiste eines Fensters. Der aktive Tab ist die Arbeits-
-// und Zielfläche. "+" öffnet einen weiteren Tab (gleicher Pfad).
-// Wird der Platz eng, erscheinen zwei Scroll-Buttons (statt einer
-// Scrollbar), um die Tab-Leiste horizontal zu verschieben.
+// Tab bar of a pane. The active tab is the working
+// and target surface. "+" opens another tab (same path).
+// When space gets tight, two scroll buttons appear (instead of a
+// scrollbar) to shift the tab bar horizontally.
 // ============================================================
 
 import { useEffect, useRef, useState } from "react";
@@ -37,7 +37,7 @@ export function TabBar({ side }: { side: Side }) {
     setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
   };
 
-  // Overflow beim Resize der Leiste neu bewerten.
+  // Re-evaluate the overflow when the bar is resized.
   useEffect(() => {
     const el = stripRef.current;
     if (!el) return;
@@ -47,7 +47,7 @@ export function TabBar({ side }: { side: Side }) {
     return () => ro.disconnect();
   }, []);
 
-  // Nach Tab-Änderung: Overflow neu bewerten + aktiven Tab einblenden.
+  // After a tab change: re-evaluate the overflow + bring the active tab into view.
   useEffect(() => {
     updateScroll();
     stripRef.current

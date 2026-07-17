@@ -1,7 +1,7 @@
 // ============================================================
-// Fensterposition und -größe über Neustarts hinweg merken.
-// Nutzt die vorhandene @tauri-apps/api (kein zusätzliches Plugin);
-// im Browser-/Demo-Modus (ohne Tauri) passiert nichts.
+// Remember window position and size across restarts.
+// Uses the existing @tauri-apps/api (no extra plugin);
+// in browser/demo mode (without Tauri) nothing happens.
 // ============================================================
 
 import { hasTauri } from "@/ipc/client";
@@ -24,14 +24,14 @@ function read(): WindowBox | null {
       return b;
     }
   } catch {
-    /* ungültig → ignorieren */
+    /* invalid → ignore */
   }
   return null;
 }
 
 /**
- * Stellt die gespeicherte Fenstergeometrie her und speichert künftige
- * Verschiebungen/Größenänderungen (entprellt). Ohne Tauri ein No-op.
+ * Restores the saved window geometry and stores future
+ * moves/resizes (debounced). Without Tauri a no-op.
  */
 export async function initWindowState(): Promise<void> {
   if (!hasTauri) return;
@@ -41,14 +41,14 @@ export async function initWindowState(): Promise<void> {
     );
     const win = getCurrentWindow();
 
-    // Wiederherstellen (Größe zuerst, dann Position).
+    // Restore (size first, then position).
     const saved = read();
     if (saved) {
       await win.setSize(new LogicalSize(saved.w, saved.h));
       await win.setPosition(new LogicalPosition(saved.x, saved.y));
     }
 
-    // Speichern bei Bewegung/Größenänderung – entprellt.
+    // Save on move/resize – debounced.
     let timer: number | undefined;
     const save = async () => {
       try {
@@ -63,7 +63,7 @@ export async function initWindowState(): Promise<void> {
         };
         localStorage.setItem(KEY, JSON.stringify(box));
       } catch {
-        /* Fenster-API nicht verfügbar → ignorieren */
+        /* window API not available → ignore */
       }
     };
     const schedule = () => {
@@ -73,6 +73,6 @@ export async function initWindowState(): Promise<void> {
     await win.onMoved(schedule);
     await win.onResized(schedule);
   } catch {
-    /* Tauri-Fenster-API nicht verfügbar → still ignorieren */
+    /* Tauri window API not available → silently ignore */
   }
 }

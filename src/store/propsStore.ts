@@ -1,6 +1,6 @@
 // ============================================================
-// Kleiner Store für den Eigenschaften-/Rechte-Dialog: merkt sich
-// den Pfad des Eintrags, dessen Rechte angezeigt werden (null = zu).
+// Small store for the properties/permissions dialog: remembers
+// the path of the entry whose permissions are shown (null = closed).
 // ============================================================
 
 import { create } from "zustand";
@@ -17,7 +17,7 @@ export const usePropsDialog = create<PropsStore>((set) => ({
   close: () => set({ path: null }),
 }));
 
-/** Bequemer Aufruf von außerhalb von React. */
+/** Convenience call from outside React. */
 export function openProps(path: string): void {
   usePropsDialog.getState().open(path);
 }

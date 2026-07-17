@@ -1,6 +1,6 @@
 // ============================================================
-// App-Einstellungen (Sprache, Theme, Systemdateien) mit
-// localStorage-Persistenz.
+// App settings (language, theme, system files) with
+// localStorage persistence.
 // ============================================================
 
 import { create } from "zustand";
@@ -8,14 +8,14 @@ import { persist } from "zustand/middleware";
 import { DICT, type Lang, type TransKey } from "@/i18n/dictionaries";
 
 export type Theme = "dark" | "light" | "system";
-/** Größenstufe für Schrift bzw. Symbole in der Dateiliste. */
+/** Size step for the font or icons in the file list. */
 export type Scale = "sm" | "md" | "lg";
-/** Anzeigeformat der Größenspalte. */
+/** Display format of the size column. */
 export type SizeFormat = "auto" | "bytes";
-/** Anzeigeformat der Datumsspalte. */
+/** Display format of the date column. */
 export type DateFormat = "medium" | "short" | "iso";
 
-/** Standardbreiten (px) der Spalten mit fester Breite in der Detailansicht. */
+/** Default widths (px) of the fixed-width columns in the detail view. */
 export const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
   ext: 60,
   perms: 100,
@@ -23,7 +23,7 @@ export const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
   date: 130,
 };
 
-/** Grenzen für per Ziehen einstellbare Spaltenbreiten (px). */
+/** Limits for drag-adjustable column widths (px). */
 export const MIN_COLUMN_WIDTH = 40;
 export const MAX_COLUMN_WIDTH = 600;
 
@@ -32,68 +32,68 @@ export interface Favorite {
   path: string;
 }
 
-/** Ein vom Nutzer angelegtes Programm zum Öffnen von Dateien. */
+/** A user-created program for opening files. */
 export interface EditorProgram {
   id: string;
   name: string;
   path: string;
 }
 
-/** Wie „Im Editor öffnen" (Zuordnung) über die Tastatur ausgelöst wird. */
+/** How "Open in editor" (the mapping) is triggered via the keyboard. */
 export type EditorTrigger = "shiftF4" | "contextOnly" | "f4";
 
 interface SettingsStore {
   language: Lang;
   theme: Theme;
   hideSystemFiles: boolean;
-  /** Anteil des linken Fensters an der Breite (0.15–0.85). */
+  /** Share of the width taken by the left pane (0.15–0.85). */
   paneSplit: number;
   favorites: Favorite[];
-  /** Terminal-Programm für „Im Terminal öffnen" (leer = System-Standard). */
+  /** Terminal program for "Open in terminal" (empty = system default). */
   terminalProgram: string;
-  /** Git-Status in der Dateiliste anzeigen (Farben + Branch-Badge). */
+  /** Show the Git status in the file list (colors + branch badge). */
   gitEnabled: boolean;
-  /** Beim Löschen in den Papierkorb verschieben (Shift = endgültig). */
+  /** Move to the trash when deleting (Shift = permanent). */
   useTrash: boolean;
 
-  // ----- Transfers (Kopieren/Verschieben) -----
-  /** Kopien nach dem Schreiben per SHA-256 gegen die Quelle prüfen. */
+  // ----- Transfers (copy/move) -----
+  /** Verify copies against the source via SHA-256 after writing. */
   verifyCopies: boolean;
-  /** Geschwindigkeitslimit in KB/s (0 = unbegrenzt). */
+  /** Speed limit in KB/s (0 = unlimited). */
   speedLimit: number;
-  /** Kopier-/Verschiebevorgänge nacheinander abarbeiten (Warteschlange). */
+  /** Process copy/move operations one after another (queue). */
   queueTransfers: boolean;
-  /** Kopier-Puffergröße in KB (Standard 256). */
+  /** Copy buffer size in KB (default 256). */
   bufferSizeKb: number;
-  /** Anzahl paralleler Kopier-Threads (1 = sequenziell). */
+  /** Number of parallel copy threads (1 = sequential). */
   copyThreads: number;
 
-  // ----- Dateiansicht -----
-  /** Ordner beim Sortieren immer vor Dateien einordnen. */
+  // ----- File view -----
+  /** Always sort folders before files. */
   foldersFirst: boolean;
-  /** Endung als eigene Spalte zeigen (aus = voller Name in der Namensspalte). */
+  /** Show the extension as its own column (off = full name in the name column). */
   showExtColumn: boolean;
-  /** Rechte-Spalte (rwxr-xr-x) anzeigen. */
+  /** Show the permissions column (rwxr-xr-x). */
   showPermissions: boolean;
-  /** Format der Größenspalte. */
+  /** Format of the size column. */
   sizeFormat: SizeFormat;
-  /** Format der Datumsspalte. */
+  /** Format of the date column. */
   dateFormat: DateFormat;
-  /** Schriftgröße der Dateiliste. */
+  /** Font size of the file list. */
   fontScale: Scale;
-  /** Symbolgröße der Dateiliste. */
+  /** Icon size of the file list. */
   iconScale: Scale;
-  /** Per Ziehen eingestellte Spaltenbreiten (px) je Spalten-id. */
+  /** Drag-adjusted column widths (px) per column id. */
   columnWidths: Record<string, number>;
 
-  // ----- Öffnen mit / Editoren -----
-  /** Vom Nutzer angelegte Programme. */
+  // ----- Open with / editors -----
+  /** Programs created by the user. */
   programs: EditorProgram[];
-  /** Zuordnung Endung (klein, ohne Punkt) → Programm-id. */
+  /** Mapping extension (lowercase, without the dot) → program id. */
   associations: Record<string, string>;
-  /** Globaler Standard-Editor (Pfad; leer = keiner → Systemstandard). */
+  /** Global default editor (path; empty = none → system default). */
   defaultEditor: string;
-  /** Auslöse-Verhalten für „Im Editor öffnen". */
+  /** Trigger behavior for "Open in editor". */
   editorTrigger: EditorTrigger;
 
   setLanguage: (l: Lang) => void;
@@ -128,7 +128,7 @@ interface SettingsStore {
   setEditorTrigger: (v: EditorTrigger) => void;
 }
 
-/** Normalisiert eine Endung: klein, ohne führenden Punkt/Leerraum. */
+/** Normalizes an extension: lowercase, without a leading dot/whitespace. */
 export function normalizeExt(ext: string): string {
   return ext.trim().replace(/^\.+/, "").toLowerCase();
 }
@@ -218,7 +218,7 @@ export const useSettings = create<SettingsStore>()(
       removeProgram: (id) =>
         set((s) => ({
           programs: s.programs.filter((p) => p.id !== id),
-          // Zuordnungen auf dieses Programm mitentfernen.
+          // Remove mappings to this program as well.
           associations: Object.fromEntries(
             Object.entries(s.associations).filter(([, v]) => v !== id),
           ),
@@ -236,11 +236,11 @@ export const useSettings = create<SettingsStore>()(
         set((s) => {
           const wanted = new Set(exts.map(normalizeExt).filter(Boolean));
           const associations: Record<string, string> = {};
-          // Bestehende Zuordnungen anderer Programme behalten.
+          // Keep existing mappings of other programs.
           for (const [ext, pid] of Object.entries(s.associations)) {
             if (pid !== id) associations[ext] = pid;
           }
-          // Gewünschte Endungen diesem Programm zuordnen (überschreibt fremde).
+          // Map the desired extensions to this program (overrides foreign ones).
           for (const ext of wanted) associations[ext] = id;
           return { associations };
         }),
@@ -251,19 +251,19 @@ export const useSettings = create<SettingsStore>()(
   ),
 );
 
-/** Das einer Endung zugeordnete Programm (oder undefined). */
+/** The program mapped to an extension (or undefined). */
 export function programForExtension(ext: string): EditorProgram | undefined {
   const s = useSettings.getState();
   const id = s.associations[normalizeExt(ext)];
   return id ? s.programs.find((p) => p.id === id) : undefined;
 }
 
-/** Übersetzung außerhalb von React (z. B. in Aktionen). */
+/** Translation outside of React (e.g. in actions). */
 export function translate(key: TransKey): string {
   return DICT[useSettings.getState().language][key];
 }
 
-/** React-Hook: liefert eine an die aktuelle Sprache gebundene t()-Funktion. */
+/** React hook: returns a t() function bound to the current language. */
 export function useT(): (key: TransKey) => string {
   const lang = useSettings((s) => s.language);
   return (key: TransKey) => DICT[lang][key];

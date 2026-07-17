@@ -1,9 +1,9 @@
 // ============================================================
-// Datei-/Binärvergleich zweier einzelner Dateien.
-//   compare_files – erkennt Text vs. Binär und liefert entweder einen
-//   zeilenweisen Diff (similar/Myers) oder eine Hex-Gegenüberstellung.
-// Läuft auf einem Hintergrund-Thread (spawn_blocking), damit große
-// Dateien die UI nicht blockieren; Ergebnisse sind hart begrenzt.
+// File/binary comparison of two individual files.
+//   compare_files – detects text vs. binary and returns either a
+//   line-by-line diff (similar/Myers) or a hex comparison.
+// Runs on a background thread (spawn_blocking) so large
+// files don't block the UI; results are hard-limited.
 // ============================================================
 
 use serde::Serialize;
@@ -13,7 +13,7 @@ use std::io::{BufReader, Read};
 use std::path::Path;
 use ts_rs::TS;
 
-/// Eine Zeile der Text-Gegenüberstellung (side-by-side).
+/// One line of the text comparison (side-by-side).
 /// `tag`: "equal" | "replace" | "delete" | "insert".
 #[derive(Serialize, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
@@ -27,7 +27,7 @@ pub struct DiffLine {
     pub right: Option<String>,
 }
 
-/// Eine 16-Byte-Zeile der Hex-Gegenüberstellung.
+/// One 16-byte line of the hex comparison.
 #[derive(Serialize, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct HexRow {
@@ -37,37 +37,37 @@ pub struct HexRow {
     pub left_ascii: String,
     pub right_hex: String,
     pub right_ascii: String,
-    /// Ob sich die beiden Seiten in dieser Zeile unterscheiden.
+    /// Whether the two sides differ in this line.
     pub differs: bool,
 }
 
-/// Gesamtergebnis eines Dateivergleichs.
+/// Overall result of a file comparison.
 #[derive(Serialize, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct FileDiff {
     /// "text" | "binary"
     pub mode: String,
-    /// Ob beide Dateien byte-identisch sind.
+    /// Whether both files are byte-identical.
     pub identical: bool,
-    /// Ob das Ergebnis wegen der Größenobergrenzen gekürzt wurde.
+    /// Whether the result was truncated due to the size limits.
     pub truncated: bool,
     #[ts(type = "number")]
     pub left_size: u64,
     #[ts(type = "number")]
     pub right_size: u64,
-    /// Zeilen im Textmodus (sonst leer).
+    /// Lines in text mode (otherwise empty).
     pub lines: Vec<DiffLine>,
-    /// Zeilen im Binärmodus (sonst leer).
+    /// Lines in binary mode (otherwise empty).
     pub hex: Vec<HexRow>,
 }
 
-// Obergrenzen: schützen Speicher/Frontend bei sehr großen Dateien.
+// Upper limits: protect memory/frontend for very large files.
 const MAX_TEXT_BYTES: usize = 4 * 1024 * 1024; // je Seite für den Textmodus
 const MAX_LINES: usize = 200_000; // Diff-Zeilen gesamt
 const MAX_HEX_BYTES: usize = 1024 * 1024; // je Seite für die Hex-Ansicht
 
-/// Prüft streamend, ob zwei Dateien byte-identisch sind (ohne beide
-/// vollständig im Speicher zu halten).
+/// Checks in a streaming way whether two files are byte-identical (without keeping
+/// both fully in memory).
 fn files_identical(a: &Path, b: &Path) -> std::io::Result<bool> {
     let mut ra = BufReader::new(File::open(a)?);
     let mut rb = BufReader::new(File::open(b)?);
@@ -85,8 +85,8 @@ fn files_identical(a: &Path, b: &Path) -> std::io::Result<bool> {
     }
 }
 
-/// Füllt den Puffer so weit wie möglich (bis EOF), damit blockweise
-/// verglichen werden kann, ohne dass kurze Reads den Vergleich verfälschen.
+/// Fills the buffer as much as possible (up to EOF) so it can be compared
+/// block by block without short reads distorting the comparison.
 fn read_full<R: Read>(r: &mut R, buf: &mut [u8]) -> std::io::Result<usize> {
     let mut filled = 0;
     while filled < buf.len() {
@@ -100,23 +100,23 @@ fn read_full<R: Read>(r: &mut R, buf: &mut [u8]) -> std::io::Result<usize> {
     Ok(filled)
 }
 
-/// Liest höchstens `cap` Bytes; meldet zusätzlich, ob die Datei größer ist.
+/// Reads at most `cap` bytes; also reports whether the file is larger.
 fn read_capped(path: &Path, cap: usize) -> std::io::Result<(Vec<u8>, bool)> {
     let mut f = File::open(path)?;
     let mut buf = Vec::new();
     f.by_ref().take(cap as u64).read_to_end(&mut buf)?;
-    // Ein weiteres Byte lesen, um „größer als cap" zu erkennen.
+    // Read one more byte to detect "larger than cap".
     let mut extra = [0u8; 1];
     let more = f.read(&mut extra)? > 0;
     Ok((buf, more))
 }
 
-/// Heuristik: NUL-Byte oder ungültiges UTF-8 ⇒ Binärdatei.
+/// Heuristic: NUL byte or invalid UTF-8 ⇒ binary file.
 fn looks_binary(bytes: &[u8]) -> bool {
     bytes.contains(&0) || std::str::from_utf8(bytes).is_err()
 }
 
-/// Baut die side-by-side-Zeilen aus einem Zeilen-Diff.
+/// Builds the side-by-side lines from a line diff.
 fn build_text_diff(left: &str, right: &str) -> (Vec<DiffLine>, bool) {
     let diff = TextDiff::from_lines(left, right);
     let changes: Vec<_> = diff.iter_all_changes().collect();
@@ -144,8 +144,8 @@ fn build_text_diff(left: &str, right: &str) -> (Vec<DiffLine>, bool) {
                 });
                 i += 1;
             }
-            // Ein Block aus Löschungen (+ direkt folgende Einfügungen) wird
-            // zeilenweise als „replace" gepaart, Überhänge als delete/insert.
+            // A block of deletions (+ directly following insertions) is
+            // paired line by line as "replace", overhangs as delete/insert.
             ChangeTag::Delete | ChangeTag::Insert => {
                 let mut dels = Vec::new();
                 while i < changes.len() && changes[i].tag() == ChangeTag::Delete {
@@ -180,7 +180,7 @@ fn build_text_diff(left: &str, right: &str) -> (Vec<DiffLine>, bool) {
     (rows, truncated)
 }
 
-/// Formatiert 16 Bytes als Hex („48 65 …") und druckbaren ASCII-Text.
+/// Formats 16 bytes as hex ("48 65 …") and printable ASCII text.
 fn hex_and_ascii(chunk: &[u8]) -> (String, String) {
     let hex = chunk
         .iter()
@@ -200,7 +200,7 @@ fn hex_and_ascii(chunk: &[u8]) -> (String, String) {
     (hex, ascii)
 }
 
-/// Baut die Hex-Gegenüberstellung (16 Bytes je Zeile).
+/// Builds the hex comparison (16 bytes per line).
 fn build_hex_diff(left: &[u8], right: &[u8]) -> Vec<HexRow> {
     let rows = left.len().max(right.len()).div_ceil(16);
     (0..rows)
@@ -241,7 +241,7 @@ fn compare_impl(left: String, right: String) -> Result<FileDiff, String> {
     let binary = looks_binary(&lbytes) || looks_binary(&rbytes);
 
     if binary {
-        // Für die Hex-Ansicht auf ein kleineres Fenster begrenzen.
+        // Limit to a smaller window for the hex view.
         let lhex = &lbytes[..lbytes.len().min(MAX_HEX_BYTES)];
         let rhex = &rbytes[..rbytes.len().min(MAX_HEX_BYTES)];
         let truncated = lmore || rmore || lbytes.len() > MAX_HEX_BYTES || rbytes.len() > MAX_HEX_BYTES;
@@ -255,7 +255,7 @@ fn compare_impl(left: String, right: String) -> Result<FileDiff, String> {
             hex: build_hex_diff(lhex, rhex),
         })
     } else {
-        // Sicher, da looks_binary UTF-8 bereits geprüft hat.
+        // Safe, since looks_binary already checked UTF-8.
         let ltext = String::from_utf8_lossy(&lbytes);
         let rtext = String::from_utf8_lossy(&rbytes);
         let (lines, line_trunc) = build_text_diff(&ltext, &rtext);
@@ -271,7 +271,7 @@ fn compare_impl(left: String, right: String) -> Result<FileDiff, String> {
     }
 }
 
-/// Vergleicht zwei Dateien inhaltlich (Text-Diff oder Hex-Gegenüberstellung).
+/// Compares two files by content (text diff or hex comparison).
 #[tauri::command]
 pub async fn compare_files(left: String, right: String) -> Result<FileDiff, String> {
     tauri::async_runtime::spawn_blocking(move || compare_impl(left, right))
@@ -316,7 +316,7 @@ mod tests {
         let repl = d.lines.iter().find(|l| l.tag == "replace").unwrap();
         assert_eq!(repl.left.as_deref(), Some("old"));
         assert_eq!(repl.right.as_deref(), Some("new"));
-        // Reine Einfügung/Löschung als delete/insert.
+        // Pure insertion/deletion as delete/insert.
         let c = write("c", b"same\ntail\n");
         let d2 = compare_impl(write("a2", b"same\nextra\ntail\n"), c).unwrap();
         assert!(d2.lines.iter().any(|l| l.tag == "delete"));

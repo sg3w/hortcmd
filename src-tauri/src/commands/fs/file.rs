@@ -1,7 +1,7 @@
 // ============================================================
-// Dateioperationen: Kopieren/Verschieben/Löschen/Ordner anlegen.
-// Enthält die gemeinsame Transfer-Infrastruktur (Fortschritt,
-// Abbruch, Namenskonflikte), die auch das Archiv-Modul nutzt.
+// File operations: copy/move/delete/create folder.
+// Contains the shared transfer infrastructure (progress,
+// cancel, name conflicts) that the archive module also uses.
 // ============================================================
 
 use serde::Serialize;
@@ -16,17 +16,17 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 use ts_rs::TS;
 
-/// Laufender Fortschritt eines Transfers – Event "fs-progress".
-/// Zwei Ebenen: aktuelle Datei (file_done/file_total) und
-/// Gesamtvorgang (bytes_done/bytes_total, files_done/files_total).
+/// Ongoing progress of a transfer – event "fs-progress".
+/// Two levels: current file (file_done/file_total) and
+/// overall operation (bytes_done/bytes_total, files_done/files_total).
 #[derive(Serialize, Clone, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct OpProgress {
-    /// Eindeutige Vorgangs-ID (vom Frontend vergeben).
+    /// Unique operation ID (assigned by the frontend).
     pub id: String,
     /// "copy" | "move" | "extract" | "pack"
     pub op: String,
-    /// aktuell verarbeitete Datei (voller Pfad)
+    /// currently processed file (full path)
     pub file_name: String,
     #[ts(type = "number")]
     pub file_done: u64,
@@ -38,11 +38,11 @@ pub struct OpProgress {
     pub bytes_done: u64,
     #[ts(type = "number")]
     pub bytes_total: u64,
-    /// Ob der Vorgang gerade pausiert ist (wartet auf Fortsetzen).
+    /// Whether the operation is currently paused (waiting to resume).
     pub paused: bool,
 }
 
-/// Abschluss eines Transfers – Event "fs-done".
+/// Completion of a transfer – event "fs-done".
 #[derive(Serialize, Clone, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct OpDone {
@@ -53,19 +53,19 @@ pub struct OpDone {
     pub cancelled: bool,
 }
 
-/// Namenskonflikt-Anfrage – Event "fs-collision".
-/// Der Transfer-Thread wartet, bis das Frontend `resolve_collision` aufruft.
+/// Name-conflict request – event "fs-collision".
+/// The transfer thread waits until the frontend calls `resolve_collision`.
 #[derive(Serialize, Clone, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct CollisionReq {
     pub transfer_id: String,
     pub req_id: String,
-    /// Zielpfad, der bereits existiert
+    /// target path that already exists
     pub path: String,
     pub is_dir: bool,
 }
 
-/// Ergebnis einer synchronen Operation (z. B. Löschen).
+/// Result of a synchronous operation (e.g. delete).
 #[derive(Serialize, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct OpResult {
@@ -73,12 +73,12 @@ pub struct OpResult {
     pub errors: Vec<String>,
 }
 
-/// Zielpfad im Zielordner aus dem Quell-Basisnamen bilden.
+/// Builds the target path in the target folder from the source base name.
 fn target_in(dest_dir: &Path, src: &Path) -> Option<PathBuf> {
     src.file_name().map(|name| dest_dir.join(name))
 }
 
-/// Zählt Dateien und Bytes rekursiv (für die Fortschrittssummen).
+/// Counts files and bytes recursively (for the progress totals).
 fn measure(p: &Path) -> (u32, u64) {
     if p.is_dir() {
         match fs::read_dir(p) {
@@ -94,7 +94,7 @@ fn measure(p: &Path) -> (u32, u64) {
     }
 }
 
-/// Auflösung eines Namenskonflikts.
+/// Resolution of a name conflict.
 #[derive(Clone, Copy)]
 enum Resolution {
     Overwrite,
@@ -102,7 +102,7 @@ enum Resolution {
     Skip,
 }
 
-// ----- Vorgangs-Registries (Abbruch-Flags + Kollisions-Kanäle) -----
+// ----- Operation registries (cancel flags + collision channels) -----
 
 type CancelMap = Mutex<HashMap<String, Arc<AtomicBool>>>;
 static CANCELS: OnceLock<CancelMap> = OnceLock::new();
@@ -110,7 +110,7 @@ fn cancels() -> &'static CancelMap {
     CANCELS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-// Pausen-Flags je Vorgang (true = pausiert). Der Kopier-Loop wartet darauf.
+// Pause flags per operation (true = paused). The copy loop waits on them.
 static PAUSES: OnceLock<CancelMap> = OnceLock::new();
 fn pauses() -> &'static CancelMap {
     PAUSES.get_or_init(|| Mutex::new(HashMap::new()))
@@ -124,7 +124,7 @@ fn resolvers() -> &'static ResolverMap {
 
 static REQ_COUNTER: AtomicU64 = AtomicU64::new(1);
 
-/// Sucht einen freien Namen "Name (2)", "Name (3)" … im Zielordner.
+/// Finds a free name "Name (2)", "Name (3)" … in the target folder.
 fn free_name(target: &Path) -> PathBuf {
     let parent = target.parent().map(Path::to_path_buf).unwrap_or_default();
     let stem = target
@@ -145,8 +145,8 @@ fn free_name(target: &Path) -> PathBuf {
     }
 }
 
-/// Fragt das Frontend nach der Konfliktauflösung und blockiert bis zur Antwort.
-/// Reagiert dabei auf Abbruch (Skip), damit der Thread nie hängen bleibt.
+/// Asks the frontend for the conflict resolution and blocks until the answer.
+/// Reacts to cancel (skip) so the thread never hangs.
 fn ask_collision(
     app: &AppHandle,
     transfer_id: &str,
@@ -181,8 +181,8 @@ fn ask_collision(
     result
 }
 
-/// Hält die kumulierten Zähler + Abbruch-Flag und sendet gedrosselte Events.
-/// Wird auch vom Archiv-Modul (Entpacken/Packen) verwendet.
+/// Holds the cumulative counters + cancel flag and sends throttled events.
+/// Also used by the archive module (extract/pack).
 pub(crate) struct Prog {
     pub(crate) app: AppHandle,
     pub(crate) id: String,
@@ -213,7 +213,7 @@ impl Prog {
         force: bool,
         paused: bool,
     ) {
-        // Nicht öfter als alle 40 ms senden (Ausnahme: erzwungene Ticks).
+        // Don't send more often than every 40 ms (exception: forced ticks).
         if !force && self.last.elapsed() < Duration::from_millis(40) {
             return;
         }
@@ -235,9 +235,9 @@ impl Prog {
         );
     }
 
-    /// Blockiert, solange der Vorgang pausiert (und nicht abgebrochen) ist,
-    /// und hält die UI dabei über gedrosselte „paused"-Ticks auf dem Laufenden.
-    /// Setzt nach dem Fortsetzen die Drosselung/Rate-Referenz zurück.
+    /// Blocks while the operation is paused (and not cancelled),
+    /// keeping the UI informed via throttled "paused" ticks.
+    /// Resets the throttle/rate reference after resuming.
     pub(crate) fn wait_if_paused(&mut self, file_name: &str, file_done: u64, file_total: u64) {
         if !self.pause.load(Ordering::Relaxed) {
             return;
@@ -250,10 +250,10 @@ impl Prog {
     }
 }
 
-/// Kopiert eine Datei in Blöcken; reagiert auf Abbruch (Teildatei wird
-/// entfernt) und Pause. `limit` begrenzt optional die Geschwindigkeit
-/// (Bytes/s, 0 = unbegrenzt). Mit `verify` wird nach dem Kopieren die
-/// SHA-256-Prüfsumme von Quelle und Ziel verglichen.
+/// Copies a file in blocks; reacts to cancel (the partial file is
+/// removed) and pause. `limit` optionally caps the speed
+/// (bytes/s, 0 = unlimited). With `verify`, the SHA-256 checksum of
+/// source and target is compared after copying.
 fn copy_file_prog(
     src: &Path,
     dst: &Path,
@@ -272,7 +272,7 @@ fn copy_file_prog(
     let mut file_done = 0u64;
     let mut hasher = verify.then(Sha256::new);
 
-    // Rate-Limit-Fenster (nur bei limit > 0): pro ~1 s zurückgesetzt.
+    // Rate-limit window (only for limit > 0): reset roughly every 1 s.
     let mut win_start = Instant::now();
     let mut win_bytes = 0u64;
 
@@ -287,7 +287,7 @@ fn copy_file_prog(
         if prog.cancelled() {
             return Err(abort(writer, dst));
         }
-        // Bei Pause blockieren; danach ggf. erneut auf Abbruch prüfen.
+        // Block while paused; afterwards check for cancel again if needed.
         prog.wait_if_paused(&name, file_done, file_total);
         if prog.cancelled() {
             return Err(abort(writer, dst));
@@ -304,7 +304,7 @@ fn copy_file_prog(
         prog.bytes_done += n as u64;
         prog.emit(&name, file_done, file_total, false);
 
-        // Geschwindigkeitsbegrenzung: bei Überschreitung kurz schlafen.
+        // Speed limit: sleep briefly when exceeded.
         if limit > 0 {
             win_bytes += n as u64;
             let elapsed = win_start.elapsed().as_secs_f64();
@@ -320,7 +320,7 @@ fn copy_file_prog(
         }
     }
 
-    // Verifikation: Ziel erneut lesen und Prüfsummen vergleichen.
+    // Verification: read the target again and compare checksums.
     if let Some(h) = hasher {
         let src_hash = h.finalize();
         let dst_hash = hash_file_sha256(dst)?;
@@ -337,7 +337,7 @@ fn copy_file_prog(
     Ok(())
 }
 
-/// SHA-256 einer Datei (für die Kopier-Verifikation).
+/// SHA-256 of a file (for the copy verification).
 fn hash_file_sha256(path: &Path) -> std::io::Result<Vec<u8>> {
     use sha2::{Digest, Sha256};
     let mut f = File::open(path)?;
@@ -353,7 +353,7 @@ fn hash_file_sha256(path: &Path) -> std::io::Result<Vec<u8>> {
     Ok(h.finalize().to_vec())
 }
 
-/// Kopiert rekursiv (Datei oder Verzeichnisbaum).
+/// Copies recursively (file or directory tree).
 fn copy_tree(
     src: &Path,
     dst: &Path,
@@ -377,8 +377,8 @@ fn copy_tree(
     Ok(())
 }
 
-/// Löst eine Buffergröße in KB in eine sichere Bytezahl auf
-/// (0 = Standard 256 KB; sonst 4 KB … 16 MB).
+/// Resolves a buffer size in KB into a safe byte count
+/// (0 = default 256 KB; otherwise 4 KB … 16 MB).
 fn resolve_buf(buf_kb: u64) -> usize {
     if buf_kb == 0 {
         256 * 1024
@@ -388,13 +388,13 @@ fn resolve_buf(buf_kb: u64) -> usize {
 }
 
 // ============================================================
-// Paralleler Kopierpfad (nur bei Thread-Anzahl > 1 und reinem Kopieren).
-// Bewusst isoliert vom sequentiellen Pfad: `SharedProg` hält den
-// Fortschritt in Atomics, sodass mehrere Worker-Threads gefahrlos
-// dieselbe Buchhaltung teilen. Move und Archiv bleiben unberührt.
+// Parallel copy path (only for thread count > 1 and pure copying).
+// Deliberately isolated from the sequential path: `SharedProg` keeps the
+// progress in atomics, so several worker threads can safely share
+// the same bookkeeping. Move and archive stay untouched.
 // ============================================================
 
-/// Thread-sicherer Fortschritt für den parallelen Kopierpfad.
+/// Thread-safe progress for the parallel copy path.
 struct SharedProg {
     app: AppHandle,
     id: String,
@@ -439,8 +439,8 @@ impl SharedProg {
         );
     }
 
-    /// Blockiert, solange pausiert (und nicht abgebrochen); setzt danach
-    /// das Rate-Fenster zurück, damit die Drosselung nicht nachholt.
+    /// Blocks while paused (and not cancelled); afterwards resets
+    /// the rate window so the throttle does not catch up.
     fn wait_if_paused(&self, name: &str, file_done: u64, file_total: u64) {
         if !self.pause.load(Ordering::Relaxed) {
             return;
@@ -454,7 +454,7 @@ impl SharedProg {
         }
     }
 
-    /// Globale Geschwindigkeitsbegrenzung über alle Worker (limit = Bytes/s).
+    /// Global speed limit across all workers (limit = bytes/s).
     fn rate_limit(&self, n: usize, limit: u64) {
         if limit == 0 {
             return;
@@ -480,15 +480,15 @@ impl SharedProg {
     }
 }
 
-/// Eine einzelne Datei-Kopieraufgabe (mit Quell-Index für die ok-Zählung).
+/// A single file copy task (with source index for the ok counting).
 struct CopyTask {
     idx: usize,
     src: PathBuf,
     dst: PathBuf,
 }
 
-/// Flacht einen Quellbaum in einzelne Dateiaufgaben ab und legt dabei die
-/// Zielordner an. `idx` verweist auf die Top-Level-Quelle.
+/// Flattens a source tree into individual file tasks, creating the
+/// target folders along the way. `idx` refers to the top-level source.
 fn flatten_tree(src: &Path, dst: &Path, idx: usize, tasks: &mut Vec<CopyTask>) {
     if src.is_dir() {
         let _ = fs::create_dir_all(dst);
@@ -509,7 +509,7 @@ fn flatten_tree(src: &Path, dst: &Path, idx: usize, tasks: &mut Vec<CopyTask>) {
     }
 }
 
-/// Kopiert eine Datei blockweise mit geteilter Buchhaltung (paralleler Pfad).
+/// Copies a file block by block with shared bookkeeping (parallel path).
 fn parallel_copy_file(
     task: &CopyTask,
     sp: &SharedProg,
@@ -572,8 +572,8 @@ fn parallel_copy_file(
     Ok(())
 }
 
-/// Kopiert die aufgelösten (Quelle, Ziel)-Paare parallel mit `threads`
-/// Worker-Threads. Rückgabe: (erfolgreiche Quellen, Fehlermeldungen).
+/// Copies the resolved (source, target) pairs in parallel with `threads`
+/// worker threads. Returns: (successful sources, error messages).
 #[allow(clippy::too_many_arguments)]
 fn run_parallel_copy(
     app: AppHandle,
@@ -589,7 +589,7 @@ fn run_parallel_copy(
     files_total: u32,
     bytes_total: u64,
 ) -> (u32, Vec<String>) {
-    // Alle Quellbäume in Dateiaufgaben abflachen (Zielordner werden angelegt).
+    // Flatten all source trees into file tasks (target folders are created).
     let mut tasks = Vec::new();
     for (i, (src, target)) in jobs.iter().enumerate() {
         flatten_tree(src, target, i, &mut tasks);
@@ -660,7 +660,7 @@ fn run_parallel_copy(
     (ok, errors)
 }
 
-/// Führt einen Kopier-/Verschiebe-Vorgang aus (läuft im eigenen Thread).
+/// Runs a copy/move operation (runs in its own thread).
 #[allow(clippy::too_many_arguments)]
 fn run_transfer(
     app: AppHandle,
@@ -678,10 +678,10 @@ fn run_transfer(
 ) {
     let dest = PathBuf::from(&dest_dir);
     let buf_size = resolve_buf(buf_kb);
-    // Paralleler Pfad nur beim reinen Kopieren und Thread-Anzahl > 1.
-    // Move bleibt sequentiell (rename ist ohnehin sofort; Copy-Fallback selten).
+    // Parallel path only for pure copying and thread count > 1.
+    // Move stays sequential (rename is immediate anyway; copy fallback is rare).
     let parallel = !remove_source && threads > 1;
-    // Pro Quelle vorab messen (Gesamtsummen + Buchhaltung bei rename-Move).
+    // Measure per source up front (totals + bookkeeping for a rename move).
     let measured: Vec<(String, u32, u64)> = sources
         .iter()
         .map(|s| {
@@ -709,8 +709,8 @@ fn run_transfer(
     let mut ok = 0u32;
     let mut errors: Vec<String> = Vec::new();
     let mut default_res: Option<Resolution> = None; // „Für alle übernehmen"
-    // Im Parallelmodus werden die aufgelösten Paare gesammelt und danach
-    // parallel kopiert (Kollisionen werden hier sequenziell/interaktiv geklärt).
+    // In parallel mode the resolved pairs are collected and afterwards
+    // copied in parallel (collisions are resolved here sequentially/interactively).
     let mut copy_jobs: Vec<(PathBuf, PathBuf)> = Vec::new();
 
     'outer: for (s, files, bytes) in &measured {
@@ -727,7 +727,7 @@ fn run_transfer(
             continue;
         }
 
-        // Namenskonflikt: Frontend fragen (oder gemerkte Auswahl anwenden).
+        // Name conflict: ask the frontend (or apply the remembered choice).
         if target.exists() {
             let res = match default_res {
                 Some(r) => r,
@@ -756,14 +756,14 @@ fn run_transfer(
             }
         }
 
-        // Parallelmodus (nur Copy): Paar merken, eigentliches Kopieren später.
+        // Parallel mode (copy only): remember the pair, actual copying happens later.
         if parallel {
             copy_jobs.push((src.to_path_buf(), target));
             continue;
         }
 
         let result = if remove_source {
-            // Move: zuerst rename (sofort); sonst kopieren + Quelle löschen.
+            // Move: first rename (immediate); otherwise copy + delete the source.
             match fs::rename(src, &target) {
                 Ok(_) => {
                     prog.files_done += files;
@@ -790,7 +790,7 @@ fn run_transfer(
         }
     }
 
-    // Parallele Kopierphase (alle Kollisionen sind bereits aufgelöst).
+    // Parallel copy phase (all collisions are already resolved).
     if parallel && !copy_jobs.is_empty() && !prog.cancelled() {
         let (pok, perrors) = run_parallel_copy(
             app.clone(),
@@ -823,8 +823,8 @@ fn run_transfer(
     );
 }
 
-/// Registriert Abbruch-Flag und startet eine Hintergrund-Operation.
-/// Gemeinsam genutzt von Transfers und Archiv-Operationen.
+/// Registers the cancel flag and starts a background operation.
+/// Shared by transfers and archive operations.
 pub(crate) fn spawn_op<F>(id: String, f: F)
 where
     F: FnOnce(Arc<AtomicBool>, Arc<AtomicBool>) + Send + 'static,
@@ -840,17 +840,17 @@ where
     });
 }
 
-/// Legt ein Verzeichnis (rekursiv) an.
+/// Creates a directory (recursively).
 #[tauri::command]
 pub fn make_dir(path: String) -> Result<String, String> {
     fs::create_dir_all(&path).map_err(|e| e.to_string())?;
     Ok(path)
 }
 
-/// Schreibt Text in eine Datei (z. B. eine exportierte Dateiliste).
-/// Ohne `overwrite` wird eine bereits vorhandene Datei nicht angetastet:
-/// Rückgabe `Ok(false)` signalisiert dem Frontend den Namenskonflikt.
-/// `Ok(true)` = geschrieben, `Err` = echter E/A-Fehler.
+/// Writes text into a file (e.g. an exported file list).
+/// Without `overwrite`, an existing file is left untouched:
+/// returning `Ok(false)` signals the name conflict to the frontend.
+/// `Ok(true)` = written, `Err` = a real I/O error.
 #[tauri::command]
 pub fn write_text_file(
     path: String,
@@ -864,8 +864,8 @@ pub fn write_text_file(
     Ok(true)
 }
 
-/// Benennt einen Eintrag um (Datei oder Ordner) innerhalb desselben Ordners.
-/// Verweigert das Überschreiben eines bereits vorhandenen Zielnamens.
+/// Renames an entry (file or folder) within the same folder.
+/// Refuses to overwrite an already existing target name.
 #[tauri::command]
 pub fn rename_entry(from: String, to: String) -> Result<(), String> {
     let from_p = Path::new(&from);
@@ -879,7 +879,7 @@ pub fn rename_entry(from: String, to: String) -> Result<(), String> {
     fs::rename(from_p, to_p).map_err(|e| e.to_string())
 }
 
-/// Sucht einen freien temporären Namen im selben Ordner (versteckte Datei).
+/// Finds a free temporary name in the same folder (hidden file).
 fn unique_temp(base: &Path) -> PathBuf {
     loop {
         let n = REQ_COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -890,27 +890,27 @@ fn unique_temp(base: &Path) -> PathBuf {
     }
 }
 
-/// Benennt mehrere Einträge in `dir` um (Massenumbenennen).
+/// Renames several entries in `dir` (batch rename).
 ///
-/// Die neuen Namen berechnet das Frontend; hier passiert nur die sichere
-/// Ausführung: unveränderte Paare werden übersprungen, Konflikte (ungültiger
-/// Name, doppeltes Ziel, fremdbelegtes Ziel, fehlende Quelle) gemeldet. Die
-/// eigentliche Umbenennung läuft in zwei Phasen (erst auf temporäre Namen,
-/// dann auf die Zielnamen), damit auch Ketten und Namenstausch funktionieren.
+/// The new names are computed by the frontend; only the safe
+/// execution happens here: unchanged pairs are skipped, conflicts (invalid
+/// name, duplicate target, target taken by another, missing source) are reported. The
+/// actual renaming runs in two phases (first to temporary names,
+/// then to the target names) so that chains and name swaps work too.
 #[tauri::command]
 pub fn rename_batch(dir: String, renames: Vec<(String, String)>) -> OpResult {
     let base = Path::new(&dir);
     let mut errors: Vec<String> = Vec::new();
 
-    // Quellnamen (für die Prüfung „Ziel wird selbst mit umbenannt").
+    // Source names (for the check "the target is itself being renamed").
     let sources: HashSet<&str> = renames.iter().map(|(f, _)| f.as_str()).collect();
-    // Häufigkeit jedes Zielnamens (doppelte Ziele erkennen).
+    // Frequency of each target name (detect duplicate targets).
     let mut target_count: HashMap<&str, u32> = HashMap::new();
     for (_, to) in &renames {
         *target_count.entry(to.as_str()).or_insert(0) += 1;
     }
 
-    // Gültige Paare herausfiltern.
+    // Filter out the valid pairs.
     let mut valid: Vec<(&str, &str)> = Vec::new();
     for (from, to) in &renames {
         if from == to {
@@ -928,7 +928,7 @@ pub fn rename_batch(dir: String, renames: Vec<(String, String)>) -> OpResult {
             errors.push(format!("{}: Quelle nicht gefunden", from));
             continue;
         }
-        // Fremdkollision: Ziel existiert und wird nicht selbst umbenannt.
+        // Foreign collision: the target exists and is not itself being renamed.
         if base.join(to).exists() && !sources.contains(to.as_str()) {
             errors.push(format!("{} → {}: Ziel existiert bereits", from, to));
             continue;
@@ -936,7 +936,7 @@ pub fn rename_batch(dir: String, renames: Vec<(String, String)>) -> OpResult {
         valid.push((from.as_str(), to.as_str()));
     }
 
-    // Phase 1: alle Quellen auf temporäre Namen.
+    // Phase 1: all sources to temporary names.
     let mut staged: Vec<(PathBuf, &str, &str)> = Vec::new(); // (temp, to, from)
     for (from, to) in &valid {
         let tmp = unique_temp(base);
@@ -946,13 +946,13 @@ pub fn rename_batch(dir: String, renames: Vec<(String, String)>) -> OpResult {
         }
     }
 
-    // Phase 2: temporäre Namen auf die Zielnamen.
+    // Phase 2: temporary names to the target names.
     let mut ok = 0u32;
     for (tmp, to, from) in staged {
         match fs::rename(&tmp, base.join(to)) {
             Ok(_) => ok += 1,
             Err(e) => {
-                // Zurückbenennen, damit kein temporärer Name übrig bleibt.
+                // Rename back so no temporary name is left behind.
                 let _ = fs::rename(&tmp, base.join(from));
                 errors.push(format!("{} → {}: {}", from, to, e));
             }
@@ -962,8 +962,8 @@ pub fn rename_batch(dir: String, renames: Vec<(String, String)>) -> OpResult {
     OpResult { ok, errors }
 }
 
-/// Startet einen Kopiervorgang im Hintergrund (kehrt sofort zurück).
-/// `limit` = Bytes/s (0 = unbegrenzt), `verify` = Prüfsummen nach dem Kopieren.
+/// Starts a copy operation in the background (returns immediately).
+/// `limit` = bytes/s (0 = unlimited), `verify` = checksums after copying.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn copy_entries(
@@ -985,8 +985,8 @@ pub fn copy_entries(
     });
 }
 
-/// Startet einen Verschiebevorgang im Hintergrund (kehrt sofort zurück).
-/// `threads` wird bewusst ignoriert (Move bleibt sequentiell).
+/// Starts a move operation in the background (returns immediately).
+/// `threads` is deliberately ignored (move stays sequential).
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn move_entries(
@@ -1008,19 +1008,19 @@ pub fn move_entries(
     });
 }
 
-/// Bricht einen laufenden Transfer ab (setzt dessen Abbruch-Flag).
+/// Cancels a running transfer (sets its cancel flag).
 #[tauri::command]
 pub fn cancel_transfer(id: String) {
     if let Some(flag) = cancels().lock().unwrap().get(&id) {
         flag.store(true, Ordering::Relaxed);
     }
-    // Falls pausiert: Pause lösen, damit der wartende Thread den Abbruch sieht.
+    // If paused: release the pause so the waiting thread sees the cancel.
     if let Some(flag) = pauses().lock().unwrap().get(&id) {
         flag.store(false, Ordering::Relaxed);
     }
 }
 
-/// Pausiert oder setzt einen laufenden Transfer fort.
+/// Pauses or resumes a running transfer.
 #[tauri::command]
 pub fn pause_transfer(id: String, paused: bool) {
     if let Some(flag) = pauses().lock().unwrap().get(&id) {
@@ -1028,7 +1028,7 @@ pub fn pause_transfer(id: String, paused: bool) {
     }
 }
 
-/// Antwort auf einen Namenskonflikt aus dem Frontend.
+/// Answer to a name conflict from the frontend.
 #[tauri::command]
 pub fn resolve_collision(req_id: String, action: String, apply_all: bool) {
     let res = match action.as_str() {
@@ -1041,7 +1041,7 @@ pub fn resolve_collision(req_id: String, action: String, apply_all: bool) {
     }
 }
 
-/// Verschiebt mehrere Einträge in den System-Papierkorb (wiederherstellbar).
+/// Moves several entries to the system trash (restorable).
 #[tauri::command]
 pub fn trash_entries(paths: Vec<String>) -> OpResult {
     let mut ok = 0u32;
@@ -1056,7 +1056,7 @@ pub fn trash_entries(paths: Vec<String>) -> OpResult {
     OpResult { ok, errors }
 }
 
-/// Löscht mehrere Einträge (synchron; Dateien oder Verzeichnisse rekursiv).
+/// Deletes several entries (synchronously; files or directories recursively).
 #[tauri::command]
 pub fn delete_entries(paths: Vec<String>) -> OpResult {
     let mut ok = 0u32;
@@ -1078,8 +1078,8 @@ pub fn delete_entries(paths: Vec<String>) -> OpResult {
 }
 
 // ============================================================
-// Tests: echte Dateisystem-Prüfung des Massenumbenennens und des
-// Text-Schreibens (nutzen einen frischen temporären Ordner).
+// Tests: real file-system checks of the batch rename and the
+// text writing (they use a fresh temporary folder).
 // ============================================================
 #[cfg(test)]
 mod tests {
@@ -1130,7 +1130,7 @@ mod tests {
 
     #[test]
     fn swap_names() {
-        // Namenstausch a<->b muss über die Zwei-Phasen-Logik funktionieren.
+        // A name swap a<->b must work via the two-phase logic.
         let d = tmp_dir();
         write(&d, "a.txt", "AAA");
         write(&d, "b.txt", "BBB");
@@ -1145,7 +1145,7 @@ mod tests {
 
     #[test]
     fn chain_rename() {
-        // Kette a->b, b->c (c neu): Ergebnis b=altes A, c=altes B.
+        // Chain a->b, b->c (c new): result b=old A, c=old B.
         let d = tmp_dir();
         write(&d, "a.txt", "A");
         write(&d, "b.txt", "B");
@@ -1161,8 +1161,8 @@ mod tests {
 
     #[test]
     fn external_collision_is_skipped() {
-        // Ziel „keep.txt" existiert und wird nicht selbst umbenannt -> Fehler,
-        // Quelle bleibt unangetastet.
+        // The target "keep.txt" exists and is not itself renamed -> error,
+        // the source stays untouched.
         let d = tmp_dir();
         write(&d, "a.txt", "A");
         write(&d, "keep.txt", "KEEP");
@@ -1199,8 +1199,8 @@ mod tests {
 
     #[test]
     fn flatten_tree_collects_files_and_makes_dirs() {
-        // Quellbaum mit Unterordner; flatten muss die Zielordner anlegen
-        // und je Datei eine Aufgabe liefern (Verzeichnisse nicht).
+        // Source tree with a subfolder; flatten must create the target folders
+        // and yield one task per file (not for directories).
         let root = tmp_dir();
         let src = root.join("src");
         fs::create_dir_all(src.join("sub")).unwrap();
@@ -1224,8 +1224,8 @@ mod tests {
 
     #[test]
     fn hash_file_matches_known_vector() {
-        // SHA-256("abc") ist ein bekannter Referenzwert – Grundlage der
-        // Kopier-Verifikation (Quelle vs. Ziel).
+        // SHA-256("abc") is a known reference value – the basis of the
+        // copy verification (source vs. target).
         let d = tmp_dir();
         write(&d, "abc.bin", "abc");
         let hex: String = hash_file_sha256(&d.join("abc.bin"))
@@ -1244,10 +1244,10 @@ mod tests {
         let d = tmp_dir();
         let p = d.join("list.txt").to_string_lossy().into_owned();
         assert_eq!(write_text_file(p.clone(), "first".into(), false), Ok(true));
-        // Ohne overwrite: nicht angetastet -> Ok(false), Inhalt bleibt.
+        // Without overwrite: untouched -> Ok(false), the content stays.
         assert_eq!(write_text_file(p.clone(), "second".into(), false), Ok(false));
         assert_eq!(read(&d, "list.txt"), "first");
-        // Mit overwrite: neu geschrieben.
+        // With overwrite: written anew.
         assert_eq!(write_text_file(p.clone(), "second".into(), true), Ok(true));
         assert_eq!(read(&d, "list.txt"), "second");
     }

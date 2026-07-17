@@ -1,6 +1,6 @@
 // ============================================================
-// Öffnen eines Eintrags: Ordner navigieren, in Archive
-// eintreten/heraus, Dateien mit dem Standardprogramm öffnen.
+// Opening an entry: navigate folders, enter/leave
+// archives, open files with the default program.
 // ============================================================
 
 import { panelOf, usePanes, type Side } from "@/store/panesStore";
@@ -8,18 +8,18 @@ import { openPath } from "@/ipc/client";
 import { joinPath, parentPath } from "@/lib/path";
 import { isArchive } from "@/lib/archive";
 
-/** Öffnet den Eintrag an `index` im aktiven Tab von `side`. */
+/** Opens the entry at `index` in the active tab of `side`. */
 export function openEntry(side: Side, index: number): void {
   const store = usePanes.getState();
   const p = panelOf(store, side);
   const entry = p.entries[index];
   if (!entry) return;
 
-  // ----- Innerhalb eines Archivs -----
+  // ----- Inside an archive -----
   if (p.archive) {
     if (entry.parent) {
       if (p.path === "/" || p.path === "") {
-        // Archivwurzel: Archiv verlassen → Ordner der Archivdatei.
+        // Archive root: leave the archive → folder of the archive file.
         store.loadDir(side, parentPath(p.archive));
       } else {
         store.loadArchive(side, p.archive, parentPath(p.path));
@@ -27,11 +27,11 @@ export function openEntry(side: Side, index: number): void {
     } else if (entry.is_dir) {
       store.loadArchive(side, p.archive, joinPath(p.path, entry.name));
     }
-    // Dateien im Archiv: über Kopieren (F5) entpacken.
+    // Files inside an archive: extract via copy (F5).
     return;
   }
 
-  // ----- Reales Dateisystem -----
+  // ----- Real file system -----
   if (entry.parent) {
     store.loadDir(side, parentPath(p.path));
   } else if (entry.is_dir) {

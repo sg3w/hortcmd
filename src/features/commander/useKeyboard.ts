@@ -1,6 +1,6 @@
 // ============================================================
-// Globales TC-Tastaturmodell. Wirkt auf den aktiven Tab des
-// aktiven Fensters. Fokus in Eingabefeldern hat Vorrang.
+// Global TC keyboard model. Acts on the active tab of the
+// active pane. Focus in input fields takes precedence.
 // ============================================================
 
 import { useEffect } from "react";
@@ -20,19 +20,19 @@ const PAGE = 20; // Zeilen pro Seiten-Sprung
 const F_KEYS: Record<string, ActionId> = {
   F2: "rename",
   F3: "view",
-  // F4 wird separat behandelt (Standard-Öffnen vs. „Im Editor öffnen").
+  // F4 is handled separately (default open vs. "Open in editor").
   F5: "copy",
   F6: "move",
   F7: "mkdir",
 };
 
-/** Öffnet den Cursor-Eintrag. */
+/** Opens the cursor entry. */
 function openCursor(): void {
   const s = usePanes.getState();
   openEntry(s.active, panelOf(s, s.active).cursor);
 }
 
-/** „Ein Verzeichnis hoch" (Backspace) – nutzt die ".."-Zeile. */
+/** "Up one directory" (Backspace) – uses the ".." row. */
 function goUp(): void {
   const s = usePanes.getState();
   const p = panelOf(s, s.active);
@@ -42,14 +42,14 @@ function goUp(): void {
 export function useKeyboard(): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // In Textfeldern (Kommandozeile) nichts abfangen.
+      // Don't intercept anything in text fields (command line).
       const el = document.activeElement;
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
         return;
       }
-      // Bei offenem modalen Dialog (TICKET-012) keine Tastenkürzel an die
-      // Dateifenster durchreichen — Dialoge laufen jetzt im selben Fenster
-      // und teilen sich sonst denselben globalen Listener.
+      // With a modal dialog open (TICKET-012), don't pass shortcuts through to
+      // the file panes — dialogs now run in the same window
+      // and would otherwise share the same global listener.
       if (el instanceof Element && el.closest('[role="dialog"]')) {
         return;
       }
@@ -57,10 +57,10 @@ export function useKeyboard(): void {
       const s = usePanes.getState();
       const side = s.active;
       const mod = e.metaKey || e.ctrlKey;
-      // Spaltenzahl der aktuellen Ansicht (Detail = 1, Grid > 1).
+      // Column count of the current view (detail = 1, grid > 1).
       const cols = Math.max(1, s[side].gridCols);
 
-      // Alt+←/→: im Ordner-Verlauf zurück/vor (wie im Browser).
+      // Alt+←/→: back/forward in the folder history (like in a browser).
       if (e.altKey && e.key === "ArrowLeft") {
         e.preventDefault();
         return s.goBack(side);
@@ -70,7 +70,7 @@ export function useKeyboard(): void {
         return s.goForward(side);
       }
 
-      // Alt+Enter: Eigenschaften/Rechte des Cursor-Eintrags (nicht im Archiv).
+      // Alt+Enter: properties/permissions of the cursor entry (not in an archive).
       if (e.altKey && e.key === "Enter") {
         e.preventDefault();
         const p = panelOf(s, side);
@@ -81,7 +81,7 @@ export function useKeyboard(): void {
         return;
       }
 
-      // ----- Zwischenablage & Tabs (Cmd/Ctrl-Kürzel) -----
+      // ----- Clipboard & tabs (Cmd/Ctrl shortcuts) -----
       if (mod) {
         switch (e.key.toLowerCase()) {
           case "c":
@@ -102,7 +102,7 @@ export function useKeyboard(): void {
         }
       }
 
-      // ----- Schnellfilter (Filtern beim Tippen) -----
+      // ----- Quick filter (filter while typing) -----
       const panel = panelOf(s, side);
       const filterActive = panel.filter.length > 0;
       if (!mod && !e.altKey) {
@@ -114,8 +114,8 @@ export function useKeyboard(): void {
           e.preventDefault();
           return s.setFilter(side, panel.filter.slice(0, -1));
         }
-        // Druckbare Zeichen: bei aktivem Filter anhängen; sonst mit
-        // Buchstabe/Ziffer/._ starten (+,-,* bleiben Muster-Auswahl, Space bleibt frei).
+        // Printable characters: append when the filter is active; otherwise start
+        // with letter/digit/._ (+,-,* stay pattern selection, Space stays free).
         if (e.key.length === 1 && e.key !== " ") {
           if (filterActive) {
             e.preventDefault();
@@ -177,7 +177,7 @@ export function useKeyboard(): void {
           return;
         case "F8":
         case "Delete":
-          // Standard: Papierkorb; Shift erzwingt endgültiges Löschen.
+          // Default: trash; Shift forces permanent deletion.
           e.preventDefault();
           runDelete(side, { permanent: e.shiftKey });
           return;
@@ -186,7 +186,7 @@ export function useKeyboard(): void {
           s.toggleMark(side, panelOf(s, side).cursor, true);
           return;
         case " ":
-          // macOS: Leertaste öffnet Quick Look; sonst (oder Archiv/„..“) markieren.
+          // macOS: Space opens Quick Look; otherwise (or archive/"..") select.
           e.preventDefault();
           if (isMacOS && runQuickLook(side)) return;
           s.toggleMark(side, panelOf(s, side).cursor, true);
@@ -205,21 +205,21 @@ export function useKeyboard(): void {
           return;
       }
 
-      // Alt+F5: Auswahl packen (TC-Kürzel).
+      // Alt+F5: pack the selection (TC shortcut).
       if (e.altKey && e.key === "F5") {
         e.preventDefault();
         runAction("pack", side);
         return;
       }
 
-      // Alt+F7: Suche öffnen (TC-Kürzel).
+      // Alt+F7: open search (TC shortcut).
       if (e.altKey && e.key === "F7") {
         e.preventDefault();
         openSearch(side);
         return;
       }
 
-      // F4 / Umschalt+F4: „Im Editor öffnen" je nach Einstellung.
+      // F4 / Shift+F4: "Open in editor" depending on the setting.
       if (e.key === "F4") {
         e.preventDefault();
         const trigger = useSettings.getState().editorTrigger;

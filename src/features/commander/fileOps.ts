@@ -1,7 +1,7 @@
 // ============================================================
-// Ausführung der Dateioperationen.
-// Copy/Move/Paste laufen nebenläufig als Transfer (Fortschritt
-// via Events); Delete/Mkdir sind kurze synchrone Operationen.
+// Execution of the file operations.
+// Copy/move/paste run concurrently as a transfer (progress
+// via events); delete/mkdir are short synchronous operations.
 // ============================================================
 
 import { panelOf, usePanes, type Side } from "@/store/panesStore";
@@ -40,7 +40,7 @@ import {
 
 const other = (side: Side): Side => (side === "left" ? "right" : "left");
 
-/** Basisnamen der Zielmenge (Auswahl oder Cursor). */
+/** Base names of the target set (selection or cursor). */
 function selectedNames(side: Side): string[] {
   const p = panelOf(usePanes.getState(), side);
   if (p.selected.size > 0) return [...p.selected];
@@ -54,7 +54,7 @@ function newId(): string {
     : `t${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-/** Vollständige Pfade der Zielmenge (Auswahl oder Cursor). */
+/** Full paths of the target set (selection or cursor). */
 export function targetPaths(side: Side): string[] {
   const p = panelOf(usePanes.getState(), side);
   const names =
@@ -67,9 +67,9 @@ export function targetPaths(side: Side): string[] {
   return names.map((n) => joinPath(p.path, n));
 }
 
-/** Aktive Tabs beider Seiten neu laden (nach Abschluss eines Vorgangs).
- *  Bewahrt Scrollposition/Auswahl (TICKET-006) und markiert neu
- *  hinzugekommene Einträge (Ziel eines Kopier-/Verschiebe-/Einfüge-Vorgangs). */
+/** Reload the active tabs of both sides (after an operation completes).
+ *  Preserves scroll position/selection (TICKET-006) and selects newly
+ *  added entries (target of a copy/move/paste operation). */
 export async function reloadBoth(): Promise<void> {
   const s = usePanes.getState();
   await Promise.all([
@@ -87,9 +87,9 @@ function reportErrors(errors: string[]): void {
   });
 }
 
-// ---------- Transfers (nebenläufig) ----------
+// ---------- Transfers (concurrent) ----------
 
-// ----- Kopier-Queue: Vorgänge nacheinander abarbeiten -----
+// ----- Copy queue: process operations one after another -----
 
 interface QueuedParams {
   op: "copy" | "move";
@@ -100,10 +100,10 @@ interface QueuedParams {
   bufKb: number;
   threads: number;
 }
-/** Parameter wartender (noch nicht gestarteter) Transfers je id. */
+/** Parameters of waiting (not yet started) transfers per id. */
 const queuedParams = new Map<string, QueuedParams>();
 
-/** Ob gerade ein Kopier-/Verschiebevorgang aktiv läuft (nicht wartend/fertig). */
+/** Whether a copy/move operation is currently active (not waiting/done). */
 function hasActiveTransfer(exceptId?: string): boolean {
   return useTransfers
     .getState()
@@ -126,7 +126,7 @@ function beginTransfer(op: "copy" | "move", sources: string[], dest: string): vo
   const id = newId();
   useTransfers.getState().start(op, id);
 
-  // Warteschlange aktiv und schon ein Vorgang unterwegs → einreihen.
+  // Queue active and an operation already underway → enqueue.
   if (st.queueTransfers && hasActiveTransfer(id)) {
     queuedParams.set(id, { op, sources, dest, limit, verify, bufKb, threads });
     useTransfers.getState().setQueued(id, true);
@@ -135,7 +135,7 @@ function beginTransfer(op: "copy" | "move", sources: string[], dest: string): vo
   }
 }
 
-/** Startet den nächsten wartenden Transfer, sofern gerade keiner läuft. */
+/** Starts the next waiting transfer, provided none is running. */
 export function startNextQueued(): void {
   if (hasActiveTransfer()) return;
   const next = useTransfers.getState().transfers.find((t) => t.queued);
@@ -156,13 +156,13 @@ export function startNextQueued(): void {
   );
 }
 
-/** Entfernt einen noch wartenden Transfer aus der Queue (Abbruch vor Start). */
+/** Removes a still-waiting transfer from the queue (cancel before start). */
 export function dequeueTransfer(id: string): void {
   queuedParams.delete(id);
   useTransfers.getState().remove(id);
 }
 
-/** Offene Entpack-Vorgänge (für Passwort-Wiederholung nach fs-done). */
+/** Pending extract operations (for a password retry after fs-done). */
 interface ExtractReq {
   archive: string;
   base: string;
@@ -171,7 +171,7 @@ interface ExtractReq {
 }
 const pendingExtracts = new Map<string, ExtractReq>();
 
-/** Entpackt aus einem Archiv (Ebene `base`) nach `dest`. */
+/** Extracts from an archive (level `base`) to `dest`. */
 function beginExtract(
   archive: string,
   base: string,
@@ -185,10 +185,10 @@ function beginExtract(
 }
 
 /**
- * Behandelt einen abgeschlossenen Entpack-Vorgang: Fehlte/stimmte das
- * Passwort nicht, wird es erfragt und der Vorgang wiederholt. Gibt true
- * zurück, wenn eine Passwort-Wiederholung eingeleitet wurde (der Aufrufer
- * überspringt dann die normale Fehleranzeige).
+ * Handles a completed extract operation: if the password was missing or
+ * wrong, it is requested and the operation retried. Returns true
+ * when a password retry was initiated (the caller then
+ * skips the normal error display).
  */
 export function handleExtractDone(d: OpDone): boolean {
   if (d.op !== "extract") return false;
@@ -206,7 +206,7 @@ export function handleExtractDone(d: OpDone): boolean {
   return true;
 }
 
-/** Zielordner der Gegenseite; blockiert das Schreiben in ein Archiv. */
+/** Target folder of the opposite side; blocks writing into an archive. */
 function destOf(side: Side): string | null {
   const dst = panelOf(usePanes.getState(), other(side));
   return dst.archive ? null : dst.path;
@@ -227,7 +227,7 @@ export function runMove(side: Side): void {
   const src = panelOf(usePanes.getState(), side);
   const dest = destOf(side);
   if (dest === null) return;
-  // Aus einem Archiv „verschieben" = entpacken (Archiv bleibt unverändert).
+  // "Moving" out of an archive = extracting (the archive stays unchanged).
   if (src.archive) {
     beginExtract(src.archive, src.path, selectedNames(side), dest);
   } else {
@@ -236,8 +236,8 @@ export function runMove(side: Side): void {
 }
 
 /**
- * Fügt die Zwischenablage ein. Ohne `destDir` in den aktuellen Ordner;
- * mit `destDir` (Rechtsklick auf einen Ordner) direkt in diesen Ordner.
+ * Pastes the clipboard. Without `destDir` into the current folder;
+ * with `destDir` (right-click on a folder) directly into that folder.
  */
 export function runPaste(side: Side, destDir?: string): void {
   const clip = useClipboard.getState();
@@ -251,7 +251,7 @@ export function runPaste(side: Side, destDir?: string): void {
   if (clip.mode === "cut") clip.clear();
 }
 
-/** „Entpacken": ausgewählte Archive (reales FS) komplett in die Gegenseite. */
+/** "Extract": selected archives (real FS) completely into the opposite side. */
 export function runExtractArchive(side: Side): void {
   const src = panelOf(usePanes.getState(), side);
   if (src.archive) return;
@@ -263,7 +263,7 @@ export function runExtractArchive(side: Side): void {
   }
 }
 
-/** „Packen": Auswahl in ein neues ZIP in der Gegenseite. */
+/** "Pack": the selection into a new ZIP on the opposite side. */
 export function runPack(side: Side): void {
   const src = panelOf(usePanes.getState(), side);
   if (src.archive) return;
@@ -288,7 +288,7 @@ export function runPack(side: Side): void {
   });
 }
 
-/** „Bearbeiten" (F4): Datei mit dem Standardprogramm öffnen. */
+/** "Edit" (F4): open the file with the default program. */
 export function runEdit(side: Side): void {
   const p = panelOf(usePanes.getState(), side);
   if (p.archive) return;
@@ -298,8 +298,8 @@ export function runEdit(side: Side): void {
 }
 
 /**
- * Native macOS-Quick-Look-Vorschau des Cursor-Eintrags (Leertaste).
- * Liefert false, wenn nicht möglich (Archiv/„..“) → Aufrufer kann markieren.
+ * Native macOS Quick Look preview of the cursor entry (Space).
+ * Returns false when not possible (archive/"..") → the caller can select instead.
  */
 export function runQuickLook(side: Side): boolean {
   const p = panelOf(usePanes.getState(), side);
@@ -309,7 +309,7 @@ export function runQuickLook(side: Side): boolean {
   return true;
 }
 
-/** Vollständiger Pfad der Cursor-Datei, oder null (Ordner/„..“/Archiv). */
+/** Full path of the cursor file, or null (folder/".."/archive). */
 function cursorFile(side: Side): string | null {
   const p = panelOf(usePanes.getState(), side);
   if (p.archive) return null;
@@ -319,8 +319,8 @@ function cursorFile(side: Side): string | null {
 }
 
 /**
- * „Im Editor öffnen": Programm nach Zuordnung (Endung) → globaler
- * Standard-Editor → System-Standard. Alternative zu F4.
+ * "Open in editor": program by mapping (extension) → global
+ * default editor → system default. Alternative to F4.
  */
 export function runEditWith(side: Side): void {
   const p = panelOf(usePanes.getState(), side);
@@ -332,13 +332,13 @@ export function runEditWith(side: Side): void {
   openWith(joinPath(p.path, cur.name), program); // leer = System-Standard
 }
 
-/** Datei mit einem bestimmten Programm öffnen (Kontextmenü). */
+/** Open a file with a specific program (context menu). */
 export function runOpenWithProgram(side: Side, program: string): void {
   const full = cursorFile(side);
   if (full) openWith(full, program);
 }
 
-/** „Anderes Programm …": Programm über den Dateibrowser wählen und öffnen. */
+/** "Other program …": choose a program via the file browser and open. */
 export function runOpenWithBrowse(side: Side): void {
   const full = cursorFile(side);
   if (!full) return;
@@ -349,7 +349,7 @@ export function runOpenWithBrowse(side: Side): void {
   });
 }
 
-// ---------- Kurze synchrone Operationen ----------
+// ---------- Short synchronous operations ----------
 
 async function withBusy<T>(fn: () => Promise<T>): Promise<T> {
   const ops = useOps.getState();
@@ -362,8 +362,8 @@ async function withBusy<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /**
- * Löschen (F8/Entf): standardmäßig in den Papierkorb (wiederherstellbar).
- * Mit `permanent` (Shift) oder deaktiviertem Papierkorb wird endgültig gelöscht.
+ * Delete (F8/Del): by default to the trash (restorable).
+ * With `permanent` (Shift) or the trash disabled, it deletes permanently.
  */
 export function runDelete(side: Side, opts?: { permanent?: boolean }): void {
   const paths = targetPaths(side);
@@ -405,7 +405,7 @@ export function runDelete(side: Side, opts?: { permanent?: boolean }): void {
   });
 }
 
-/** Umbenennen (F2): benennt den Cursor-Eintrag im aktuellen Ordner um. */
+/** Rename (F2): renames the cursor entry in the current folder. */
 export function runRename(side: Side): void {
   const p = panelOf(usePanes.getState(), side);
   if (p.archive) return; // in Archiven nicht umbenennen
@@ -414,7 +414,7 @@ export function runRename(side: Side): void {
 
   const oldName = cur.name;
   const base = p.path;
-  // Bei Dateien nur den Basisnamen (vor der Endung) vorwählen.
+  // For files, preselect only the base name (before the extension).
   const dot = !cur.is_dir ? oldName.lastIndexOf(".") : -1;
   const selEnd = dot > 0 ? dot : oldName.length;
 
@@ -432,7 +432,7 @@ export function runRename(side: Side): void {
         reportErrors([translate("op.rename.invalid")]);
         return;
       }
-      // Namenskonflikt vorab lokalisiert melden (Backend prüft zusätzlich).
+      // Report a name conflict localized up front (the backend also checks).
       const exists = panelOf(usePanes.getState(), side).entries.some(
         (e) => !e.parent && e.name === name,
       );

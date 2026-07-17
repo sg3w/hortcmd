@@ -1,6 +1,6 @@
 // ============================================================
-// Speicherort-Auswahl als Radix Select (gestylt im TC-Look).
-// Ersetzt die frühere Button-Leiste.
+// Location picker as a Radix Select (styled in the TC look).
+// Replaces the earlier button bar.
 // ============================================================
 
 import * as Select from "@radix-ui/react-select";
@@ -23,7 +23,7 @@ export function DriveSelect({ side, drives }: Props) {
   const favorites = useSettings((s) => s.favorites);
   const t = useT();
 
-  // Längster passender Mount = aktueller Speicherort.
+  // Longest matching mount = current location.
   const current = [...drives]
     .filter((d) => path.startsWith(d.mount))
     .sort((a, b) => b.mount.length - a.mount.length)[0];
@@ -35,8 +35,8 @@ export function DriveSelect({ side, drives }: Props) {
         value={current?.mount ?? ""}
         onValueChange={(value) => {
           setActive(side);
-          // Favoriten tragen ein "fav:"-Präfix, um mit Laufwerks-Mounts
-          // nicht zu kollidieren.
+          // Favorites carry a "fav:" prefix so they don't collide with
+          // drive mounts.
           loadDir(side, value.startsWith("fav:") ? value.slice(4) : value);
         }}
       >

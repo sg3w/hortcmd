@@ -1,7 +1,7 @@
 // ============================================================
-// Dialog „Dateiliste exportieren": konfiguriert Umfang, Format,
-// Felder und Optionen, zeigt eine Live-Vorschau und schreibt das
-// Ergebnis via Backend (`write_text_file`) bzw. in die Zwischenablage.
+// "Export file list" dialog: configures scope, format, fields and
+// options, shows a live preview and writes the result via the backend
+// (`write_text_file`) or to the clipboard.
 // ============================================================
 
 import { useEffect, useMemo, useState } from "react";
@@ -57,7 +57,7 @@ const DEFAULT_SIZE = { w: 820, h: 600 };
 const MIN_W = 600;
 const MIN_H = 420;
 
-/** Ersetzt die Endung eines Dateinamens (behält den Basisnamen). */
+/** Replaces the extension of a file name (keeps the base name). */
 function withExt(name: string, ext: string): string {
   const base = name.replace(/\.[^.\\/]*$/, "");
   return `${base}.${ext}`;
@@ -70,7 +70,7 @@ export function ExportDialog() {
   const sizeFormat = useSettings((s) => s.sizeFormat);
   const dateFormat = useSettings((s) => s.dateFormat);
 
-  // Momentaufnahme der aktiven Liste beim Öffnen des Dialogs.
+  // Snapshot of the active list taken when the dialog opens.
   const snapshot = useMemo(() => {
     if (!side) return null;
     const p = panelOf(usePanes.getState(), side);
@@ -85,7 +85,7 @@ export function ExportDialog() {
       selectedCount,
       destDir,
     };
-    // Bewusst nur an `side` gebunden: Snapshot bei jedem Öffnen neu.
+    // Deliberately bound only to `side`: a fresh snapshot on every open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [side]);
 
@@ -101,7 +101,7 @@ export function ExportDialog() {
     null,
   );
 
-  // Beim Öffnen die Standardwerte aus dem Snapshot herstellen.
+  // On open, restore the default values from the snapshot.
   useEffect(() => {
     if (!snapshot) return;
     setFormat("list");
@@ -193,7 +193,7 @@ export function ExportDialog() {
     try {
       const written = await writeTextFile(target, fullText, overwrite);
       if (!written) {
-        // Datei existiert bereits → vor dem Überschreiben nachfragen.
+        // File already exists → ask before overwriting.
         useOps.getState().requestConfirm({
           title: t("op.collision.title"),
           message: t("op.collision.exists").replace("{name}", baseName(target)),
@@ -208,7 +208,7 @@ export function ExportDialog() {
         ok: true,
         text: t("export.saved").replace("{path}", target),
       });
-      // Betroffene Fenster mit dem Zielordner aktualisieren.
+      // Refresh the affected windows showing the target folder.
       const s = usePanes.getState();
       (["left", "right"] as const).forEach((sd) => {
         if (panelOf(s, sd).path === destDir) void s.refresh(sd);
@@ -242,7 +242,7 @@ export function ExportDialog() {
       minSize={{ w: MIN_W, h: MIN_H }}
     >
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4">
-            {/* Formular – kompakt, bricht bei Bedarf um. */}
+            {/* Form – compact, wraps when needed. */}
             <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
               <Section label={t("export.scope")}>
                 <div className="flex flex-col gap-1.5">
@@ -321,7 +321,7 @@ export function ExportDialog() {
               </Section>
             </div>
 
-            {/* Ziel (Dateiname + Ordner) */}
+            {/* Target (file name + folder) */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <label className="flex min-w-[220px] flex-1 items-center gap-2">
                 <span className="shrink-0 text-[12px] text-dim">
@@ -352,7 +352,7 @@ export function ExportDialog() {
               </div>
             </div>
 
-            {/* Vorschau (volle Breite, füllt den restlichen Platz). */}
+            {/* Preview (full width, fills the remaining space). */}
             <div className="flex min-h-0 flex-1 flex-col">
               <span className="mb-1.5 text-[13px] text-text">
                 {t("export.preview")}
@@ -372,7 +372,7 @@ export function ExportDialog() {
             </div>
           </div>
 
-          {/* Fußzeile */}
+          {/* Footer */}
           <div className="flex items-center gap-2 border-t border-edge px-4 py-2.5">
             {status && (
               <span

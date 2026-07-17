@@ -1,6 +1,6 @@
 // ============================================================
-// Verzeichnis-Überwachung: beobachtet die aktuell angezeigten
-// Ordner und meldet externe Änderungen per Event "fs-changed".
+// Directory watching: observes the currently displayed
+// folders and reports external changes via the "fs-changed" event.
 // ============================================================
 
 use notify::{recommended_watcher, RecommendedWatcher, RecursiveMode, Watcher};
@@ -8,15 +8,15 @@ use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 use tauri::{AppHandle, Emitter};
 
-// Ein einziger Watcher; wird bei jedem set_watched neu aufgebaut
-// (der alte wird beim Ersetzen automatisch gedroppt/gestoppt).
+// A single watcher; rebuilt on every set_watched
+// (the old one is automatically dropped/stopped on replacement).
 static WATCHER: OnceLock<Mutex<Option<RecommendedWatcher>>> = OnceLock::new();
 fn slot() -> &'static Mutex<Option<RecommendedWatcher>> {
     WATCHER.get_or_init(|| Mutex::new(None))
 }
 
-/// Überwacht genau die angegebenen Ordner (nicht rekursiv). Bei einer Änderung
-/// wird `fs-changed` mit dem betroffenen Ordnerpfad gesendet.
+/// Watches exactly the given folders (non-recursive). On a change,
+/// `fs-changed` is sent with the affected folder path.
 #[tauri::command]
 pub fn set_watched(app: AppHandle, paths: Vec<String>) {
     let app2 = app.clone();

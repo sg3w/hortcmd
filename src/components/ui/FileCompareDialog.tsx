@@ -1,9 +1,9 @@
 // ============================================================
-// Dialog „Datei-/Binärvergleich": vergleicht die Cursor-Datei des
-// linken Fensters inhaltlich mit der des rechten. Textdateien werden
-// zeilenweise (side-by-side) gegenübergestellt, Binärdateien als
-// Hex-Dump. Vergleich erledigt das Backend (`compare_files`); die
-// Ergebnisliste ist virtualisiert.
+// "File/binary comparison" dialog: compares the content of the
+// cursor file in the left window with that of the right window.
+// Text files are displayed side-by-side, binary files as hex dumps.
+// Comparison is handled by the backend (`compare_files`); the
+// result list is virtualized.
 // ============================================================
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -22,7 +22,7 @@ const ROW_H = 20;
 const DEFAULT_SIZE = { w: 1100, h: 700 };
 const MIN_SIZE = { w: 700, h: 400 };
 
-// Hintergrund je Diff-Status (Textmodus).
+// Background color per diff status (Text mode).
 const ROW_BG: Record<string, string> = {
   replace: "bg-amber-500/10",
   delete: "bg-red-500/10",
@@ -120,7 +120,7 @@ export function FileCompareDialog() {
       defaultSize={DEFAULT_SIZE}
       minSize={MIN_SIZE}
     >
-      {/* Kopf mit den beiden Dateinamen */}
+      {/* Header with the two file names */}
       <div className="grid grid-cols-2 gap-px border-b border-edge bg-edge text-[12px]">
         {[
           { path: left, size: data?.left_size },
@@ -135,7 +135,7 @@ export function FileCompareDialog() {
         ))}
       </div>
 
-      {/* Inhalt */}
+      {/* Content */}
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
         {!data && !error && (
           <div className="flex items-center gap-2 p-4 text-[13px] text-dim">

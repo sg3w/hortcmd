@@ -1,5 +1,5 @@
 // ============================================================
-// Ordnet einem Eintrag ein Lucide-Icon (+ Farbe) zu.
+// Assigns a Lucide icon (+ color) to an entry.
 // ============================================================
 
 import {
@@ -40,7 +40,7 @@ export function iconFor(row: Row): IconSpec {
   return { Icon: File, className: "text-dim" };
 }
 
-/** Fertig gerendertes Zeilen-Icon; Größe für Listen-/Miniaturansicht anpassbar. */
+/** Ready-rendered row icon; size adjustable for the list/thumbnail view. */
 export function RowIcon({ row, size = 14 }: { row: Row; size?: number }) {
   const { Icon, className } = iconFor(row);
   return (

@@ -1,6 +1,6 @@
 // ============================================================
-// Zustand für laufende Dateioperationen: Fortschrittsanzeige
-// sowie Bestätigungs- und Eingabedialoge.
+// State for running file operations: progress display
+// as well as confirmation and input dialogs.
 // ============================================================
 
 import { create } from "zustand";
@@ -11,9 +11,9 @@ export interface ConfirmRequest {
   title: string;
   message: string;
   danger?: boolean;
-  /** Beschriftung des Bestätigen-Buttons (Standard: „OK"). */
+  /** Label of the confirm button (default: "OK"). */
   confirmLabel?: string;
-  /** Symbol im Dialogkopf (Standard: Warndreieck bei danger). */
+  /** Icon in the dialog header (default: warning triangle for danger). */
   icon?: LucideIcon;
   onConfirm: () => void;
 }
@@ -23,11 +23,11 @@ export interface PromptRequest {
   label: string;
   initial: string;
   confirmLabel?: string;
-  /** Symbol im Dialogkopf (Standard: Ordner-Plus). */
+  /** Icon in the dialog header (default: folder plus). */
   icon?: LucideIcon;
-  /** Textbereich, der beim Öffnen vorausgewählt wird (z. B. Name ohne Endung). */
+  /** Text range preselected on open (e.g. the name without the extension). */
   selectRange?: [number, number];
-  /** Eingabe maskieren (Passwortfeld). */
+  /** Mask the input (password field). */
   password?: boolean;
   onSubmit: (value: string) => void;
 }
@@ -38,7 +38,7 @@ interface OpsStore {
   prompt: PromptRequest | null;
   collisions: CollisionReq[]; // Warteschlange offener Namenskonflikte
   preview: Preview | null;
-  /** Fenster-Schließen wurde bei laufenden Transfers abgefangen (TICKET-004). */
+  /** Window closing was intercepted during running transfers (TICKET-004). */
   forceClose: boolean;
 
   setBusy: (b: boolean) => void;

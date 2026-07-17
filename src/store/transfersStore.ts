@@ -1,7 +1,7 @@
 // ============================================================
-// Zustand für laufende Kopier-/Verschiebe-Vorgänge.
-// Jeder Transfer hat zwei Fortschrittsebenen (Datei + Gesamt),
-// kann minimiert (in die Statusleiste) und wiederhergestellt werden.
+// State for running copy/move operations.
+// Each transfer has two progress levels (file + overall),
+// can be minimized (to the status bar) and restored.
 // ============================================================
 
 import { create } from "zustand";
@@ -22,9 +22,9 @@ export interface Transfer {
   minimized: boolean;
   done: boolean;
   cancelled: boolean;
-  /** Vom Backend gemeldet: Vorgang ist gerade pausiert. */
+  /** Reported by the backend: the operation is currently paused. */
   paused: boolean;
-  /** Wartet in der Kopier-Queue auf den Start (läuft noch nicht). */
+  /** Waiting in the copy queue to start (not running yet). */
   queued: boolean;
   errors: string[];
 }

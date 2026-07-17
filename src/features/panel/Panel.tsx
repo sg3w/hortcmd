@@ -1,6 +1,6 @@
 // ============================================================
-// Ein Dateifenster: Tab-Leiste, Speicherort, Pfad, Tabelle,
-// Status. Kapselt die Öffnen-Logik (Ordnernavigation / ".." hoch).
+// One file pane: tab bar, location, path, table,
+// status. Encapsulates the open logic (folder navigation / ".." up).
 // ============================================================
 
 import { useRef, useState, type MouseEvent } from "react";
@@ -26,7 +26,7 @@ export function Panel({ side, drives }: Props) {
   const active = usePanes((s) => s.active === side);
   const showTree = usePanes((s) => s[side].viewMode === "tree");
   const open = (index: number) => openEntry(side, index);
-  // Index der zuletzt rechtsgeklickten Zeile (für kontextabhängiges Einfügen).
+  // Index of the last right-clicked row (for context-dependent pasting).
   const ctxIndexRef = useRef<number | null>(null);
   const [treeWidth, setTreeWidth] = useState(220);
 
