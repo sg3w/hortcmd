@@ -24,6 +24,12 @@ import { writeClipboard } from "@/lib/clipboard";
 import { isMacOS } from "@/lib/platform";
 import type { Checksums, FileProps, Tag } from "@/ipc/bindings";
 import { Section } from "@/components/ui/dialogControls";
+import {
+  fileColorLabel,
+  fileColorRef,
+  resolveFileColor,
+  useFileColorRules,
+} from "@/lib/fileColors";
 import { cn } from "@/lib/cn";
 
 // Permission bits of the three classes (owner/group/other) and the special bits.
@@ -57,8 +63,10 @@ const TAG_COLORS: Record<number, string> = {
 
 export function PropertiesDialog() {
   const path = usePropsDialog((s) => s.path);
+  const gitStatus = usePropsDialog((s) => s.gitStatus);
   const close = usePropsDialog((s) => s.close);
   const t = useT();
+  const colorRules = useFileColorRules();
 
   const [data, setData] = useState<FileProps | null>(null);
   const [perm, setPerm] = useState(0); // permission bits (0..0o7777)
@@ -163,6 +171,14 @@ export function PropertiesDialog() {
     setTimeout(() => setCopied((c) => (c === tag ? null : c)), 1200);
   };
 
+  // The rule that colors this entry in the file list. Same registry and the
+  // same context the list evaluates, so the dialog cannot disagree with it.
+  const colorRule = useMemo(
+    () =>
+      data ? resolveFileColor(colorRules, { ...data, gitStatus }) : undefined,
+    [colorRules, data, gitStatus],
+  );
+
   const typeLabel = (p: FileProps) =>
     p.is_symlink
       ? t("props.type.symlink")
@@ -222,6 +238,32 @@ export function PropertiesDialog() {
                     </>
                   )}
                 </div>
+
+                {/* Why the entry has its color in the file list */}
+                <Section label={t("props.color")}>
+                  {colorRule ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className="h-3.5 w-3.5 shrink-0 rounded-sm border border-edge"
+                        style={{ background: fileColorRef(colorRule.id) }}
+                        aria-hidden
+                      />
+                      <span
+                        className={cn("font-mono text-[12px]", colorRule.extraClass)}
+                        style={{ color: fileColorRef(colorRule.id) }}
+                      >
+                        {data.name}
+                      </span>
+                      <span className="text-[12px] text-dim">
+                        — {fileColorLabel(colorRule, t)}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-[12px] text-dim">
+                      {t("props.color.none")}
+                    </span>
+                  )}
+                </Section>
 
                 {/* Finder tags (macOS only) */}
                 {isMacOS && (

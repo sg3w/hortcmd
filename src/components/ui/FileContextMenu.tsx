@@ -104,7 +104,7 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
     const entry =
       idx != null && p.entries[idx] ? p.entries[idx] : p.entries[p.cursor];
     if (!entry || entry.parent) return;
-    openProps(joinPath(p.path, entry.name));
+    openProps(joinPath(p.path, entry.name), p.git?.entries[entry.name]);
   };
 
   // Full paths of the target set (selection or right-clicked entry).

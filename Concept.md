@@ -206,6 +206,31 @@ and switchable via `data-theme` on `<html>`; "System" follows `prefers-color-sch
 live (matchMedia listener in `App.tsx`). **Font/icon size** (Small/Medium/Large)
 are implemented as well (see Settings).
 
+### File color registry (`lib/fileColors.ts`, TICKET-009)
+
+Every color the file list can apply to an entry is a **slot** in a central
+registry: a semantic id (`git.modified`, `symlink`, `selection`, …), a label, and
+a default per theme. Slots of kind `rule` also carry a **matcher** and a
+**priority**; the first matching rule (lowest value first) colors the entry.
+Slots of kind `state` have no matcher — they feed the interaction colors
+(`--selection`, `--cursor-active`, `--cursor-inactive-marker`), which `index.css`
+therefore no longer hardcodes but references from the registry.
+
+`applyFileColors()` publishes every slot as a CSS variable `--fc-<id>` on
+`<html>` for the resolved theme (`useFileColorVars` in `App.tsx`). File list,
+properties dialog, and settings preview all reference the same variable, so they
+cannot drift apart, and changing a color repaints without a re-render.
+
+The matcher input comes from the backend, not from frontend guesswork:
+`DirEntry`/`FileProps` carry `hidden`, `readonly`, and `executable`
+(`commands/fs/attrs.rs`, per platform), and the Git status codes come from
+`commands/fs/git.rs`.
+
+Extension points: `registerFileColor()` adds a slot at module load (plugins), and
+users add their own glob rules in the settings. Both flow through the same
+resolution, and the settings UI renders whatever the registry contains — a new
+rule needs no UI change.
+
 ---
 
 ## 9. Settings – category tree
@@ -253,9 +278,17 @@ is organized into the following categories. Legend: **✅ present · ⏳ planned
 - Quick search while typing ⏳ · default search path ⏳ · history ⏳
 - Search file contents ⏳ · regular expressions ⏳ · ignored folders ⏳
 
+### File colors
+- Configure every color rule ✅ *(Git states, symlink, executable, hidden, read-only)*
+- Interaction colors ✅ *(selection, cursor active/inactive)*
+- Dark and light configurable independently ✅ · live preview ✅ ·
+  restore defaults ✅ · persisted in localStorage ✅
+- Custom rules by wildcard pattern ✅ *(name, pattern, color, order)*
+
 ### Git
 - Git status ✅ · branch ✅ *(badge in the path bar)* · on/off switch ✅
-- Remote ⏳ · configure colors ⏳ · diff view ⏳
+- Configure colors ✅ *(see File colors)*
+- Remote ⏳ · diff view ⏳
 
 ### Network
 - SFTP ⏳ · FTP/FTPS ⏳ · SMB ⏳ · WebDAV ⏳ *(large effort, per protocol)*
@@ -380,6 +413,27 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
   inactive panel with a subtle green (`FileTable.tsx`'s `stateClass()`); with
   an additional selection the yellow selection color stays dominant. Verified in
   browser demo mode in dark and light theme.
+- Legend of the file colors + configurable color scheme (TICKET-009): the colors
+  of the file list used to be a hardcoded Git→Tailwind-class map (`lib/gitColor.ts`),
+  and nothing explained them. New central registry `lib/fileColors.ts` (see §8):
+  slots with semantic id, label, per-theme default, and — for rules — matcher and
+  priority; published as `--fc-*` CSS variables. The properties dialog gained a
+  "Color" section showing the entry's name in its actual color plus the rule that
+  produced it (only the highest-priority one, message when none applies); it
+  resolves through the same registry and context as the list, so both cannot
+  disagree. New settings category **File colors** with a live preview, one picker
+  per theme, per-rule and global reset, plus an editor for custom wildcard rules
+  (matched before the built-ins, reorderable). Prerequisites in the backend:
+  `DirEntry`/`FileProps` now carry `hidden`/`readonly`/`executable` from the new
+  `commands/fs/attrs.rs` (per platform, so the frontend stops guessing from the
+  name/mode — this also fixes hidden-file filtering on Windows), and `classify()`
+  in `git.rs` now distinguishes `untracked` (`??`) from `staged` (index-only
+  change) instead of lumping both into `new`. `index.css` no longer hardcodes
+  `--selection`/`--cursor-active`/`--cursor-inactive-marker` but references the
+  registry. Verified in browser demo mode: all 11 rules incl. priority
+  (git-ignored beats executable), custom rule beats built-ins, live update of
+  list/dialog/preview, dark↔light independent, persistence across reload,
+  restore defaults, and invalid configuration falling back to the defaults.
 
 ### P1 — Complete the core
 - [x] **Rename (F2)** of individual entries (also in the context menu; the dialog preselects
@@ -420,12 +474,13 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
 
 ### P2 — Developers & convenience (early-desired) + macOS
 - [~] **Git integration**: base implemented — detects Git repos (branch badge in the
-      path bar) and colors entries by Git status (modified/new/deleted/renamed/
-      ignored), can be toggled off/on in the settings. Backend `git_status_watch` via
-      git CLI, runs **asynchronously via `spawn_blocking`** and delivers the result via the
-      event `git-support-ready` (blocks neither folder opening nor the UI, even for
-      large repos; TICKET-003).
-      Open: configurable colors, diff view, status in the tree/tab
+      path bar) and colors entries by Git status (untracked/staged/modified/deleted/
+      renamed/conflict/ignored), can be toggled off/on in the settings. Backend
+      `git_status_watch` via git CLI, runs **asynchronously via `spawn_blocking`** and
+      delivers the result via the event `git-support-ready` (blocks neither folder
+      opening nor the UI, even for large repos; TICKET-003). Colors are configurable
+      (TICKET-009).
+      Open: diff view, status in the tree/tab
 - [x] **Terminal in the current folder** (context menu "Open in terminal"; default terminal
       configurable in the settings, empty = system default) + "Open in file manager"
 - [x] **Open file in editor** (configurable editor, alternative to F4): program assignable per

@@ -15,12 +15,15 @@
   --text-dim: #9aa0a6;
   --accent: #3b82f6;
   --accent-dim: #2c5aa0;
-  --selection: #4a3b0f;
   --selection-text: #ffd166;
-  --cursor-active: #3b82f6;
   --cursor-inactive: #4a4d54;
-  /* TICKET-008: Cursor-Zeile im inaktiven Panel — dezente grüne Füllung. */
-  --cursor-inactive-marker: rgba(154, 194, 123, 0.4);
+  /* TICKET-009: values of the three configurable state colors come from the
+     registry in lib/fileColors.ts, published per theme as --fc-* on <html>
+     (incl. user overrides). --cursor-inactive-marker is the subtle fill of
+     the cursor row in the inactive panel from TICKET-008. */
+  --selection: var(--fc-selection);
+  --cursor-active: var(--fc-cursor-active);
+  --cursor-inactive-marker: var(--fc-cursor-inactive);
   --dir-color: #e8e8e8;
   --file-color: #c8cbd0;
   --exec-color: #7ee787;
@@ -52,12 +55,9 @@
   --text-dim: #6b7178;
   --accent: #2563eb;
   --accent-dim: #cdddfb;
-  --selection: #fde68a;
   --selection-text: #7c4a03;
-  --cursor-active: #2563eb;
   --cursor-inactive: #b6bac1;
-  /* TICKET-008: Cursor-Zeile im inaktiven Panel — dezente grüne Füllung. */
-  --cursor-inactive-marker: rgba(154, 194, 123, 0.4);
+  /* --selection / --cursor-* : see the :root block (registry-driven). */
   --dir-color: #1a1b1e;
   --file-color: #33363b;
   --exec-color: #15803d;

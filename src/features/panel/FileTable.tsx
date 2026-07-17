@@ -33,7 +33,12 @@ import {
 } from "@/store/settingsStore";
 import type { TransKey } from "@/i18n/dictionaries";
 import { RowIcon } from "@/lib/fileIcon";
-import { gitTextClass } from "@/lib/gitColor";
+import {
+  fileColorRef,
+  resolveFileColor,
+  useFileColorRules,
+  type FileColorDef,
+} from "@/lib/fileColors";
 import { buildColumns, SORTABLE } from "./columns";
 import { cn } from "@/lib/cn";
 
@@ -82,6 +87,8 @@ export function FileTable({ side, onOpen, onContext }: Props) {
   const setColumnWidth = useSettings((s) => s.setColumnWidth);
   const fontPx = FONT_PX[fontScale];
   const iconPx = ICON_PX[iconScale];
+  // Color rules (built-in + user-defined), sorted by priority.
+  const colorRules = useFileColorRules();
 
   const { columns, template } = useMemo(
     () =>
@@ -275,6 +282,7 @@ export function FileTable({ side, onOpen, onContext }: Props) {
                   cells={row.getVisibleCells()}
                   row={row.original}
                   gitStatus={git?.entries[row.original.name]}
+                  rules={colorRules}
                   style={rowStyle}
                   template={template}
                   fontSize={fontPx}
@@ -304,6 +312,7 @@ export function FileTable({ side, onOpen, onContext }: Props) {
                     selected={selected}
                     row={row.original}
                     gitStatus={git?.entries[row.original.name]}
+                    rules={colorRules}
                     thumbnail={viewMode === "thumbnails"}
                     fontSize={fontPx}
                     iconSize={iconPx}
@@ -344,11 +353,28 @@ interface ItemProps {
   active: boolean;
   selected: Set<string>;
   row: Row;
-  /** Git status of the entry (colors the name; not when selected). */
+  /** Git status of the entry (feeds the color rules). */
   gitStatus?: string;
+  /** Color rules, sorted by priority. */
+  rules: FileColorDef[];
   style?: CSSProperties;
   onMouseDown: (e: MouseEvent, index: number) => void;
   onOpen: (index: number) => void;
+}
+
+/**
+ * The color rule for an entry, or undefined when the entry keeps its
+ * default color. A selection paints its own colors over the whole row,
+ * and ".." is navigation rather than an entry — neither is colored.
+ */
+function rowColor(
+  rules: FileColorDef[],
+  row: Row,
+  gitStatus: string | undefined,
+  isSelected: boolean,
+): FileColorDef | undefined {
+  if (isSelected || row.parent) return undefined;
+  return resolveFileColor(rules, { ...row, gitStatus });
 }
 
 /** One detail row with TanStack cells. */
@@ -360,6 +386,7 @@ function DetailRow({
   cells,
   row,
   gitStatus,
+  rules,
   style,
   template,
   fontSize,
@@ -372,7 +399,7 @@ function DetailRow({
 }) {
   const isCursor = index === cursor;
   const isSelected = selected.has(row.name);
-  const gitCls = isSelected ? undefined : gitTextClass(gitStatus);
+  const rule = rowColor(rules, row, gitStatus, isSelected);
   return (
     <div
       data-index={index}
@@ -382,9 +409,9 @@ function DetailRow({
         "absolute left-0 grid w-full font-mono",
         index % 2 === 1 && "bg-row-alt",
         row.is_dir && !row.parent && "font-semibold",
-        !gitCls && row.is_dir && !row.parent && "text-dir",
-        !gitCls && row.parent && "text-dim",
-        gitCls,
+        !rule && row.is_dir && !row.parent && "text-dir",
+        !rule && row.parent && "text-dim",
+        rule?.extraClass,
         stateClass(isCursor, isSelected, active),
       )}
       style={{
@@ -392,6 +419,7 @@ function DetailRow({
         gridTemplateColumns: template,
         fontSize,
         lineHeight: `${style?.height ?? fontSize + 8}px`,
+        color: rule && fileColorRef(rule.id),
       }}
     >
       {cells.map((cell) => {
@@ -421,6 +449,7 @@ function GridCell({
   selected,
   row,
   gitStatus,
+  rules,
   thumbnail,
   fontSize,
   iconSize,
@@ -429,21 +458,21 @@ function GridCell({
 }: ItemProps & { thumbnail: boolean; fontSize: number; iconSize: number }) {
   const isCursor = index === cursor;
   const isSelected = selected.has(row.name);
-  const gitCls = isSelected ? undefined : gitTextClass(gitStatus);
+  const rule = rowColor(rules, row, gitStatus, isSelected);
   return (
     <div
       data-index={index}
       onMouseDown={(e) => onMouseDown(e, index)}
       onDoubleClick={() => onOpen(index)}
       title={row.name}
-      style={{ fontSize }}
+      style={{ fontSize, color: rule && fileColorRef(rule.id) }}
       className={cn(
         "flex min-w-0 cursor-default items-center gap-2 rounded px-2 hover:bg-row-alt",
         thumbnail && "h-full flex-col justify-center gap-1 py-1 text-center",
         row.is_dir && !row.parent && "font-semibold",
-        !gitCls && row.is_dir && !row.parent && "text-dir",
-        !gitCls && row.parent && "text-dim",
-        gitCls,
+        !rule && row.is_dir && !row.parent && "text-dir",
+        !rule && row.parent && "text-dim",
+        rule?.extraClass,
         stateClass(isCursor, isSelected, active),
       )}
     >

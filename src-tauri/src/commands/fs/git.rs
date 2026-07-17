@@ -17,8 +17,8 @@ use ts_rs::TS;
 pub struct GitStatus {
     pub is_repo: bool,
     pub branch: Option<String>,
-    /// Name (top level in the folder) → status code
-    /// ("modified" | "new" | "deleted" | "renamed" | "conflict" | "ignored").
+    /// Name (top level in the folder) → status code ("untracked" | "staged" |
+    /// "modified" | "deleted" | "renamed" | "conflict" | "ignored").
     pub entries: HashMap<String, String>,
 }
 
@@ -56,6 +56,11 @@ fn run_git(dir: &Path, args: &[&str]) -> Option<String> {
 
 /// Maps a porcelain status code to a normalized status.
 /// `sub` = the change is in a subfolder (→ folder "modified").
+///
+/// The two porcelain columns are the index (X) and the worktree (Y).
+/// Deletion, rename and conflict describe *what* happened and keep their
+/// own status; for the remaining changes X/Y decide *where* the change
+/// lives: index only (Y blank) → "staged", otherwise "modified".
 fn classify(code: &str, sub: bool) -> &'static str {
     if code == "!!" {
         return "ignored";
@@ -64,7 +69,7 @@ fn classify(code: &str, sub: bool) -> &'static str {
         return "modified";
     }
     if code == "??" {
-        return "new";
+        return "untracked";
     }
     let x = code.as_bytes().first().copied().unwrap_or(b' ');
     let y = code.as_bytes().get(1).copied().unwrap_or(b' ');
@@ -72,10 +77,10 @@ fn classify(code: &str, sub: bool) -> &'static str {
         "conflict"
     } else if x == b'R' || y == b'R' {
         "renamed"
-    } else if x == b'A' || y == b'A' {
-        "new"
     } else if x == b'D' || y == b'D' {
         "deleted"
+    } else if x != b' ' && y == b' ' {
+        "staged"
     } else {
         "modified"
     }

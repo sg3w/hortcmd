@@ -8,6 +8,7 @@
 // so the frontend gets the same structure everywhere.
 // ============================================================
 
+use super::attrs;
 use serde::Serialize;
 use std::fs;
 use std::io::Read;
@@ -53,6 +54,11 @@ pub struct FileProps {
     pub acl: Vec<String>,
     /// Whether the platform supports owner/xattr/ACL at all.
     pub unix: bool,
+    /// Entry states the frontend colors by (see commands/fs/attrs.rs).
+    /// Same fields as `DirEntry`, so both resolve the same color rules.
+    pub hidden: bool,
+    pub readonly: bool,
+    pub executable: bool,
 }
 
 /// Three common checksums of a file's content.
@@ -144,13 +150,17 @@ pub fn file_props(path: String) -> Result<FileProps, String> {
     let mode = None;
 
     let (uid, gid, owner, group) = read_owner(&meta);
+    let name = p
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.clone());
 
     Ok(FileProps {
         path: p.to_string_lossy().into_owned(),
-        name: p
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| path.clone()),
+        hidden: attrs::is_hidden(&meta, &name),
+        readonly: attrs::is_readonly(&meta),
+        executable: attrs::is_executable(&meta, &name),
+        name,
         is_dir: meta.is_dir(),
         is_symlink: meta.file_type().is_symlink(),
         size: meta.len(),

@@ -2,6 +2,7 @@
 // Read directories, drives/mount points, home directory.
 // ============================================================
 
+use super::attrs;
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -26,6 +27,10 @@ pub struct DirEntry {
     // Unix permission bits (st_mode); None on non-Unix platforms.
     #[ts(type = "number | null")]
     pub mode: Option<u32>,
+    // Entry states the frontend colors by (see commands/fs/attrs.rs).
+    pub hidden: bool,
+    pub readonly: bool,
+    pub executable: bool,
 }
 
 #[derive(Serialize, TS)]
@@ -70,6 +75,9 @@ pub fn list_dir(path: String) -> Result<DirListing, String> {
         #[cfg(not(unix))]
         let mode = None;
         entries.push(DirEntry {
+            hidden: attrs::is_hidden(&meta, &name),
+            readonly: attrs::is_readonly(&meta),
+            executable: attrs::is_executable(&meta, &name),
             name,
             is_dir: meta.is_dir(),
             is_symlink: meta.file_type().is_symlink(),

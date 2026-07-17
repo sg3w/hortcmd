@@ -175,7 +175,7 @@ function rebuildEntries(
 ): Row[] {
   const hideSystem = useSettings.getState().hideSystemFiles;
   let list = raw;
-  if (hideSystem) list = list.filter((e) => !e.name.startsWith("."));
+  if (hideSystem) list = list.filter((e) => !e.hidden);
   if (filter) {
     const f = filter.toLowerCase();
     list = list.filter((e) => e.name.toLowerCase().includes(f));
@@ -192,6 +192,9 @@ function rebuildEntries(
       size: 0,
       modified: 0,
       mode: null,
+      hidden: false,
+      readonly: false,
+      executable: false,
       parent: true,
     });
   }

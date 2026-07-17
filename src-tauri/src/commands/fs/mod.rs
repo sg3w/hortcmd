@@ -7,6 +7,7 @@
 // ============================================================
 
 pub mod archive;
+pub mod attrs;
 pub mod compare;
 pub mod dir;
 pub mod filecompare;

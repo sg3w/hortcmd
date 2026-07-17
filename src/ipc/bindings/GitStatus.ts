@@ -2,7 +2,7 @@
 
 export type GitStatus = { is_repo: boolean, branch: string | null, 
 /**
- * Name (top level in the folder) → status code
- * ("modified" | "new" | "deleted" | "renamed" | "conflict" | "ignored").
+ * Name (top level in the folder) → status code ("untracked" | "staged" |
+ * "modified" | "deleted" | "renamed" | "conflict" | "ignored").
  */
 entries: { [key in string]?: string }, };

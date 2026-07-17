@@ -76,7 +76,7 @@ export function useKeyboard(): void {
         const p = panelOf(s, side);
         const cur = p.entries[p.cursor];
         if (cur && !cur.parent && p.archive === null) {
-          openProps(joinPath(p.path, cur.name));
+          openProps(joinPath(p.path, cur.name), p.git?.entries[cur.name]);
         }
         return;
       }

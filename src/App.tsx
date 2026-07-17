@@ -24,6 +24,7 @@ import { useOps } from "@/store/opsStore";
 import { useSettings, useT } from "@/store/settingsStore";
 import type { TransKey } from "@/i18n/dictionaries";
 import { initWindowState } from "@/lib/windowState";
+import { useFileColorVars, type ThemeMode } from "@/lib/fileColors";
 import { useKeyboard } from "@/features/commander/useKeyboard";
 import {
   handleExtractDone,
@@ -59,6 +60,7 @@ export default function App() {
   const [drives, setDrives] = useState<Drive[]>([]);
   const [ready, setReady] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [resolvedTheme, setResolvedTheme] = useState<ThemeMode>("dark");
   const loadDir = usePanes((s) => s.loadDir);
   const activePath = usePanes((s) => panelOf(s, s.active).path);
   const active = usePanes((s) => s.active);
@@ -86,20 +88,24 @@ export default function App() {
     window.addEventListener("mouseup", onUp);
   };
 
-  // Apply the theme to <html>. "system" follows the OS appearance live.
+  // Resolve the theme. "system" follows the OS appearance live.
   useEffect(() => {
     if (theme !== "system") {
-      document.documentElement.dataset.theme = theme;
+      setResolvedTheme(theme);
       return;
     }
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => {
-      document.documentElement.dataset.theme = mq.matches ? "dark" : "light";
-    };
+    const apply = () => setResolvedTheme(mq.matches ? "dark" : "light");
     apply();
     mq.addEventListener("change", apply);
     return () => mq.removeEventListener("change", apply);
   }, [theme]);
+
+  // Apply the resolved theme to <html> and publish the file colors for it.
+  useEffect(() => {
+    document.documentElement.dataset.theme = resolvedTheme;
+  }, [resolvedTheme]);
+  useFileColorVars(resolvedTheme);
 
   // Forward transfer events from the backend to the transfers store.
   useEffect(() => {

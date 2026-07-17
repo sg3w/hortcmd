@@ -20,6 +20,7 @@ use zip::result::ZipError;
 use zip::write::SimpleFileOptions;
 use zip::{ZipArchive, ZipWriter};
 
+use super::attrs;
 use super::dir::{DirEntry, DirListing};
 use super::file::{spawn_op, OpDone, Prog};
 
@@ -167,12 +168,15 @@ fn collapse(raw: &[RawEntry], inner: &str) -> DirListing {
             None => {
                 if seen.insert(rest.to_string()) {
                     files.push(DirEntry {
+                        hidden: attrs::is_hidden_name(rest),
                         name: rest.to_string(),
                         is_dir: false,
                         is_symlink: false,
                         size: *size,
                         modified: 0,
                         mode: None,
+                        readonly: false,
+                        executable: false,
                     });
                 }
             }
@@ -180,12 +184,15 @@ fn collapse(raw: &[RawEntry], inner: &str) -> DirListing {
     }
     for d in dirs {
         files.push(DirEntry {
+            hidden: attrs::is_hidden_name(&d),
             name: d,
             is_dir: true,
             is_symlink: false,
             size: 0,
             modified: 0,
             mode: None,
+            readonly: false,
+            executable: false,
         });
     }
 

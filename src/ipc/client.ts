@@ -142,6 +142,9 @@ function demoArchive(_archive: string, inner: string): DirListing {
     size,
     modified: 0,
     mode: null,
+    hidden: name.startsWith("."),
+    readonly: false,
+    executable: false,
   });
   // Fictional archive structure: the root contains "src/" and files.
   const entries =
@@ -647,10 +650,13 @@ function demoGitStatus(path: string): GitStatus {
     branch: "main",
     entries: {
       "notes.txt": "modified",
-      "readme.md": "new",
+      "readme.md": "untracked",
       "report.pdf": "deleted",
       "photo.jpg": "renamed",
+      "config.json": "staged",
+      "data.csv": "conflict",
       Projects: "modified",
+      // Also executable — shows that the Git rule has the higher priority.
       "script.sh": "ignored",
     },
   };
@@ -733,11 +739,12 @@ let demoTags: Tag[] = [
 
 function demoProps(path: string): FileProps {
   const name = path.split("/").pop() || path;
+  // Mirror the flags of demoListDir, so both show the same color rule.
   return {
     path,
     name,
     is_dir: false,
-    is_symlink: false,
+    is_symlink: name === "latest",
     size: 4096,
     modified: Math.floor(Date.now() / 1000),
     mode: 0o100644,
@@ -748,6 +755,9 @@ function demoProps(path: string): FileProps {
     xattrs: [{ name: "com.apple.quarantine", size: 42, value: "0081;…" }],
     acl: ["user:demo:allow read,write"],
     unix: true,
+    hidden: name.startsWith("."),
+    readonly: name === "license.txt",
+    executable: name === "script.sh",
   };
 }
 
@@ -900,6 +910,7 @@ function demoListDir(path: string): DirListing {
     is_dir: boolean,
     size: number,
     ageDays: number,
+    extra: Partial<DirEntry> = {},
   ): DirEntry => ({
     name,
     is_dir,
@@ -907,6 +918,10 @@ function demoListDir(path: string): DirListing {
     size,
     modified: Math.floor((now - ageDays * 86_400_000) / 1000),
     mode: null,
+    hidden: name.startsWith("."),
+    readonly: false,
+    executable: false,
+    ...extra,
   });
   return {
     path,
@@ -920,11 +935,15 @@ function demoListDir(path: string): DirListing {
       mk("notes.txt", false, 2048, 2),
       mk("report.pdf", false, 384_512, 5),
       mk("archive.zip", false, 10_485_760, 20),
-      mk("script.sh", false, 512, 8),
+      mk("script.sh", false, 512, 8, { executable: true }),
       mk("photo.jpg", false, 2_359_296, 30),
       mk("readme.md", false, 4096, 1),
       mk("data.csv", false, 256, 4),
       mk("config.json", false, 320, 6),
+      // Cover the remaining color rules in demo mode as well.
+      mk("latest", false, 12, 2, { is_symlink: true }),
+      mk("license.txt", false, 1024, 90, { readonly: true }),
+      mk("build.log", false, 65_536, 0),
     ],
   };
 }

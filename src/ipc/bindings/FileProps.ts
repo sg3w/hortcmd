@@ -20,4 +20,9 @@ acl: Array<string>,
 /**
  * Whether the platform supports owner/xattr/ACL at all.
  */
-unix: boolean, };
+unix: boolean, 
+/**
+ * Entry states the frontend colors by (see commands/fs/attrs.rs).
+ * Same fields as `DirEntry`, so both resolve the same color rules.
+ */
+hidden: boolean, readonly: boolean, executable: boolean, };

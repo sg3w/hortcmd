@@ -6,6 +6,11 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { DICT, type Lang, type TransKey } from "@/i18n/dictionaries";
+import type {
+  CustomColorRule,
+  FileColorOverrides,
+  ThemeMode,
+} from "@/lib/fileColors";
 
 export type Theme = "dark" | "light" | "system";
 /** Size step for the font or icons in the file list. */
@@ -86,6 +91,12 @@ interface SettingsStore {
   /** Drag-adjusted column widths (px) per column id. */
   columnWidths: Record<string, number>;
 
+  // ----- File colors (see lib/fileColors.ts) -----
+  /** Color overrides per slot id; missing/invalid → registry default. */
+  fileColors: FileColorOverrides;
+  /** User rules, matched before the built-in rules in list order. */
+  customColorRules: CustomColorRule[];
+
   // ----- Open with / editors -----
   /** Programs created by the user. */
   programs: EditorProgram[];
@@ -118,6 +129,18 @@ interface SettingsStore {
   setFontScale: (v: Scale) => void;
   setIconScale: (v: Scale) => void;
   setColumnWidth: (id: string, width: number) => void;
+
+  setFileColor: (id: string, theme: ThemeMode, color: string | null) => void;
+  /** Drops all overrides → the registry defaults apply again. */
+  resetFileColors: () => void;
+  addColorRule: () => void;
+  updateColorRule: (
+    id: string,
+    patch: Partial<Omit<CustomColorRule, "id">>,
+  ) => void;
+  removeColorRule: (id: string) => void;
+  /** Moves a rule by `delta` positions (changes its priority). */
+  moveColorRule: (id: string, delta: number) => void;
 
   addProgram: (name: string, path: string) => string;
   updateProgram: (id: string, patch: Partial<Omit<EditorProgram, "id">>) => void;
@@ -158,6 +181,8 @@ export const useSettings = create<SettingsStore>()(
       fontScale: "md",
       iconScale: "md",
       columnWidths: { ...DEFAULT_COLUMN_WIDTHS },
+      fileColors: {},
+      customColorRules: [],
       programs: [],
       associations: {},
       defaultEditor: "",
@@ -203,6 +228,51 @@ export const useSettings = create<SettingsStore>()(
             ),
           },
         })),
+
+      setFileColor: (id, theme, color) =>
+        set((s) => {
+          const slot = { ...s.fileColors[id] };
+          if (color) slot[theme] = color;
+          else delete slot[theme];
+          const fileColors = { ...s.fileColors };
+          // Drop the slot entirely once it holds no override anymore.
+          if (Object.keys(slot).length > 0) fileColors[id] = slot;
+          else delete fileColors[id];
+          return { fileColors };
+        }),
+      resetFileColors: () => set({ fileColors: {} }),
+      addColorRule: () =>
+        set((s) => ({
+          customColorRules: [
+            ...s.customColorRules,
+            {
+              id: crypto.randomUUID(),
+              name: "",
+              pattern: "",
+              dark: "#f5a43c",
+              light: "#c2410c",
+            },
+          ],
+        })),
+      updateColorRule: (id, patch) =>
+        set((s) => ({
+          customColorRules: s.customColorRules.map((r) =>
+            r.id === id ? { ...r, ...patch } : r,
+          ),
+        })),
+      removeColorRule: (id) =>
+        set((s) => ({
+          customColorRules: s.customColorRules.filter((r) => r.id !== id),
+        })),
+      moveColorRule: (id, delta) =>
+        set((s) => {
+          const rules = [...s.customColorRules];
+          const from = rules.findIndex((r) => r.id === id);
+          const to = from + delta;
+          if (from < 0 || to < 0 || to >= rules.length) return s;
+          [rules[from], rules[to]] = [rules[to], rules[from]];
+          return { customColorRules: rules };
+        }),
 
       addProgram: (name, path) => {
         const id = crypto.randomUUID();
