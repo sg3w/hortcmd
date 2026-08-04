@@ -177,6 +177,9 @@ Global listener in `useKeyboard.ts`; focus in input fields takes precedence.
 | `list_dir` | `path` | `DirListing` | ✅ |
 | `list_drives` | – | `Drive[]` | ✅ |
 | `home_dir` | – | `string` | ✅ |
+| `dir_size` | `path, token, onProgress` | `DirSize` (+ progress) | ✅ |
+| `cancel_dir_size` | `token` | – | ✅ |
+| `volume_info` | `path` | `VolumeInfo \| null` | ✅ |
 | `make_dir` | `path` | `string` | ✅ |
 | `copy_entries` | `id, sources[], destDir` | – (events) | ✅ |
 | `move_entries` | `id, sources[], destDir` | – (events) | ✅ |
@@ -592,6 +595,22 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
       ID; `set_owner`), display extended attributes and ACL (`xattr`/`exacl`),
       checksums MD5/SHA-1/SHA-256 on demand (`file_checksums`). Unix parts
       (owner/xattr/ACL) behind `cfg(unix)`; Windows returns empty/None values.
+- [x] **Folder size & volume information** in the properties dialog (TICKET-010):
+      folders show their recursive size (`commands/fs/size.rs` → `dir_size`),
+      calculated on a background thread and streamed over a Tauri `Channel`, so
+      the intermediate totals (bytes, files, folders) grow live next to a spinner.
+      The walk is iterative (deep trees cannot overflow the stack), never follows
+      symlinks (no loops), and counts unreadable entries instead of aborting
+      ("… nicht lesbar (übersprungen)"). Closing the dialog cancels the task by
+      token (`cancel_dir_size`); a cancel arriving before the task registers is
+      kept, so it cannot be lost. In addition, every entry shows the storage of
+      its volume (`commands/fs/volume.rs` → `volume_info`, via the same `sysinfo`
+      abstraction as `list_drives`): the compact summary **"268 G frei von 926 G"**,
+      a usage bar (red below 10 % free), mount point, file system, total, used, and
+      free with percentages. The deepest matching mount point wins, compared
+      component-wise ("/Volumes/Data" does not match "/Volumes/Dat"). The
+      drive bar of a pane (`DriveSelect`) uses the same wording and shows
+      "268 G frei von 926 G" instead of only the free space.
 - [x] **Parallel copies / thread count / buffer size** (settings + backend):
       three new settings (`settings.buffer`, `settings.threads`; buffer size
       default 256 KB, thread count default **1 = sequential/unchanged**).

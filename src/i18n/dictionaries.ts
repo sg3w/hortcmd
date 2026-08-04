@@ -381,6 +381,24 @@ export const DICT = {
     "props.tags.add": "Tag hinzufügen …",
     "props.color": "Farbe",
     "props.color.none": "Keine Farbregel trifft zu — Standardfarbe.",
+    "props.size": "Größe",
+    "props.modified": "Geändert",
+    "props.mode": "Modus",
+    "props.calculating": "Berechne …",
+    "props.files": "Dateien",
+    "props.folders": "Ordner",
+    "props.skipped": "nicht lesbar (übersprungen)",
+
+    // Speicherinformationen des Volumes (TICKET-010)
+    "vol.title": "Volume",
+    "vol.name": "Name",
+    "vol.mount": "Einhängepunkt",
+    "vol.fs": "Dateisystem",
+    "vol.total": "Gesamt",
+    "vol.used": "Belegt",
+    "vol.free": "Frei",
+    "vol.freeOf": "frei von",
+    "vol.none": "Kein Volume gefunden.",
 
     // Dateifarben: Namen der Regeln aus lib/fileColors.ts
     "color.git.conflict": "Git: Konflikt",
@@ -829,6 +847,24 @@ export const DICT = {
     "props.tags.add": "Add tag …",
     "props.color": "Color",
     "props.color.none": "No color rule applies — default color.",
+    "props.size": "Size",
+    "props.modified": "Modified",
+    "props.mode": "Mode",
+    "props.calculating": "Calculating …",
+    "props.files": "files",
+    "props.folders": "folders",
+    "props.skipped": "unreadable (skipped)",
+
+    // Volume storage information (TICKET-010)
+    "vol.title": "Volume",
+    "vol.name": "Name",
+    "vol.mount": "Mount point",
+    "vol.fs": "File system",
+    "vol.total": "Total",
+    "vol.used": "Used",
+    "vol.free": "Free",
+    "vol.freeOf": "free of",
+    "vol.none": "No volume found.",
 
     // File colors: labels of the rules from lib/fileColors.ts
     "color.git.conflict": "Git: Conflict",

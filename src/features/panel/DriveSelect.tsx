@@ -27,7 +27,8 @@ export function DriveSelect({ side, drives }: Props) {
   const current = [...drives]
     .filter((d) => path.startsWith(d.mount))
     .sort((a, b) => b.mount.length - a.mount.length)[0];
-  const free = current ? current.free : 0;
+  // Favorites/home carry no capacity (total = 0) – then there is nothing to show.
+  const usage = current && current.total > 0 ? current : null;
 
   return (
     <div className="flex flex-shrink-0 items-center gap-2 border-b border-edge bg-header px-2 py-1">
@@ -122,9 +123,9 @@ export function DriveSelect({ side, drives }: Props) {
         </Select.Portal>
       </Select.Root>
 
-      {free > 0 && (
+      {usage && (
         <span className="ml-auto whitespace-nowrap font-mono text-[11px] text-dim">
-          {formatSize(free)} {t("drive.free")}
+          {formatSize(usage.free)} {t("vol.freeOf")} {formatSize(usage.total)}
         </span>
       )}
     </div>

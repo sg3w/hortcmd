@@ -10,6 +10,8 @@ import type {
   DiffEntry,
   DirEntry,
   DirListing,
+  DirSize,
+  DirSizeStats,
   Drive,
   FileDiff,
   FileProps,
@@ -21,6 +23,7 @@ import type {
   Preview,
   SearchHit,
   Tag,
+  VolumeInfo,
 } from "./bindings";
 
 export const hasTauri =
@@ -59,6 +62,34 @@ export async function listDrives(): Promise<Drive[]> {
 export async function homeDir(): Promise<string> {
   if (!hasTauri) return "/Users/demo";
   return invoke<string>("home_dir");
+}
+
+/**
+ * Sums a folder recursively in the background and streams intermediate
+ * totals over `onProgress`. `token` identifies the task for `cancelDirSize`.
+ */
+export async function dirSize(
+  path: string,
+  token: string,
+  onProgress: (stats: DirSizeStats) => void,
+): Promise<DirSize> {
+  if (!hasTauri) return demoDirSize(onProgress);
+  const { Channel } = await import("@tauri-apps/api/core");
+  const channel = new Channel<DirSizeStats>();
+  channel.onmessage = onProgress;
+  return invoke<DirSize>("dir_size", { path, token, onProgress: channel });
+}
+
+/** Stops a running `dirSize`; unknown tokens are ignored. */
+export async function cancelDirSize(token: string): Promise<void> {
+  if (!hasTauri) return;
+  return invoke<void>("cancel_dir_size", { token });
+}
+
+/** Capacity/usage of the volume `path` lies on; null if none matches. */
+export async function volumeInfo(path: string): Promise<VolumeInfo | null> {
+  if (!hasTauri) return demoVolume();
+  return invoke<VolumeInfo | null>("volume_info", { path });
 }
 
 // ---------- File operations ----------
@@ -901,6 +932,44 @@ function demoDrives(): Drive[] {
     { name: "/", mount: "/", total: 500_000_000_000, free: 210_000_000_000 },
     { name: "~", mount: "/Users/demo", total: 500_000_000_000, free: 210_000_000_000 },
   ];
+}
+
+function demoVolume(): VolumeInfo {
+  const total = 500_000_000_000;
+  const free = 210_000_000_000;
+  return {
+    name: "Macintosh HD",
+    mount: "/",
+    fs: "apfs",
+    total,
+    used: total - free,
+    free,
+    used_pct: ((total - free) * 100) / total,
+    free_pct: (free * 100) / total,
+  };
+}
+
+/** Counts up in a few steps, so the loading state is visible in the browser. */
+async function demoDirSize(
+  onProgress: (stats: DirSizeStats) => void,
+): Promise<DirSize> {
+  const final: DirSizeStats = {
+    bytes: 1_374_000,
+    files: 128,
+    dirs: 12,
+    errors: 1,
+  };
+  for (const step of [0.2, 0.6]) {
+    await new Promise((res) => setTimeout(res, 300));
+    onProgress({
+      bytes: Math.round(final.bytes * step),
+      files: Math.round(final.files * step),
+      dirs: Math.round(final.dirs * step),
+      errors: 0,
+    });
+  }
+  await new Promise((res) => setTimeout(res, 300));
+  return { stats: final, cancelled: false };
 }
 
 function demoListDir(path: string): DirListing {

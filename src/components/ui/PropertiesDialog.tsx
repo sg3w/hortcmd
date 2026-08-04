@@ -2,27 +2,39 @@
 // "Properties / permissions" dialog (Alt+Enter or context menu).
 // Shows and edits access permissions (chmod), owner/group (chown),
 // lists extended attributes and ACL and computes checksums.
+// Folder size and volume usage are calculated in the background
+// (TICKET-010) and cancelled when the dialog closes.
 // All logic runs in the backend; here only display/input.
 // ============================================================
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Copy, Loader2, ShieldCheck, X } from "lucide-react";
+import { Copy, HardDrive, Loader2, ShieldCheck, X } from "lucide-react";
 import { usePropsDialog } from "@/store/propsStore";
 import { useT } from "@/store/settingsStore";
 import {
+  cancelDirSize,
+  dirSize,
   fileChecksums,
   fileProps,
   getTags,
   setOwner,
   setPermissions,
   setTags,
+  volumeInfo,
 } from "@/ipc/client";
 import { reloadBoth } from "@/features/commander/fileOps";
-import { formatDate, formatMode, formatSize } from "@/lib/format";
+import { formatDate, formatMode, formatPercent, formatSize } from "@/lib/format";
 import { writeClipboard } from "@/lib/clipboard";
 import { isMacOS } from "@/lib/platform";
-import type { Checksums, FileProps, Tag } from "@/ipc/bindings";
+import type {
+  Checksums,
+  DirSizeStats,
+  FileProps,
+  Tag,
+  VolumeInfo,
+} from "@/ipc/bindings";
+import type { TransKey } from "@/i18n/dictionaries";
 import { Section } from "@/components/ui/dialogControls";
 import {
   fileColorLabel,
@@ -61,6 +73,69 @@ const TAG_COLORS: Record<number, string> = {
   7: "#f5a43c", // orange
 };
 
+type T = (key: TransKey) => string;
+
+// Each calculation gets its own token, so a cancel can never hit the
+// task of a folder opened afterwards.
+let nextSizeToken = 0;
+
+/**
+ * Recursive size of a folder. Runs in the backend, streams intermediate
+ * totals, and is cancelled on unmount or when switching entries.
+ * `path` = null (file, or properties not loaded yet) starts nothing.
+ */
+function useDirSize(path: string | null): {
+  stats: DirSizeStats | null;
+  running: boolean;
+} {
+  const [stats, setStats] = useState<DirSizeStats | null>(null);
+  const [running, setRunning] = useState(false);
+
+  useEffect(() => {
+    setStats(null);
+    if (!path) {
+      setRunning(false);
+      return;
+    }
+    setRunning(true);
+    const token = `dirsize:${++nextSizeToken}`;
+    let alive = true;
+    void dirSize(path, token, (s) => alive && setStats(s))
+      .then((res) => {
+        // A cancelled run only carries a partial total – discard it.
+        if (!alive || res.cancelled) return;
+        setStats(res.stats);
+        setRunning(false);
+      })
+      .catch(() => alive && setRunning(false));
+    return () => {
+      alive = false;
+      void cancelDirSize(token);
+    };
+  }, [path]);
+
+  return { stats, running };
+}
+
+/** Volume of a path: `undefined` = still loading, `null` = none found. */
+function useVolume(path: string | null): VolumeInfo | null | undefined {
+  const [vol, setVol] = useState<VolumeInfo | null | undefined>(undefined);
+
+  useEffect(() => {
+    setVol(undefined);
+    if (!path) return;
+    let alive = true;
+    void volumeInfo(path)
+      .then((v) => alive && setVol(v))
+      .catch(() => alive && setVol(null));
+    return () => {
+      alive = false;
+    };
+  }, [path]);
+
+  return vol;
+}
+
 export function PropertiesDialog() {
   const path = usePropsDialog((s) => s.path);
   const gitStatus = usePropsDialog((s) => s.gitStatus);
@@ -78,13 +153,21 @@ export function PropertiesDialog() {
   const [copied, setCopied] = useState<string | null>(null);
   const [tags, setTagList] = useState<Tag[]>([]);
 
-  // On open (or path change), load the properties.
+  // Both derive from the loaded properties, not from `path`: only then is
+  // it certain whether the entry is a folder, and both restart cleanly
+  // when switching entries.
+  const size = useDirSize(data?.is_dir ? data.path : null);
+  const volume = useVolume(data?.path ?? null);
+
+  // On open (or path change), load the properties. Closing the dialog
+  // (path = null) must drop `data` too: the folder-size task and the
+  // volume lookup key off it, and only a cleared entry cancels them.
   useEffect(() => {
-    if (!path) return;
     setData(null);
     setChecks(null);
     setError(null);
     setTagList([]);
+    if (!path) return;
     let alive = true;
     void fileProps(path)
       .then((p) => {
@@ -222,15 +305,19 @@ export function PropertiesDialog() {
                 <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[12px]">
                   <span className="text-dim">{t("props.type.file")}</span>
                   <span className="text-text">{typeLabel(data)}</span>
-                  <span className="text-dim">Größe</span>
-                  <span className="text-text">
-                    {formatSize(data.size)} ({data.size} B)
-                  </span>
-                  <span className="text-dim">Geändert</span>
+                  <span className="text-dim">{t("props.size")}</span>
+                  {data.is_dir ? (
+                    <FolderSize stats={size.stats} running={size.running} t={t} />
+                  ) : (
+                    <span className="text-text">
+                      {formatSize(data.size)} ({formatSize(data.size, "bytes")})
+                    </span>
+                  )}
+                  <span className="text-dim">{t("props.modified")}</span>
                   <span className="text-text">{formatDate(data.modified)}</span>
                   {data.mode != null && (
                     <>
-                      <span className="text-dim">Modus</span>
+                      <span className="text-dim">{t("props.mode")}</span>
                       <span className="font-mono text-text">
                         {formatMode(data.mode, data.is_dir, data.is_symlink)} ·{" "}
                         {octal}
@@ -238,6 +325,11 @@ export function PropertiesDialog() {
                     </>
                   )}
                 </div>
+
+                {/* Storage of the volume this entry lies on */}
+                <Section label={t("vol.title")}>
+                  <Volume vol={volume} t={t} />
+                </Section>
 
                 {/* Why the entry has its color in the file list */}
                 <Section label={t("props.color")}>
@@ -471,6 +563,111 @@ export function PropertiesDialog() {
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+  );
+}
+
+/**
+ * Size of a folder: while the walk runs, the totals grow visibly next to
+ * a spinner; unreadable entries are reported instead of aborting.
+ */
+function FolderSize({
+  stats,
+  running,
+  t,
+}: {
+  stats: DirSizeStats | null;
+  running: boolean;
+  t: T;
+}) {
+  if (!stats) {
+    return (
+      <span className="flex items-center gap-1.5 text-dim">
+        {running ? (
+          <>
+            <Loader2 size={12} className="animate-spin" aria-hidden />
+            {t("props.calculating")}
+          </>
+        ) : (
+          "—"
+        )}
+      </span>
+    );
+  }
+  return (
+    <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+      {running && (
+        <Loader2 size={12} className="animate-spin text-dim" aria-hidden />
+      )}
+      <span className="text-text">
+        {formatSize(stats.bytes)} ({formatSize(stats.bytes, "bytes")})
+      </span>
+      <span className="text-dim">
+        {stats.files} {t("props.files")} · {stats.dirs} {t("props.folders")}
+        {stats.errors > 0 && ` · ${stats.errors} ${t("props.skipped")}`}
+      </span>
+    </span>
+  );
+}
+
+/** Capacity and usage of a volume, with "40 G free of 500 G" up front. */
+function Volume({ vol, t }: { vol: VolumeInfo | null | undefined; t: T }) {
+  if (vol === undefined) {
+    return (
+      <span className="flex items-center gap-1.5 text-[12px] text-dim">
+        <Loader2 size={12} className="animate-spin" aria-hidden />
+        {t("props.calculating")}
+      </span>
+    );
+  }
+  if (!vol) {
+    return <span className="text-[12px] text-dim">{t("vol.none")}</span>;
+  }
+
+  const rows: [string, string][] = [
+    [t("vol.name"), vol.name],
+    [t("vol.fs"), vol.fs || "—"],
+    [t("vol.total"), formatSize(vol.total)],
+    [t("vol.used"), `${formatSize(vol.used)} (${formatPercent(vol.used_pct)})`],
+    [t("vol.free"), `${formatSize(vol.free)} (${formatPercent(vol.free_pct)})`],
+  ];
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <HardDrive size={14} className="self-center text-accent" aria-hidden />
+        <span className="text-[13px] font-medium text-text">
+          {formatSize(vol.free)} {t("vol.freeOf")} {formatSize(vol.total)}
+        </span>
+        <span className="text-[12px] text-dim">
+          ({formatPercent(vol.free_pct)})
+        </span>
+      </div>
+
+      <div className="h-1.5 overflow-hidden rounded-full bg-panel-inactive">
+        <div
+          className={cn(
+            "h-full rounded-full",
+            vol.free_pct < 10 ? "bg-red-500" : "bg-accent",
+          )}
+          style={{ width: `${Math.min(100, vol.used_pct)}%` }}
+        />
+      </div>
+
+      <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[12px]">
+        <span className="text-dim">{t("vol.mount")}</span>
+        <span className="truncate font-mono text-text" title={vol.mount}>
+          {vol.mount}
+        </span>
+        {rows.map(([label, value]) => (
+          <Fragment key={label}>
+            <span className="text-dim">{label}</span>
+            <span className="truncate text-text" title={value}>
+              {value}
+            </span>
+          </Fragment>
+        ))}
+      </div>
+    </div>
   );
 }
 

@@ -22,6 +22,14 @@ export function formatSize(
   return `${v.toFixed(v < 10 ? 1 : 0)} ${units[u]}`;
 }
 
+/**
+ * A percentage share ("17 %", "4.3 %"). Rounds like `formatSize`:
+ * one decimal below 10, whole numbers above.
+ */
+export function formatPercent(value: number): string {
+  return `${value < 10 ? value.toFixed(1) : value.toFixed(0)} %`;
+}
+
 export function formatDate(
   epochSecs: number | bigint,
   format: DateFormat = "medium",
