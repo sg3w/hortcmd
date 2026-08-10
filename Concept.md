@@ -109,11 +109,17 @@ lib/                         format · fileIcon · cn · path · glob
 
 ```
 main.rs · lib.rs             binary entry + command registration
+vfs/                         VFS abstraction (identical UI, foundation) — ticket 020
+├── mod.rs                   Provider trait · Scheme · Address parser · scheme registry
+│                            (resolve: address → provider + local path); local only today,
+│                            sftp/smb/webdav/ftp reserved (parsed, "not yet supported")
+└── local.rs                 LocalProvider (std::fs) — where the local fs logic lives now
 commands/fs/
 ├── mod.rs                   declares the submodules
-├── dir.rs                   list_dir · list_drives · home_dir (+ DirEntry/DirListing/Drive)
-├── file.rs                  copy/move/delete/mkdir + transfer infra (Prog, spawn_op,
-│                            collision, cancel) — pub(crate), also used by archive
+├── dir.rs                   list_dir (→ vfs) · list_drives · home_dir (+ DirEntry/DirListing/Drive)
+├── file.rs                  copy/move/delete/mkdir/rename + transfer infra (Prog, spawn_op,
+│                            collision, cancel) — all fs ops routed through the vfs registry;
+│                            pub(crate), also used by archive
 ├── preview.rs               read_preview (F3) · open_path (F4)
 ├── archive.rs               archives (ZIP/tar/tar.gz/tar.xz/7z, password): list_archive ·
 │                            extract_entries · create_archive (packing → ZIP)
@@ -626,8 +632,8 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
 ### P4 — Large subsystems
 - [ ] **Network** (identical UI): **SFTP first**, then SMB, WebDAV, FTP/FTPS;
       SSH terminal
-      *(broken down in ticket series `tickets/020`–`026`: 020 VFS abstraction
-      (foundation) → 021 connections/credentials (OS keychain) → 022 SFTP → 023 SMB,
+      *(broken down in ticket series `tickets/020`–`026`: **020 VFS abstraction
+      (foundation) ✅** → 021 connections/credentials (OS keychain) → 022 SFTP → 023 SMB,
       024 WebDAV, 025 FTP/FTPS → 026 SSH terminal; 027 optional KeePass backend.
       "Identical UI" via provider trait + schema registry; secrets via
       `CredentialStore` in the OS keychain (KeePass optional))*

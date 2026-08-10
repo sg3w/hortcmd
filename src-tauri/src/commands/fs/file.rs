@@ -4,10 +4,9 @@
 // cancel, name conflicts) that the archive module also uses.
 // ============================================================
 
+use crate::vfs::{self, Provider};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::fs::File;
 use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
@@ -79,18 +78,18 @@ fn target_in(dest_dir: &Path, src: &Path) -> Option<PathBuf> {
 }
 
 /// Counts files and bytes recursively (for the progress totals).
-fn measure(p: &Path) -> (u32, u64) {
-    if p.is_dir() {
-        match fs::read_dir(p) {
-            Ok(rd) => rd.flatten().fold((0, 0), |(f, b), e| {
-                let (cf, cb) = measure(&e.path());
+fn measure(provider: &dyn Provider, p: &Path) -> (u32, u64) {
+    match provider.stat(p) {
+        Ok(s) if s.is_dir => match provider.read_dir(p) {
+            Ok(children) => children.iter().fold((0, 0), |(f, b), c| {
+                let (cf, cb) = measure(provider, c);
                 (f + cf, b + cb)
             }),
             Err(_) => (0, 0),
-        }
-    } else {
-        let size = fs::metadata(p).map(|m| m.len()).unwrap_or(0);
-        (1, size)
+        },
+        Ok(s) => (1, s.len),
+        // Unreadable/missing entry: count as one 0-byte file (as before).
+        Err(_) => (1, 0),
     }
 }
 
@@ -125,7 +124,7 @@ fn resolvers() -> &'static ResolverMap {
 static REQ_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 /// Finds a free name "Name (2)", "Name (3)" … in the target folder.
-fn free_name(target: &Path) -> PathBuf {
+fn free_name(provider: &dyn Provider, target: &Path) -> PathBuf {
     let parent = target.parent().map(Path::to_path_buf).unwrap_or_default();
     let stem = target
         .file_stem()
@@ -138,7 +137,7 @@ fn free_name(target: &Path) -> PathBuf {
     let mut i = 2u32;
     loop {
         let candidate = parent.join(format!("{} ({}){}", stem, i, ext));
-        if !candidate.exists() {
+        if !provider.exists(&candidate) {
             return candidate;
         }
         i += 1;
@@ -149,6 +148,7 @@ fn free_name(target: &Path) -> PathBuf {
 /// Reacts to cancel (skip) so the thread never hangs.
 fn ask_collision(
     app: &AppHandle,
+    provider: &dyn Provider,
     transfer_id: &str,
     target: &Path,
     cancel: &Arc<AtomicBool>,
@@ -163,7 +163,7 @@ fn ask_collision(
             transfer_id: transfer_id.to_string(),
             req_id: req_id.clone(),
             path: target.to_string_lossy().into_owned(),
-            is_dir: target.is_dir(),
+            is_dir: provider.is_dir(target),
         },
     );
 
@@ -255,6 +255,7 @@ impl Prog {
 /// (bytes/s, 0 = unlimited). With `verify`, the SHA-256 checksum of
 /// source and target is compared after copying.
 fn copy_file_prog(
+    provider: &dyn Provider,
     src: &Path,
     dst: &Path,
     prog: &mut Prog,
@@ -264,10 +265,10 @@ fn copy_file_prog(
 ) -> std::io::Result<()> {
     use sha2::{Digest, Sha256};
 
-    let file_total = fs::metadata(src)?.len();
+    let file_total = provider.stat(src)?.len;
     let name = src.to_string_lossy().into_owned();
-    let mut reader = File::open(src)?;
-    let mut writer = File::create(dst)?;
+    let mut reader = provider.open_read(src)?;
+    let mut writer = provider.create_write(dst)?;
     let mut buf = vec![0u8; buf_size];
     let mut file_done = 0u64;
     let mut hasher = verify.then(Sha256::new);
@@ -276,9 +277,9 @@ fn copy_file_prog(
     let mut win_start = Instant::now();
     let mut win_bytes = 0u64;
 
-    let abort = |writer: File, dst: &Path| {
+    let abort = |writer: Box<dyn Write + Send>, dst: &Path| {
         drop(writer);
-        let _ = fs::remove_file(dst); // unvollständige Zieldatei verwerfen
+        let _ = provider.remove_file(dst); // unvollständige Zieldatei verwerfen
         std::io::Error::new(ErrorKind::Interrupted, "abgebrochen")
     };
 
@@ -323,7 +324,7 @@ fn copy_file_prog(
     // Verification: read the target again and compare checksums.
     if let Some(h) = hasher {
         let src_hash = h.finalize();
-        let dst_hash = hash_file_sha256(dst)?;
+        let dst_hash = hash_file_sha256(provider, dst)?;
         if src_hash.as_slice() != dst_hash.as_slice() {
             return Err(std::io::Error::new(
                 ErrorKind::InvalidData,
@@ -338,9 +339,9 @@ fn copy_file_prog(
 }
 
 /// SHA-256 of a file (for the copy verification).
-fn hash_file_sha256(path: &Path) -> std::io::Result<Vec<u8>> {
+fn hash_file_sha256(provider: &dyn Provider, path: &Path) -> std::io::Result<Vec<u8>> {
     use sha2::{Digest, Sha256};
-    let mut f = File::open(path)?;
+    let mut f = provider.open_read(path)?;
     let mut h = Sha256::new();
     let mut buf = vec![0u8; 256 * 1024];
     loop {
@@ -355,6 +356,7 @@ fn hash_file_sha256(path: &Path) -> std::io::Result<Vec<u8>> {
 
 /// Copies recursively (file or directory tree).
 fn copy_tree(
+    provider: &dyn Provider,
     src: &Path,
     dst: &Path,
     prog: &mut Prog,
@@ -362,17 +364,17 @@ fn copy_tree(
     verify: bool,
     buf_size: usize,
 ) -> std::io::Result<()> {
-    if src.is_dir() {
-        fs::create_dir_all(dst)?;
-        for entry in fs::read_dir(src)? {
-            let entry = entry?;
-            copy_tree(&entry.path(), &dst.join(entry.file_name()), prog, limit, verify, buf_size)?;
+    if provider.is_dir(src) {
+        provider.create_dir_all(dst)?;
+        for child in provider.read_dir(src)? {
+            let name = child.file_name().unwrap_or_default();
+            copy_tree(provider, &child, &dst.join(name), prog, limit, verify, buf_size)?;
         }
     } else {
         if let Some(parent) = dst.parent() {
-            fs::create_dir_all(parent)?;
+            provider.create_dir_all(parent)?;
         }
-        copy_file_prog(src, dst, prog, limit, verify, buf_size)?;
+        copy_file_prog(provider, src, dst, prog, limit, verify, buf_size)?;
     }
     Ok(())
 }
@@ -396,6 +398,7 @@ fn resolve_buf(buf_kb: u64) -> usize {
 
 /// Thread-safe progress for the parallel copy path.
 struct SharedProg {
+    provider: &'static dyn Provider,
     app: AppHandle,
     id: String,
     op: String,
@@ -489,17 +492,24 @@ struct CopyTask {
 
 /// Flattens a source tree into individual file tasks, creating the
 /// target folders along the way. `idx` refers to the top-level source.
-fn flatten_tree(src: &Path, dst: &Path, idx: usize, tasks: &mut Vec<CopyTask>) {
-    if src.is_dir() {
-        let _ = fs::create_dir_all(dst);
-        if let Ok(rd) = fs::read_dir(src) {
-            for e in rd.flatten() {
-                flatten_tree(&e.path(), &dst.join(e.file_name()), idx, tasks);
+fn flatten_tree(
+    provider: &dyn Provider,
+    src: &Path,
+    dst: &Path,
+    idx: usize,
+    tasks: &mut Vec<CopyTask>,
+) {
+    if provider.is_dir(src) {
+        let _ = provider.create_dir_all(dst);
+        if let Ok(children) = provider.read_dir(src) {
+            for child in children {
+                let name = child.file_name().unwrap_or_default();
+                flatten_tree(provider, &child, &dst.join(name), idx, tasks);
             }
         }
     } else {
         if let Some(parent) = dst.parent() {
-            let _ = fs::create_dir_all(parent);
+            let _ = provider.create_dir_all(parent);
         }
         tasks.push(CopyTask {
             idx,
@@ -519,17 +529,18 @@ fn parallel_copy_file(
 ) -> std::io::Result<()> {
     use sha2::{Digest, Sha256};
 
-    let file_total = fs::metadata(&task.src)?.len();
+    let provider = sp.provider;
+    let file_total = provider.stat(&task.src)?.len;
     let name = task.src.to_string_lossy().into_owned();
-    let mut reader = File::open(&task.src)?;
-    let mut writer = File::create(&task.dst)?;
+    let mut reader = provider.open_read(&task.src)?;
+    let mut writer = provider.create_write(&task.dst)?;
     let mut buf = vec![0u8; buf_size];
     let mut hasher = verify.then(Sha256::new);
     let mut file_done = 0u64;
 
-    let abort = |writer: File, dst: &Path| {
+    let abort = |writer: Box<dyn Write + Send>, dst: &Path| {
         drop(writer);
-        let _ = fs::remove_file(dst);
+        let _ = provider.remove_file(dst);
         std::io::Error::new(ErrorKind::Interrupted, "abgebrochen")
     };
 
@@ -558,7 +569,7 @@ fn parallel_copy_file(
 
     if let Some(h) = hasher {
         let src_hash = h.finalize();
-        let dst_hash = hash_file_sha256(&task.dst)?;
+        let dst_hash = hash_file_sha256(provider, &task.dst)?;
         if src_hash.as_slice() != dst_hash.as_slice() {
             return Err(std::io::Error::new(
                 ErrorKind::InvalidData,
@@ -576,6 +587,7 @@ fn parallel_copy_file(
 /// worker threads. Returns: (successful sources, error messages).
 #[allow(clippy::too_many_arguments)]
 fn run_parallel_copy(
+    provider: &'static dyn Provider,
     app: AppHandle,
     id: String,
     op: String,
@@ -592,10 +604,11 @@ fn run_parallel_copy(
     // Flatten all source trees into file tasks (target folders are created).
     let mut tasks = Vec::new();
     for (i, (src, target)) in jobs.iter().enumerate() {
-        flatten_tree(src, target, i, &mut tasks);
+        flatten_tree(provider, src, target, i, &mut tasks);
     }
 
     let sp = Arc::new(SharedProg {
+        provider,
         app,
         id,
         op,
@@ -676,17 +689,52 @@ fn run_transfer(
     buf_kb: u64,
     threads: u32,
 ) {
-    let dest = PathBuf::from(&dest_dir);
     let buf_size = resolve_buf(buf_kb);
+    // Resolve the destination through the VFS registry; the returned
+    // provider serves every file operation of this transfer.
+    let (provider, dest_path) = match vfs::resolve(&dest_dir) {
+        Ok(v) => v,
+        Err(e) => {
+            let _ = app.emit(
+                "fs-done",
+                OpDone {
+                    id,
+                    op,
+                    ok: 0,
+                    errors: vec![e],
+                    cancelled: false,
+                },
+            );
+            return;
+        }
+    };
+    let dest = PathBuf::from(&dest_path);
     // Parallel path only for pure copying and thread count > 1.
     // Move stays sequential (rename is immediate anyway; copy fallback is rare).
     let parallel = !remove_source && threads > 1;
-    // Measure per source up front (totals + bookkeeping for a rename move).
+
+    // Resolve + measure each source up front (totals + bookkeeping for a
+    // rename move). `measured` holds the resolved provider-local path.
+    // Sources on another provider (cross-scheme) are not supported yet.
+    let mut errors: Vec<String> = Vec::new();
     let measured: Vec<(String, u32, u64)> = sources
         .iter()
-        .map(|s| {
-            let (f, b) = measure(Path::new(s));
-            (s.clone(), f, b)
+        .filter_map(|s| match vfs::resolve(s) {
+            Ok((sp, spath)) if sp.scheme() == provider.scheme() => {
+                let (f, b) = measure(provider, Path::new(&spath));
+                Some((spath, f, b))
+            }
+            Ok(_) => {
+                errors.push(format!(
+                    "{}: providerübergreifende Übertragung wird noch nicht unterstützt",
+                    s
+                ));
+                None
+            }
+            Err(e) => {
+                errors.push(format!("{}: {}", s, e));
+                None
+            }
         })
         .collect();
     let files_total = measured.iter().map(|m| m.1).sum();
@@ -707,7 +755,6 @@ fn run_transfer(
     prog.emit("", 0, 0, true); // initialer 0%-Tick
 
     let mut ok = 0u32;
-    let mut errors: Vec<String> = Vec::new();
     let mut default_res: Option<Resolution> = None; // „Für alle übernehmen"
     // In parallel mode the resolved pairs are collected and afterwards
     // copied in parallel (collisions are resolved here sequentially/interactively).
@@ -728,11 +775,11 @@ fn run_transfer(
         }
 
         // Name conflict: ask the frontend (or apply the remembered choice).
-        if target.exists() {
+        if provider.exists(&target) {
             let res = match default_res {
                 Some(r) => r,
                 None => {
-                    let (r, apply_all) = ask_collision(&app, &id, &target, &cancel);
+                    let (r, apply_all) = ask_collision(&app, provider, &id, &target, &cancel);
                     if apply_all {
                         default_res = Some(r);
                     }
@@ -741,14 +788,9 @@ fn run_transfer(
             };
             match res {
                 Resolution::Skip => continue,
-                Resolution::Rename => target = free_name(&target),
+                Resolution::Rename => target = free_name(provider, &target),
                 Resolution::Overwrite => {
-                    let rm = if target.is_dir() {
-                        fs::remove_dir_all(&target)
-                    } else {
-                        fs::remove_file(&target)
-                    };
-                    if let Err(e) = rm {
+                    if let Err(e) = provider.remove(&target) {
                         errors.push(format!("{}: {}", s, e));
                         continue;
                     }
@@ -764,23 +806,18 @@ fn run_transfer(
 
         let result = if remove_source {
             // Move: first rename (immediate); otherwise copy + delete the source.
-            match fs::rename(src, &target) {
+            match provider.rename(src, &target) {
                 Ok(_) => {
                     prog.files_done += files;
                     prog.bytes_done += bytes;
                     prog.emit(&src.to_string_lossy(), *bytes, *bytes, true);
                     Ok(())
                 }
-                Err(_) => copy_tree(src, &target, &mut prog, limit, verify, buf_size).and_then(|_| {
-                    if src.is_dir() {
-                        fs::remove_dir_all(src)
-                    } else {
-                        fs::remove_file(src)
-                    }
-                }),
+                Err(_) => copy_tree(provider, src, &target, &mut prog, limit, verify, buf_size)
+                    .and_then(|_| provider.remove(src)),
             }
         } else {
-            copy_tree(src, &target, &mut prog, limit, verify, buf_size)
+            copy_tree(provider, src, &target, &mut prog, limit, verify, buf_size)
         };
 
         match result {
@@ -793,6 +830,7 @@ fn run_transfer(
     // Parallel copy phase (all collisions are already resolved).
     if parallel && !copy_jobs.is_empty() && !prog.cancelled() {
         let (pok, perrors) = run_parallel_copy(
+            provider,
             app.clone(),
             id.clone(),
             op.clone(),
@@ -843,7 +881,10 @@ where
 /// Creates a directory (recursively).
 #[tauri::command]
 pub fn make_dir(path: String) -> Result<String, String> {
-    fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+    let (provider, resolved) = vfs::resolve(&path)?;
+    provider
+        .create_dir_all(Path::new(&resolved))
+        .map_err(|e| e.to_string())?;
     Ok(path)
 }
 
@@ -857,10 +898,14 @@ pub fn write_text_file(
     contents: String,
     overwrite: bool,
 ) -> Result<bool, String> {
-    if !overwrite && Path::new(&path).exists() {
+    let (provider, resolved) = vfs::resolve(&path)?;
+    let p = Path::new(&resolved);
+    if !overwrite && provider.exists(p) {
         return Ok(false);
     }
-    fs::write(&path, contents).map_err(|e| e.to_string())?;
+    provider
+        .write(p, contents.as_bytes())
+        .map_err(|e| e.to_string())?;
     Ok(true)
 }
 
@@ -868,23 +913,25 @@ pub fn write_text_file(
 /// Refuses to overwrite an already existing target name.
 #[tauri::command]
 pub fn rename_entry(from: String, to: String) -> Result<(), String> {
-    let from_p = Path::new(&from);
-    let to_p = Path::new(&to);
-    if !from_p.exists() {
+    let (provider, from_r) = vfs::resolve(&from)?;
+    let (_, to_r) = vfs::resolve(&to)?;
+    let from_p = Path::new(&from_r);
+    let to_p = Path::new(&to_r);
+    if !provider.exists(from_p) {
         return Err("Quelle existiert nicht".into());
     }
-    if to_p.exists() {
+    if provider.exists(to_p) {
         return Err("Zielname existiert bereits".into());
     }
-    fs::rename(from_p, to_p).map_err(|e| e.to_string())
+    provider.rename(from_p, to_p).map_err(|e| e.to_string())
 }
 
 /// Finds a free temporary name in the same folder (hidden file).
-fn unique_temp(base: &Path) -> PathBuf {
+fn unique_temp(provider: &dyn Provider, base: &Path) -> PathBuf {
     loop {
         let n = REQ_COUNTER.fetch_add(1, Ordering::Relaxed);
         let cand = base.join(format!(".rcren-tmp-{}", n));
-        if !cand.exists() {
+        if !provider.exists(&cand) {
             return cand;
         }
     }
@@ -899,7 +946,16 @@ fn unique_temp(base: &Path) -> PathBuf {
 /// then to the target names) so that chains and name swaps work too.
 #[tauri::command]
 pub fn rename_batch(dir: String, renames: Vec<(String, String)>) -> OpResult {
-    let base = Path::new(&dir);
+    let (provider, base_str) = match vfs::resolve(&dir) {
+        Ok(v) => v,
+        Err(e) => {
+            return OpResult {
+                ok: 0,
+                errors: vec![e],
+            }
+        }
+    };
+    let base = Path::new(&base_str);
     let mut errors: Vec<String> = Vec::new();
 
     // Source names (for the check "the target is itself being renamed").
@@ -924,12 +980,12 @@ pub fn rename_batch(dir: String, renames: Vec<(String, String)>) -> OpResult {
             errors.push(format!("{} → {}: Zielname mehrfach vergeben", from, to));
             continue;
         }
-        if !base.join(from).exists() {
+        if !provider.exists(&base.join(from)) {
             errors.push(format!("{}: Quelle nicht gefunden", from));
             continue;
         }
         // Foreign collision: the target exists and is not itself being renamed.
-        if base.join(to).exists() && !sources.contains(to.as_str()) {
+        if provider.exists(&base.join(to)) && !sources.contains(to.as_str()) {
             errors.push(format!("{} → {}: Ziel existiert bereits", from, to));
             continue;
         }
@@ -939,8 +995,8 @@ pub fn rename_batch(dir: String, renames: Vec<(String, String)>) -> OpResult {
     // Phase 1: all sources to temporary names.
     let mut staged: Vec<(PathBuf, &str, &str)> = Vec::new(); // (temp, to, from)
     for (from, to) in &valid {
-        let tmp = unique_temp(base);
-        match fs::rename(base.join(from), &tmp) {
+        let tmp = unique_temp(provider, base);
+        match provider.rename(&base.join(from), &tmp) {
             Ok(_) => staged.push((tmp, to, from)),
             Err(e) => errors.push(format!("{}: {}", from, e)),
         }
@@ -949,11 +1005,11 @@ pub fn rename_batch(dir: String, renames: Vec<(String, String)>) -> OpResult {
     // Phase 2: temporary names to the target names.
     let mut ok = 0u32;
     for (tmp, to, from) in staged {
-        match fs::rename(&tmp, base.join(to)) {
+        match provider.rename(&tmp, &base.join(to)) {
             Ok(_) => ok += 1,
             Err(e) => {
                 // Rename back so no temporary name is left behind.
-                let _ = fs::rename(&tmp, base.join(from));
+                let _ = provider.rename(&tmp, &base.join(from));
                 errors.push(format!("{} → {}: {}", from, to, e));
             }
         }
@@ -1063,12 +1119,10 @@ pub fn delete_entries(paths: Vec<String>) -> OpResult {
     let mut errors = Vec::new();
 
     for p in &paths {
-        let path = Path::new(p);
-        let res = if path.is_dir() {
-            fs::remove_dir_all(path)
-        } else {
-            fs::remove_file(path)
-        };
+        let res = vfs::resolve(p)
+            .and_then(|(provider, resolved)| {
+                provider.remove(Path::new(&resolved)).map_err(|e| e.to_string())
+            });
         match res {
             Ok(_) => ok += 1,
             Err(e) => errors.push(format!("{}: {}", p, e)),
@@ -1086,6 +1140,7 @@ mod tests {
     use super::{
         flatten_tree, hash_file_sha256, rename_batch, resolve_buf, write_text_file, CopyTask,
     };
+    use crate::vfs::local::LocalProvider;
     use std::fs;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -1209,7 +1264,7 @@ mod tests {
         let dst = root.join("dst");
 
         let mut tasks: Vec<CopyTask> = Vec::new();
-        flatten_tree(&src, &dst, 0, &mut tasks);
+        flatten_tree(&LocalProvider, &src, &dst, 0, &mut tasks);
 
         assert_eq!(tasks.len(), 2, "zwei Dateien erwartet");
         assert!(dst.join("sub").is_dir(), "Zielordner angelegt");
@@ -1228,7 +1283,7 @@ mod tests {
         // copy verification (source vs. target).
         let d = tmp_dir();
         write(&d, "abc.bin", "abc");
-        let hex: String = hash_file_sha256(&d.join("abc.bin"))
+        let hex: String = hash_file_sha256(&LocalProvider, &d.join("abc.bin"))
             .unwrap()
             .iter()
             .map(|b| format!("{:02x}", b))

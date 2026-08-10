@@ -2,11 +2,9 @@
 // Read directories, drives/mount points, home directory.
 // ============================================================
 
-use super::attrs;
+use crate::vfs;
 use serde::Serialize;
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::time::UNIX_EPOCH;
+use std::path::Path;
 use ts_rs::TS;
 
 // Note: ts-rs appends export_to to an implicit "<manifest>/bindings/",
@@ -52,50 +50,13 @@ pub struct Drive {
     pub free: u64,
 }
 
-/// Reads the contents of a directory.
+/// Reads the contents of a directory. The address is resolved through
+/// the VFS registry, so the command works schema-agnostically; the
+/// `local` provider handles ordinary file-system paths unchanged.
 #[tauri::command]
 pub fn list_dir(path: String) -> Result<DirListing, String> {
-    let p = PathBuf::from(&path);
-    let canonical = fs::canonicalize(&p).unwrap_or(p);
-
-    let read = fs::read_dir(&canonical).map_err(|e| format!("{}: {}", canonical.display(), e))?;
-
-    let mut entries = Vec::new();
-    for item in read.flatten() {
-        let meta = match item.metadata() {
-            Ok(m) => m,
-            Err(_) => continue,
-        };
-        let name = item.file_name().to_string_lossy().into_owned();
-        #[cfg(unix)]
-        let mode = {
-            use std::os::unix::fs::MetadataExt;
-            Some(meta.mode())
-        };
-        #[cfg(not(unix))]
-        let mode = None;
-        entries.push(DirEntry {
-            hidden: attrs::is_hidden(&meta, &name),
-            readonly: attrs::is_readonly(&meta),
-            executable: attrs::is_executable(&meta, &name),
-            name,
-            is_dir: meta.is_dir(),
-            is_symlink: meta.file_type().is_symlink(),
-            size: if meta.is_dir() { 0 } else { meta.len() },
-            modified: meta
-                .modified()
-                .ok()
-                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                .map(|d| d.as_secs())
-                .unwrap_or(0),
-            mode,
-        });
-    }
-
-    Ok(DirListing {
-        path: path_to_string(&canonical),
-        entries,
-    })
+    let (provider, resolved) = vfs::resolve(&path)?;
+    provider.list(&resolved)
 }
 
 /// Lists drives or mount points along with their storage usage.
