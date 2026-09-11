@@ -206,8 +206,11 @@ in der separaten Plugin-Toolbar aus TICKET-103; keine vorweggenommene Menü-API.
 | 103 / 106 | Separate Plugin-Toolbar und Plugin-Verwaltung; kein Starter-Menü in 040. |
 | 012 (done) | Bestehende React-Dialoge wiederverwenden, keine neuen nativen Dialogfenster. |
 
-Kein zweites konkurrierendes Hauptmenü-Ticket anlegen. Die Umsetzung kann innerhalb
-von 040 in Befehlsdefinition, Fenster-Menü, macOS-Brücke und Verifikation erfolgen.
+Die Menügrundlage einschließlich Ausgangskatalog bleibt in 040. Das ausdrücklich
+beauftragte [Folgeticket 058](058-populate-commander-menu-items.md) prüft danach den
+zu diesem Zeitpunkt implementierten Funktionsbestand und ergänzt fehlende
+Menüpunkte. Bereits hier angebundene Aktionen werden dort wiederverwendet;
+es entsteht keine zweite Menüarchitektur. 040 ist nicht von 058 abhängig.
 
 ## Akzeptanzkriterien
 
