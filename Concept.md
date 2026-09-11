@@ -214,7 +214,7 @@ The shortcuts shown in the menu come from the same command definition as the
 Help → keyboard overview (`features/commander/commands.ts`), rendered per
 platform by `lib/shortcut.ts` (⌘C on macOS, Ctrl+C elsewhere).
 
-### Application menu (TICKET-040)
+### Application menu (TICKET-040, completed by TICKET-058)
 
 The complete menu lives **in the window**, above the toolbar, on macOS, Windows
 and Linux alike (`features/commander/MenuBar.tsx`, Radix Menubar). Categories in
@@ -233,16 +233,25 @@ connection cannot act on a stale context.
 
 | Menu | Commands |
 |---|---|
-| Dateien | open · view (F3) · edit (F4) · open with ▸ (configured programs, manage) ‖ copy (F5) · move (F6) · rename (F2) · new folder (F7) · delete (F8) · delete permanently (⇧F8) ‖ clipboard copy/cut/paste (⌘C/X/V) ‖ pack (⌥F5) · extract · batch rename · compare files by content ‖ properties (⌥⏎) ‖ quit (Windows/Linux only) |
-| Markieren | select/unselect group (+/−) · invert (*) ‖ select all visible entries · select none ‖ copy file names · copy full paths · export file list |
-| Befehle | search (⌥F7) · compare/synchronize directories ‖ navigation ▸ (back ⌥←, forward ⌥→, parent) · favorites ▸ · recent folders ▸ ‖ terminal in the current folder · open in the system file manager ‖ transfers ▸ (running/queued, opens the existing transfer dialog) |
-| Netz | manage connections · active connections ▸ ‖ disconnect current connection · open SSH terminal |
-| Ansicht | layout ▸ (radio) · sort by ▸ (key + ascending/descending, radio) ‖ hidden files · extension column · permissions column · Git status (checkboxes) ‖ reset quick filter ‖ new tab (⌘T) · close tab (⌘W) · open folder under cursor in a new tab ‖ refresh pane · Quick Look (macOS) |
-| Konfiguration | settings (⌘,) ‖ appearance ▸ (system/light/dark) · language ▸ (de/en) |
+| Dateien | open · view (F3) · edit (F4) · open with ▸ (configured programs, **other program…**, manage) ‖ copy (F5) · move (F6) · rename (F2) · new folder (F7) · delete (F8) · delete permanently (⇧F8) ‖ clipboard copy/cut/paste (⌘C/X/V) ‖ pack (⌥F5) · extract · batch rename · compare files by content ‖ properties (⌥⏎) ‖ quit (Windows/Linux only) |
+| Markieren | select/unselect group (+/−) · invert (*) ‖ select all visible entries · select none ‖ copy file names · copy full paths · export file list — the full Mark menu belongs to TICKET-059 |
+| Befehle | search (⌥F7) · **special search ▸ (duplicates, empty folders, large files)** · compare/synchronize directories ‖ navigation ▸ (back ⌥←, forward ⌥→, parent) · favorites ▸ · recent folders ▸ ‖ terminal in the current folder · open in the system file manager ‖ transfers ▸ (running/queued, opens the existing transfer dialog) |
+| Netz | manage connections · **connect to ▸ (saved, not yet connected profiles)** · active connections ▸ ‖ disconnect current connection · open SSH terminal |
+| Ansicht | layout ▸ (radio) · sort by ▸ (key + ascending/descending, radio) ‖ hidden files · **folders first** · extension column · permissions column · Git status (checkboxes) ‖ reset quick filter ‖ new tab (⌘T) · close tab (⌘W) · open folder under cursor in a new tab ‖ refresh pane · Quick Look (macOS) |
+| Konfiguration | settings (⌘,) · **open settings page ▸ (all seven pages of the dialog)** ‖ appearance ▸ (system/light/dark) · language ▸ (de/en) |
 | Hilfe | keyboard shortcuts (generated from the same command definition) · about hortcmd |
 
 Sorting from the menu uses the explicit adapters `setSortKey`/`setSortAsc`
 (`panesStore`); the column-click `setSort` keeps its toggle behavior.
+
+A menu entry must run the *whole* user action, not just the store write behind
+it: "hidden files" and "folders first" pair their setting with
+`panesStore.rebuildAll`, "Git status" with `reloadGit` — the same follow-ups the
+settings page has always made, and without them the checkbox flipped while the
+list stayed as it was (found and fixed in TICKET-058). The full command ↔ menu
+mapping, including what stays inside a dialog on purpose and what has no
+implementation yet, lives in
+[`docs/menu-command-inventory.md`](docs/menu-command-inventory.md).
 
 **macOS system menu** is reduced to **hortcmd · Bearbeiten · Fenster**
 (`src-tauri/src/menu.rs`). The Edit items are what gives the WebView's text
@@ -579,9 +588,29 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
       states (enabled + reason, checkbox, radio) are re-checked before execution.
       macOS keeps only a reduced native menu (app · edit · window) without the
       ⌘W "Close Window" item. Full structure and command mapping: §6
-      "Application menu". Follow-ups: [058](tickets/058-populate-commander-menu-items.md)
-      completes the inventory, [059](tickets/059-mark-menu-and-selection-functions.md)
+      "Application menu". Follow-up: [059](tickets/059-mark-menu-and-selection-functions.md)
       owns the full Mark menu.
+- [x] **Menu items completed against the implemented feature set** (TICKET-058):
+      every executable user action was inventoried against the code — toolbar,
+      context menu, function keys, global shortcuts, settings pages, pane/tab
+      actions, connection management and transfers — and written down in
+      [`docs/menu-command-inventory.md`](docs/menu-command-inventory.md) with its
+      implementation proof, command id, menu path, context and availability.
+      Newly wired: "open with another program" (the picker the context menu
+      already used), the three remaining search modes (duplicates, empty folders,
+      large files) as *Spezialsuche ▸*, connecting to a saved profile from
+      *Netz › Verbinden mit ▸*, the "folders first" toggle, and direct entries to
+      all seven settings pages (`uiStore` now owns the selected page, so the menu
+      can jump straight to one). Corrected: the menu's "hidden files", "folders
+      first" and "Git status" checkboxes now run the same follow-up as the
+      settings page (`rebuildAll` / `reloadGit`) instead of flipping the switch
+      while the list stayed unchanged. Deliberately *not* added: TC entries with
+      no implementation behind them (archive test, split/combine, encode/decode,
+      print, comments, checksum files, toolbar editor, "Starter"), and the Mark
+      menu, which TICKET-059 owns in full. Verified in the browser demo mode
+      (both languages, dark theme, narrow window with the overflow menu, each new
+      entry executed); Windows/Linux not run — the menu is one platform-agnostic
+      React component.
 - [x] **Breadcrumb navigation** in the path bar (clickable segments jump into the
       respective folder; also works inside archives)
 - [x] **Make the archive visible**: amber badge "📦 archive.zip ›" in the path bar (fixed

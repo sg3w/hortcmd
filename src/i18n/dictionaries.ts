@@ -530,6 +530,7 @@ export const DICT = {
     "menu.file.view": "Anzeigen",
     "menu.file.edit": "Bearbeiten",
     "menu.file.openWith": "Öffnen mit",
+    "menu.file.openWithOther": "Anderes Programm",
     "menu.file.programs": "Programme verwalten",
     "menu.file.copy": "Kopieren",
     "menu.file.move": "Verschieben",
@@ -557,6 +558,7 @@ export const DICT = {
     "menu.mark.export": "Dateiliste exportieren",
 
     "menu.cmd.search": "Suchen",
+    "menu.cmd.searchMode": "Spezialsuche",
     "menu.cmd.compareDirs": "Verzeichnisse vergleichen / synchronisieren",
     "menu.cmd.navigation": "Navigation",
     "menu.cmd.favorites": "Favoriten",
@@ -569,6 +571,7 @@ export const DICT = {
     "menu.nav.up": "Übergeordneter Ordner",
 
     "menu.net.manage": "Verbindungen verwalten",
+    "menu.net.connect": "Verbinden mit",
     "menu.net.active": "Aktive Verbindungen",
     "menu.net.disconnect": "Aktuelle Verbindung trennen",
     "menu.net.terminal": "SSH-Terminal öffnen",
@@ -578,6 +581,7 @@ export const DICT = {
     "menu.sort.asc": "Aufsteigend",
     "menu.sort.desc": "Absteigend",
     "menu.view.hidden": "Versteckte/Systemdateien anzeigen",
+    "menu.view.foldersFirst": "Ordner zuerst einsortieren",
     "menu.view.extCol": "Erweiterungsspalte",
     "menu.view.permCol": "Berechtigungsspalte",
     "menu.view.git": "Git-Status anzeigen",
@@ -588,6 +592,7 @@ export const DICT = {
     "menu.view.refresh": "Aktuelles Panel aktualisieren",
 
     "menu.cfg.settings": "Einstellungen",
+    "menu.cfg.pages": "Einstellungsseite öffnen",
     "menu.cfg.theme": "Erscheinungsbild",
     "menu.cfg.language": "Sprache",
     "menu.lang.de": "Deutsch",
@@ -599,6 +604,7 @@ export const DICT = {
     "menu.empty.programs": "Keine Programme konfiguriert.",
     "menu.empty.transfers": "Keine Übertragungen.",
     "menu.empty.connections": "Keine aktive Verbindung.",
+    "menu.empty.profiles": "Keine Verbindungsprofile.",
 
     "menu.why.offline": "Verbindung getrennt",
     "menu.why.noTarget": "Kein Eintrag markiert",
@@ -1147,6 +1153,7 @@ export const DICT = {
     "menu.file.view": "View",
     "menu.file.edit": "Edit",
     "menu.file.openWith": "Open with",
+    "menu.file.openWithOther": "Other program",
     "menu.file.programs": "Manage programs",
     "menu.file.copy": "Copy",
     "menu.file.move": "Move",
@@ -1174,6 +1181,7 @@ export const DICT = {
     "menu.mark.export": "Export file list",
 
     "menu.cmd.search": "Search",
+    "menu.cmd.searchMode": "Special search",
     "menu.cmd.compareDirs": "Compare / synchronize directories",
     "menu.cmd.navigation": "Navigation",
     "menu.cmd.favorites": "Favorites",
@@ -1186,6 +1194,7 @@ export const DICT = {
     "menu.nav.up": "Parent folder",
 
     "menu.net.manage": "Manage connections",
+    "menu.net.connect": "Connect to",
     "menu.net.active": "Active connections",
     "menu.net.disconnect": "Disconnect current connection",
     "menu.net.terminal": "Open SSH terminal",
@@ -1195,6 +1204,7 @@ export const DICT = {
     "menu.sort.asc": "Ascending",
     "menu.sort.desc": "Descending",
     "menu.view.hidden": "Show hidden/system files",
+    "menu.view.foldersFirst": "Sort folders first",
     "menu.view.extCol": "Extension column",
     "menu.view.permCol": "Permissions column",
     "menu.view.git": "Show Git status",
@@ -1205,6 +1215,7 @@ export const DICT = {
     "menu.view.refresh": "Refresh current pane",
 
     "menu.cfg.settings": "Settings",
+    "menu.cfg.pages": "Open settings page",
     "menu.cfg.theme": "Appearance",
     "menu.cfg.language": "Language",
     "menu.lang.de": "Deutsch",
@@ -1216,6 +1227,7 @@ export const DICT = {
     "menu.empty.programs": "No programs configured.",
     "menu.empty.transfers": "No transfers.",
     "menu.empty.connections": "No active connection.",
+    "menu.empty.profiles": "No connection profiles.",
 
     "menu.why.offline": "Connection lost",
     "menu.why.noTarget": "No entry selected",

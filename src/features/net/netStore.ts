@@ -26,7 +26,9 @@ interface NetState {
   error: string | null;
 
   refresh: () => Promise<void>;
-  openManager: () => void;
+  /** `keepError` shows the manager *with* the last error — the Netz menu
+   *  connects without the dialog open and needs a place to report it. */
+  openManager: (keepError?: boolean) => void;
   closeManager: () => void;
   startEdit: (profile: Profile | null) => void;
   cancelEdit: () => void;
@@ -56,9 +58,15 @@ export const useNet = create<NetState>((set, get) => ({
     }
   },
 
-  openManager: () => {
-    set({ managerOpen: true, editing: null, error: null });
-    void get().refresh();
+  openManager: (keepError = false) => {
+    // The refresh below clears `error` on success, so a kept message has to
+    // be written back afterwards — otherwise the manager opens blank right
+    // after the failure it was opened to explain.
+    const kept = keepError ? get().error : null;
+    set({ managerOpen: true, editing: null, error: kept });
+    void get().refresh().then(() => {
+      if (kept && get().managerOpen) set({ error: kept });
+    });
   },
   closeManager: () => set({ managerOpen: false, editing: null }),
 

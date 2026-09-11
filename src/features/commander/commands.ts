@@ -50,6 +50,7 @@ import { openAbout, openSettings, openShortcuts } from "@/store/uiStore";
 import { runAction } from "./actions";
 import {
   runDelete,
+  runOpenWithBrowse,
   runOpenWithProgram,
   runQuickLook,
   targetPaths,
@@ -219,10 +220,17 @@ export const COMMANDS = {
     run: runEditLikeF4,
     state: () => notInArchive(cursorIsFile),
   },
+  "file.openWithOther": {
+    label: "menu.file.openWithOther",
+    dialog: true,
+    // Same picker the context menu uses — pick a binary, open the file with it.
+    run: () => runOpenWithBrowse(activeSide()),
+    state: () => notInArchive(cursorIsFile),
+  },
   "file.programs": {
     label: "menu.file.programs",
     dialog: true,
-    run: openSettings,
+    run: () => openSettings("programs"),
   },
   "file.copy": {
     label: "menu.file.copy",
@@ -401,6 +409,24 @@ export const COMMANDS = {
     run: () => openSearch(activeSide()),
     state: () => notInArchive(),
   },
+  "cmd.searchDuplicates": {
+    label: "search.mode.duplicates",
+    dialog: true,
+    run: () => openSearch(activeSide(), "duplicates"),
+    state: () => notInArchive(),
+  },
+  "cmd.searchEmptyDirs": {
+    label: "search.mode.emptyDirs",
+    dialog: true,
+    run: () => openSearch(activeSide(), "empty_dirs"),
+    state: () => notInArchive(),
+  },
+  "cmd.searchLargeFiles": {
+    label: "search.mode.largeFiles",
+    dialog: true,
+    run: () => openSearch(activeSide(), "large_files"),
+    state: () => notInArchive(),
+  },
   "cmd.compareDirs": {
     label: "menu.cmd.compareDirs",
     dialog: true,
@@ -565,8 +591,22 @@ export const COMMANDS = {
     run: () => {
       const s = useSettings.getState();
       s.setHideSystemFiles(!s.hideSystemFiles);
+      // The displayed rows are built once per load — the settings page
+      // pairs this toggle with the same rebuild (TICKET-058).
+      usePanes.getState().rebuildAll();
     },
     state: () => ({ checked: !useSettings.getState().hideSystemFiles }),
+  },
+  "view.foldersFirst": {
+    label: "menu.view.foldersFirst",
+    role: "check",
+    run: () => {
+      const s = useSettings.getState();
+      s.setFoldersFirst(!s.foldersFirst);
+      // Sorting happens while the rows are built, so it has to run again.
+      usePanes.getState().rebuildAll();
+    },
+    state: () => ({ checked: useSettings.getState().foldersFirst }),
   },
   "view.extCol": {
     label: "menu.view.extCol",
@@ -592,6 +632,9 @@ export const COMMANDS = {
     run: () => {
       const s = useSettings.getState();
       s.setGitEnabled(!s.gitEnabled);
+      // Same follow-up as the settings page: fetch or clear the status
+      // in both panes instead of only flipping the switch.
+      usePanes.getState().reloadGit();
     },
     state: () => ({ checked: useSettings.getState().gitEnabled }),
   },
@@ -660,6 +703,41 @@ export const COMMANDS = {
     dialog: true,
     shortcut: { mods: ["Mod"], key: "," },
     run: openSettings,
+  },
+  "cfg.general": {
+    label: "settings.cat.general",
+    dialog: true,
+    run: () => openSettings("general"),
+  },
+  "cfg.view": {
+    label: "settings.cat.view",
+    dialog: true,
+    run: () => openSettings("view"),
+  },
+  "cfg.colors": {
+    label: "settings.cat.colors",
+    dialog: true,
+    run: () => openSettings("colors"),
+  },
+  "cfg.files": {
+    label: "settings.cat.files",
+    dialog: true,
+    run: () => openSettings("files"),
+  },
+  "cfg.operations": {
+    label: "settings.cat.operations",
+    dialog: true,
+    run: () => openSettings("operations"),
+  },
+  "cfg.programs": {
+    label: "settings.cat.programs",
+    dialog: true,
+    run: () => openSettings("programs"),
+  },
+  "cfg.favorites": {
+    label: "settings.cat.favorites",
+    dialog: true,
+    run: () => openSettings("favorites"),
   },
   "theme.system": {
     label: "settings.theme.system",
@@ -828,6 +906,40 @@ function transferItems(): DynamicItem[] {
     }));
 }
 
+/**
+ * Saved profiles that are not connected yet — connecting runs the same
+ * two steps as the connection manager (connect, then show the remote root
+ * in the active pane). A failure has no dialog of its own here, so the
+ * manager is opened *with* the error rather than swallowing it.
+ */
+function profileItems(): DynamicItem[] {
+  const net = useNet.getState();
+  const live = new Set(
+    net.connections.filter((c) => c.connected).map((c) => c.id),
+  );
+  return net.profiles
+    .filter((p) => !live.has(p.id))
+    .map((p) => ({
+      id: `profile:${p.id}`,
+      label: p.name || p.host,
+      // Same one-line form the connection manager shows under the name.
+      detail: `${p.protocol}://${p.user}@${p.host}:${p.port}`,
+      run: () => {
+        void useNet
+          .getState()
+          .connect(p.id)
+          .then((address) => {
+            if (address) {
+              const s = usePanes.getState();
+              void s.loadDir(s.active, address);
+            } else {
+              useNet.getState().openManager(true);
+            }
+          });
+      },
+    }));
+}
+
 /** Connections that are live right now — open them in the active pane. */
 function connectionItems(): DynamicItem[] {
   return useNet
@@ -858,6 +970,7 @@ export const MENUS: MenuCategory[] = [
         nodes: [
           { kind: "list", build: openWithItems, empty: "menu.empty.programs" },
           sep(),
+          item("file.openWithOther"),
           item("file.programs"),
         ],
       },
@@ -904,6 +1017,15 @@ export const MENUS: MenuCategory[] = [
     label: "menu.commands",
     nodes: [
       item("cmd.search"),
+      {
+        kind: "sub",
+        label: "menu.cmd.searchMode",
+        nodes: [
+          item("cmd.searchDuplicates"),
+          item("cmd.searchEmptyDirs"),
+          item("cmd.searchLargeFiles"),
+        ],
+      },
       item("cmd.compareDirs"),
       sep(),
       {
@@ -953,6 +1075,17 @@ export const MENUS: MenuCategory[] = [
     label: "menu.net",
     nodes: [
       item("net.manage"),
+      {
+        kind: "sub",
+        label: "menu.net.connect",
+        nodes: [
+          {
+            kind: "list",
+            build: profileItems,
+            empty: "menu.empty.profiles",
+          },
+        ],
+      },
       {
         kind: "sub",
         label: "menu.net.active",
@@ -1006,6 +1139,7 @@ export const MENUS: MenuCategory[] = [
       },
       sep(),
       item("view.hidden"),
+      item("view.foldersFirst"),
       item("view.extCol"),
       item("view.permCol"),
       item("view.git"),
@@ -1025,6 +1159,19 @@ export const MENUS: MenuCategory[] = [
     label: "menu.config",
     nodes: [
       item("cfg.settings"),
+      {
+        kind: "sub",
+        label: "menu.cfg.pages",
+        nodes: [
+          item("cfg.general"),
+          item("cfg.view"),
+          item("cfg.colors"),
+          item("cfg.files"),
+          item("cfg.operations"),
+          item("cfg.programs"),
+          item("cfg.favorites"),
+        ],
+      },
       sep(),
       {
         kind: "sub",

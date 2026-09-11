@@ -7,16 +7,20 @@
 import { create } from "zustand";
 import { panelOf, usePanes, type Side } from "./panesStore";
 import { parentPath } from "@/lib/path";
+import type { SearchMode } from "@/ipc/client";
 
 interface SearchStore {
   side: Side | null;
-  open: (side: Side) => void;
+  /** Mode the dialog starts in — the Befehle menu opens it per mode. */
+  mode: SearchMode;
+  open: (side: Side, mode?: SearchMode) => void;
   close: () => void;
 }
 
 export const useSearchDialog = create<SearchStore>((set) => ({
   side: null,
-  open: (side) => set({ side }),
+  mode: "files",
+  open: (side, mode = "files") => set({ side, mode }),
   close: () => set({ side: null }),
 }));
 
@@ -37,6 +41,6 @@ export async function revealPath(side: Side, path: string): Promise<void> {
   if (idx >= 0) usePanes.getState().setCursor(side, idx);
 }
 
-export function openSearch(side: Side): void {
-  useSearchDialog.getState().open(side);
+export function openSearch(side: Side, mode?: SearchMode): void {
+  useSearchDialog.getState().open(side, mode);
 }

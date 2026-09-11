@@ -62,6 +62,9 @@ const STATUS_WARNING: Partial<Record<SearchStatus, TransKey>> = {
 export function SearchDialog() {
   const side = useSearchDialog((s) => s.side);
   const close = useSearchDialog((s) => s.close);
+  // Mode the caller asked for — the Befehle menu opens the dialog straight
+  // into "duplicates", "empty folders" or "large files" (TICKET-058).
+  const requestedMode = useSearchDialog((s) => s.mode);
   const t = useT();
 
   const [root, setRoot] = useState("");
@@ -85,10 +88,13 @@ export function SearchDialog() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Adopt the start folder on first open.
+  // Adopt the start folder and the requested mode on first open.
   const open = side !== null;
   useMemo(() => {
-    if (open && side) setRoot(searchRoot(side));
+    if (open && side) {
+      setRoot(searchRoot(side));
+      setMode(requestedMode);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 

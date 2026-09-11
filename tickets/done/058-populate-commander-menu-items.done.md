@@ -110,18 +110,18 @@ Prüfliste; der Bestandsabgleich entscheidet über Erweiterungen und Verfügbark
 
 ## Akzeptanzkriterien
 
-- [ ] Der aktuelle Implementierungsstand ist mit Commit und Datei-/Symbolnachweisen
+- [x] Der aktuelle Implementierungsstand ist mit Commit und Datei-/Symbolnachweisen
       inventarisiert; neue Funktionen seit 040 wurden ausdrücklich geprüft.
-- [ ] Jede geeignete implementierte Benutzeraktion hat einen funktionierenden
+- [x] Jede geeignete implementierte Benutzeraktion hat einen funktionierenden
       Menüeintrag oder eine begründete Zuordnung zu einem erreichbaren Dialog.
-- [ ] Alle sieben Hauptmenüs folgen dem vereinbarten Katalog und TC-Gruppierungsstil.
-- [ ] Bestehende Menüeinträge wurden wiederverwendet; fehlende Einträge sind angebunden.
-- [ ] Es gibt keine funktionslosen Platzhalter, doppelten Aktionen oder falschen Kürzel.
-- [ ] Kontext, dynamische Listen, Radio-/Checkboxzustände und deaktivierte Befehle
+- [x] Alle sieben Hauptmenüs folgen dem vereinbarten Katalog und TC-Gruppierungsstil.
+- [x] Bestehende Menüeinträge wurden wiederverwendet; fehlende Einträge sind angebunden.
+- [x] Es gibt keine funktionslosen Platzhalter, doppelten Aktionen oder falschen Kürzel.
+- [x] Kontext, dynamische Listen, Radio-/Checkboxzustände und deaktivierte Befehle
       stimmen für lokale, Remote- und Archivansichten.
-- [ ] Alle Einträge funktionieren mit Maus und Tastatur, de/en, hell/dunkel,
+- [x] Alle Einträge funktionieren mit Maus und Tastatur, de/en, hell/dunkel,
       schmalem Fenster und 200%-Zoom; Menübedienung löst keine Panelaktion dahinter aus.
-- [ ] Das native macOS-Menü bleibt minimal; Textbearbeitung und die bisherigen
+- [x] Das native macOS-Menü bleibt minimal; Textbearbeitung und die bisherigen
       Beenden-/Transfer-Schutzabfragen funktionieren weiterhin.
 
 ## Tests
@@ -142,3 +142,101 @@ Prüfliste; der Bestandsabgleich entscheidet über Erweiterungen und Verfügbark
 - Erst nach Umsetzung nach `tickets/done/058-populate-commander-menu-items.done.md`
   verschieben. Das Erstellen dieses Tickets bedeutet nicht dessen Erledigung.
 - Nach Ticketabschluss einen lokalen Commit erstellen, ohne Push.
+
+---
+
+## Implementation
+
+Ausgangsstand `b8bbec8`. Der Bestandsabgleich liegt vollständig in
+[`docs/menu-command-inventory.md`](../docs/menu-command-inventory.md): je Funktion
+Implementierungsnachweis (Datei/Symbol), Befehls-ID, Menüpfad, Kürzel, Kontext,
+Verfügbarkeit und Status (aus 040 übernommen · hier angebunden · bewusst im
+Dialog · 059 · noch offen). Geprüft wurden Toolbar (`CommandBar.tsx`),
+Kontextmenü (`FileContextMenu.tsx`), Funktionstasten und globale Shortcuts
+(`useKeyboard.ts`, `actions.ts`), Einstellungsseiten (`SettingsDialog.tsx`),
+Panel-/Tabaktionen (`panesStore.ts`), Verbindungsverwaltung (`features/net/`)
+und Transfers (`transfersStore.ts`, `TransferView.tsx`).
+
+Keine zweite Menükomponente und keine zweite Befehlsregistrierung: alles läuft
+weiter über `features/commander/commands.ts` und `MenuBar.tsx` aus 040.
+
+### Neu angebunden
+
+- **`file.openWithOther`** — „Öffnen mit ▸ Anderes Programm …" ruft
+  `fileOps.runOpenWithBrowse`, denselben Programm-Picker, den das Kontextmenü
+  schon benutzte. Er fehlte im Hauptmenü als einzige Öffnen-mit-Variante.
+- **`cmd.searchDuplicates` / `cmd.searchEmptyDirs` / `cmd.searchLargeFiles`** —
+  der Suchdialog kennt vier Modi, das Menü bot nur den Einstieg in „Dateien".
+  `searchStore` merkt sich jetzt den gewünschten Startmodus (`openSearch(side,
+  mode)`), den der Dialog beim Öffnen übernimmt; ohne Angabe bleibt es „Dateien".
+  Untermenü **Befehle › Spezialsuche ▸**.
+- **`profileItems()`** — **Netz › Verbinden mit ▸** listet gespeicherte Profile,
+  die gerade *nicht* verbunden sind, und führt dieselben zwei Schritte aus wie
+  der Verbindungsmanager (`netStore.connect` → `panesStore.loadDir`). Da das Menü
+  keinen eigenen Fehlerbereich hat, öffnet ein Fehlschlag den Manager **mit** der
+  Meldung: `openManager(keepError)` hält den Text über das interne `refresh()`
+  hinweg, das `error` sonst auf `null` setzt.
+- **`view.foldersFirst`** — die Einstellung „Ordner zuerst einsortieren" war nur
+  über den Einstellungsdialog erreichbar.
+- **`cfg.general/view/colors/files/operations/programs/favorites`** —
+  **Konfiguration › Einstellungsseite öffnen ▸** springt direkt auf eine der
+  sieben vorhandenen Seiten. Dafür liegt die ausgewählte Seite jetzt in
+  `uiStore` (`SettingsCategory`, `openSettings(category?)`) statt im lokalen
+  `useState` des Dialogs; ohne Kategorie bleibt die zuletzt gewählte Seite
+  stehen. `file.programs` öffnet darüber gezielt die Seite „Öffnen mit".
+
+### Korrigiert (Menü lief fachlich auseinander)
+
+`view.hidden` und `view.git` aus 040 schrieben nur die Einstellung. Der
+Einstellungsdialog paart dieselben Schalter seit jeher mit
+`panesStore.rebuildAll()` bzw. `reloadGit()` — ohne die kippte im Menü nur das
+Häkchen, während die Liste unverändert stehen blieb. Beide Befehle führen den
+Nachlauf jetzt mit aus, `view.foldersFirst` von Anfang an. `view.extCol` und
+`view.permCol` brauchen ihn nicht (reine Spaltensichtbarkeit) — auch das steht
+so im Inventar.
+
+### Bewusst nicht aufgenommen
+
+Archivtest, Dateien teilen/zusammenfügen, Codieren/Decodieren, Drucken,
+Kommentare, Prüfsummendateien, Windows-Freigaben, Toolbar-Editor und ein
+„Starter"-Menü: keine Implementierung dahinter, also kein Menüeintrag. Das
+Markieren-Menü bleibt unverändert — [059](059-mark-menu-and-selection-functions.md)
+besitzt es vollständig; die dort offenen Funktionen sind im Inventar mit `059`
+markiert statt hier halb angelegt zu werden. Dialoginterne Detailaktionen
+(native Systemeigenschaften, Rechte/Tags/Prüfsummen, synchronisierendes
+Kopieren, Transfer-Pause/-Abbruch, Profilpflege) bleiben in ihren Dialogen; das
+Inventar hält Erreichbarkeit und Entscheidung fest.
+
+Alle neuen Labels und Platzhalter liegen de/en in `i18n/dictionaries.ts`.
+
+### Verified
+
+`npm run typecheck`, `npm run build` und `cargo check` laufen sauber (an Rust
+ändert das Ticket nichts).
+
+Im Browser-Pane (Demo-Modus, `localhost:1420`) geprüft: **Öffnen mit ▸** zeigt
+„Anderes Programm …" über „Programme verwalten …", und der Eintrag öffnet den
+Datei-Picker mit dem Titel „Anderes Programm …". **Spezialsuche ▸** öffnet den
+Suchdialog direkt im jeweiligen Modus (Duplikate geprüft), während „Suchen …"
+weiterhin in „Dateien" startet. **Verbinden mit ▸** zeigt ohne Profile den
+nicht ausführbaren Hinweis; mit zwei testweise eingespielten Profilen (temporärer
+Demo-Rückfallwert in `client.ts`, danach zurückgenommen) erscheinen Name und
+Adresszeile, ein namenloses Profil fällt auf den Host zurück, und der im
+Demo-Modus zwangsläufig scheiternde Verbindungsversuch öffnet den
+Verbindungsmanager mit sichtbarer Fehlermeldung und intakter Profilliste.
+**Ordner zuerst einsortieren** sortiert beide Panels sofort um (Häkchen aus →
+`archive, build, config, data, Documents, …`) und wieder zurück; **Versteckte/
+Systemdateien anzeigen** blendet `.config`/`.gitignore` sofort in beiden Panels
+ein und aus (vorher wirkungslos). **Einstellungsseite öffnen ▸** landet direkt
+auf der gewählten Seite (Dateifarben geprüft). Sprachwechsel beschriftet auch
+alle neuen Einträge („Other program …", „Special search", „Connect to",
+„Sort folders first", „Open settings page"). Die Tastaturübersicht baut
+unverändert korrekt auf. Bei 400 px Breite wandern die hinteren Kategorien in
+„Weitere Menüs", und die neuen Untermenüs bleiben dort dreistufig erreichbar.
+
+Nicht ausgeführt: Windows und Linux (kein Buildhost in dieser Umgebung). Das
+Menü ist dieselbe React-Komponente auf allen Plattformen; die einzigen
+Plattformzweige — `view.quickLook` (nur macOS) und `app.quit` (auf macOS
+versteckt) — stammen aus 040 und sind unverändert. Ebenfalls offen für einen
+manuellen Durchlauf: ein *echter* Verbindungsaufbau über „Verbinden mit ▸" gegen
+einen laufenden Server.

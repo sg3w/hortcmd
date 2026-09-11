@@ -79,15 +79,7 @@ import {
 import { cn } from "@/lib/cn";
 import { consumeDialogKey } from "@/lib/keys";
 import { AppDialog } from "@/components/ui/AppDialog";
-
-type Category =
-  | "general"
-  | "view"
-  | "colors"
-  | "files"
-  | "operations"
-  | "programs"
-  | "favorites";
+import { useUi, type SettingsCategory as Category } from "@/store/uiStore";
 
 /** Options for the size segmentation (small/medium/large). */
 const SCALE_OPTIONS: { value: Scale; key: TransKey }[] = [
@@ -107,7 +99,10 @@ interface Props {
 export function SettingsDialog({ open, onOpenChange }: Props) {
   const t = useT();
   const close = () => onOpenChange?.(false);
-  const [category, setCategory] = useState<Category>("general");
+  // The selected page lives in `uiStore`, so the Konfiguration menu can
+  // open the dialog directly on one of them (TICKET-058).
+  const category = useUi((s) => s.settingsCategory);
+  const setCategory = useUi((s) => s.setSettingsCategory);
   const [leftFrac, setLeftFrac] = useState(MIN_FRAC);
   const bodyRef = useRef<HTMLDivElement>(null);
 
