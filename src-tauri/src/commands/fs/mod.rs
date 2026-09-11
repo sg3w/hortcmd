@@ -3,7 +3,9 @@
 //   dir     – read directories/drives
 //   size    – recursive folder size (background + cancellable)
 //   volume  – capacity/usage of a drive or mount point
-//   file    – copy/move/delete/folders + transfer infra
+//   file    – the copy/move/delete/folder *commands* (thin adapters)
+//   transfer – the engine behind them: events, operation registries,
+//             progress, planning/commit, sequential and parallel copy
 //   preview – file preview (F3) + open with default program (F4)
 //   archive – ZIP: browse, extract, pack
 //   walk    – reusable local directory traversal (search, sizes)
@@ -24,6 +26,7 @@ pub mod search;
 pub mod selection;
 pub mod size;
 pub mod tags;
+pub mod transfer;
 pub mod volume;
 pub mod walk;
 pub mod watch;
@@ -33,5 +36,5 @@ pub mod watch;
 /// (ticket 029) without making the engine's internals public.
 #[cfg(test)]
 pub mod staging_test_support {
-    pub(crate) use super::file::commit;
+    pub(crate) use super::transfer::plan::commit;
 }

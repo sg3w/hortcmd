@@ -6,7 +6,7 @@
 // by the backend (target folders are created as needed).
 // ============================================================
 
-use super::file::OpResult;
+use super::transfer::OpResult;
 use crate::vfs::caps::{self, Capability};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};

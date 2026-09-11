@@ -22,7 +22,7 @@ use zip::{ZipArchive, ZipWriter};
 
 use super::attrs;
 use super::dir::{DirEntry, DirListing};
-use super::file::{spawn_op, OpDone, Prog};
+use super::transfer::{spawn_op, OpDone, Prog};
 use crate::vfs::caps::{self, Capability};
 
 /// Sentinel error: the archive/entry is encrypted, but no password
@@ -525,7 +525,7 @@ fn run_extract(
     let all = targets.is_empty();
 
     let mut prog = Prog {
-        app: app.clone(),
+        sink: Arc::new(app.clone()),
         id: id.clone(),
         op: "extract".into(),
         files_total: 0,
@@ -621,7 +621,7 @@ fn run_pack(
         .sum();
 
     let mut prog = Prog {
-        app: app.clone(),
+        sink: Arc::new(app.clone()),
         id: id.clone(),
         op: "pack".into(),
         files_total,
