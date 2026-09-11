@@ -94,24 +94,35 @@ store/
 ├── settingsStore.ts         language/theme/system files (localStorage-persisted)
 ├── clipboardStore.ts        Copy/Cut → Paste (metadata)
 ├── opsStore.ts              confirm/input dialogs, collision queue, preview, busy
+├── uiStore.ts               open state of the app-level dialogs reachable from
+│                            several places (settings, shortcuts, about; TICKET-040)
 └── transfersStore.ts        running Copy/Move/Extract/Pack operations (two bars)
 i18n/dictionaries.ts         de/en + t() mechanism
 features/panel/              Panel · TabBar · DriveSelect · PathBar · StatusBar
                              · FileTable (Table+Virtual) · columns
 features/commander/          useKeyboard · navigate · actions · fileOps · preview
-                             · selection · FunctionBar
+                             · selection · FunctionBar · CommandBar
+                             · commands.ts (shared command definition + menu tree,
+                               TICKET-040) · MenuBar · nativeMenu (macOS bridge)
 features/net/                remote connections (021): netStore · ConnectionsDialog
                              (profiles CRUD + connect/disconnect; DriveSelect group);
                              SSH terminal (026): terminalStore · SshTerminal (xterm.js)
 components/ui/               FileContextMenu · SettingsDialog · OperationDialogs
                              · PreviewDialog · TransferView
-lib/                         format · fileIcon · cn · path · glob
+                             · ShortcutsDialog · AboutDialog (Help menu, TICKET-040)
+lib/                         format · fileIcon · cn · path · glob · keys · shortcut
 ```
 
 **Backend (`src-tauri/src/`)**
 
 ```
 main.rs · lib.rs             binary entry + command registration
+menu.rs                     reduced native macOS menu (app/edit/window only;
+                            TICKET-040). No "Close Window" — ⌘W belongs to the
+                            panel tab; Quit closes the window so the running-
+                            transfer guard applies. About/Settings/Quit emit the
+                            `native-menu` event; `set_menu_language` rebuilds it.
+                            No native menu on Windows/Linux.
 vfs/                         VFS abstraction (identical UI) — tickets 020/022–025
 ├── mod.rs                   Provider trait · Scheme · Address parser · scheme registry
 │                            (resolve: address → Arc<Provider> + provider path);
@@ -193,8 +204,52 @@ filter and the `..` row are applied on rebuild.
 | Typing (letter/digit) | Quick filter of the active list · `Esc` clears |
 | `F3`…`F8` | View · Edit · Copy · Move · New Folder · Delete |
 | `Alt+F5` | Pack · `Cmd+C/X/V` clipboard · `Cmd+T/W` open/close tab |
+| `Alt+F7` | Search · `Alt+←/→` history · `Alt+Enter` properties |
+| `Cmd/Ctrl+,` | Settings (on macOS also from the native app menu) |
 
-Global listener in `useKeyboard.ts`; focus in input fields takes precedence.
+Global listener in `useKeyboard.ts`; focus in input fields takes precedence, and
+so does an open dialog or menu (`lib/keys.ts` marker + `role="menu"` guard), so a
+keystroke never triggers both a menu action and a file action (TICKET-040).
+The shortcuts shown in the menu come from the same command definition as the
+Help → keyboard overview (`features/commander/commands.ts`), rendered per
+platform by `lib/shortcut.ts` (⌘C on macOS, Ctrl+C elsewhere).
+
+### Application menu (TICKET-040)
+
+The complete menu lives **in the window**, above the toolbar, on macOS, Windows
+and Linux alike (`features/commander/MenuBar.tsx`, Radix Menubar). Categories in
+order: **Dateien · Markieren · Befehle · Netz · Ansicht · Konfiguration**, with
+**Hilfe** pushed to the right but inside the same `Menubar.Root`, so arrow keys
+walk the whole bar. Categories that no longer fit a narrow window move into a
+"Weitere Menüs" category instead of being cut off.
+
+Every entry is a command from `features/commander/commands.ts`: stable id,
+translation key, shortcut, `run`, and a `state()` returning hidden / disabled
+(+ reason) / checked. Commands delegate to the existing runners (`actions.ts`,
+`fileOps.ts`, `selection.ts`) and store actions — the menu adds no second
+implementation of any file operation. `runCommand` re-evaluates `state()` right
+before executing, so a menu left open across a folder change or a dropped remote
+connection cannot act on a stale context.
+
+| Menu | Commands |
+|---|---|
+| Dateien | open · view (F3) · edit (F4) · open with ▸ (configured programs, manage) ‖ copy (F5) · move (F6) · rename (F2) · new folder (F7) · delete (F8) · delete permanently (⇧F8) ‖ clipboard copy/cut/paste (⌘C/X/V) ‖ pack (⌥F5) · extract · batch rename · compare files by content ‖ properties (⌥⏎) ‖ quit (Windows/Linux only) |
+| Markieren | select/unselect group (+/−) · invert (*) ‖ select all visible entries · select none ‖ copy file names · copy full paths · export file list |
+| Befehle | search (⌥F7) · compare/synchronize directories ‖ navigation ▸ (back ⌥←, forward ⌥→, parent) · favorites ▸ · recent folders ▸ ‖ terminal in the current folder · open in the system file manager ‖ transfers ▸ (running/queued, opens the existing transfer dialog) |
+| Netz | manage connections · active connections ▸ ‖ disconnect current connection · open SSH terminal |
+| Ansicht | layout ▸ (radio) · sort by ▸ (key + ascending/descending, radio) ‖ hidden files · extension column · permissions column · Git status (checkboxes) ‖ reset quick filter ‖ new tab (⌘T) · close tab (⌘W) · open folder under cursor in a new tab ‖ refresh pane · Quick Look (macOS) |
+| Konfiguration | settings (⌘,) ‖ appearance ▸ (system/light/dark) · language ▸ (de/en) |
+| Hilfe | keyboard shortcuts (generated from the same command definition) · about hortcmd |
+
+Sorting from the menu uses the explicit adapters `setSortKey`/`setSortAsc`
+(`panesStore`); the column-click `setSort` keeps its toggle behavior.
+
+**macOS system menu** is reduced to **hortcmd · Bearbeiten · Fenster**
+(`src-tauri/src/menu.rs`). The Edit items are what gives the WebView's text
+fields their native copy/paste/undo key equivalents — that is *text* undo, not
+file undo (TICKET-048). Tauri's default "Close Window" item is gone so ⌘W stays
+"close tab", and Quit closes the window instead of terminating the process, so
+the running-transfer guard from TICKET-004 still applies.
 
 ---
 
@@ -220,10 +275,13 @@ Global listener in `useKeyboard.ts`; focus in input fields takes precedence.
 | `extract_entries` | `id, archive, base, names[], destDir` | – (events) | ✅ |
 | `create_archive` | `id, sources[], destZip` | – (events) | ✅ |
 | `set_watched` | `paths[]` | – (events) | ✅ |
+| `set_menu_language` | `lang` | – (rebuilds the native macOS menu) | ✅ |
 
 **Events:** `fs-progress` (`OpProgress` – per-file + overall progress), `fs-done`
 (`OpDone` – ok/errors/cancelled), `fs-collision` (`CollisionReq` – blocks until answer),
-`fs-changed` (folder path – external change, triggers a debounced auto-refresh).
+`fs-changed` (folder path – external change, triggers a debounced auto-refresh),
+`native-menu` (id of a reduced-native-menu item — `app.about`/`app.settings`/
+`app.quit`, routed to the same commands as the in-window menu, TICKET-040).
 Types are generated with **ts-rs** (`npm run gen:types` → `src/ipc/bindings/`); the
 `client.ts` wrapper has a demo fallback for the browser without Tauri.
 
@@ -514,6 +572,16 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
       lazily loaded; single click selects, double click/Enter loads into the list
 - [x] **Command bar** with icons for special functions (Refresh, Up, New Folder,
       View, Pack, Settings) + view switcher for the active pane
+- [x] **Application menu in the window** (TICKET-040): the former clickable
+      `span` placeholders in `App.tsx` became a real, keyboard-operable Radix
+      menubar over a shared command definition (`features/commander/commands.ts`)
+      that menu, Help → keyboard overview and the native macOS menu all read from;
+      states (enabled + reason, checkbox, radio) are re-checked before execution.
+      macOS keeps only a reduced native menu (app · edit · window) without the
+      ⌘W "Close Window" item. Full structure and command mapping: §6
+      "Application menu". Follow-ups: [058](tickets/058-populate-commander-menu-items.md)
+      completes the inventory, [059](tickets/059-mark-menu-and-selection-functions.md)
+      owns the full Mark menu.
 - [x] **Breadcrumb navigation** in the path bar (clickable segments jump into the
       respective folder; also works inside archives)
 - [x] **Make the archive visible**: amber badge "📦 archive.zip ›" in the path bar (fixed

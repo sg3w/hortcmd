@@ -37,6 +37,7 @@ import { openSearch } from "@/store/searchStore";
 import { useHistory } from "@/store/historyStore";
 import { useNet } from "@/features/net/netStore";
 import { useOps } from "@/store/opsStore";
+import { openSettings } from "@/store/uiStore";
 import { translate, useT } from "@/store/settingsStore";
 import type { TransKey } from "@/i18n/dictionaries";
 import { baseName } from "@/lib/path";
@@ -68,11 +69,7 @@ const VIEWS: { mode: ViewMode; label: TransKey; Icon: LucideIcon }[] = [
   { mode: "tree", label: "view.tree", Icon: FolderTree },
 ];
 
-interface Props {
-  onOpenSettings: () => void;
-}
-
-export function CommandBar({ onOpenSettings }: Props) {
+export function CommandBar() {
   const active = usePanes((s) => s.active);
   const viewMode = usePanes((s) => s[s.active].viewMode);
   const canBack = usePanes((s) => panelOf(s, s.active).historyIndex > 0);
@@ -177,7 +174,11 @@ export function CommandBar({ onOpenSettings }: Props) {
 
       <div className="ml-auto" />
 
-      <ToolButton title={t("tb.settings")} Icon={Settings} onClick={onOpenSettings} />
+      <ToolButton
+        title={t("tb.settings")}
+        Icon={Settings}
+        onClick={openSettings}
+      />
     </div>
   );
 }

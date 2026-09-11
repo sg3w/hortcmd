@@ -22,19 +22,23 @@ import { useSession } from "@/store/sessionStore";
 import { useTransfers } from "@/store/transfersStore";
 import { useOps } from "@/store/opsStore";
 import { useSettings, useT } from "@/store/settingsStore";
-import type { TransKey } from "@/i18n/dictionaries";
+import { useUi } from "@/store/uiStore";
 import { initWindowState } from "@/lib/windowState";
 import { useFileColorVars, type ThemeMode } from "@/lib/fileColors";
 import { useKeyboard } from "@/features/commander/useKeyboard";
+import { useNativeMenu } from "@/features/commander/nativeMenu";
 import {
   handleExtractDone,
   reloadBoth,
   startNextQueued,
 } from "@/features/commander/fileOps";
+import { MenuBar } from "@/features/commander/MenuBar";
 import { CommandBar } from "@/features/commander/CommandBar";
 import { FunctionBar } from "@/features/commander/FunctionBar";
 import { Panel } from "@/features/panel/Panel";
 import { SettingsDialog } from "@/components/ui/SettingsDialog";
+import { ShortcutsDialog } from "@/components/ui/ShortcutsDialog";
+import { AboutDialog } from "@/components/ui/AboutDialog";
 import { OperationDialogs } from "@/components/ui/OperationDialogs";
 import { FileBrowserDialog } from "@/components/ui/FileBrowserDialog";
 import { ExportDialog } from "@/components/ui/ExportDialog";
@@ -48,20 +52,9 @@ import { ConnectionsDialog } from "@/features/net/ConnectionsDialog";
 import { SshTerminalWindow } from "@/features/net/SshTerminal";
 import { TransferTray, TransferWindow } from "@/components/ui/TransferView";
 
-const MENU: { key: TransKey; action?: "settings" }[] = [
-  { key: "menu.files" },
-  { key: "menu.mark" },
-  { key: "menu.commands" },
-  { key: "menu.net" },
-  { key: "menu.view" },
-  { key: "menu.config", action: "settings" },
-  { key: "menu.help" },
-];
-
 export default function App() {
   const [drives, setDrives] = useState<Drive[]>([]);
   const [ready, setReady] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [resolvedTheme, setResolvedTheme] = useState<ThemeMode>("dark");
   const loadDir = usePanes((s) => s.loadDir);
   const activePath = usePanes((s) => panelOf(s, s.active).path);
@@ -69,12 +62,13 @@ export default function App() {
   const theme = useSettings((s) => s.theme);
   const paneSplit = useSettings((s) => s.paneSplit);
   const setPaneSplit = useSettings((s) => s.setPaneSplit);
+  const settingsOpen = useUi((s) => s.settingsOpen);
+  const setSettingsOpen = useUi((s) => s.setSettingsOpen);
   const t = useT();
   const mainRef = useRef<HTMLDivElement>(null);
 
   useKeyboard();
-
-  const openSettings = () => setSettingsOpen(true);
+  useNativeMenu();
 
   const startSplitDrag = (e: MouseEvent) => {
     e.preventDefault();
@@ -260,24 +254,11 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Menüleiste */}
-      <header className="flex flex-shrink-0 items-center gap-0.5 border-b border-edge bg-header px-2 py-[3px]">
-        {MENU.map((m) => (
-          <span
-            key={m.key}
-            onClick={() => m.action === "settings" && openSettings()}
-            className="cursor-default rounded px-2 py-0.5 hover:bg-accent-dim"
-          >
-            {t(m.key)}
-          </span>
-        ))}
-        <span className="ml-auto font-semibold tracking-wide text-dim">
-          hortcmd
-        </span>
-      </header>
+      {/* Anwendungsmenü (TICKET-040) */}
+      <MenuBar />
 
       {/* Commandbar (Sonderfunktionen + Ansichtsumschalter) */}
-      <CommandBar onOpenSettings={openSettings} />
+      <CommandBar />
 
       {/* Zwei-Fenster-Bereich (Splitter verschiebbar) */}
       <main ref={mainRef} className="flex min-h-0 flex-1">
@@ -327,6 +308,8 @@ export default function App() {
       <FunctionBar />
 
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <ShortcutsDialog />
+      <AboutDialog />
       <OperationDialogs />
       <FileBrowserDialog />
       <RenameDialog />

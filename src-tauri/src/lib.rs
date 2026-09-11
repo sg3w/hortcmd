@@ -3,12 +3,19 @@
 // ============================================================
 
 mod commands;
+mod menu;
 mod net;
 mod vfs;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // The window carries the full Commander menu; macOS additionally
+        // gets a reduced native menu (TICKET-040).
+        .setup(|app| {
+            menu::install(app.handle())?;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::fs::dir::list_dir,
             commands::fs::dir::list_drives,
@@ -59,6 +66,7 @@ pub fn run() {
             net::terminal::ssh_send,
             net::terminal::ssh_resize,
             net::terminal::ssh_close,
+            menu::set_menu_language,
         ])
         .run(tauri::generate_context!())
         .expect("Fehler beim Start der Tauri-Anwendung");

@@ -13,6 +13,7 @@ import { invertSelection, promptSelect } from "./selection";
 import { openEntry } from "./navigate";
 import { openProps } from "@/store/propsStore";
 import { openSearch } from "@/store/searchStore";
+import { openSettings } from "@/store/uiStore";
 import { joinPath } from "@/lib/path";
 import { isDialogKey } from "@/lib/keys";
 
@@ -71,6 +72,16 @@ export function useKeyboard(): void {
       if (document.querySelector('[role="dialog"]')) {
         return;
       }
+      // An open menu (application menu, context menu, dropdown) owns the
+      // keyboard: arrows navigate it and printable characters drive its
+      // type-ahead. Without this guard they would additionally fill the
+      // quick filter or run a file action behind the menu (TICKET-040).
+      if (el instanceof Element && el.closest('[role="menu"],[role="menubar"]')) {
+        return;
+      }
+      if (document.querySelector('[role="menu"][data-state="open"]')) {
+        return;
+      }
 
       const s = usePanes.getState();
       const side = s.active;
@@ -117,6 +128,11 @@ export function useKeyboard(): void {
           case "w":
             e.preventDefault();
             return s.closeTab(side, s[side].activeTab);
+          case ",":
+            // Settings (TICKET-040). On macOS the native app menu owns
+            // this accelerator; here it covers Windows/Linux as well.
+            e.preventDefault();
+            return openSettings();
         }
       }
 

@@ -112,7 +112,12 @@ interface PanesStore {
   shiftTo: (side: Side, index: number) => void;
   invertSelection: (side: Side) => void;
   selectPattern: (side: Side, pattern: string, add: boolean) => void;
+  /** Toolbar/column click: same key toggles the direction. */
   setSort: (side: Side, key: SortKey) => void;
+  /** Menu: set the sort key without toggling (TICKET-040). */
+  setSortKey: (side: Side, key: SortKey) => void;
+  /** Menu: set the sort direction explicitly (TICKET-040). */
+  setSortAsc: (side: Side, asc: boolean) => void;
   /** Set the quick filter of the active tab (filter while typing). */
   setFilter: (side: Side, filter: string) => void;
 
@@ -140,6 +145,21 @@ function newTab(path = ""): TabState {
     git: null,
     history: path ? [path] : [],
     historyIndex: path ? 0 : -1,
+  };
+}
+
+/** Applies a sort order to a tab and rebuilds its visible rows. */
+function applySort(
+  t: TabState,
+  sort: { key: SortKey; asc: boolean },
+): TabState {
+  return {
+    ...t,
+    sort,
+    entries: rebuildEntries(t.raw, t.path, sort, t.archive !== null, t.filter),
+    cursor: 0,
+    anchor: 0,
+    shiftBase: null,
   };
 }
 
@@ -535,19 +555,16 @@ export const usePanes = create<PanesStore>((set, get) => ({
 
   setSort: (side, key) =>
     set(
-      withActiveTab(get(), side, (t) => {
-        const asc = t.sort.key === key ? !t.sort.asc : true;
-        const sort = { key, asc };
-        return {
-          ...t,
-          sort,
-          entries: rebuildEntries(t.raw, t.path, sort, t.archive !== null, t.filter),
-          cursor: 0,
-          anchor: 0,
-          shiftBase: null,
-        };
-      }),
+      withActiveTab(get(), side, (t) =>
+        applySort(t, { key, asc: t.sort.key === key ? !t.sort.asc : true }),
+      ),
     ),
+
+  setSortKey: (side, key) =>
+    set(withActiveTab(get(), side, (t) => applySort(t, { ...t.sort, key }))),
+
+  setSortAsc: (side, asc) =>
+    set(withActiveTab(get(), side, (t) => applySort(t, { ...t.sort, asc }))),
 
   setFilter: (side, filter) =>
     set(

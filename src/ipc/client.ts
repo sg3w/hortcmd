@@ -355,6 +355,7 @@ const changedSubs = new Set<(dir: string) => void>();
 const gitReadySubs = new Set<(path: string, status: GitStatus) => void>();
 const termDataSubs = new Set<(d: TermData) => void>();
 const termClosedSubs = new Set<(c: TermClosed) => void>();
+const nativeMenuSubs = new Set<(id: string) => void>();
 let tauriWired = false;
 
 async function ensureTauriEvents(): Promise<void> {
@@ -380,6 +381,23 @@ async function ensureTauriEvents(): Promise<void> {
   listen<TermClosed>("ssh-term-closed", (e) =>
     termClosedSubs.forEach((f) => f(e.payload)),
   );
+  listen<string>("native-menu", (e) =>
+    nativeMenuSubs.forEach((f) => f(e.payload)),
+  );
+}
+
+/** Rebuilds the reduced native macOS menu in `lang` (TICKET-040).
+ *  Only the frontend knows the persisted language setting. */
+export function setMenuLanguage(lang: string): void {
+  if (!hasTauri) return;
+  void invoke<void>("set_menu_language", { lang });
+}
+
+/** Subscribes to clicks in the reduced native macOS menu (TICKET-040). */
+export function onNativeMenu(cb: (id: string) => void): () => void {
+  nativeMenuSubs.add(cb);
+  void ensureTauriEvents();
+  return () => nativeMenuSubs.delete(cb);
 }
 
 /** Subscribes to shell output (base64 chunks) of all SSH terminals. */

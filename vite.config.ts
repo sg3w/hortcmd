@@ -1,11 +1,21 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "path";
+import { readFileSync } from "fs";
+
+// Version aus der package.json — der Über-Dialog (TICKET-040) zeigt die
+// tatsächliche Version und darf sie nicht fest verdrahten.
+const pkg = JSON.parse(
+  readFileSync(resolve(__dirname, "package.json"), "utf8"),
+) as { version: string };
 
 // Tauri erwartet einen festen Port und lauscht im Dev-Modus lokal.
 export default defineConfig({
   plugins: [react()],
   clearScreen: false,
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   resolve: {
     alias: {
       "@": resolve(__dirname, "src"),

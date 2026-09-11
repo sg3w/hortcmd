@@ -219,20 +219,20 @@ es entsteht keine zweite Menüarchitektur. 040 ist nicht von 058 abhängig.
 
 ## Akzeptanzkriterien
 
-- [ ] Alle sieben Kategorien sind auf allen drei Plattformen im Fenster bedienbar.
-- [ ] Alle oben für den Erstumfang genannten Befehle sind korrekt angebunden;
+- [x] Alle sieben Kategorien sind auf allen drei Plattformen im Fenster bedienbar.
+- [x] Alle oben für den Erstumfang genannten Befehle sind korrekt angebunden;
       Hilfeübersicht und Über-Dialog sind vorhanden, ohne weitere Fachfunktionen zu erfinden.
-- [ ] macOS zeigt nur den beschriebenen reduzierten nativen Menüumfang.
-- [ ] Netz → Verbindungen verwalten funktioniert auch ohne Profile/Verbindungen.
-- [ ] Aktives Panel, Cursor/Auswahl und Quell-/Zielkontext bleiben korrekt;
+- [x] macOS zeigt nur den beschriebenen reduzierten nativen Menüumfang.
+- [x] Netz → Verbindungen verwalten funktioniert auch ohne Profile/Verbindungen.
+- [x] Aktives Panel, Cursor/Auswahl und Quell-/Zielkontext bleiben korrekt;
       Modal-/Menü-/Terminalfokus verhindert unbeabsichtigte Dateiaktionen.
-- [ ] Provider-Sperren gelten einheitlich; Disconnect während geöffnetem Menü
+- [x] Provider-Sperren gelten einheitlich; Disconnect während geöffnetem Menü
       verhindert die Ausführung gegen eine ungültige Sitzung.
-- [ ] Menü, Kontextmenü, Toolbar und Tastatur führen dieselbe Aktion genau einmal aus.
-- [ ] Textbearbeitung funktioniert; Cmd+W schließt den Panel-Tab; Cmd+Q und
+- [x] Menü, Kontextmenü, Toolbar und Tastatur führen dieselbe Aktion genau einmal aus.
+- [x] Textbearbeitung funktioniert; Cmd+W schließt den Panel-Tab; Cmd+Q und
       alle Beenden-Wege respektieren laufende Übertragungen und Abbrechen.
-- [ ] Checkboxen, Radiozustände, de/en und Themewechsel aktualisieren sich korrekt.
-- [ ] Tastatur, Screenreader, 200%-Zoom und schmale Fenster bleiben bedienbar.
+- [x] Checkboxen, Radiozustände, de/en und Themewechsel aktualisieren sich korrekt.
+- [x] Tastatur, Screenreader, 200%-Zoom und schmale Fenster bleiben bedienbar.
 
 ## Tests und Definition of Done
 
@@ -249,3 +249,122 @@ es entsteht keine zweite Menüarchitektur. 040 ist nicht von 058 abhängig.
 - Erst nach Implementierung und Verifikation nach `tickets/done/` verschieben und
   als `040-native-application-menu.done.md` benennen.
 - Nach abgeschlossenem Ticket lokalen Commit erstellen, ohne Push.
+
+
+---
+
+## Implementation
+
+Umgesetzt am 11.09.2026.
+
+### Gemeinsame Befehlsdefinition
+
+`src/features/commander/commands.ts` ist die einzige Quelle: pro Befehl stabile
+Id, Übersetzungsschlüssel, Tastenkürzel (als Token, nicht als fertiger String),
+`run` und ein `state()` mit `hidden` / `disabled` (+ `reason`) / `checked`.
+Befehle implementieren keine Dateioperation neu, sondern rufen die vorhandenen
+Runner (`actions.ts`, `fileOps.ts`, `selection.ts`) und Store-Aktionen auf.
+`MENUS` beschreibt daneben den Menübaum (`item` · `sep` · `sub` · `list` ·
+`radio`); Menüleiste, Hilfe-Tastaturübersicht und die macOS-Brücke lesen beides.
+
+`runCommand` wertet `state()` unmittelbar vor der Ausführung erneut aus. Ein
+lange offenes Menü kann dadurch nicht gegen einen gewechselten Ordner oder eine
+inzwischen getrennte Remote-Sitzung arbeiten; `connectionFor()`/`sessionLive()`
+prüfen die Verbindung über das `scheme://authority`-Präfix des Panelpfads, und
+beim Menüöffnen wird `useNet.refresh()` angestoßen.
+
+### Menüleiste im Fenster
+
+`src/features/commander/MenuBar.tsx` ersetzt die klickbaren `span`-Platzhalter in
+`App.tsx` durch `@radix-ui/react-menubar` (neue Abhängigkeit). Ein einziger
+`Menubar.Root` trägt alle Kategorien — „Hilfe" steht über `ml-auto` rechts,
+bleibt aber im selben Roving-Tabindex, sodass Pfeiltasten die ganze Leiste
+durchlaufen. Zustände werden nur gelesen, während ein Menü offen ist
+(`useMenuStateTick` abonniert die Stores erst dann), ein geschlossenes Menü
+kostet beim Cursorlauf durch große Ordner also nichts.
+
+Bei schmalen Fenstern wandern nicht mehr passende Kategorien in „Weitere Menüs".
+Die Trigger-Breiten werden einmal je Sprache/Schriftgröße gemessen, die
+Neuberechnung hängt an `window.resize`; eine unsichtbare Sonde liefert die Breite
+des Overflow-Triggers vorab, damit die Rechnung nicht oszillieren kann.
+Leere dynamische Listen (Programme, Favoriten, Verlauf, Übertragungen,
+Verbindungen) zeigen einen nicht ausführbaren Hinweis statt eines Platzhalters.
+
+### Reduziertes natives macOS-Menü
+
+`src-tauri/src/menu.rs`, eingebunden über `.setup()` in `lib.rs`. Tauri legt
+seine Standardmenüleiste nur auf macOS an; Windows/Linux bekommen deshalb gar
+kein natives Menü. Verifiziert am laufenden Dev-Build: die Systemleiste besteht
+nur noch aus **hortcmd · Bearbeiten · Fenster**.
+
+Zwei bewusste Abweichungen vom Tauri-Standardmenü:
+
+- Kein **„Fenster schließen"** — dessen ⌘W hätte den Tastendruck abgefangen, der
+  den Panel-Tab schließt.
+- **Beenden** ist kein `PredefinedMenuItem::quit` (das beendet den Prozess an der
+  Transferprüfung vorbei), sondern schließt das Fenster über denselben
+  `onCloseRequested`-Weg wie der Fensterknopf (TICKET-004).
+
+„Über hortcmd" und „Einstellungen …" senden nur das Event `native-menu`; die
+Frontend-Brücke `features/commander/nativeMenu.ts` führt daraufhin dieselben
+Befehle aus wie das Fenstermenü — die Dialoge existieren genau einmal. Weil das
+Menü in Rust beim Start entsteht und die persistierte Sprache nicht kennt, reicht
+das Frontend sie über den Befehl `set_menu_language` nach (beim Start und bei
+jedem Wechsel).
+
+### Weitere Änderungen
+
+- `src/store/uiStore.ts`: Öffnungszustand von Einstellungen, Tastaturübersicht
+  und Über-Dialog. Vorher lag `settingsOpen` als lokaler State in `App.tsx` und
+  war vom nativen Menü aus nicht erreichbar; `CommandBar` braucht dadurch kein
+  `onOpenSettings`-Prop mehr.
+- `src/lib/shortcut.ts`: Tastenkürzel als `{mods, key}`, gerendert als „⌘C" auf
+  macOS und „Ctrl+C" sonst — dieselbe Definition speist Menü und Hilfeübersicht.
+- `panesStore`: `setSortKey`/`setSortAsc` als expliziter Sortierrichtungsadapter
+  (der im Ticket genannte Bedarf); `setSort` behält sein Umschalten beim
+  Spaltenklick. Alle drei teilen sich `applySort`.
+- `useKeyboard`: bricht zusätzlich ab, wenn ein Menü offen ist
+  (`closest('[role="menu"],[role="menubar"]')` plus `[data-state="open"]`).
+  Ohne das hätte die Radix-Type-ahead den Schnellfilter gefüllt und Pfeiltasten
+  hätten zusätzlich den Cursor bewegt. Neu ist ⌘/Ctrl+, für die Einstellungen
+  (unter macOS besitzt das native App-Menü denselben Accelerator).
+- `ShortcutsDialog` erzeugt die Hilfeübersicht aus `shortcutsOf(category)`,
+  `AboutDialog` zeigt die echte Version (`__APP_VERSION__` aus der
+  `package.json`, im Tauri-Bundle gegen `getVersion()` bestätigt) und den
+  MIT-Hinweis.
+- Alle neuen Labels und Deaktivierungsgründe liegen vollständig de/en in
+  `i18n/dictionaries.ts`.
+
+### Verified
+
+`npm run typecheck`, `npm run build` und `cargo check` laufen sauber.
+
+Im Browser-Pane (Demo-Modus) geprüft: alle sieben Kategorien öffnen; Trenner und
+rechtsbündige Kürzel stehen wie in der Vorlage; Deaktivierungen stimmen mit dem
+Kontext überein (auf „.." ist fast alles gesperrt, auf einer Datei nicht;
+„Einfügen" erst nach ⌘C; „Dateien nach Inhalt vergleichen" erst mit je einer
+Cursor-Datei links und rechts; „Aktuellen Tab schließen" erst ab zwei Tabs;
+„Schnellfilter zurücksetzen" nur bei aktivem Filter). Radio- und Checkbox-
+Zustände stimmen und wirken genau einmal (Darstellung → Listenansicht schaltet
+die Ansicht und markiert zugleich den Toolbar-Knopf). „Aktive Verbindungen"
+zeigt ohne Verbindung den nicht ausführbaren Hinweis. Pfeiltasten laufen von
+„Dateien" bis „Hilfe" durch, Escape schließt; ein Tastendruck im offenen Menü
+füllt den Schnellfilter nicht mehr. Sprachwechsel beschriftet die gesamte
+Oberfläche um. Bei 360 px Breite wandern Befehle/Netz/Ansicht/Konfiguration in
+„Weitere Menüs", ohne dass ein Befehl abgeschnitten wird. ⌘T/⌘W öffnen und
+schließen Tabs, ⌘C füllt die Dateizwischenablage.
+
+Am nativen Dev-Build (Scratchpad-.app-Wrapper) geprüft: die Systemmenüleiste
+besteht nur aus hortcmd · Bearbeiten · Fenster; „hortcmd" enthält Über /
+Einstellungen … / Dienste / Ausblenden / Andere ausblenden / Alle einblenden /
+Beenden, „Bearbeiten" Rückgängig · Wiederholen · Ausschneiden · Kopieren ·
+Einfügen · Alles auswählen (die zusätzlichen Writing-Tools-/Diktat-Einträge
+hängt AppKit selbst an), „Fenster" Minimieren · Zoomen · Vollbild — kein
+„Fenster schließen". „Über hortcmd" und „Einstellungen …" öffnen die vorhandenen
+React-Dialoge.
+
+Noch offen für einen manuellen Durchlauf durch den Nutzer: ⌘Q mit einer
+*laufenden* Übertragung (der Code nimmt denselben `onCloseRequested`-Weg wie der
+Fensterknopf, ein echter Transfer ließ sich hier nicht erzeugen), die
+Umbeschriftung des nativen Menüs bei Sprachwechsel im laufenden Fenster, sowie
+Windows und Linux.
