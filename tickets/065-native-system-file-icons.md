@@ -36,6 +36,17 @@ vor Umsetzung inventarisieren. Es existiert noch keine native Iconauflösung in
   Ein nachgeladenes Icon darf keinen Zeilenhöhenwechsel oder Scrollsprung verursachen.
 - Systemicons sind keine neuen Inhalts-Thumbnails oder Quick-Look-Vorschauen.
   Bereits vorhandene echte Vorschauen behalten ihre bisherige Rolle.
+- **Symlinks erhalten ein kleines Pfeilsymbol unten links am Datei-/Ordnericon.**
+  Die Kennzeichnung gilt für Systemicons, einfache Icons und Lade-/Fehlerfallbacks,
+  in allen betroffenen Dateiansichten und Größen. Sie bleibt in beiden Themes
+  und bei Auswahl erkennbar, ohne das Haupticon wesentlich zu verdecken.
+- Vorhandene Symlink-Metadaten (z. B. `is_symlink`) verwenden; keine zusätzliche
+  Zielauflösung oder Remote-Abfrage allein für den Pfeil. Auch defekte Symlinks
+  kennzeichnen, soweit ihr Linkstatus bekannt ist. Ein nativer bereits enthaltener
+  Linkpfeil darf nicht doppelt überlagert werden; die Plattformadapter müssen dies
+  berücksichtigen bzw. ein Basisicon ohne Overlay für die gemeinsame Darstellung liefern.
+- Overlay rein visuell auf das Icon setzen, ohne Zeilenhöhe oder Klickfläche zu
+  verändern. Den Symlink-Status zusätzlich als zugängliche Beschreibung bereitstellen.
 
 ### Native Auflösung im Backend
 
@@ -86,6 +97,9 @@ vor Umsetzung inventarisieren. Es existiert noch keine native Iconauflösung in
       unbekannte Endungen und HiDPI sehen korrekt aus, ohne Layoutsprünge.
 - [ ] Remote-/Archiv-Einträge erhalten Typicons ohne Download oder Extraktion.
 - [ ] Fehlende native Unterstützung und einzelne Abfragefehler führen zu Fallbacks.
+- [ ] Datei-, Ordner- und defekte Symlinks zeigen genau einen kleinen Pfeil unten
+      links; beide Iconmodi, Fallback/Nachladen, Auswahl, Themes und HiDPI geprüft.
+      Normale Dateien/Ordner erhalten keinen Pfeil.
 - [ ] Schnelle Navigation, gleichnamige Dateien in verschiedenen Ordnern, Scrollen
       und Umschalten während laufender Requests zeigen keine falschen Icons.
 - [ ] Tests für Request-Deduplizierung, Cachegrenzen, Invalidierung und späte Antworten.
