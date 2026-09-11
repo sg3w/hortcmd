@@ -25,7 +25,6 @@ import { useSession } from "@/store/sessionStore";
 import { useTransfers } from "@/store/transfersStore";
 import { useOps } from "@/store/opsStore";
 import { useSettings, useT } from "@/store/settingsStore";
-import { useUi } from "@/store/uiStore";
 import { initWindowState } from "@/lib/windowState";
 import { useFileColorVars, type ThemeMode } from "@/lib/fileColors";
 import { useKeyboard } from "@/features/commander/useKeyboard";
@@ -40,22 +39,12 @@ import { MenuBar } from "@/features/commander/MenuBar";
 import { CommandBar } from "@/features/commander/CommandBar";
 import { FunctionBar } from "@/features/commander/FunctionBar";
 import { Panel } from "@/features/panel/Panel";
-import { SettingsDialog } from "@/components/ui/SettingsDialog";
-import { ShortcutsDialog } from "@/components/ui/ShortcutsDialog";
-import { AboutDialog } from "@/components/ui/AboutDialog";
+// Eager on purpose: an operation prompt can be raised by any action and
+// must never wait on a fetch, and the transfer surface reports on work
+// that is already running (TICKET-034).
 import { OperationDialogs } from "@/components/ui/OperationDialogs";
-import { FileBrowserDialog } from "@/components/ui/FileBrowserDialog";
-import { ExportDialog } from "@/components/ui/ExportDialog";
-import { SelectionFileDialog } from "@/components/ui/SelectionFileDialog";
-import { RenameDialog } from "@/components/ui/RenameDialog";
-import { CompareDialog } from "@/components/ui/CompareDialog";
-import { FileCompareDialog } from "@/components/ui/FileCompareDialog";
-import { PreviewDialog } from "@/components/ui/PreviewDialog";
-import { PropertiesDialog } from "@/components/ui/PropertiesDialog";
-import { SearchDialog } from "@/components/ui/SearchDialog";
-import { ConnectionsDialog } from "@/features/net/ConnectionsDialog";
-import { SshTerminalWindow } from "@/features/net/SshTerminal";
 import { TransferTray, TransferWindow } from "@/components/ui/TransferView";
+import { LazyDialogs } from "@/features/LazyDialogs";
 
 export default function App() {
   const [drives, setDrives] = useState<Drive[]>([]);
@@ -67,8 +56,6 @@ export default function App() {
   const theme = useSettings((s) => s.theme);
   const paneSplit = useSettings((s) => s.paneSplit);
   const setPaneSplit = useSettings((s) => s.setPaneSplit);
-  const settingsOpen = useUi((s) => s.settingsOpen);
-  const setSettingsOpen = useUi((s) => s.setSettingsOpen);
   const t = useT();
   const mainRef = useRef<HTMLDivElement>(null);
 
@@ -324,22 +311,9 @@ export default function App() {
 
       <FunctionBar />
 
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
-      <ShortcutsDialog />
-      <AboutDialog />
       <OperationDialogs />
-      <FileBrowserDialog />
-      <RenameDialog />
-      <CompareDialog />
-      <ExportDialog />
-      <SelectionFileDialog />
-      <FileCompareDialog />
-      <PreviewDialog />
-      <PropertiesDialog />
-      <SearchDialog />
-      <ConnectionsDialog />
-      <SshTerminalWindow />
       <TransferWindow />
+      <LazyDialogs />
     </div>
   );
 }

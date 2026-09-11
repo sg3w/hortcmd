@@ -45,6 +45,8 @@ import { useHistory } from "@/store/historyStore";
 import { fillVars } from "@/store/noticeStore";
 import { useTransfers } from "@/store/transfersStore";
 import { markDialogKey } from "@/lib/keys";
+import { preload } from "@/components/ui/LazyFeature";
+import { PRELOAD_ON_MENU } from "@/features/lazyFeatures";
 import { formatShortcut } from "@/lib/shortcut";
 import { cn } from "@/lib/cn";
 
@@ -311,9 +313,20 @@ interface CategoryProps {
 
 function Category({ cat, className, triggerRef }: CategoryProps) {
   const t = useT();
+  // Opening (or even just pointing at) a category is strong intent:
+  // warm the chunks its heavyweight actions need, so the fetch hides
+  // behind the time it takes to read the menu (TICKET-034).
+  const warm = () => {
+    for (const load of PRELOAD_ON_MENU[cat.id] ?? []) preload(load);
+  };
   return (
     <Menubar.Menu value={cat.id}>
-      <Menubar.Trigger ref={triggerRef} className={cn(triggerCls, className)}>
+      <Menubar.Trigger
+        ref={triggerRef}
+        onPointerEnter={warm}
+        onFocus={warm}
+        className={cn(triggerCls, className)}
+      >
         {t(cat.label)}
       </Menubar.Trigger>
       <Menubar.Portal>

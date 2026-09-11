@@ -367,6 +367,67 @@ that decision is stated once and tested directly rather than living in JSX.
 
 ---
 
+### Frontend loading boundaries and bundle budget (TICKET-034)
+
+All sixteen dialogs used to be imported and rendered unconditionally, each
+managing its own visibility. The WebView therefore parsed a Markdown renderer, a
+syntax highlighter and a terminal emulator before it could draw two file panes —
+**1,306 kB** in one eager chunk.
+
+**What stays eager.** The two-pane shell, navigation, file operations, the
+operation prompts (`OperationDialogs` — a confirm can be raised by any action
+and must never wait on a fetch) and the transfer surface
+(`TransferTray`/`TransferWindow`, which reports on work already running).
+
+**What moved.** `features/lazyFeatures.ts` lists every boundary in one place;
+`features/LazyDialogs.tsx` pairs each with the store flag that opens it. The
+heavyweights are the preview (marked + highlight.js + DOMPurify, 146 kB) and the
+SSH terminal (xterm, 330 kB); the larger dialogs — settings, connections,
+properties, rename, compare, search, export — get their own chunks too.
+
+Result: the eager application chunk is **230 kB** (70 kB gzipped), down from
+1,306 kB (372 kB).
+
+**How the boundary behaves** (`components/ui/LazyFeature.tsx`):
+
+* **Nothing mounts while closed.** No invisible modal exists, so nothing can
+  steal focus or swallow a function key aimed at the panes.
+* **Loading is visible but inert** — a `role="status"`, `aria-live="polite"`
+  line with `pointer-events: none`, no focus, no buttons. The panes stay usable
+  while a chunk arrives.
+* **A rejected import is recoverable.** An error boundary (a class, because
+  React has no hook form) shows a localized message with a retry that hands
+  React a *fresh* `lazy()` — a rejected one replays its rejection forever.
+  Without this, a chunk that fails to arrive would unmount the whole tree.
+* **Unmounting is delayed by one beat** after closing, because unmounting a
+  Radix dialog while it is still open leaks `pointer-events: none` onto
+  `<body>`.
+
+**Preloading on intent, never at startup.** Pointing at or focusing a menubar
+category warms the chunks its heavyweight actions need
+(`PRELOAD_ON_MENU`), so the fetch hides behind the time it takes to read the
+menu. An unconditional startup preload would put the cost straight back into the
+launch path.
+
+**Chunking.** Four coarse vendor groups (`react`, `radix`, `tanstack`,
+`lucide`); vendors change far less often than application code, so separating
+them keeps their chunks cached across releases. Deliberately not finer — more
+requests on a local custom protocol buy nothing.
+
+**The budget.** `EAGER_BUDGET_KB = 320` in `vite.config.ts`, enforced by
+`scripts/bundle-report.mjs` (`npm run check:bundle`, part of `npm run check` and
+of CI). The report reads the build manifest, walks the entry chunk's import
+graph to tell eager from lazy, prints which watched dependency landed in which
+chunk, and fails when the entry chunk exceeds the budget **or** when xterm,
+highlight.js or marked reappear in the eager graph — the regression that is
+otherwise invisible, since one static import from a store is enough to cause it.
+Raising the budget is a deliberate edit with a reason recorded here.
+
+**Security.** Lazy chunks are ordinary same-origin application assets, so the
+production CSP from TICKET-030 (`script-src 'self'`) covers them unchanged.
+
+---
+
 ## 5. State model (store)
 
 ```ts

@@ -97,6 +97,8 @@ jobs:
         run: npm test
       - name: Production build
         run: npm run build
+      - name: Bundle budget
+        run: npm run check:bundle
 
   rust:
     name: Rust (${{ matrix.os }})

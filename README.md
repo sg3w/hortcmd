@@ -131,6 +131,7 @@ npm run tauri dev      # native app: Vite + Rust backend
 
 ```bash
 npm run check          # everything CI runs, in the same order
+npm run bundle:report  # build + chunk composition and the eager budget
 npm run typecheck      # tsc --noEmit
 npm run test           # vitest, non-watch (CI mode)
 npm run test:watch     # vitest in watch mode
@@ -191,6 +192,14 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib live_ \
 `.github/workflows/live-tests.yml` is the manual counterpart; dispatched
 without those servers it stops with the setup instructions rather than
 pretending to pass.
+
+**Bundle budget.** The eager entry chunk has a documented budget
+(`EAGER_BUDGET_KB` in `vite.config.ts`), enforced by
+`scripts/bundle-report.mjs`. `npm run bundle:report` builds and prints which
+chunk holds which major dependency, marking each as eager (fetched before the
+shell renders) or lazy. It fails if the entry chunk grows past the budget, or if
+xterm, highlight.js or marked reappear in the eager graph — one static import
+from a store is enough to undo the split, and nothing else would notice.
 
 **CI jobs.** `check` (the full gate, Linux), `rust` (Ubuntu/macOS/Windows, so
 the `cfg`-gated platform code keeps compiling and its portable tests keep

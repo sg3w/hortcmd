@@ -93,16 +93,16 @@ const SCALE_OPTIONS: { value: Scale; key: TransKey }[] = [
 const MIN_FRAC = 0.25; // 1:3
 const MAX_FRAC = 0.5; // 1:1
 
-interface Props {
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-}
-
-export function SettingsDialog({ open, onOpenChange }: Props) {
+export function SettingsDialog() {
   const t = useT();
-  const close = () => onOpenChange?.(false);
-  // The selected page lives in `uiStore`, so the Konfiguration menu can
-  // open the dialog directly on one of them (TICKET-058).
+  // Open state and the selected page both live in `uiStore`, so the
+  // Konfiguration menu can open the dialog directly on one of them
+  // (TICKET-058) — and so this component is self-contained, like every
+  // other dialog, which is what lets it sit behind a lazy boundary
+  // without props (TICKET-034).
+  const open = useUi((s) => s.settingsOpen);
+  const setOpen = useUi((s) => s.setSettingsOpen);
+  const close = () => setOpen(false);
   const category = useUi((s) => s.settingsCategory);
   const setCategory = useUi((s) => s.setSettingsCategory);
   const [leftFrac, setLeftFrac] = useState(MIN_FRAC);
@@ -141,7 +141,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
   return (
     <AppDialog
       dialogKey="settings"
-      open={!!open}
+      open={open}
       onClose={close}
       titleBar={
         <>
