@@ -22,6 +22,11 @@ look current.
 
 ## Requirements
 
+- Once implemented, expose **Befehle → Speicherbelegung analysieren…** through
+  the shared command definition from [TICKET-040](040-native-application-menu.md).
+  The existing folder/volume size display stays in Properties; the new analyzer
+  is a distinct workflow. Do not add a non-functional menu placeholder in 040.
+
 ### Scan model and recursion depth
 
 - Add a typed scan request with root location, maximum depth, item limit, size mode,

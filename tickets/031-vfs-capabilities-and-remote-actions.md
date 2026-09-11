@@ -70,8 +70,11 @@ everything.
 - Cache capabilities by resolved location/provider identity and invalidate them on
   connect, disconnect, reconnect, platform change, or navigation to a different
   scheme. Do not perform one IPC call per menu item.
-- Command-bar buttons, context-menu items, keyboard shortcuts, and dialogs use the
-  same capability selector. Avoid separate scheme checks scattered across views.
+- Command-bar buttons, context-menu items, the in-window application menu from
+  [TICKET-040](040-native-application-menu.md), keyboard shortcuts, and dialogs
+  use the same capability selector. Avoid separate scheme checks across views.
+  Revalidate the captured panel/tab and source/destination capabilities at menu
+  execution; an enabled item from before a disconnect is not authorization to run.
 - Disable unsupported visible actions and provide a localized tooltip or status
   explanation. If an unsupported action is triggered by keyboard, show the same
   explanation instead of silently doing nothing.

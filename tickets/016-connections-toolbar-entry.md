@@ -46,8 +46,10 @@ TICKET-012 and needs to be decided before implementation.
   navigation and the file-action groups.
 - Tooltip from the existing `net.*` translations; add a `tb.net` key for **de**
   and **en** in `src/i18n/dictionaries.ts` if no fitting key exists.
-- Optional, if it stays simple: also wire the inert `menu.net` menu entry to the
-  same action, so the feature is discoverable from the menu bar as well.
+- The full in-window **Netz → Verbindungen verwalten…** entry is mandatory and
+  owned by [TICKET-040](040-native-application-menu.md). Reuse the same
+  `useNet.openManager()` action; do not make the top-level Netz label a direct
+  action, since it will open a dropdown. This ticket owns the toolbar entry.
 
 ### Location picker
 - Remove the `__manage__` item and its sentinel handling from
@@ -87,6 +89,8 @@ TICKET-012 and needs to be decided before implementation.
 - [ ] Disconnecting a connection in the manager removes it from both pickers.
 - [ ] Connecting from the manager navigates the active panel as before.
 - [ ] The manager is reachable with zero configured connections.
+- [ ] Integration with TICKET-040 provides the same manager through the in-window
+      Netz menu; this remains reachable independently of toolbar visibility.
 - [ ] Favorites and drives in the picker are unchanged.
 
 ## Tests

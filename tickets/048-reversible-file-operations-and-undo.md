@@ -42,6 +42,11 @@ from TICKET-036.
   contents. Expire entries when providers disconnect permanently, backups are
   removed, or required state no longer matches.
 - Add keyboard and menu entry points that show the exact next reversible operation.
+  Integrate into **Dateien** through the shared command definition from
+  [TICKET-040](040-native-application-menu.md), once file undo is implemented.
+  Native macOS Edit-menu undo remains text editing; route shortcuts by focus and
+  never undo a file operation while editing text. TICKET-040 ships no file-undo
+  placeholder in advance of this feature.
 - Permit redo only where it can be represented as a newly validated operation,
   not as blind replay of stale paths.
 

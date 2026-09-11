@@ -20,6 +20,10 @@ TICKET-014 covers one concrete Enter-key leak, TICKET-033 establishes component
 tests, and TICKET-036 owns structured backend errors. This ticket supplies the
 cross-cutting accessibility and translation standard.
 
+[TICKET-040](040-native-application-menu.md) owns the full React menu inside the
+Tauri window on all platforms and a minimal native macOS menu. Test both surfaces;
+do not replace the in-window menu with a full native macOS application menu.
+
 ## Requirements
 
 - Inventory user-visible strings, accessible names, titles, status messages, and
@@ -60,6 +64,11 @@ cross-cutting accessibility and translation standard.
   dialogs, menus, tree, table, tab, progress, and terminal controls.
 - Add keyboard-only interaction tests for pane navigation and every core operation.
 - Test focus restoration and modal isolation with nested prompts and async errors.
+- For TICKET-040, verify arrow/Enter/Escape menubar navigation, focus restoration,
+  checked/radio/disabled states, accessible unavailable-action explanations, and
+  overflow at 200% zoom. Menu keystrokes must not leak into quick filtering or
+  file operations. Cover text inputs, contenteditable and SSH terminal focus,
+  native macOS text editing, and duplicate native/WebView shortcut dispatch.
 - Snapshot translation-key parity and render representative long strings in both
   languages.
 - Manually test current VoiceOver, NVDA, and Orca versions using a documented

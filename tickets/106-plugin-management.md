@@ -9,6 +9,10 @@ Concept.md §9 provides the "Plugins" category (Installed plugins · updates ·
 preview/packer plugins). Without management, the plugin system stays unusable.
 
 ## Requirements
+- Keep plugin management reachable through **Konfiguration → Einstellungen… →
+  Plugins**, using the existing settings dialog and the menu architecture in
+  [TICKET-040](040-native-application-menu.md). No separate Starter menu; plugin
+  execution entry points remain in the plugin command bar (TICKET-103).
 - Build out the **"Plugins"** category in `SettingsDialog.tsx`: list of detected plugins
   (from `list_plugins`, TICKET-100) with name, version, icon, runtime, status.
 - **Install** from a local folder/archive into the app plugin folder (a marketplace
