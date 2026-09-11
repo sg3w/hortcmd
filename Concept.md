@@ -624,6 +624,21 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
       Tauri `Channel`; result list **virtualized** (`@tanstack/react-virtual`),
       double click reveals the match in the active pane (Reveal). Hard match limit
       (50,000) with a "truncated" note; content search up to 8 MB/file, binaries skipped.
+      The tree is read by the **reusable local walker** `commands/fs/walk.rs`
+      (**jwalk**, two reader threads; TICKET-013) instead of the former handwritten
+      recursive collect-all function: ignored folders are pruned **before** descending,
+      links are never followed (Windows junctions included), deep trees cannot overflow
+      the stack, and every mode **streams** — the first match arrives after ~0.15 ms
+      instead of after the whole tree (~225 ms on a 60,000-entry fixture), while a wide
+      tree scans 2.1× faster than with `walkdir` (measurements:
+      `docs/traversal-benchmark.md`). All limits are bounded and honestly reported:
+      `search` now returns a **`SearchSummary`** whose `status` is
+      `complete | truncated | limited | partial | cancelled` (plus hit/file/folder and
+      skipped-entry counts) — only `complete` means the list is the full answer, and the
+      dialog shows the other four. A run can be **stopped** (Stop button, `cancel_search`
+      by token, also fired when the dialog closes); a closed result channel ends the scan
+      as well. Duplicate mode buffers at most 300,000 candidate files, large-file mode
+      keeps only the biggest 50,000 in a bounded heap instead of sorting the whole tree.
 - [x] **Permissions**: properties dialog (context menu "Properties …" / Alt+Enter,
       `PropertiesDialog.tsx` ↔ backend `commands/fs/props.rs`). Display + edit
       access rights (chmod via rwx matrix, setuid/setgid/sticky, octal field;
@@ -686,8 +701,10 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
 - [ ] **Integrate Spotlight search** (macOS)
 
 ### Cross-cutting — performance
-- [ ] Directory watcher (P1) · directory cache · thumbnail cache · background index
-      (with search) · lazy loading *(Virtual already present)*
+- [~] Directory watcher (P1) ✅ · **library-backed, streaming, bounded local traversal**
+      (`commands/fs/walk.rs`, jwalk; TICKET-013) ✅ · directory cache ⏳ ·
+      thumbnail cache ⏳ · background index (with search) ⏳ *(TICKET-054)* ·
+      lazy loading *(Virtual already present)*
 
 ### 💭 Later / to be clarified
 - **Read RAR** — license problem (`unrar` non-free); only via a system tool or omit

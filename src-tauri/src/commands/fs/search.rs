@@ -5,17 +5,34 @@
 //   empty_dirs   – empty folders
 //   large_files  – files from a minimum size (sorted by size)
 //
-// Runs asynchronously via `spawn_blocking` and streams matches in batches
-// over a Tauri `Channel`. Ignored folders are skipped; a
-// hard match limit protects memory/frontend.
+// Runs asynchronously via `spawn_blocking` and streams matches in
+// batches over a Tauri `Channel`. The tree is read by the reusable
+// local walker (`super::walk`, jwalk-backed): ignored folders are
+// pruned before descending, links are never followed.
+//
+// Limits (all enforced, all reported through `SearchSummary::status`):
+//   * `Limits::max_hits` matches – further matches are not produced,
+//     the walk stops right there ("truncated").
+//   * `Limits::dup_candidates` files remembered in duplicate mode – the
+//     only mode that must see the whole tree before it can answer
+//     ("limited").
+//   * `Limits::large_candidates` files kept in a bounded heap in
+//     large-file mode, so sorting never buffers the whole tree.
+//   * `MAX_CONTENT_BYTES` per file for the content search.
+// Unreadable entries are counted and reported ("partial"); a cancel
+// token or a closed result channel ends the run ("cancelled").
 // ============================================================
 
+use super::cancel;
+use super::walk::{walk_local, Flow, WalkOptions, WALK_THREADS};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::cmp::Reverse;
+use std::collections::{BinaryHeap, HashMap};
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::time::UNIX_EPOCH;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tauri::ipc::Channel;
 use ts_rs::TS;
 
@@ -34,6 +51,43 @@ pub struct SearchHit {
     pub detail: String,
     /// Duplicate group (>0 in "duplicates" mode; otherwise 0).
     pub group: u32,
+}
+
+/// How a search ended. Everything except `Complete` means the result
+/// list is not the full answer.
+#[derive(Serialize, TS, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../src/ipc/bindings/")]
+pub enum SearchStatus {
+    /// Whole tree read, every match reported.
+    Complete,
+    /// The match limit was reached; the scan stopped early.
+    Truncated,
+    /// A work/memory limit of an aggregating mode was reached.
+    Limited,
+    /// The tree was read completely, but entries had to be skipped.
+    Partial,
+    /// Cancelled by the frontend, or the result channel was closed.
+    Cancelled,
+}
+
+/// Result of a search run.
+#[derive(Serialize, TS)]
+#[ts(export, export_to = "../../src/ipc/bindings/")]
+pub struct SearchSummary {
+    pub status: SearchStatus,
+    /// Matches sent over the channel.
+    #[ts(type = "number")]
+    pub hits: u64,
+    /// Files seen while walking.
+    #[ts(type = "number")]
+    pub files: u64,
+    /// Folders seen while walking.
+    #[ts(type = "number")]
+    pub dirs: u64,
+    /// Entries skipped because they could not be read.
+    #[ts(type = "number")]
+    pub unreadable: u64,
 }
 
 /// Search options from the frontend.
@@ -55,19 +109,34 @@ pub struct SearchOptions {
     pub min_size: u64,
 }
 
-const MAX_HITS: usize = 50_000;
 const MAX_CONTENT_BYTES: u64 = 8 * 1024 * 1024; // Inhaltssuche nur bis 8 MB/Datei
+/// Cancel token namespace (see `super::cancel`).
+const KIND: &str = "search";
 
-type Meta = (u64, u64); // (Größe, mtime)
+/// The memory/work bounds of a search run. Kept in one place so they
+/// are documented together – and so the tests can shrink them instead
+/// of building fixtures with 50 000 files.
+struct Limits {
+    /// Matches after which the scan stops ("truncated").
+    max_hits: usize,
+    /// Matches per channel message – small enough that the first
+    /// results show up immediately, large enough to keep the IPC cheap.
+    batch: usize,
+    /// Files duplicate mode may remember before it gives up ("limited").
+    /// It is the only mode that must see the whole tree to answer.
+    dup_candidates: usize,
+    /// Files large-file mode keeps in its bounded heap, so sorting never
+    /// buffers the whole tree.
+    large_candidates: usize,
+}
 
-fn meta_of(m: &fs::Metadata) -> Meta {
-    let mtime = m
-        .modified()
-        .ok()
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    (m.len(), mtime)
+impl Limits {
+    const DEFAULT: Limits = Limits {
+        max_hits: 50_000,
+        batch: 200,
+        dup_candidates: 300_000,
+        large_candidates: 50_000,
+    };
 }
 
 /// Converts a glob pattern (`*`, `?`, multiple separated by space/`;`) to regex.
@@ -133,29 +202,6 @@ impl NameMatch {
     }
 }
 
-/// Recursively collects all files and folders (ignored folders skipped,
-/// symlinks not followed). The order is that of the file system.
-fn walk(root: &Path, ignore: &[String], files: &mut Vec<(PathBuf, Meta)>, dirs: &mut Vec<PathBuf>) {
-    let Ok(rd) = fs::read_dir(root) else { return };
-    for entry in rd.flatten() {
-        let Ok(m) = entry.metadata() else { continue };
-        if m.file_type().is_symlink() {
-            continue;
-        }
-        let path = entry.path();
-        if m.is_dir() {
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if ignore.iter().any(|ig| ig == &name) {
-                continue;
-            }
-            dirs.push(path.clone());
-            walk(&path, ignore, files, dirs);
-        } else {
-            files.push((path, meta_of(&m)));
-        }
-    }
-}
-
 fn hit(path: &Path, size: u64, modified: u64, detail: String, group: u32) -> SearchHit {
     SearchHit {
         name: path
@@ -168,6 +214,72 @@ fn hit(path: &Path, size: u64, modified: u64, detail: String, group: u32) -> Sea
         modified,
         detail,
         group,
+    }
+}
+
+/// Collects matches into bounded batches and pushes them over the
+/// channel. Enforces the hit limit and notices a closed channel, so the
+/// walk can stop instead of scanning on into the void.
+struct Sink<'a> {
+    channel: &'a Channel<Vec<SearchHit>>,
+    limits: &'a Limits,
+    batch: Vec<SearchHit>,
+    sent: usize,
+    truncated: bool,
+    disconnected: bool,
+}
+
+impl<'a> Sink<'a> {
+    fn new(channel: &'a Channel<Vec<SearchHit>>, limits: &'a Limits) -> Self {
+        Self {
+            channel,
+            limits,
+            batch: Vec::new(),
+            sent: 0,
+            truncated: false,
+            disconnected: false,
+        }
+    }
+
+    /// Accepts a match. `false` = stop searching (limit or closed channel).
+    fn push(&mut self, hit: SearchHit) -> bool {
+        if self.disconnected {
+            return false;
+        }
+        self.batch.push(hit);
+        if self.total() >= self.limits.max_hits {
+            self.truncated = true;
+            self.flush();
+            return false;
+        }
+        if self.batch.len() >= self.limits.batch {
+            self.flush();
+        }
+        !self.disconnected
+    }
+
+    fn total(&self) -> usize {
+        self.sent + self.batch.len()
+    }
+
+    fn flush(&mut self) {
+        if self.batch.is_empty() {
+            return;
+        }
+        let batch = std::mem::take(&mut self.batch);
+        self.sent += batch.len();
+        // A closed channel means the dialog is gone – treat it like a cancel.
+        if self.channel.send(batch).is_err() {
+            self.disconnected = true;
+        }
+    }
+
+    fn flow(&self) -> Flow {
+        if self.truncated || self.disconnected {
+            Flow::Stop
+        } else {
+            Flow::Continue
+        }
     }
 }
 
@@ -199,10 +311,27 @@ enum Needle {
 }
 
 impl Needle {
+    fn build(opts: &SearchOptions) -> Result<Option<Self>, String> {
+        if opts.content.trim().is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(if opts.content_regex {
+            Needle::Re(build_regex(&opts.content, opts.case_sensitive)?)
+        } else {
+            Needle::Plain {
+                text: opts.content.clone(),
+                case_sensitive: opts.case_sensitive,
+            }
+        }))
+    }
+
     fn is_match(&self, line: &str) -> bool {
         match self {
             Needle::Re(re) => re.is_match(line),
-            Needle::Plain { text, case_sensitive } => {
+            Needle::Plain {
+                text,
+                case_sensitive,
+            } => {
                 if *case_sensitive {
                     line.contains(text)
                 } else {
@@ -229,147 +358,160 @@ fn hash_file(path: &Path) -> Option<Vec<u8>> {
     Some(h.finalize().to_vec())
 }
 
+fn walk_opts(opts: &SearchOptions, dirs_only: bool) -> WalkOptions {
+    WalkOptions {
+        ignore_dirs: opts.ignore_dirs.clone(),
+        want_files: !dirs_only,
+        want_dirs: dirs_only,
+        detect_empty_dirs: dirs_only,
+        threads: WALK_THREADS,
+    }
+}
+
 fn run_search(
     root: PathBuf,
     opts: SearchOptions,
+    cancel_flag: Arc<AtomicBool>,
+    limits: &Limits,
     channel: &Channel<Vec<SearchHit>>,
-) -> Result<bool, String> {
+) -> Result<SearchSummary, String> {
     let name_match = NameMatch::build(&opts)?;
-    let mut files = Vec::new();
-    let mut dirs = Vec::new();
-    walk(&root, &opts.ignore_dirs, &mut files, &mut dirs);
+    let needle = Needle::build(&opts)?;
+    let mut sink = Sink::new(channel, limits);
+    let mut limited = false;
 
-    match opts.mode.as_str() {
-        "empty_dirs" => {
-            let mut batch = Vec::new();
-            for d in &dirs {
-                let empty = fs::read_dir(d).map(|mut r| r.next().is_none()).unwrap_or(false);
-                if empty {
-                    let (size, modified) = fs::metadata(d).map(|m| meta_of(&m)).unwrap_or((0, 0));
-                    let mut h = hit(d, size, modified, String::new(), 0);
-                    h.is_dir = true;
-                    batch.push(h);
-                }
+    let report = match opts.mode.as_str() {
+        "empty_dirs" => walk_local(&root, &walk_opts(&opts, true), &cancel_flag, |entry| {
+            if !entry.is_dir || !entry.dir_empty {
+                return Flow::Continue;
             }
-            let truncated = batch.len() > MAX_HITS;
-            batch.truncate(MAX_HITS);
-            if !batch.is_empty() {
-                let _ = channel.send(batch);
-            }
-            Ok(truncated)
-        }
+            let mut h = hit(&entry.path, entry.size, entry.modified, String::new(), 0);
+            h.is_dir = entry.is_dir;
+            sink.push(h);
+            sink.flow()
+        }),
 
         "large_files" => {
-            let mut hits: Vec<(u64, u64, PathBuf)> = files
-                .iter()
-                .filter(|(_, (sz, _))| *sz >= opts.min_size)
-                .map(|(p, (sz, mt))| (*sz, *mt, p.clone()))
-                .collect();
-            hits.sort_by(|a, b| b.0.cmp(&a.0)); // größte zuerst
-            let truncated = hits.len() > MAX_HITS;
-            hits.truncate(MAX_HITS);
-            let batch: Vec<SearchHit> = hits
-                .into_iter()
-                .map(|(sz, mt, p)| hit(&p, sz, mt, String::new(), 0))
-                .collect();
-            if !batch.is_empty() {
-                let _ = channel.send(batch);
+            // Bounded max-heap: only the biggest `large_candidates`
+            // files are kept, so sorting never buffers the whole tree.
+            let mut heap: BinaryHeap<Reverse<(u64, u64, PathBuf)>> = BinaryHeap::new();
+            let report = walk_local(&root, &walk_opts(&opts, false), &cancel_flag, |entry| {
+                if entry.size < opts.min_size {
+                    return Flow::Continue;
+                }
+                heap.push(Reverse((entry.size, entry.modified, entry.path)));
+                if heap.len() > limits.large_candidates {
+                    heap.pop(); // kleinste Kandidatin fällt raus
+                    limited = true;
+                }
+                Flow::Continue
+            });
+            let mut sorted: Vec<_> = heap.into_iter().map(|Reverse(t)| t).collect();
+            sorted.sort_by(|a, b| b.0.cmp(&a.0)); // größte zuerst
+            for (size, modified, path) in sorted {
+                if !sink.push(hit(&path, size, modified, String::new(), 0)) {
+                    break;
+                }
             }
-            Ok(truncated)
+            report
         }
 
-        "duplicates" => Ok(find_duplicates(files, channel)),
+        "duplicates" => {
+            let mut by_size: HashMap<u64, Vec<(PathBuf, u64)>> = HashMap::new();
+            let mut candidates = 0usize;
+            let report = walk_local(&root, &walk_opts(&opts, false), &cancel_flag, |entry| {
+                if entry.size == 0 {
+                    return Flow::Continue;
+                }
+                if candidates >= limits.dup_candidates {
+                    limited = true;
+                    return Flow::Stop;
+                }
+                candidates += 1;
+                by_size
+                    .entry(entry.size)
+                    .or_default()
+                    .push((entry.path, entry.modified));
+                Flow::Continue
+            });
+            find_duplicates(by_size, &cancel_flag, &mut sink);
+            report
+        }
 
         // Default: name and/or content search.
-        _ => {
-            let needle = if opts.content.trim().is_empty() {
-                None
-            } else if opts.content_regex {
-                Some(Needle::Re(build_regex(&opts.content, opts.case_sensitive)?))
-            } else {
-                Some(Needle::Plain {
-                    text: opts.content.clone(),
-                    case_sensitive: opts.case_sensitive,
-                })
+        _ => walk_local(&root, &walk_opts(&opts, false), &cancel_flag, |entry| {
+            if !name_match.matches(&entry.name) {
+                return Flow::Continue;
+            }
+            let detail = match &needle {
+                Some(nd) => match content_match(&entry.path, entry.size, nd) {
+                    Some(line) => line,
+                    None => return Flow::Continue, // Inhaltssuche ohne Treffer
+                },
+                None => String::new(),
             };
+            sink.push(hit(&entry.path, entry.size, entry.modified, detail, 0));
+            sink.flow()
+        }),
+    };
 
-            let mut sent = 0usize;
-            let mut batch = Vec::new();
-            for (path, (size, modified)) in &files {
-                if sent + batch.len() >= MAX_HITS {
-                    if !batch.is_empty() {
-                        let _ = channel.send(std::mem::take(&mut batch));
-                    }
-                    return Ok(true);
-                }
-                let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
-                if !name.map(|n| name_match.matches(&n)).unwrap_or(false) {
-                    continue;
-                }
-                let detail = match &needle {
-                    Some(nd) => match content_match(path, *size, nd) {
-                        Some(line) => line,
-                        None => continue, // Inhaltssuche ohne Treffer
-                    },
-                    None => String::new(),
-                };
-                batch.push(hit(path, *size, *modified, detail, 0));
-                if batch.len() >= 200 {
-                    sent += batch.len();
-                    let _ = channel.send(std::mem::take(&mut batch));
-                }
-            }
-            if !batch.is_empty() {
-                let _ = channel.send(batch);
-            }
-            Ok(false)
-        }
-    }
+    sink.flush();
+    let cancelled = report.cancelled || sink.disconnected || cancel_flag.load(Ordering::Relaxed);
+    let status = if cancelled {
+        SearchStatus::Cancelled
+    } else if sink.truncated {
+        SearchStatus::Truncated
+    } else if limited {
+        SearchStatus::Limited
+    } else if report.unreadable > 0 {
+        SearchStatus::Partial
+    } else {
+        SearchStatus::Complete
+    };
+    Ok(SearchSummary {
+        status,
+        hits: sink.sent as u64,
+        files: report.files,
+        dirs: report.dirs,
+        unreadable: report.unreadable,
+    })
 }
 
 /// Finds duplicates: pre-group by size, then within the same size
 /// by SHA-256. Only groups with ≥2 identical files are reported.
-fn find_duplicates(files: Vec<(PathBuf, Meta)>, channel: &Channel<Vec<SearchHit>>) -> bool {
-    let mut by_size: HashMap<u64, Vec<(PathBuf, u64)>> = HashMap::new();
-    for (p, (sz, mt)) in files {
-        if sz > 0 {
-            by_size.entry(sz).or_default().push((p, mt));
-        }
-    }
-
+fn find_duplicates(
+    by_size: HashMap<u64, Vec<(PathBuf, u64)>>,
+    cancel_flag: &AtomicBool,
+    sink: &mut Sink,
+) {
     let mut group_id = 0u32;
-    let mut total = 0usize;
-    let mut truncated = false;
     for (size, group) in by_size {
-        if group.len() < 2 {
+        if group.len() < 2 || cancel_flag.load(Ordering::Relaxed) {
             continue;
         }
         // Group further by hash within the same size.
         let mut by_hash: HashMap<Vec<u8>, Vec<(PathBuf, u64)>> = HashMap::new();
         for (p, mt) in group {
+            if cancel_flag.load(Ordering::Relaxed) {
+                return;
+            }
             if let Some(h) = hash_file(&p) {
                 by_hash.entry(h).or_default().push((p, mt));
             }
         }
-        for (_, dups) in by_hash {
+        for dups in by_hash.into_values() {
             if dups.len() < 2 {
                 continue;
             }
             group_id += 1;
             let detail = format!("{} × {}", dups.len(), human_size(size));
-            let batch: Vec<SearchHit> = dups
-                .iter()
-                .map(|(p, mt)| hit(p, size, *mt, detail.clone(), group_id))
-                .collect();
-            total += batch.len();
-            let _ = channel.send(batch);
-            if total >= MAX_HITS {
-                truncated = true;
-                return truncated;
+            for (p, mt) in &dups {
+                if !sink.push(hit(p, size, *mt, detail.clone(), group_id)) {
+                    return;
+                }
             }
         }
     }
-    truncated
 }
 
 fn human_size(bytes: u64) -> String {
@@ -388,30 +530,46 @@ fn human_size(bytes: u64) -> String {
 }
 
 /// Starts the search and streams the matches over `on_batch`.
-/// Returns `true` = the result was truncated at the match limit.
+/// `token` identifies the run for `cancel_search`.
 #[tauri::command]
 pub async fn search(
     root: String,
     options: SearchOptions,
+    token: String,
     on_batch: Channel<Vec<SearchHit>>,
-) -> Result<bool, String> {
+) -> Result<SearchSummary, String> {
     let root_path = PathBuf::from(&root);
-    if !root_path.is_dir() {
-        return Err(format!("{}: kein Verzeichnis", root));
-    }
-    tauri::async_runtime::spawn_blocking(move || run_search(root_path, options, &on_batch))
+    // Register first, so every path out of here also unregisters again.
+    let cancel_flag = cancel::register(KIND, &token);
+    let result = if root_path.is_dir() {
+        tauri::async_runtime::spawn_blocking(move || {
+            run_search(root_path, options, cancel_flag, &Limits::DEFAULT, &on_batch)
+        })
         .await
         .map_err(|e| e.to_string())?
+    } else {
+        Err(format!("{}: kein Verzeichnis", root))
+    };
+    cancel::unregister(KIND, &token);
+    result
+}
+
+/// Stops a running search. Also works before the task has registered.
+#[tauri::command]
+pub fn cancel_search(token: String) {
+    cancel::cancel(KIND, &token);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::UNIX_EPOCH;
 
-    fn tmp() -> PathBuf {
+    fn tmp(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "rc-search-{}-{}",
+            "rc-search-{}-{}-{}",
             std::process::id(),
+            name,
             std::time::SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
@@ -434,6 +592,80 @@ mod tests {
         }
     }
 
+    /// Runs a search and collects everything the channel received.
+    fn run(root: &Path, options: SearchOptions) -> (SearchSummary, Vec<SearchHit>) {
+        run_with(root, options, false, &Limits::DEFAULT, true)
+    }
+
+    fn run_cancelled(
+        root: &Path,
+        options: SearchOptions,
+        cancelled: bool,
+    ) -> (SearchSummary, Vec<SearchHit>) {
+        run_with(root, options, cancelled, &Limits::DEFAULT, true)
+    }
+
+    fn run_with(
+        root: &Path,
+        options: SearchOptions,
+        cancelled: bool,
+        limits: &Limits,
+        channel_open: bool,
+    ) -> (SearchSummary, Vec<SearchHit>) {
+        use std::sync::Mutex;
+        // Each run gets its own collector – the tests run in parallel.
+        let collected: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let sink = Arc::clone(&collected);
+        let channel = Channel::new(move |msg| {
+            // The payload only arrives serialized here, so the hits are
+            // parsed back from JSON below.
+            if let tauri::ipc::InvokeResponseBody::Json(json) = msg {
+                sink.lock().unwrap().push(json);
+            }
+            if channel_open {
+                Ok(())
+            } else {
+                // Simulates a dialog that is gone: the send fails.
+                Err(tauri::Error::UnknownPath)
+            }
+        });
+        let flag = Arc::new(AtomicBool::new(cancelled));
+        let summary = run_search(root.to_path_buf(), options, flag, limits, &channel).unwrap();
+        drop(channel);
+        let hits = collected
+            .lock()
+            .unwrap()
+            .iter()
+            .flat_map(|json| serde_json::from_str::<Vec<SearchHit>>(json).unwrap())
+            .collect();
+        (summary, hits)
+    }
+
+    impl<'de> serde::Deserialize<'de> for SearchHit {
+        fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+            #[derive(Deserialize)]
+            struct Raw {
+                path: String,
+                name: String,
+                is_dir: bool,
+                size: u64,
+                modified: u64,
+                detail: String,
+                group: u32,
+            }
+            let r = Raw::deserialize(d)?;
+            Ok(SearchHit {
+                path: r.path,
+                name: r.name,
+                is_dir: r.is_dir,
+                size: r.size,
+                modified: r.modified,
+                detail: r.detail,
+                group: r.group,
+            })
+        }
+    }
+
     #[test]
     fn glob_matches_extension() {
         let re = glob_to_regex("*.txt *.md", false).unwrap();
@@ -444,54 +676,232 @@ mod tests {
 
     #[test]
     fn name_and_content_needle() {
-        let plain = Needle::Plain { text: "Fehler".into(), case_sensitive: false };
+        let plain = Needle::Plain {
+            text: "Fehler".into(),
+            case_sensitive: false,
+        };
         assert!(plain.is_match("ein FEHLER hier"));
         assert!(!plain.is_match("alles gut"));
         let re = Needle::Re(build_regex(r"TODO:\s*\w+", true).unwrap());
         assert!(re.is_match("  TODO: fixme"));
     }
 
-    #[test]
-    fn empty_dir_and_large_file_walk() {
-        let d = tmp();
+    /// One fixture for all four modes: nested folders, an ignored name,
+    /// an empty folder, duplicates and files with content.
+    fn fixture(name: &str) -> PathBuf {
+        let d = tmp(name);
+        fs::create_dir_all(d.join("sub/deeper")).unwrap();
         fs::create_dir_all(d.join("leer")).unwrap();
-        fs::create_dir_all(d.join("voll")).unwrap();
-        fs::write(d.join("voll/big.bin"), vec![0u8; 2048]).unwrap();
-        fs::write(d.join("small.txt"), b"hi").unwrap();
-
-        let mut files = Vec::new();
-        let mut dirs = Vec::new();
-        walk(&d, &[], &mut files, &mut dirs);
-        assert_eq!(files.len(), 2);
-        assert_eq!(dirs.len(), 2);
-
-        // "empty" is empty, "full" is not.
-        let empty: Vec<_> = dirs
-            .iter()
-            .filter(|p| fs::read_dir(p).unwrap().next().is_none())
-            .collect();
-        assert_eq!(empty.len(), 1);
-        assert!(empty[0].ends_with("leer"));
-
-        // Large file ≥ 1 KB: only big.bin.
-        let large: Vec<_> = files.iter().filter(|(_, (sz, _))| *sz >= 1024).collect();
-        assert_eq!(large.len(), 1);
-
-        let _ = opts("files"); // Options-Konstruktion prüfen
+        fs::create_dir_all(d.join("node_modules/inner")).unwrap();
+        fs::write(d.join("node_modules/pkg.js"), b"TODO: ignoriert").unwrap();
+        fs::write(d.join("a.txt"), b"erste Zeile\nTODO: aufraeumen\n").unwrap();
+        fs::write(d.join("sub/b.txt"), b"nichts hier\n").unwrap();
+        fs::write(d.join("sub/deeper/c.log"), vec![b'x'; 4096]).unwrap();
+        // Duplicate pair (identical content), plus a same-size decoy.
+        fs::write(d.join("dup1.bin"), b"gleicher inhalt!").unwrap();
+        fs::write(d.join("sub/dup2.bin"), b"gleicher inhalt!").unwrap();
+        fs::write(d.join("sub/other.bin"), b"andrer inhalt!!!").unwrap();
+        d
     }
 
     #[test]
-    fn ignore_dirs_are_skipped() {
-        let d = tmp();
-        fs::create_dir_all(d.join("node_modules")).unwrap();
-        fs::write(d.join("node_modules/x.js"), b"x").unwrap();
-        fs::write(d.join("keep.js"), b"y").unwrap();
+    fn files_mode_matches_name_and_ignores_pruned_dirs() {
+        let d = fixture("files");
+        let mut o = opts("files");
+        o.name = "*.txt".into();
+        o.ignore_dirs = vec!["node_modules".into()];
+        let (summary, hits) = run(&d, o);
+        let mut names: Vec<_> = hits.iter().map(|h| h.name.clone()).collect();
+        names.sort();
+        assert_eq!(names, vec!["a.txt", "b.txt"]);
+        assert_eq!(summary.status, SearchStatus::Complete);
+        assert_eq!(summary.hits, 2);
+        // Six files in the fixture; the pruned `node_modules/pkg.js`
+        // was never even read.
+        assert_eq!(summary.files, 6);
+        let _ = fs::remove_dir_all(&d);
+    }
 
-        let mut files = Vec::new();
-        let mut dirs = Vec::new();
-        walk(&d, &["node_modules".to_string()], &mut files, &mut dirs);
-        assert_eq!(files.len(), 1);
-        assert!(files[0].0.ends_with("keep.js"));
-        assert!(dirs.is_empty());
+    #[test]
+    fn files_mode_content_search() {
+        let d = fixture("content");
+        let mut o = opts("files");
+        o.content = "TODO".into();
+        o.ignore_dirs = vec!["node_modules".into()];
+        let (_, hits) = run(&d, o);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].name, "a.txt");
+        assert!(hits[0].detail.starts_with("2: TODO"));
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn empty_dirs_mode() {
+        let d = fixture("empty");
+        let mut o = opts("empty_dirs");
+        o.ignore_dirs = vec!["node_modules".into()];
+        let (summary, hits) = run(&d, o);
+        let names: Vec<_> = hits.iter().map(|h| h.name.clone()).collect();
+        assert_eq!(names, vec!["leer"]);
+        assert!(hits[0].is_dir);
+        assert_eq!(summary.status, SearchStatus::Complete);
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn large_files_mode_sorts_biggest_first() {
+        let d = fixture("large");
+        let mut o = opts("large_files");
+        o.min_size = 1024;
+        o.ignore_dirs = vec!["node_modules".into()];
+        let (_, hits) = run(&d, o);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].name, "c.log");
+        assert_eq!(hits[0].size, 4096);
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn duplicates_mode_groups_identical_files() {
+        let d = fixture("dups");
+        let mut o = opts("duplicates");
+        o.ignore_dirs = vec!["node_modules".into()];
+        let (_, hits) = run(&d, o);
+        let mut names: Vec<_> = hits.iter().map(|h| h.name.clone()).collect();
+        names.sort();
+        assert_eq!(names, vec!["dup1.bin", "dup2.bin"]);
+        // Same size but different content must not be grouped.
+        assert!(hits.iter().all(|h| h.group == 1));
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn cancelled_run_is_not_reported_complete() {
+        let d = fixture("cancel");
+        let (summary, hits) = run_cancelled(&d, opts("files"), true);
+        assert_eq!(summary.status, SearchStatus::Cancelled);
+        assert!(hits.is_empty());
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_loop_terminates_and_links_are_not_hits() {
+        let d = fixture("links");
+        std::os::unix::fs::symlink(&d, d.join("sub/back")).unwrap();
+        std::os::unix::fs::symlink(d.join("a.txt"), d.join("link.txt")).unwrap();
+        let mut o = opts("files");
+        o.name = "*.txt".into();
+        o.ignore_dirs = vec!["node_modules".into()];
+        let (summary, hits) = run(&d, o);
+        let mut names: Vec<_> = hits.iter().map(|h| h.name.clone()).collect();
+        names.sort();
+        // link.txt is a symlink → not reported; the loop terminates.
+        assert_eq!(names, vec!["a.txt", "b.txt"]);
+        assert_eq!(summary.status, SearchStatus::Complete);
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_folder_makes_the_scan_partial() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = tmp("unreadable");
+        fs::write(d.join("a.txt"), b"hi").unwrap();
+        let locked = d.join("locked");
+        fs::create_dir_all(&locked).unwrap();
+        fs::write(locked.join("hidden.txt"), b"hi").unwrap();
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+
+        let (summary, _) = run(&d, opts("files"));
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+
+        // Running as root ignores the permission bits – then nothing is
+        // skipped and the scan is legitimately complete.
+        if summary.unreadable > 0 {
+            assert_eq!(summary.status, SearchStatus::Partial);
+        }
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    /// Small limits so the limit paths can be tested without building
+    /// fixtures with tens of thousands of files.
+    fn tiny_limits() -> Limits {
+        Limits {
+            max_hits: 3,
+            batch: 2,
+            dup_candidates: 2,
+            large_candidates: 2,
+        }
+    }
+
+    #[test]
+    fn hit_limit_truncates_and_stops_the_walk() {
+        let d = tmp("limit");
+        for i in 0..10 {
+            fs::write(d.join(format!("f{}.txt", i)), b"x").unwrap();
+        }
+        let (summary, hits) = run_with(&d, opts("files"), false, &tiny_limits(), true);
+        assert_eq!(summary.status, SearchStatus::Truncated);
+        assert_eq!(hits.len(), 3);
+        assert_eq!(summary.hits, 3);
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn large_file_heap_keeps_the_biggest_and_reports_limited() {
+        let d = tmp("heap");
+        for (i, size) in [10usize, 40, 20, 30].iter().enumerate() {
+            fs::write(d.join(format!("f{}.bin", i)), vec![0u8; *size]).unwrap();
+        }
+        let (summary, hits) = run_with(&d, opts("large_files"), false, &tiny_limits(), true);
+        // Only the two biggest survive the bounded heap, biggest first.
+        let sizes: Vec<u64> = hits.iter().map(|h| h.size).collect();
+        assert_eq!(sizes, vec![40, 30]);
+        assert_eq!(summary.status, SearchStatus::Limited);
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn duplicate_candidate_limit_reports_limited() {
+        let d = tmp("duplimit");
+        for i in 0..6 {
+            fs::write(d.join(format!("f{}.bin", i)), b"same").unwrap();
+        }
+        let (summary, _) = run_with(&d, opts("duplicates"), false, &tiny_limits(), true);
+        assert_eq!(summary.status, SearchStatus::Limited);
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn closed_channel_ends_the_search() {
+        let d = tmp("closed");
+        for i in 0..10 {
+            fs::write(d.join(format!("f{}.txt", i)), b"x").unwrap();
+        }
+        let (summary, _) = run_with(&d, opts("files"), false, &tiny_limits(), false);
+        // A dialog that is gone must not leave the scan running, and the
+        // result must not look complete.
+        assert_eq!(summary.status, SearchStatus::Cancelled);
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn deep_tree_is_searched_without_growing_the_stack() {
+        let d = tmp("deep");
+        let mut cur = d.clone();
+        // One-character names: the depth is capped by PATH_MAX.
+        for _ in 0..400 {
+            cur = cur.join("d");
+            fs::create_dir_all(&cur).unwrap();
+        }
+        fs::write(cur.join("tief.txt"), b"x").unwrap();
+        let mut o = opts("files");
+        o.name = "tief.txt".into();
+        let (summary, hits) = run(&d, o);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(summary.dirs, 400);
+        assert_eq!(summary.status, SearchStatus::Complete);
+        let _ = fs::remove_dir_all(&d);
     }
 }

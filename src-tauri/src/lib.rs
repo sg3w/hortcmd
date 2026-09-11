@@ -41,6 +41,7 @@ pub fn run() {
             commands::fs::compare::sync_copy,
             commands::fs::filecompare::compare_files,
             commands::fs::search::search,
+            commands::fs::search::cancel_search,
             commands::fs::props::file_props,
             commands::fs::props::set_permissions,
             commands::fs::props::set_owner,

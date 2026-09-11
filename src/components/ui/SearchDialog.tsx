@@ -5,7 +5,7 @@
 // virtualized. A double-click reveals the hit in the active window.
 // ============================================================
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -16,9 +16,15 @@ import {
   HardDrive,
   Loader2,
   Search as SearchIcon,
+  XCircle,
 } from "lucide-react";
-import type { SearchHit } from "@/ipc/bindings";
-import { search, type SearchMode, type SearchOptions } from "@/ipc/client";
+import type { SearchHit, SearchStatus } from "@/ipc/bindings";
+import {
+  cancelSearch,
+  search,
+  type SearchMode,
+  type SearchOptions,
+} from "@/ipc/client";
 import { useSearchDialog, searchRoot, revealPath } from "@/store/searchStore";
 import { useT } from "@/store/settingsStore";
 import { formatSize } from "@/lib/format";
@@ -38,6 +44,20 @@ const MODES: { mode: SearchMode; key: TransKey; Icon: typeof Files }[] = [
 
 const DEFAULT_IGNORE = "node_modules .git target .cache dist";
 
+// Each run gets its own token, so a cancel can never hit a later run.
+let nextToken = 0;
+
+/**
+ * Warning shown for a result that is not the full answer. `complete`
+ * needs none; `partial` only says that unreadable entries were skipped.
+ */
+const STATUS_WARNING: Partial<Record<SearchStatus, TransKey>> = {
+  truncated: "search.truncated",
+  limited: "search.limited",
+  partial: "search.partial",
+  cancelled: "search.cancelled",
+};
+
 export function SearchDialog() {
   const side = useSearchDialog((s) => s.side);
   const close = useSearchDialog((s) => s.close);
@@ -55,9 +75,12 @@ export function SearchDialog() {
 
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [running, setRunning] = useState(false);
-  const [truncated, setTruncated] = useState(false);
+  const [status, setStatus] = useState<SearchStatus | null>(null);
+  const [skipped, setSkipped] = useState(0);
   const [ran, setRan] = useState(false);
   const runToken = useRef(0);
+  // Token of the run currently in the backend (null = nothing running).
+  const activeToken = useRef<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -75,12 +98,29 @@ export function SearchDialog() {
     overscan: 15,
   });
 
+  /** Stops the run in the backend (new search, dialog closed, Stop). */
+  const stopRunning = useCallback(() => {
+    if (activeToken.current) {
+      void cancelSearch(activeToken.current);
+      activeToken.current = null;
+    }
+  }, []);
+
+  // A closed dialog must not leave a scan running.
+  useEffect(() => {
+    if (!open) stopRunning();
+  }, [open, stopRunning]);
+
   const runSearch = useCallback(async () => {
     if (!root.trim()) return;
-    const token = ++runToken.current;
+    stopRunning();
+    const run = ++runToken.current;
+    const token = `search:${++nextToken}`;
+    activeToken.current = token;
     setHits([]);
     setRunning(true);
-    setTruncated(false);
+    setStatus(null);
+    setSkipped(0);
     setRan(true);
     const options: SearchOptions = {
       mode,
@@ -93,15 +133,20 @@ export function SearchDialog() {
       min_size: mode === "large_files" ? Math.max(0, minSizeMb) * 1024 * 1024 : 0,
     };
     try {
-      const cut = await search(root, options, (batch) => {
-        if (token !== runToken.current) return; // stale batch
+      const summary = await search(root, options, token, (batch) => {
+        if (run !== runToken.current) return; // stale batch
         setHits((prev) => (prev.length ? [...prev, ...batch] : batch));
       });
-      if (token === runToken.current) setTruncated(cut);
+      if (run === runToken.current) {
+        setStatus(summary.status);
+        setSkipped(summary.unreadable);
+      }
     } finally {
-      if (token === runToken.current) setRunning(false);
+      if (activeToken.current === token) activeToken.current = null;
+      if (run === runToken.current) setRunning(false);
     }
   }, [
+    stopRunning,
     root,
     mode,
     name,
@@ -117,6 +162,8 @@ export function SearchDialog() {
     if (side) void revealPath(side, hit.path);
     close();
   };
+
+  const warning = status ? STATUS_WARNING[status] : undefined;
 
   const showFileOpts = mode === "files";
   const showLargeOpts = mode === "large_files";
@@ -241,18 +288,24 @@ export function SearchDialog() {
                   label={t("search.case")}
                 />
               )}
-              <button
-                onClick={runSearch}
-                disabled={running || !root.trim()}
-                className="flex items-center gap-1.5 rounded bg-accent px-4 py-1.5 text-[13px] text-white hover:brightness-110 disabled:opacity-50"
-              >
-                {running ? (
+              {running ? (
+                <button
+                  onClick={stopRunning}
+                  className="flex items-center gap-1.5 rounded border border-edge bg-panel px-4 py-1.5 text-[13px] text-text hover:border-accent"
+                >
                   <Loader2 size={14} className="animate-spin" aria-hidden />
-                ) : (
+                  {t("search.stop")}
+                </button>
+              ) : (
+                <button
+                  onClick={runSearch}
+                  disabled={!root.trim()}
+                  className="flex items-center gap-1.5 rounded bg-accent px-4 py-1.5 text-[13px] text-white hover:brightness-110 disabled:opacity-50"
+                >
                   <SearchIcon size={14} aria-hidden />
-                )}
-                {t("search.run")}
-              </button>
+                  {t("search.run")}
+                </button>
+              )}
             </div>
           </div>
 
@@ -261,10 +314,20 @@ export function SearchDialog() {
             <span>
               {hits.length} {t("search.results")}
             </span>
-            {truncated && (
-              <span className="flex items-center gap-1 text-amber-400">
-                <AlertTriangle size={12} aria-hidden />
-                {t("search.truncated")}
+            {warning && (
+              <span
+                className={cn(
+                  "flex items-center gap-1",
+                  status === "cancelled" ? "text-dim" : "text-amber-400",
+                )}
+              >
+                {status === "cancelled" ? (
+                  <XCircle size={12} aria-hidden />
+                ) : (
+                  <AlertTriangle size={12} aria-hidden />
+                )}
+                {t(warning)}
+                {status === "partial" && ` (${skipped})`}
               </span>
             )}
           </div>

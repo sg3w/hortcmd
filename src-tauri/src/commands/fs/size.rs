@@ -10,12 +10,11 @@
 // aborting the walk.
 // ============================================================
 
+use super::cancel;
 use serde::Serialize;
-use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use tauri::ipc::Channel;
 use ts_rs::TS;
@@ -49,43 +48,16 @@ pub struct DirSize {
 /// than the UI needs to be).
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(120);
 
-// ----- Cancel registry (token → flag) -----
+// ----- Cancellation (registry in `super::cancel`) -----
 
-type CancelMap = Mutex<HashMap<String, Arc<AtomicBool>>>;
-static CANCELS: OnceLock<CancelMap> = OnceLock::new();
-
-fn cancels() -> &'static CancelMap {
-    CANCELS.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-/// Flag of a task. A cancel can arrive before the task starts (dialog
-/// closed immediately) – then its flag is already in the map and is
-/// reused here, so the cancel cannot be lost.
-fn register(token: &str) -> Arc<AtomicBool> {
-    match cancels().lock() {
-        Ok(mut map) => map
-            .entry(token.to_string())
-            .or_insert_with(|| Arc::new(AtomicBool::new(false)))
-            .clone(),
-        Err(_) => Arc::new(AtomicBool::new(false)),
-    }
-}
-
-fn unregister(token: &str) {
-    if let Ok(mut map) = cancels().lock() {
-        map.remove(token);
-    }
-}
+/// Cancel token namespace, so search and folder size cannot collide.
+const KIND: &str = "dir_size";
 
 /// Sets the cancel flag of a calculation. Also works before the task has
 /// registered: the flag is stored, and the run then starts cancelled.
 #[tauri::command]
 pub fn cancel_dir_size(token: String) {
-    if let Ok(mut map) = cancels().lock() {
-        map.entry(token)
-            .or_insert_with(|| Arc::new(AtomicBool::new(false)))
-            .store(true, Ordering::Relaxed);
-    }
+    cancel::cancel(KIND, &token);
 }
 
 /// Sums a folder tree iteratively (explicit stack instead of recursion,
@@ -173,15 +145,15 @@ pub async fn dir_size(
 ) -> Result<DirSize, String> {
     let root = PathBuf::from(&path);
     // Register first, so every path out of here also unregisters again.
-    let cancel = register(&token);
+    let flag = cancel::register(KIND, &token);
     let result = if root.is_dir() {
-        tauri::async_runtime::spawn_blocking(move || walk_size(root, &cancel, &on_progress))
+        tauri::async_runtime::spawn_blocking(move || walk_size(root, &flag, &on_progress))
             .await
             .map_err(|e| e.to_string())
     } else {
         Err(format!("{}: kein Verzeichnis", path))
     };
-    unregister(&token);
+    cancel::unregister(KIND, &token);
     result
 }
 
@@ -287,24 +259,11 @@ mod tests {
     }
 
     #[test]
-    fn cancel_token_sets_the_flag() {
-        let flag = register("t-1");
+    fn command_cancels_through_the_shared_registry() {
+        let flag = cancel::register(KIND, "t-1");
         assert!(!flag.load(Ordering::Relaxed));
         cancel_dir_size("t-1".into());
         assert!(flag.load(Ordering::Relaxed));
-        unregister("t-1");
-        // Unknown tokens must not panic.
-        cancel_dir_size("t-1".into());
-        unregister("t-1");
-    }
-
-    #[test]
-    fn cancel_before_start_is_not_lost() {
-        // Dialog closed before the task registers: the run must start
-        // already cancelled instead of walking on forever.
-        cancel_dir_size("t-2".into());
-        let flag = register("t-2");
-        assert!(flag.load(Ordering::Relaxed));
-        unregister("t-2");
+        cancel::unregister(KIND, "t-1");
     }
 }

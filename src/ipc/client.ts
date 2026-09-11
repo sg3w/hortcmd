@@ -24,6 +24,7 @@ import type {
   Preview,
   Profile,
   SearchHit,
+  SearchSummary,
   Tag,
   TermClosed,
   TermData,
@@ -587,21 +588,38 @@ export interface SearchOptions {
   min_size: number;
 }
 
-/** Searches `root` and streams matches in batches. `true` = truncated (limit). */
+/**
+ * Searches `root` and streams matches in batches. `token` identifies the
+ * run for `cancelSearch`. Only `status: "complete"` means the returned
+ * list is the full answer – see `SearchStatus`.
+ */
 export async function search(
   root: string,
   options: SearchOptions,
+  token: string,
   onBatch: (hits: SearchHit[]) => void,
-): Promise<boolean> {
+): Promise<SearchSummary> {
   if (!hasTauri) {
     const rows = demoSearch(options);
     onBatch(rows);
-    return false;
+    return {
+      status: "complete",
+      hits: rows.length,
+      files: rows.length,
+      dirs: 0,
+      unreadable: 0,
+    };
   }
   const { Channel } = await import("@tauri-apps/api/core");
   const channel = new Channel<SearchHit[]>();
   channel.onmessage = onBatch;
-  return invoke<boolean>("search", { root, options, onBatch: channel });
+  return invoke<SearchSummary>("search", { root, options, token, onBatch: channel });
+}
+
+/** Stops a running `search`; unknown tokens are ignored. */
+export async function cancelSearch(token: string): Promise<void> {
+  if (!hasTauri) return;
+  return invoke<void>("cancel_search", { token });
 }
 
 function demoSearch(o: SearchOptions): SearchHit[] {

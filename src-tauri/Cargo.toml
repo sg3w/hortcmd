@@ -38,6 +38,9 @@ md-5 = "0.10"        # Prüfsummen MD5 (Modulname `md5`)
 hex = "0.4"          # Hex-Kodierung der Prüfsummen
 similar = "2"        # Zeilen-Diff (Myers) für den Dateivergleich
 regex = "1"          # Regex für die Suche (Name + Inhalt)
+# Lokaler Verzeichnis-Walk der Suche (Ticket 013). Parallel, prunt ignorierte
+# Ordner vor dem Abstieg; Auswahl gegen `walkdir` gemessen (docs/traversal-benchmark.md).
+jwalk = "0.9"
 keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 russh = "0.53"       # SSH-Client (reines Rust, async) für den SFTP-Provider
 russh-sftp = "2.4.0" # SFTP-Client über einen russh-Kanal
@@ -63,6 +66,11 @@ exacl = "0.12"       # ACL (Access Control Lists) lesen
 # `com.apple.metadata:_kMDItemUserTags`.
 [target.'cfg(target_os = "macos")'.dependencies]
 plist = "1"          # Binär-plist lesen/schreiben (Finder-Tags)
+
+[dev-dependencies]
+# Nur für den Vergleichs-Benchmark der Traversierung (docs/traversal-benchmark.md),
+# damit die Messung jwalk↔walkdir reproduzierbar bleibt.
+walkdir = "2"
 
 [features]
 # Standardfeatures für ein reguläres Tauri-Build.

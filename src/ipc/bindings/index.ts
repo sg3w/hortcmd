@@ -21,6 +21,8 @@ export type { DiffLine } from "./DiffLine";
 export type { HexRow } from "./HexRow";
 export type { Tag } from "./Tag";
 export type { SearchHit } from "./SearchHit";
+export type { SearchStatus } from "./SearchStatus";
+export type { SearchSummary } from "./SearchSummary";
 export type { Profile } from "./Profile";
 export type { ConnectionStatus } from "./ConnectionStatus";
 export type { TermData } from "./TermData";
