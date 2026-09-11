@@ -119,6 +119,13 @@ export async function netForgetHostKey(id: string): Promise<ForgetResult> {
   return invoke<ForgetResult>("net_forget_host_key", { id });
 }
 
+/** Stops a running connection attempt (TICKET-032). Idempotent: an
+ *  already finished or unknown attempt is a no-op, never an error. */
+export async function netCancelConnect(attempt: string): Promise<void> {
+  if (!hasTauri) return;
+  return invoke<void>("net_cancel_connect", { attempt });
+}
+
 export async function netDisconnect(id: string): Promise<void> {
   if (!hasTauri) return;
   return invoke<void>("net_disconnect", { id });
@@ -442,6 +449,7 @@ const gitReadySubs = new Set<(path: string, status: GitStatus) => void>();
 const termDataSubs = new Set<(d: TermData) => void>();
 const termClosedSubs = new Set<(c: TermClosed) => void>();
 const nativeMenuSubs = new Set<(id: string) => void>();
+const netStateSubs = new Set<(states: ConnectionStatus[]) => void>();
 let tauriWired = false;
 
 async function ensureTauriEvents(): Promise<void> {
@@ -473,6 +481,9 @@ async function ensureTauriEvents(): Promise<void> {
   listen<string>("native-menu", (e) =>
     nativeMenuSubs.forEach((f) => f(e.payload)),
   );
+  listen<ConnectionStatus[]>("net-state", (e) =>
+    netStateSubs.forEach((f) => f(e.payload)),
+  );
 }
 
 /** Rebuilds the reduced native macOS menu in `lang` (TICKET-040).
@@ -489,6 +500,19 @@ export function onLeftovers(cb: (l: Leftovers) => void): () => void {
   leftoverSubs.add(cb);
   void ensureTauriEvents();
   return () => leftoverSubs.delete(cb);
+}
+
+/**
+ * Subscribes to the authoritative connection lifecycle (TICKET-032).
+ * The backend pushes the whole list on every transition — attempt
+ * started, cancelled, finished, disconnected, connection lost — so the
+ * manager and the location pickers can never disagree about who is
+ * connected.
+ */
+export function onNetState(cb: (states: ConnectionStatus[]) => void): () => void {
+  netStateSubs.add(cb);
+  void ensureTauriEvents();
+  return () => netStateSubs.delete(cb);
 }
 
 /** Subscribes to clicks in the reduced native macOS menu (TICKET-040). */

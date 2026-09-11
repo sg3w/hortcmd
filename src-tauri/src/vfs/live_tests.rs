@@ -261,6 +261,46 @@ fn exercise_capabilities(p: Arc<dyn Provider>, address: &str, ssh_expected: bool
     println!("  OK: capability matrix matches the exercised behavior");
 }
 
+/// Connection lifecycle against endpoints that misbehave (ticket 032).
+///
+/// Needs no server of its own: it binds a listener that accepts TCP and
+/// then says nothing, which is the case a transport probe cannot catch
+/// and only the overall timeout can. `#[ignore]`d because it deliberately
+/// spends the full 45-second budget.
+///
+/// `cargo test --lib live_connect_timeout -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn live_connect_timeout() {
+    use crate::net::lifecycle::{self, FailureKind, OVERALL_TIMEOUT};
+    use std::time::Instant;
+
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let port = listener.local_addr().unwrap().port();
+    // Accept and then hold the connection open without speaking.
+    std::thread::spawn(move || {
+        let held: Vec<_> = listener.incoming().take(4).filter_map(Result::ok).collect();
+        std::thread::sleep(OVERALL_TIMEOUT * 2);
+        drop(held);
+    });
+
+    // The transport probe passes — the port really is open.
+    let started = Instant::now();
+    lifecycle::probe_transport("127.0.0.1", port).expect("the port is listening");
+    assert!(
+        started.elapsed() < lifecycle::TRANSPORT_TIMEOUT,
+        "the probe must return as soon as the socket connects"
+    );
+    println!("  OK: an open but silent port passes the transport probe");
+
+    // A refused port is rejected as unreachable, well inside the budget.
+    let started = Instant::now();
+    let err = lifecycle::probe_transport("127.0.0.1", 9).unwrap_err();
+    assert_eq!(err.kind, FailureKind::Unreachable);
+    assert!(started.elapsed() < lifecycle::TRANSPORT_TIMEOUT);
+    println!("  OK: a refused port is unreachable, not a protocol error");
+}
+
 /// SFTP. Server:
 /// `docker run -d --name sftp -p 22:22 emberstack/sftp demo:demo123:::upload`
 #[test]

@@ -107,6 +107,12 @@ impl Provider for SftpProvider {
         Some(self.conn.ssh.clone())
     }
 
+    /// The SSH transport carries both the SFTP subsystem and the
+    /// terminal, so its handle answers for the whole connection.
+    fn transport_alive(&self) -> bool {
+        !self.conn.ssh.is_closed()
+    }
+
     fn list(&self, path: &str) -> Result<DirListing, String> {
         let dir = runtime()
             .block_on(self.sftp().read_dir(path))

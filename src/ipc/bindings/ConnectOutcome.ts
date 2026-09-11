@@ -3,8 +3,9 @@ import type { ConnectionStatus } from "./ConnectionStatus";
 import type { HostKeyChallenge } from "./HostKeyChallenge";
 
 /**
- * What `net_connect` produced. A connection attempt either yields a
- * live session or stops at a host-key question (ticket 028) — the
- * frontend branches on the tag, never on message text.
+ * What `net_connect` produced. An attempt yields a live session, stops
+ * at a host-key question (ticket 028), or reports that one was already
+ * running for this profile (ticket 032) — the frontend branches on the
+ * tag, never on message text.
  */
-export type ConnectOutcome = { "kind": "connected", "data": ConnectionStatus } | { "kind": "hostKey", "data": HostKeyChallenge };
+export type ConnectOutcome = { "kind": "connected", "data": ConnectionStatus } | { "kind": "hostKey", "data": HostKeyChallenge } | { "kind": "pending", "data": ConnectionStatus };

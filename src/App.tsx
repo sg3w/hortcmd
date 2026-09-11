@@ -16,9 +16,11 @@ import {
   onFsDone,
   onFsProgress,
   onGitStatusReady,
+  onNetState,
   setWatched,
 } from "@/ipc/client";
 import { panelOf, usePanes } from "@/store/panesStore";
+import { useNet } from "@/features/net/netStore";
 import { useSession } from "@/store/sessionStore";
 import { useTransfers } from "@/store/transfersStore";
 import { useOps } from "@/store/opsStore";
@@ -225,6 +227,14 @@ export default function App() {
     return onGitStatusReady((path, git) => {
       usePanes.getState().applyGitStatus(path, git);
     });
+  }, []);
+
+  // The authoritative connection lifecycle (TICKET-032). Every
+  // transition — attempt started, cancelled, finished, disconnected,
+  // connection lost — arrives as one snapshot, so the manager and the
+  // location pickers always show the same thing.
+  useEffect(() => {
+    return onNetState((states) => useNet.getState().applyStates(states));
   }, []);
 
   // Intercept window closing during running transfers (TICKET-004): instead

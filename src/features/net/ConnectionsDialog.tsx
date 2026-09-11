@@ -14,6 +14,7 @@
 import { useEffect, useState } from "react";
 import {
   KeyRound,
+  Loader2,
   Lock,
   LockOpen,
   Pencil,
@@ -26,7 +27,13 @@ import {
   ShieldOff,
   Trash2,
 } from "lucide-react";
-import type { CredConfig, Profile } from "@/ipc/bindings";
+import type {
+  ConnectionStatus,
+  CredConfig,
+  Phase,
+  Profile,
+} from "@/ipc/bindings";
+import { phaseLabel, rowControls } from "./lifecycleUi";
 import { useNet } from "@/features/net/netStore";
 import { usePanes } from "@/store/panesStore";
 import { useT } from "@/store/settingsStore";
@@ -123,16 +130,13 @@ export function ConnectionsDialog() {
                   {t("net.empty")}
                 </p>
               )}
-              {profiles.map((p) => {
-                const status = connections.find((c) => c.id === p.id);
-                return (
-                  <ConnectionRow
-                    key={p.id}
-                    profile={p}
-                    connected={!!status?.connected}
-                  />
-                );
-              })}
+              {profiles.map((p) => (
+                <ConnectionRow
+                  key={p.id}
+                  profile={p}
+                  status={connections.find((c) => c.id === p.id) ?? null}
+                />
+              ))}
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -158,20 +162,35 @@ export function ConnectionsDialog() {
   );
 }
 
+/** Dot colour per lifecycle phase — one glance says where a profile is. */
+const PHASE_DOT: Record<Phase, string> = {
+  connected: "bg-emerald-400",
+  connecting: "bg-amber-400",
+  disconnecting: "bg-amber-400",
+  failed: "bg-red-400",
+  disconnected: "bg-dim/50",
+};
+
 function ConnectionRow({
   profile,
-  connected,
+  status,
 }: {
   profile: Profile;
-  connected: boolean;
+  status: ConnectionStatus | null;
 }) {
   const connect = useNet((s) => s.connect);
   const disconnect = useNet((s) => s.disconnect);
+  const cancelConnect = useNet((s) => s.cancelConnect);
   const remove = useNet((s) => s.remove);
   const startEdit = useNet((s) => s.startEdit);
   const startForget = useNet((s) => s.startForget);
   const closeManager = useNet((s) => s.closeManager);
   const t = useT();
+
+  // The backend is the authority on the phase (TICKET-032); what the
+  // row makes of it is decided once, in `rowControls`.
+  const { phase, action, busy, secondaryDisabled, status: line } =
+    rowControls(status);
 
   const doConnect = async () => {
     const address = await connect(profile.id);
@@ -180,6 +199,8 @@ function ConnectionRow({
       closeManager();
       void s.loadDir(s.active, address);
     }
+    // No address means failed, cancelled, a host-key question, or a
+    // duplicate request — the manager stays open and says which.
   };
 
   return (
@@ -187,9 +208,10 @@ function ConnectionRow({
       <span
         className={cn(
           "h-2 w-2 shrink-0 rounded-full",
-          connected ? "bg-emerald-400" : "bg-dim/50",
+          PHASE_DOT[phase],
+          busy && "animate-pulse",
         )}
-        title={connected ? t("net.connected") : ""}
+        title={t(phaseLabel(phase))}
       />
       <div className="flex min-w-0 flex-col leading-tight">
         <span className="truncate text-[13px] text-text">
@@ -198,9 +220,36 @@ function ConnectionRow({
         <span className="truncate font-mono text-[10px] text-dim">
           {profile.protocol}://{profile.user}@{profile.host}:{profile.port}
         </span>
+        {line && (
+          <span
+            className={cn(
+              "truncate text-[10px]",
+              busy ? "text-amber-400" : "text-red-400",
+            )}
+          >
+            {"key" in line ? t(line.key) : line.text}
+          </span>
+        )}
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1">
-        {connected ? (
+        {action === "cancel" ? (
+          <button
+            onClick={() => void cancelConnect(profile.id)}
+            title={t("net.cancelConnect")}
+            aria-label={t("net.cancelConnect")}
+            className="flex items-center gap-1 rounded border border-edge px-1.5 py-1 text-[11px] text-amber-400 hover:border-accent"
+          >
+            <Loader2 size={13} className="animate-spin" aria-hidden />
+            {t("net.cancel")}
+          </button>
+        ) : action === "waiting" ? (
+          <span
+            title={t("net.disconnecting")}
+            className="flex items-center rounded border border-transparent p-1 text-dim"
+          >
+            <Loader2 size={14} className="animate-spin" aria-hidden />
+          </span>
+        ) : action === "disconnect" ? (
           <button
             onClick={() => void disconnect(profile.id)}
             title={t("net.disconnect")}
@@ -220,23 +269,26 @@ function ConnectionRow({
         {profile.protocol === "sftp" && (
           <button
             onClick={() => startForget(profile)}
-            title={t("hostkey.forget")}
-            className="rounded border border-edge p-1 text-dim hover:border-accent hover:text-text"
+            disabled={secondaryDisabled}
+            title={secondaryDisabled ? t("net.busy") : t("hostkey.forget")}
+            className="rounded border border-edge p-1 text-dim hover:border-accent hover:text-text disabled:opacity-30 disabled:hover:border-edge"
           >
             <ShieldOff size={14} />
           </button>
         )}
         <button
           onClick={() => startEdit(profile)}
-          title={t("net.edit")}
-          className="rounded border border-edge p-1 text-dim hover:border-accent hover:text-text"
+          disabled={secondaryDisabled}
+          title={secondaryDisabled ? t("net.busy") : t("net.edit")}
+          className="rounded border border-edge p-1 text-dim hover:border-accent hover:text-text disabled:opacity-30 disabled:hover:border-edge"
         >
           <Pencil size={14} />
         </button>
         <button
           onClick={() => void remove(profile.id)}
-          title={t("net.delete")}
-          className="rounded border border-edge p-1 text-dim hover:border-red-500 hover:text-red-400"
+          disabled={secondaryDisabled}
+          title={secondaryDisabled ? t("net.busy") : t("net.delete")}
+          className="rounded border border-edge p-1 text-dim hover:border-red-500 hover:text-red-400 disabled:opacity-30 disabled:hover:border-edge"
         >
           <Trash2 size={14} />
         </button>

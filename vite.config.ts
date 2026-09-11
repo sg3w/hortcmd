@@ -38,5 +38,8 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     include: ["src/**/*.test.ts"],
+    // jsdom here has no usable localStorage; the stores persist through
+    // it, so one in-memory shim runs before every test file.
+    setupFiles: ["src/test/setup.ts"],
   },
 });

@@ -258,6 +258,17 @@ pub trait Provider: Send + Sync {
     /// Removes a directory and its contents recursively.
     fn remove_dir_all(&self, path: &Path) -> io::Result<()>;
 
+    /// Whether this provider's transport is still usable.
+    ///
+    /// Answered from local state only — never a round trip — because the
+    /// connection status refresh asks every live provider (ticket 032).
+    /// A provider that cannot tell cheaply says `true` and reports a
+    /// loss from its own operations instead; a definitive `false` makes
+    /// the session disconnect once rather than staying marked live.
+    fn transport_alive(&self) -> bool {
+        true
+    }
+
     /// The SSH connection carrying this provider, if it has one (SFTP).
     /// The SSH terminal (ticket 026) opens its shell channel on it, so
     /// no second login is needed; every other provider returns `None`.

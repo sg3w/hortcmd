@@ -158,6 +158,11 @@ net/                         Remote connection base (identical UI) — tickets 0
 │                            in <config>/hortcmd/known_hosts (atomar, 0600) ·
 │                            Decision trusted/unknown/mismatch · ConnectError
 │                            (typisiert statt Fehlertext); TICKET-028
+├── lifecycle.rs             Verbindungs-Zustandsmaschine (TICKET-032): Phase ·
+│                            FailureKind/ConnFailure (typisiert) · Versuch mit
+│                            Id + Generation (einer pro Profil) · 15 s Transport-,
+│                            45 s Gesamt-Timeout · probe_transport · settle als
+│                            einziges Tor in die Live-Registry
 ├── session.rs               Profile (persisted, no secret) · session registry
 │                            (connect/disconnect/reconnect) · net_* commands
 ├── ssh.rs                   SshSession: authentifizierte SSH-Verbindung (russh);
@@ -298,6 +303,67 @@ returns one deterministic local set with the same platform gates.
 
 Direct frontend scheme tests (`scheme === "sftp"`) are gone; the platform is
 only consulted where the answer is needed before the backend has spoken.
+
+---
+
+### Connection lifecycle (TICKET-032)
+
+Connecting is the one operation that talks to a machine nobody here controls, so
+it is the one operation with an explicit state machine: `net/lifecycle.rs`.
+
+**One attempt per profile.** Each connect request gets an attempt id and a
+monotonically increasing generation. A second click finds the running attempt
+(`ConnectOutcome::Pending`) instead of opening a second socket, and
+`net_cancel_connect(attempt)` stops it — idempotently, so an unknown or already
+finished id is a no-op rather than an error.
+
+**Bounded.** A **15-second transport timeout** covers DNS plus TCP: reaching the
+port is the one step all four protocols share, and most of their clients cannot
+express a connect timeout at all, so `probe_transport` does it uniformly and
+reports `unreachable`. A **45-second overall timeout** then covers handshake,
+authentication, host verification and the provider's own readiness probe. The
+attempt runs on a worker thread and the command waits on a channel, so
+`net_connect` never outlives the budget however the server behaves. Both are
+constants, not settings.
+
+**Only a finished attempt may win.** `lifecycle::settle` is the single place a
+provider enters the live registry, and it installs only when the attempt is still
+the current generation and not cancelled. Everything follows from that:
+
+* a cancelled or superseded late success is dropped — which closes the connection
+  it opened — and never replaces the authoritative session;
+* a **failed reconnect leaves the previously working session connected**, because
+  nothing is removed before a replacement is ready;
+* `net_disconnect` cancels a pending attempt first, so an attempt in flight
+  cannot install its provider behind the teardown.
+
+**Typed outcomes.** `FailureKind` separates `timeout`, `cancelled`, `auth`,
+`hostKey`, `unreachable`, `protocol` and `keychain`. Cancellation, timeout, host
+key, keychain and unreachable are *structural* — they come from the phase that
+produced them, never from reading a message. Only the protocol clients still hand
+back prose, and `classify_protocol_error` separates a refused sign-in from the
+rest with a narrow vocabulary, defaulting to `protocol` when unsure (TICKET-036
+replaces this with structured errors). Errors that travel as strings carry a
+`CONN_*` marker, the same pattern as `KEEPASS_LOCKED` and `UNSUPPORTED_LOCATION`.
+
+**Connection loss.** `Provider::transport_alive` is answered from local state, so
+the status refresh can ask every live provider without a round trip; SFTP reports
+its russh handle. A shell whose channel ends while the transport is closed
+reports the loss too. Either way `report_connection_lost` removes the session
+**once**, closes the shells riding on it, and records `failed` with the reason —
+nothing stays marked live after the link is gone.
+
+**Locks.** The registry mutex is never held across a keychain prompt, a socket, or
+a shell teardown: every phase runs on a worker thread and reaches into the
+registry only to record a decision.
+
+**Frontend.** `ConnectionStatus` carries `phase`, `attempt` and `error`, so the
+dialog adopts authoritative state when it reopens instead of resetting itself to
+"disconnected". `net-state` pushes the whole list on every transition, which is
+what keeps the manager and the location pickers from disagreeing.
+`features/net/lifecycleUi.ts` turns a status into what the row offers — connect,
+cancel, disconnect or a spinner, plus what editing/deleting may do meanwhile — so
+that decision is stated once and tested directly rather than living in JSX.
 
 ---
 
@@ -466,11 +532,14 @@ the running-transfer guard from TICKET-004 still applies.
 | `save_selection` | `path, location, entries[], overwrite` | `boolean` (false = exists) | ✅ |
 | `load_selection` | `path` | `SelectionFile` (validated) | ✅ |
 | `location_capabilities` | `address` | `LocationCapabilities` (TICKET-031) | ✅ |
+| `net_cancel_connect` | `attempt` | – (TICKET-032, idempotent) | ✅ |
 | `set_menu_language` | `lang` | – (rebuilds the native macOS menu) | ✅ |
 
 **Events:** `fs-progress` (`OpProgress` – per-file + overall progress), `fs-done`
 (`OpDone` – ok/errors/cancelled), `fs-collision` (`CollisionReq` – blocks until answer),
 `fs-changed` (folder path – external change, triggers a debounced auto-refresh),
+`net-state` (`ConnectionStatus[]` – the whole connection lifecycle on every
+transition, TICKET-032),
 `native-menu` (id of a reduced-native-menu item — `app.about`/`app.settings`/
 `app.quit`, routed to the same commands as the in-window menu, TICKET-040).
 Types are generated with **ts-rs** (`npm run gen:types` → `src/ipc/bindings/`); the
@@ -1079,7 +1148,8 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
       (foundation) ✅ → 021 connections/credentials (OS keychain) ✅ →
       022 SFTP ✅ → 023 SMB ✅, 024 WebDAV ✅, 025 FTP/FTPS ✅ →
       026 SSH terminal ✅ → 027 optional KeePass backend ✅ →
-      028 SSH host-key verification ✅ → 031 capability contract ✅**.
+      028 SSH host-key verification ✅ → 031 capability contract ✅ →
+      032 connection lifecycle ✅**.
       "Identical UI" via provider trait + schema registry; secrets via
       `CredentialStore` — OS keychain by default, optionally a portable
       `.kdbx` file (TICKET-027). The store is picked in the connection
@@ -1125,6 +1195,17 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
       the native menu and the keyboard, so a disabled item, a blocked
       shortcut and a two-location dialog all explain themselves in the
       same words. The matrix is in §4 "Location capabilities".
+      **Connecting itself is bounded and cancellable** (TICKET-032): one
+      attempt per profile with an id and a generation, a 15-second
+      transport and 45-second overall timeout, an explicit cancel, and
+      `settle` as the only gate into the live registry — so a cancelled
+      or superseded late result is dropped and a failed reconnect leaves
+      the working session alone. Failures are typed
+      (`timeout`/`cancelled`/`auth`/`hostKey`/`unreachable`/`protocol`/
+      `keychain`), the manager shows a spinner with a cancel action while
+      an attempt runs, and a lost connection reaches the manager and the
+      location pickers as one `net-state` snapshot. Details in §4
+      "Connection lifecycle".
       The **connection manager has its own toolbar button** (`CommandBar`, `Server`
       icon in its own section between navigation and file actions; TICKET-016) and
       opens globally via `useNet.getState().openManager()` — the toolbar is always

@@ -86,6 +86,14 @@ impl SshSession {
     }
 
     /// Opens a new session channel on this connection.
+    /// Whether the transport is gone (the peer closed it, or it broke).
+    /// russh flags this on its handle, so the check is a read of local
+    /// state — no round trip — which is what makes it usable from the
+    /// status refresh (ticket 032).
+    pub fn is_closed(&self) -> bool {
+        self.handle.is_closed()
+    }
+
     pub async fn open_channel(&self) -> Result<Channel<Msg>, String> {
         self.handle
             .channel_open_session()

@@ -21,9 +21,11 @@ import type {
   HostKeyChallenge,
   Profile,
 } from "@/ipc/bindings";
+import { describeConnError } from "./connFailure";
 import { useCaps } from "@/store/capsStore";
 import { usePanes } from "@/store/panesStore";
 import {
+  netCancelConnect,
   netConnect,
   netCredLock,
   netCredSetBackend,
@@ -40,6 +42,18 @@ import {
 
 /** Marker the backend puts on every "KeePass file is locked" error. */
 const LOCKED = "KEEPASS_LOCKED";
+
+/** Swaps one profile's status into the list (or appends it). */
+function replaceStatus(
+  list: ConnectionStatus[],
+  next: ConnectionStatus,
+): ConnectionStatus[] {
+  const idx = list.findIndex((c) => c.id === next.id);
+  if (idx < 0) return [...list, next];
+  const copy = [...list];
+  copy[idx] = next;
+  return copy;
+}
 
 /** Which connections are live — the part a capability answer depends on. */
 function liveSignature(connections: ConnectionStatus[]): string {
@@ -94,6 +108,10 @@ interface NetState {
   /** Connects and returns the navigable address on success. */
   connect: (id: string) => Promise<string | null>;
   disconnect: (id: string) => Promise<void>;
+  /** Stops a running attempt (TICKET-032); idempotent. */
+  cancelConnect: (id: string) => Promise<void>;
+  /** Replaces the connection list from a backend `net-state` push. */
+  applyStates: (states: ConnectionStatus[]) => void;
 
   showPanel: (panel: NetPanel) => void;
   refreshCred: () => Promise<void>;
@@ -192,6 +210,13 @@ export const useNet = create<NetState>((set, get) => ({
   connect: async (id) => {
     try {
       const outcome = await netConnect(id);
+      if (outcome.kind === "pending") {
+        // A duplicate request. The attempt that is already running owns
+        // the profile; adopting its state is all there is to do here
+        // (TICKET-032) — no second socket, no second error.
+        set({ connections: replaceStatus(get().connections, outcome.data) });
+        return null;
+      }
       if (outcome.kind === "hostKey") {
         // Nothing was authenticated — the server identity has to be
         // settled first (ticket 028).
@@ -210,7 +235,9 @@ export const useNet = create<NetState>((set, get) => ({
       return outcome.data.address;
     } catch (e) {
       if (!isLocked(e)) {
-        set({ error: String(e) });
+        // A typed lifecycle failure reads as one localized sentence
+        // (TICKET-032); anything else is passed through unchanged.
+        set({ error: describeConnError(e) });
         return null;
       }
       // Park the *whole* step, navigation included — by the time the
@@ -224,6 +251,26 @@ export const useNet = create<NetState>((set, get) => ({
       });
       return null;
     }
+  },
+
+  cancelConnect: async (id) => {
+    const attempt = get().connections.find((c) => c.id === id)?.attempt;
+    if (!attempt) return;
+    try {
+      await netCancelConnect(attempt);
+      await get().refresh();
+    } catch (e) {
+      // Cancelling is idempotent in the backend, so a failure here means
+      // the IPC itself broke — worth showing, never worth blocking on.
+      set({ error: String(e) });
+    }
+  },
+
+  applyStates: (states) => {
+    if (liveSignature(states) !== liveSignature(get().connections)) {
+      useCaps.getState().invalidateRemote();
+    }
+    set({ connections: states });
   },
 
   disconnect: async (id) => {

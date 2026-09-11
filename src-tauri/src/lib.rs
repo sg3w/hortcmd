@@ -115,6 +115,7 @@ pub fn run() {
             net::session::net_connect,
             net::session::net_trust_host_key,
             net::session::net_forget_host_key,
+            net::session::net_cancel_connect,
             net::session::net_disconnect,
             net::session::net_list_connections,
             net::credentials::net_cred_status,

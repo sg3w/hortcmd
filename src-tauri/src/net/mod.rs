@@ -5,6 +5,9 @@
 //                 optional portable KeePass (.kdbx) backend (ticket 027)
 //   hostkey     – SSH host-key verification against known_hosts plus the
 //                 hortcmd-managed trust store (ticket 028)
+//   lifecycle   – attempt/generation state machine behind connecting:
+//                 one attempt per profile, bounded, cancellable, and the
+//                 single gate a provider passes to become live (032)
 //   session     – connection profiles + live session registry
 //                 (connect/disconnect/reconnect), protocol-independent
 //   ssh         – authenticated SSH connection (SFTP + terminal ride on it)
@@ -13,6 +16,7 @@
 
 pub mod credentials;
 pub mod hostkey;
+pub mod lifecycle;
 pub mod session;
 pub mod ssh;
 pub mod terminal;

@@ -11,7 +11,11 @@
 
 use super::credentials::{self, CredentialStore};
 use super::hostkey::{self, ConnectError, ForgetResult, HostKeyChallenge, HostId};
+use super::lifecycle::{
+    self, Attempt, ConnFailure, FailureKind, Phase, Start, OVERALL_TIMEOUT,
+};
 use crate::vfs::Provider;
+use tauri::{AppHandle, Emitter};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -89,7 +93,11 @@ impl Profile {
     }
 }
 
-/// Live status of a connection (for the location selector).
+/// Live status of a connection (for the location selector and the
+/// connection manager). `connected` is the registry's answer; `phase`,
+/// `attempt` and `error` are the lifecycle around it (ticket 032), so a
+/// reopened dialog renders a running attempt or a past failure instead
+/// of resetting itself to "disconnected".
 #[derive(Serialize, Clone, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct ConnectionStatus {
@@ -99,17 +107,27 @@ pub struct ConnectionStatus {
     pub connected: bool,
     /// `sftp://user@host:port/start` — navigate here to browse.
     pub address: String,
+    /// Where this profile stands right now (ticket 032).
+    pub phase: Phase,
+    /// Id of the running attempt, for `net_cancel_connect`.
+    pub attempt: Option<String>,
+    /// How the last attempt failed, typed (ticket 032).
+    pub error: Option<ConnFailure>,
 }
 
-/// What `net_connect` produced. A connection attempt either yields a
-/// live session or stops at a host-key question (ticket 028) — the
-/// frontend branches on the tag, never on message text.
+/// What `net_connect` produced. An attempt yields a live session, stops
+/// at a host-key question (ticket 028), or reports that one was already
+/// running for this profile (ticket 032) — the frontend branches on the
+/// tag, never on message text.
 #[derive(Serialize, Clone, TS)]
 #[serde(tag = "kind", content = "data", rename_all = "camelCase")]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub enum ConnectOutcome {
     Connected(ConnectionStatus),
     HostKey(HostKeyChallenge),
+    /// A duplicate request: this profile already has an attempt running.
+    /// The caller shows that one rather than opening a second socket.
+    Pending(ConnectionStatus),
 }
 
 // ---------- Persistence ----------
@@ -205,6 +223,105 @@ pub fn remote_provider(scheme: &str, key: &str) -> Result<Arc<dyn Provider>, Str
     }
 }
 
+/// Whether a profile's session is in the live registry right now.
+fn is_live(profile: &Profile) -> bool {
+    registry()
+        .lock()
+        .unwrap()
+        .live
+        .contains_key(&profile.store_id())
+}
+
+/// One profile's status, with its lifecycle reconciled against the
+/// registry. The registry is the truth about a *live* session; the
+/// lifecycle adds the states it cannot express.
+fn status_of(profile: &Profile) -> ConnectionStatus {
+    let live = is_live(profile);
+    let (phase, attempt, error) = lifecycle::reconcile(&profile.id, live);
+    ConnectionStatus {
+        id: profile.id.clone(),
+        key: profile.connection_key(),
+        name: profile.name.clone(),
+        connected: phase == Phase::Connected,
+        address: profile.address(),
+        phase,
+        attempt,
+        error,
+    }
+}
+
+/// Current status of every saved profile.
+///
+/// Sessions whose transport is definitively gone are reaped first, so a
+/// connection the peer dropped stops being reported as live the moment
+/// anything asks — the manager and the location pickers therefore learn
+/// about a loss at the same instant (ticket 032).
+fn all_states() -> Vec<ConnectionStatus> {
+    reap_dead_sessions();
+    // The profile list is copied out first: `status_of` takes the
+    // registry lock itself, and no lock may be held across that.
+    let profiles = registry().lock().unwrap().profiles.clone();
+    profiles.iter().map(status_of).collect()
+}
+
+/// Drops every live provider whose transport reports itself closed.
+/// `transport_alive` is answered from local state, so this stays a cheap
+/// check rather than a round trip per connection.
+fn reap_dead_sessions() {
+    let dead: Vec<String> = {
+        let reg = registry().lock().unwrap();
+        reg.live
+            .iter()
+            .filter(|(_, p)| !p.transport_alive())
+            .map(|(id, _)| id.clone())
+            .collect()
+    };
+    for store_id in dead {
+        report_connection_lost(&store_id, "Verbindung zum Server verloren");
+    }
+}
+
+/// Pushes the current lifecycle of every profile to the frontend.
+///
+/// One event carrying the whole list rather than per-profile deltas: the
+/// list is short, and a single authoritative snapshot cannot leave the
+/// manager and the location pickers disagreeing about who is connected.
+pub fn emit_states(app: &AppHandle) {
+    let _ = app.emit("net-state", all_states());
+}
+
+/// Records that a live connection turned out to be gone.
+///
+/// Called by a provider or a terminal session that hit a definitive
+/// transport failure — not a missing file or a refused operation, which
+/// say nothing about the connection. The session is removed once, its
+/// shells are closed with it, and the profile ends in `failed` with the
+/// reason, so nothing stays marked live after the link is lost.
+pub fn report_connection_lost(store_id: &str, reason: &str) {
+    let (removed, profile_id) = {
+        let mut reg = registry().lock().unwrap();
+        let removed = reg.live.remove(store_id).is_some();
+        let profile_id = reg
+            .profiles
+            .iter()
+            .find(|p| p.store_id() == store_id)
+            .map(|p| p.id.clone());
+        (removed, profile_id)
+    };
+    if !removed {
+        // Already reported — "mark it once", not once per failing call.
+        return;
+    }
+    // Outside the lock: closing a shell is network I/O.
+    super::terminal::close_for_store(store_id);
+    if let Some(id) = profile_id {
+        lifecycle::set_disconnected(
+            &id,
+            Some(ConnFailure::new(FailureKind::Protocol, reason)),
+        );
+    }
+}
+
 // ---------- Commands ----------
 
 /// Lists saved connection profiles.
@@ -233,6 +350,8 @@ pub fn net_save_profile(profile: Profile, secret: Option<String>) -> Result<(), 
 /// Deletes a profile and its stored secret (disconnecting if live).
 #[tauri::command]
 pub fn net_delete_profile(id: String) -> Result<(), String> {
+    // A profile that is still connecting loses its attempt with it.
+    lifecycle::cancel_for_profile(&id);
     let mut reg = registry().lock().unwrap();
     let mut closed = None;
     if let Some(pos) = reg.profiles.iter().position(|p| p.id == id) {
@@ -247,6 +366,7 @@ pub fn net_delete_profile(id: String) -> Result<(), String> {
     if let Some(store_id) = closed {
         super::terminal::close_for_store(&store_id);
     }
+    lifecycle::forget(&id);
     result
 }
 
@@ -263,53 +383,196 @@ fn profile_by_id(id: &str) -> Result<Profile, String> {
         .ok_or_else(|| format!("Profil {} nicht gefunden", id))
 }
 
-/// Opens a connection for a profile and returns its status. Reconnects
-/// (replaces) an existing session for the same key. An SSH host whose
-/// key is unknown or has changed stops here with a host-key challenge
-/// instead — nothing has been authenticated at that point (ticket 028).
-#[tauri::command]
-pub fn net_connect(id: String) -> Result<ConnectOutcome, String> {
-    let profile = profile_by_id(&id)?;
-    let secret = credentials::store().get(&id)?;
+/// What a finished attempt produced, before the lifecycle decides
+/// whether it may become the live session.
+enum Opened {
+    Provider(Arc<dyn Provider>),
+    HostKey(HostKeyChallenge),
+}
 
-    // Dispatch to the protocol's provider. Each `connect` returns a ready
-    // provider bound to the live connection.
+/// The whole connect sequence for one attempt, off the UI thread.
+///
+/// Each phase is preceded by a cancellation check, so a cancel taken
+/// during the previous phase stops the next one from starting. Nothing
+/// here touches the registry: the result travels back to [`net_connect`]
+/// and only `lifecycle::settle` may install it.
+fn run_attempt(attempt: &Attempt, profile: &Profile) -> Result<Opened, ConnFailure> {
+    attempt.check()?;
+
+    // 1. The secret. A keychain prompt or a locked KeePass file is a
+    //    failure of its own kind, not a protocol error — and it happens
+    //    before any socket, with no registry lock held anywhere.
+    let secret = credentials::store()
+        .get(&profile.id)
+        .map_err(|e| ConnFailure::new(FailureKind::Keychain, e))?;
+    attempt.check()?;
+
+    // 2. The transport. Reaching the port is timed uniformly (15 s),
+    //    because most protocol clients cannot express a connect timeout.
+    lifecycle::probe_transport(&profile.host, profile.port)?;
+    attempt.check()?;
+
+    // 3. Handshake, authentication, host verification and the provider's
+    //    own readiness probe — all inside the client's `connect`.
     let opened: Result<Arc<dyn Provider>, ConnectError> = match profile.protocol.as_str() {
-        "sftp" => crate::vfs::sftp::connect(&profile, secret.as_deref()),
+        "sftp" => crate::vfs::sftp::connect(profile, secret.as_deref()),
         "ftp" | "ftps" => {
-            crate::vfs::ftp::connect(&profile, secret.as_deref()).map_err(ConnectError::from)
+            crate::vfs::ftp::connect(profile, secret.as_deref()).map_err(ConnectError::from)
         }
         "webdav" => {
-            crate::vfs::webdav::connect(&profile, secret.as_deref()).map_err(ConnectError::from)
+            crate::vfs::webdav::connect(profile, secret.as_deref()).map_err(ConnectError::from)
         }
-        "smb" => crate::vfs::smb::connect(&profile, secret.as_deref()).map_err(ConnectError::from),
+        "smb" => crate::vfs::smb::connect(profile, secret.as_deref()).map_err(ConnectError::from),
         other => {
-            return Err(format!("Protokoll '{}' wird noch nicht unterstützt", other));
+            return Err(ConnFailure::new(
+                FailureKind::Protocol,
+                format!("Protokoll '{}' wird noch nicht unterstützt", other),
+            ))
         }
     };
 
-    let provider = match opened {
-        Ok(provider) => provider,
-        Err(ConnectError::HostKey(challenge)) => {
-            return Ok(ConnectOutcome::HostKey(challenge));
+    match opened {
+        Ok(provider) => Ok(Opened::Provider(provider)),
+        Err(ConnectError::HostKey(challenge)) => Ok(Opened::HostKey(challenge)),
+        Err(ConnectError::Message(message)) => Err(lifecycle::classify_protocol_error(&message)),
+    }
+}
+
+/// Opens a connection for a profile and returns its status.
+///
+/// The attempt runs on a worker thread under a 45-second cap, so the
+/// command never outlives the budget however the server behaves. It can
+/// be stopped with `net_cancel_connect`, a second click finds the
+/// running attempt instead of opening another socket, and the provider
+/// enters the registry only in `lifecycle::settle` — so a superseded or
+/// cancelled result cannot replace a working session, and a failed
+/// reconnect leaves the previous one connected (ticket 032).
+///
+/// An SSH host whose key is unknown or has changed stops with a host-key
+/// challenge instead; nothing has been authenticated at that point
+/// (ticket 028).
+#[tauri::command]
+pub fn net_connect(app: AppHandle, id: String) -> Result<ConnectOutcome, String> {
+    let profile = profile_by_id(&id)?;
+
+    let attempt = match lifecycle::begin(&id) {
+        Start::Started(a) => a,
+        // A duplicate click: report the attempt that is already running,
+        // so the caller shows (and can cancel) that one instead of
+        // opening a second socket.
+        Start::AlreadyRunning(running) => {
+            let mut status = status_of(&profile);
+            status.phase = Phase::Connecting;
+            status.attempt = Some(running.id);
+            status.connected = false;
+            return Ok(ConnectOutcome::Pending(status));
         }
-        Err(ConnectError::Message(message)) => return Err(message),
+    };
+    // The pending state is visible before the first packet leaves.
+    emit_states(&app);
+
+    let (tx, rx) = std::sync::mpsc::sync_channel::<Result<Opened, ConnFailure>>(1);
+    let worker = {
+        let attempt = attempt.clone();
+        let profile = profile.clone();
+        // A plain thread, not the shared Tokio runtime: the protocol
+        // clients bridge async work through `block_on` internally, which
+        // must not run inside a runtime worker.
+        std::thread::spawn(move || {
+            let outcome = run_attempt(&attempt, &profile);
+            // The receiver is gone once the caller hit the overall
+            // timeout. Settle regardless — that is what closes a late
+            // provider and returns the profile to a stable state.
+            if tx.send(outcome).is_err() {
+                lifecycle::settle(
+                    &attempt,
+                    Err(ConnFailure::new(
+                        FailureKind::Timeout,
+                        "Verbindungsaufbau hat zu lange gedauert",
+                    )),
+                    || {},
+                );
+            }
+        })
     };
 
-    let key = profile.connection_key();
-    registry()
-        .lock()
-        .unwrap()
-        .live
-        .insert(provider.store_id(), provider);
+    let result = rx.recv_timeout(OVERALL_TIMEOUT);
+    let outcome = match result {
+        Ok(outcome) => outcome,
+        // Timed out: the worker keeps running and settles on its own,
+        // dropping whatever it opened. The caller is free immediately.
+        Err(_) => {
+            let failure = ConnFailure::new(
+                FailureKind::Timeout,
+                format!(
+                    "Keine Antwort von {} innerhalb von {} s",
+                    profile.host,
+                    OVERALL_TIMEOUT.as_secs()
+                ),
+            );
+            lifecycle::cancel(&attempt.id);
+            lifecycle::settle(&attempt, Err(failure.clone()), || {});
+            emit_states(&app);
+            return Err(failure.tagged());
+        }
+    };
+    // The worker is done the moment it sent; joining cannot block.
+    let _ = worker.join();
 
-    Ok(ConnectOutcome::Connected(ConnectionStatus {
-        id: profile.id.clone(),
-        key,
-        name: profile.name.clone(),
-        connected: true,
-        address: profile.address(),
-    }))
+    match outcome {
+        Ok(Opened::Provider(provider)) => {
+            let store_id = provider.store_id();
+            // `settle` is the only place a provider becomes live, and it
+            // holds the lifecycle lock for exactly that decision.
+            let installed = lifecycle::settle(&attempt, Ok(()), || {
+                registry()
+                    .lock()
+                    .unwrap()
+                    .live
+                    .insert(store_id.clone(), provider.clone());
+            });
+            emit_states(&app);
+            if !installed {
+                // Cancelled or superseded — dropping `provider` here
+                // closes the connection this attempt opened.
+                drop(provider);
+                return Err(ConnFailure::new(
+                    FailureKind::Cancelled,
+                    "Verbindungsaufbau abgebrochen",
+                )
+                .tagged());
+            }
+            Ok(ConnectOutcome::Connected(status_of(&profile)))
+        }
+        Ok(Opened::HostKey(challenge)) => {
+            // Not a failure: the identity question is a state of its own
+            // and the profile waits for the user's answer.
+            lifecycle::settle(
+                &attempt,
+                Err(ConnFailure::new(
+                    FailureKind::HostKey,
+                    ConnectError::HostKey(challenge.clone()).message(),
+                )),
+                || {},
+            );
+            emit_states(&app);
+            Ok(ConnectOutcome::HostKey(challenge))
+        }
+        Err(failure) => {
+            lifecycle::settle(&attempt, Err(failure.clone()), || {});
+            emit_states(&app);
+            Err(failure.tagged())
+        }
+    }
+}
+
+/// Stops a running connection attempt. Idempotent: an unknown, finished
+/// or already-cancelled id is a no-op and never an error, so a second
+/// click on "cancel" cannot fail (ticket 032).
+#[tauri::command]
+pub fn net_cancel_connect(app: AppHandle, attempt: String) {
+    lifecycle::cancel(&attempt);
+    emit_states(&app);
 }
 
 /// Persists the host key the user just confirmed and retries the
@@ -317,9 +580,13 @@ pub fn net_connect(id: String) -> Result<ConnectOutcome, String> {
 /// the key hortcmd actually displayed can be trusted; a failed write
 /// aborts before any authentication is attempted (ticket 028).
 #[tauri::command]
-pub fn net_trust_host_key(id: String, token: String) -> Result<ConnectOutcome, String> {
+pub fn net_trust_host_key(
+    app: AppHandle,
+    id: String,
+    token: String,
+) -> Result<ConnectOutcome, String> {
     hostkey::trust(&token)?;
-    net_connect(id)
+    net_connect(app, id)
 }
 
 /// Drops the host keys hortcmd stores for a profile's endpoint. The
@@ -336,37 +603,48 @@ pub fn net_forget_host_key(id: String) -> Result<ForgetResult, String> {
 /// Open shell sessions on that connection are closed with it (026), so
 /// no channel outlives the connection it rides on.
 #[tauri::command]
-pub fn net_disconnect(id: String) -> Result<(), String> {
-    let mut reg = registry().lock().unwrap();
-    let store_id = reg
-        .profiles
-        .iter()
-        .find(|p| p.id == id)
-        .map(|profile| profile.store_id());
-    if let Some(store_id) = &store_id {
-        reg.live.remove(store_id);
+pub fn net_disconnect(app: AppHandle, id: String) -> Result<(), String> {
+    // A second disconnect while the first is still tearing down would
+    // race it; the request is simply dropped (ticket 032).
+    if lifecycle::snapshot(&id).0 == Phase::Disconnecting {
+        return Ok(());
     }
-    drop(reg);
+    // A pending attempt is stopped first: disconnecting a profile that
+    // is still connecting must not leave that attempt free to install
+    // its provider afterwards (ticket 032).
+    lifecycle::cancel_for_profile(&id);
+    lifecycle::begin_disconnect(&id);
+    emit_states(&app);
+
+    let store_id = {
+        let mut reg = registry().lock().unwrap();
+        let store_id = reg
+            .profiles
+            .iter()
+            .find(|p| p.id == id)
+            .map(|profile| profile.store_id());
+        if let Some(store_id) = &store_id {
+            reg.live.remove(store_id);
+        }
+        store_id
+    };
+    // Outside the lock: closing a shell channel is network I/O, and no
+    // mutex is held while waiting for it.
     if let Some(store_id) = store_id {
         super::terminal::close_for_store(&store_id);
     }
+    lifecycle::set_disconnected(&id, None);
+    emit_states(&app);
     Ok(())
 }
 
-/// Lists saved profiles with their live-connection status.
+/// Lists saved profiles with their live-connection status and lifecycle
+/// (ticket 032). This is the authoritative state the dialog adopts when
+/// it reopens — a running attempt or a recorded failure survives the
+/// refresh instead of being reset to "disconnected".
 #[tauri::command]
 pub fn net_list_connections() -> Vec<ConnectionStatus> {
-    let reg = registry().lock().unwrap();
-    reg.profiles
-        .iter()
-        .map(|p| ConnectionStatus {
-            id: p.id.clone(),
-            key: p.connection_key(),
-            name: p.name.clone(),
-            connected: reg.live.contains_key(&p.store_id()),
-            address: p.address(),
-        })
-        .collect()
+    all_states()
 }
 
 #[cfg(test)]

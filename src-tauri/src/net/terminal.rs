@@ -102,6 +102,7 @@ pub fn ssh_open_shell(
             .to_string()
     })?;
     let store_id = provider.store_id();
+    let store_id_for_task = store_id.clone();
 
     let channel = runtime().block_on(open_shell_channel(&ssh, &path, cols, rows))?;
 
@@ -114,8 +115,11 @@ pub fn ssh_open_shell(
 
     // Pump the shell output to the frontend until the channel ends.
     let task_id = id.clone();
+    let task_store = store_id_for_task;
+    let task_ssh = ssh.clone();
     runtime().spawn(async move {
         let mut reason = String::from("Sitzung beendet");
+        let mut clean_exit = false;
         while let Some(msg) = read.wait().await {
             match msg {
                 ChannelMsg::Data { data } | ChannelMsg::ExtendedData { data, .. } => {
@@ -128,6 +132,9 @@ pub fn ssh_open_shell(
                     }
                 }
                 ChannelMsg::ExitStatus { exit_status } => {
+                    // The remote shell exited by itself — the connection
+                    // underneath it is fine.
+                    clean_exit = true;
                     reason = format!("Shell beendet (Status {})", exit_status);
                 }
                 ChannelMsg::Eof | ChannelMsg::Close => break,
@@ -135,6 +142,20 @@ pub fn ssh_open_shell(
             }
         }
         sessions().lock().unwrap().remove(&task_id);
+        // A shell that ended because the transport under it died means
+        // the whole connection is gone, not just this channel. Reported
+        // once, which removes the session and tells the frontend
+        // (ticket 032); a normal `exit` reports nothing.
+        if !clean_exit && task_ssh.is_closed() {
+            reason = "Verbindung zum Server verloren".to_string();
+            let store = task_store.clone();
+            // A plain thread, not a runtime task: the report closes the
+            // remaining shells, which blocks on the runtime this pump is
+            // itself running on.
+            std::thread::spawn(move || {
+                super::session::report_connection_lost(&store, "Verbindung zum Server verloren");
+            });
+        }
         let _ = app.emit(
             "ssh-term-closed",
             TermClosed {
