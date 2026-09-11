@@ -66,6 +66,11 @@ Verifizieren von Prüfsummendateien jedoch nicht durch dieses Ticket abgedeckt.
 
 ### Markieren
 
+Erweiterung: [TICKET-059](059-mark-menu-and-selection-functions.md) implementiert
+das vollständige Markieren-Menü einschließlich bisher fehlender Funktionen.
+Die folgenden Einschränkungen gelten nur für den Erstumfang von 040;
+059 definiert die erweiterte Datei-/Ordner-Auswahlsemantik verbindlich.
+
 1. Gruppe markieren… (+); Gruppe abwählen… (-); Auswahl umkehren (*).
 2. Alle sichtbaren Einträge markieren; Keine Einträge markieren.
    Dafür bestehende Musterauswahl verwenden; „..“ bleibt ausgeschlossen.

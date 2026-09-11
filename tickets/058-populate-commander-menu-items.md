@@ -10,6 +10,13 @@ Funktionsumfang ist der aktuelle hortcmd-Code, nicht allein die heutige Roadmap.
 
 ## Abhängigkeit und Abgrenzung
 
+- [TICKET-059](059-mark-menu-and-selection-functions.md) besitzt das vollständige
+  Markieren-Menü und implementiert dessen fehlende Fachfunktionen ausdrücklich.
+  Die Beschränkung dieses Tickets auf vorhandene Funktionen gilt für 059 nicht.
+  Bereits aus 059 vorhandene Aktionen im Inventar übernehmen; noch offene dort
+  referenzieren. Keine doppelte Implementierung; 059 benötigt die Grundlage 040,
+  nicht den Abschluss von 058.
+
 - Baut auf [TICKET-040](040-native-application-menu.md) auf: gemeinsame
   Befehlsdefinition, React-Menü im Tauri-Fenster auf allen Plattformen,
   reduziertes natives macOS-Menü und grundlegende Tastatur-/Fokusbehandlung.
