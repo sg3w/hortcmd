@@ -1,10 +1,12 @@
 // ============================================================
-// Manage remote connections (SFTP, ticket 021) and the credential
-// backend behind them (ticket 027).
+// Manage remote connections (SFTP, ticket 021), the credential backend
+// behind them (ticket 027) and the SSH host-key trust for them
+// (ticket 028).
 //
 // Panels inside one dialog: the list of saved profiles (connect /
 // disconnect / edit / delete), the add/edit form, the credential-store
-// settings (OS keychain ↔ KeePass file) and the KeePass unlock prompt.
+// settings (OS keychain ↔ KeePass file), the KeePass unlock prompt, the
+// host-key confirmation and the explicit "drop stored host keys" step.
 // Secrets are entered here but sent straight to the backend; neither
 // form keeps them around after submitting.
 // ============================================================
@@ -20,6 +22,8 @@ import {
   Plus,
   Server,
   ShieldAlert,
+  ShieldCheck,
+  ShieldOff,
   Trash2,
 } from "lucide-react";
 import type { CredConfig, Profile } from "@/ipc/bindings";
@@ -103,6 +107,10 @@ export function ConnectionsDialog() {
         )}
         {editing ? (
           <ProfileForm profile={editing} />
+        ) : panel === "hostkey" ? (
+          <HostKeyPanel />
+        ) : panel === "forget" ? (
+          <ForgetHostKeyPanel />
         ) : panel === "store" ? (
           <CredentialStoreForm />
         ) : panel === "unlock" ? (
@@ -161,6 +169,7 @@ function ConnectionRow({
   const disconnect = useNet((s) => s.disconnect);
   const remove = useNet((s) => s.remove);
   const startEdit = useNet((s) => s.startEdit);
+  const startForget = useNet((s) => s.startForget);
   const closeManager = useNet((s) => s.closeManager);
   const t = useT();
 
@@ -206,6 +215,15 @@ function ConnectionRow({
             className="rounded border border-edge p-1 text-emerald-400 hover:border-accent"
           >
             <PlugZap size={14} />
+          </button>
+        )}
+        {profile.protocol === "sftp" && (
+          <button
+            onClick={() => startForget(profile)}
+            title={t("hostkey.forget")}
+            className="rounded border border-edge p-1 text-dim hover:border-accent hover:text-text"
+          >
+            <ShieldOff size={14} />
           </button>
         )}
         <button
@@ -627,6 +645,178 @@ function UnlockForm() {
         >
           {t("cred.unlock")}
         </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The host-key question raised by a connect attempt (ticket 028). On
+ * first contact the user confirms the fingerprint; a *changed* key is a
+ * dead end here on purpose — dropping the stored key is a separate,
+ * deliberate step, so no single click can wave a changed key through.
+ */
+function HostKeyPanel() {
+  const challenge = useNet((s) => s.hostKey);
+  const trust = useNet((s) => s.trustHostKey);
+  const dismiss = useNet((s) => s.dismissHostKey);
+  const closeManager = useNet((s) => s.closeManager);
+  const t = useT();
+  const [busy, setBusy] = useState(false);
+
+  if (!challenge) return null;
+  const changed = challenge.status === "mismatch";
+
+  const accept = async () => {
+    if (busy) return;
+    setBusy(true);
+    const address = await trust();
+    setBusy(false);
+    if (address) {
+      const s = usePanes.getState();
+      closeManager();
+      void s.loadDir(s.active, address);
+    }
+  };
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-auto">
+      <div className="flex items-center gap-2 text-[13px] text-text">
+        {changed ? (
+          <ShieldAlert size={15} className="text-red-400" />
+        ) : (
+          <ShieldCheck size={15} className="text-accent" />
+        )}
+        {changed ? t("hostkey.changedTitle") : t("hostkey.unknownTitle")}
+      </div>
+
+      <p
+        className={cn(
+          "rounded border px-2.5 py-1.5 text-[11px]",
+          changed
+            ? "border-red-500/40 bg-red-500/10 text-red-400"
+            : "border-edge bg-panel-inactive text-dim",
+        )}
+      >
+        {changed ? t("hostkey.changedHint") : t("hostkey.unknownHint")}
+      </p>
+
+      <Field label={t("hostkey.server")}>
+        <p className={cn(inputCls, "truncate")}>
+          {challenge.host}:{challenge.port}
+        </p>
+      </Field>
+      <Field
+        label={changed ? t("hostkey.presented") : t("hostkey.fingerprint")}
+      >
+        <p className={cn(inputCls, "break-all")}>
+          {challenge.key_type} {challenge.fingerprint}
+        </p>
+      </Field>
+
+      {challenge.stored.length > 0 && (
+        <Field label={t("hostkey.stored")}>
+          <div className="flex flex-col gap-1">
+            {challenge.stored.map((entry) => (
+              <p
+                key={`${entry.source}:${entry.line}`}
+                className={cn(inputCls, "break-all")}
+              >
+                {entry.key_type} {entry.fingerprint}
+                <span className="block text-[10px] text-dim">
+                  {entry.source}:{entry.line}
+                </span>
+              </p>
+            ))}
+          </div>
+        </Field>
+      )}
+
+      <div className="mt-1 flex justify-end gap-2">
+        <button
+          onClick={dismiss}
+          className="rounded border border-edge bg-panel px-3 py-1 text-[13px] text-text hover:border-accent"
+        >
+          {changed ? t("hostkey.close") : t("net.cancel")}
+        </button>
+        {!changed && (
+          <button
+            onClick={() => void accept()}
+            disabled={busy || !challenge.token}
+            className="rounded bg-accent px-3 py-1 text-[13px] text-white hover:brightness-110 disabled:opacity-40"
+          >
+            {t("hostkey.trust")}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Drops the host keys hortcmd stores for a profile's endpoint — the
+ * explicit way out of a mismatch. Entries in the user's own
+ * `known_hosts` files are reported, never rewritten.
+ */
+function ForgetHostKeyPanel() {
+  const profile = useNet((s) => s.forgetting);
+  const result = useNet((s) => s.forgot);
+  const forget = useNet((s) => s.forgetHostKey);
+  const showPanel = useNet((s) => s.showPanel);
+  const t = useT();
+  const [busy, setBusy] = useState(false);
+
+  if (!profile) return null;
+
+  const run = async () => {
+    if (busy) return;
+    setBusy(true);
+    await forget();
+    setBusy(false);
+  };
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-auto">
+      <div className="flex items-center gap-2 text-[13px] text-text">
+        <ShieldOff size={15} className="text-amber-400" />
+        {t("hostkey.forgetTitle")}
+      </div>
+      <p className="rounded border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-400">
+        {t("hostkey.forgetWarning")}
+      </p>
+      <p className="truncate font-mono text-[11px] text-dim">
+        {profile.host}:{profile.port}
+      </p>
+
+      {result && (
+        <div className="flex flex-col gap-1 rounded border border-edge bg-panel-inactive px-2.5 py-1.5 text-[11px] text-dim">
+          <span>
+            {t("hostkey.forgetDone").replace("{n}", String(result.removed))}
+          </span>
+          {result.remaining.map((file) => (
+            <span key={file} className="break-all text-amber-400">
+              {t("hostkey.forgetRemaining").replace("{file}", file)}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-1 flex justify-end gap-2">
+        <button
+          onClick={() => showPanel("list")}
+          className="rounded border border-edge bg-panel px-3 py-1 text-[13px] text-text hover:border-accent"
+        >
+          {result ? t("hostkey.close") : t("net.cancel")}
+        </button>
+        {!result && (
+          <button
+            onClick={() => void run()}
+            disabled={busy}
+            className="rounded bg-red-600 px-3 py-1 text-[13px] text-white hover:brightness-110 disabled:opacity-40"
+          >
+            {t("hostkey.forgetConfirm")}
+          </button>
+        )}
       </div>
     </div>
   );

@@ -105,7 +105,7 @@ pub fn ssh_open_shell(
 
     let channel = runtime().block_on(open_shell_channel(&ssh, &path, cols, rows))?;
 
-    let id = format!("term-{}", uuid());
+    let id = format!("term-{}", super::unique_id());
     let (mut read, write) = channel.split();
     sessions()
         .lock()
@@ -205,21 +205,6 @@ pub fn close_for_store(store_id: &str) {
     }
 }
 
-/// Small random id (no extra dependency): time + address entropy.
-fn uuid() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    let counter = {
-        use std::sync::atomic::{AtomicU64, Ordering};
-        static N: AtomicU64 = AtomicU64::new(0);
-        N.fetch_add(1, Ordering::Relaxed)
-    };
-    format!("{:x}-{:x}", nanos, counter)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -234,7 +219,7 @@ mod tests {
 
     #[test]
     fn ids_are_unique() {
-        assert_ne!(uuid(), uuid());
+        assert_ne!(crate::net::unique_id(), crate::net::unique_id());
     }
 
     #[test]

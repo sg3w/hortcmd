@@ -57,8 +57,9 @@ Built together with [[021-connections-credentials]]. Provider in
   `block_on` (flush+close on `Drop`).
 - Auth (`authenticate`): **password**, **ssh-agent** (`AgentClient::connect_env`, tries each
   offered identity — no private key stored by us), **key file** (`load_secret_key` + optional
-  passphrase), **anonymous** (`authenticate_none`). Server-key check is currently
-  trust-on-first-use (known_hosts is a follow-up).
+  passphrase), **anonymous** (`authenticate_none`). Server-key check was
+  trust-on-first-use here; **TICKET-028** replaced it with real `known_hosts`
+  verification, which now runs before *every* one of these methods.
 
 ### Cross-provider transfers (generalized the 020 foundation)
 - `vfs::resolve()` now returns `Arc<dyn Provider>` (not a `&'static` singleton) bound to the
@@ -99,6 +100,8 @@ password), remote file preview via the UI, cancel/pause mid-transfer, and connec
 handling.
 
 ### Deferred (follow-ups, not blockers)
-- known_hosts / host-key verification (currently accept-on-connect).
+- ~~known_hosts / host-key verification (currently accept-on-connect).~~ Done in
+  **TICKET-028** (`net::hostkey`): user `known_hosts` + a hortcmd-managed store,
+  checked in `check_server_key` before authentication.
 - Automatic reconnect + resume mid-transfer (today a lost session errors the op; the user
   reconnects via the manager and retries).

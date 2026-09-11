@@ -3,28 +3,40 @@
 //
 // One authenticated SSH connection, shared by everything that rides on
 // it: the SFTP provider opens the `sftp` subsystem on it (ticket 022),
-// the terminal opens an interactive shell channel (ticket 026). The
-// russh client is async, so callers drive it through the shared Tokio
-// runtime in `net::session`.
+// the terminal opens an interactive shell channel (ticket 026) — so the
+// single host-key check in `connect` (ticket 028, `net::hostkey`)
+// protects both. The russh client is async, so callers drive it through
+// the shared Tokio runtime in `net::session`.
 // ============================================================
 
+use super::hostkey::{self, ConnectError, Decision, HostId};
 use super::session::Profile;
 use russh::client::{self, AuthResult, Msg};
 use russh::Channel;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-/// Minimal russh client handler. Server-key verification is currently
-/// trust-on-first-use (accept); known_hosts checking is future work.
-pub struct ClientHandler;
+/// russh client handler. Its only job is server authentication: the
+/// presented host key is checked against the trust stores (ticket 028)
+/// and the verdict recorded, because russh itself only reports a
+/// generic handshake failure when the check says no.
+pub struct ClientHandler {
+    id: HostId,
+    verdict: Arc<Mutex<Option<Result<Decision, String>>>>,
+}
 
 impl client::Handler for ClientHandler {
     type Error = russh::Error;
 
     async fn check_server_key(
         &mut self,
-        _server_public_key: &russh::keys::PublicKey,
+        server_public_key: &russh::keys::PublicKey,
     ) -> Result<bool, Self::Error> {
-        Ok(true)
+        let verdict = hostkey::check(&self.id, server_public_key);
+        // Only a host we already trust may continue; everything else
+        // aborts the handshake *before* any authentication method runs.
+        let trusted = matches!(verdict, Ok(Decision::Trusted));
+        *self.verdict.lock().unwrap() = Some(verdict);
+        Ok(trusted)
     }
 }
 
@@ -35,14 +47,40 @@ pub struct SshSession {
 }
 
 impl SshSession {
-    /// Connects and authenticates against the profile's host.
-    pub async fn connect(profile: &Profile, secret: Option<&str>) -> Result<Self, String> {
+    /// Connects and authenticates against the profile's host. The host
+    /// identity is verified first; an unknown or changed key returns
+    /// `ConnectError::HostKey` and no secret ever leaves the machine.
+    pub async fn connect(profile: &Profile, secret: Option<&str>) -> Result<Self, ConnectError> {
+        let id = HostId::new(&profile.host, profile.port);
+        let verdict: Arc<Mutex<Option<Result<Decision, String>>>> = Arc::new(Mutex::new(None));
+        let handler = ClientHandler {
+            id: id.clone(),
+            verdict: Arc::clone(&verdict),
+        };
         let config = Arc::new(client::Config::default());
-        let mut handle =
-            client::connect(config, (profile.host.as_str(), profile.port), ClientHandler)
-                .await
-                .map_err(|e| format!("Verbindung zu {} fehlgeschlagen: {}", profile.host, e))?;
+        let connected =
+            client::connect(config, (profile.host.as_str(), profile.port), handler).await;
 
+        // The recorded verdict, not the russh error, decides what the
+        // user is told — and a handshake that never reached the host key
+        // is a failure, so no path here can authenticate unverified.
+        let checked = verdict.lock().unwrap().take();
+        match checked {
+            Some(Ok(Decision::Trusted)) => {}
+            Some(Ok(Decision::Challenge(challenge))) => {
+                return Err(ConnectError::HostKey(challenge))
+            }
+            Some(Err(message)) => return Err(ConnectError::Message(message)),
+            None => {
+                return Err(ConnectError::Message(match connected {
+                    Ok(_) => format!("Host-Schlüssel von {} wurde nicht geprüft", id.host),
+                    Err(e) => format!("Verbindung zu {} fehlgeschlagen: {}", profile.host, e),
+                }))
+            }
+        }
+
+        let mut handle = connected
+            .map_err(|e| format!("Verbindung zu {} fehlgeschlagen: {}", profile.host, e))?;
         authenticate(&mut handle, profile, secret).await?;
         Ok(SshSession { handle })
     }

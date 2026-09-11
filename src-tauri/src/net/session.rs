@@ -10,6 +10,7 @@
 // ============================================================
 
 use super::credentials::{self, CredentialStore};
+use super::hostkey::{self, ConnectError, ForgetResult, HostKeyChallenge, HostId};
 use crate::vfs::Provider;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -98,6 +99,17 @@ pub struct ConnectionStatus {
     pub connected: bool,
     /// `sftp://user@host:port/start` — navigate here to browse.
     pub address: String,
+}
+
+/// What `net_connect` produced. A connection attempt either yields a
+/// live session or stops at a host-key question (ticket 028) — the
+/// frontend branches on the tag, never on message text.
+#[derive(Serialize, Clone, TS)]
+#[serde(tag = "kind", content = "data", rename_all = "camelCase")]
+#[ts(export, export_to = "../../src/ipc/bindings/")]
+pub enum ConnectOutcome {
+    Connected(ConnectionStatus),
+    HostKey(HostKeyChallenge),
 }
 
 // ---------- Persistence ----------
@@ -225,34 +237,50 @@ pub fn net_delete_profile(id: String) -> Result<(), String> {
     result
 }
 
+/// Looks up a saved profile without holding the registry lock any
+/// longer than the copy takes.
+fn profile_by_id(id: &str) -> Result<Profile, String> {
+    registry()
+        .lock()
+        .unwrap()
+        .profiles
+        .iter()
+        .find(|p| p.id == id)
+        .cloned()
+        .ok_or_else(|| format!("Profil {} nicht gefunden", id))
+}
+
 /// Opens a connection for a profile and returns its status. Reconnects
-/// (replaces) an existing session for the same key.
+/// (replaces) an existing session for the same key. An SSH host whose
+/// key is unknown or has changed stops here with a host-key challenge
+/// instead — nothing has been authenticated at that point (ticket 028).
 #[tauri::command]
-pub fn net_connect(id: String) -> Result<ConnectionStatus, String> {
-    // Collect what we need under the lock, then connect without holding it.
-    let (profile, secret) = {
-        let reg = registry().lock().unwrap();
-        let profile = reg
-            .profiles
-            .iter()
-            .find(|p| p.id == id)
-            .cloned()
-            .ok_or_else(|| format!("Profil {} nicht gefunden", id))?;
-        drop(reg);
-        let secret = credentials::store().get(&id)?;
-        (profile, secret)
-    };
+pub fn net_connect(id: String) -> Result<ConnectOutcome, String> {
+    let profile = profile_by_id(&id)?;
+    let secret = credentials::store().get(&id)?;
 
     // Dispatch to the protocol's provider. Each `connect` returns a ready
     // provider bound to the live connection.
-    let provider: Arc<dyn Provider> = match profile.protocol.as_str() {
-        "sftp" => crate::vfs::sftp::connect(&profile, secret.as_deref())?,
-        "ftp" | "ftps" => crate::vfs::ftp::connect(&profile, secret.as_deref())?,
-        "webdav" => crate::vfs::webdav::connect(&profile, secret.as_deref())?,
-        "smb" => crate::vfs::smb::connect(&profile, secret.as_deref())?,
+    let opened: Result<Arc<dyn Provider>, ConnectError> = match profile.protocol.as_str() {
+        "sftp" => crate::vfs::sftp::connect(&profile, secret.as_deref()),
+        "ftp" | "ftps" => {
+            crate::vfs::ftp::connect(&profile, secret.as_deref()).map_err(ConnectError::from)
+        }
+        "webdav" => {
+            crate::vfs::webdav::connect(&profile, secret.as_deref()).map_err(ConnectError::from)
+        }
+        "smb" => crate::vfs::smb::connect(&profile, secret.as_deref()).map_err(ConnectError::from),
         other => {
             return Err(format!("Protokoll '{}' wird noch nicht unterstützt", other));
         }
+    };
+
+    let provider = match opened {
+        Ok(provider) => provider,
+        Err(ConnectError::HostKey(challenge)) => {
+            return Ok(ConnectOutcome::HostKey(challenge));
+        }
+        Err(ConnectError::Message(message)) => return Err(message),
     };
 
     let key = profile.connection_key();
@@ -262,13 +290,33 @@ pub fn net_connect(id: String) -> Result<ConnectionStatus, String> {
         .live
         .insert(provider.store_id(), provider);
 
-    Ok(ConnectionStatus {
+    Ok(ConnectOutcome::Connected(ConnectionStatus {
         id: profile.id.clone(),
         key,
         name: profile.name.clone(),
         connected: true,
         address: profile.address(),
-    })
+    }))
+}
+
+/// Persists the host key the user just confirmed and retries the
+/// connection. `token` is the one-shot value from the challenge, so only
+/// the key hortcmd actually displayed can be trusted; a failed write
+/// aborts before any authentication is attempted (ticket 028).
+#[tauri::command]
+pub fn net_trust_host_key(id: String, token: String) -> Result<ConnectOutcome, String> {
+    hostkey::trust(&token)?;
+    net_connect(id)
+}
+
+/// Drops the host keys hortcmd stores for a profile's endpoint. The
+/// explicit action behind a changed host key — the mismatch dialog
+/// itself offers no bypass. The user's own `known_hosts` files are only
+/// reported on, never rewritten.
+#[tauri::command]
+pub fn net_forget_host_key(id: String) -> Result<ForgetResult, String> {
+    let profile = profile_by_id(&id)?;
+    hostkey::forget(&HostId::new(&profile.host, profile.port))
 }
 
 /// Disconnects a live connection (by profile id). Profile stays saved.

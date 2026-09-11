@@ -49,6 +49,28 @@ export const DICT = {
     "net.ftpWarning":
       "Achtung: Klartext-FTP überträgt Benutzername, Passwort und Daten unverschlüsselt. Wenn möglich FTPS verwenden.",
 
+    // SSH-Host-Schlüssel (TICKET-028)
+    "hostkey.unknownTitle": "Unbekannter Host-Schlüssel",
+    "hostkey.unknownHint":
+      "Dieser Server war noch nie verbunden. Vergleichen Sie den Fingerabdruck mit einer vertrauenswürdigen Quelle, bevor Sie bestätigen — bis dahin wurden weder Passwort noch Schlüssel gesendet.",
+    "hostkey.changedTitle": "Host-Schlüssel hat sich geändert",
+    "hostkey.changedHint":
+      "Der Server zeigt einen anderen Schlüssel als den gespeicherten. Das kann ein neu aufgesetzter Server sein — oder ein Angriff. Die Verbindung wurde abgelehnt. Erst nach Prüfung den gespeicherten Schlüssel im Verbindungsmanager verwerfen.",
+    "hostkey.server": "Server",
+    "hostkey.fingerprint": "Fingerabdruck (SHA-256)",
+    "hostkey.presented": "Vorgelegter Schlüssel",
+    "hostkey.stored": "Gespeicherter Schlüssel",
+    "hostkey.trust": "Vertrauen und verbinden",
+    "hostkey.close": "Schließen",
+    "hostkey.forget": "Host-Schlüssel verwerfen …",
+    "hostkey.forgetTitle": "Gespeicherte Host-Schlüssel verwerfen",
+    "hostkey.forgetWarning":
+      "Danach gilt der Server wieder als unbekannt und der nächste Fingerabdruck muss erneut bestätigt werden. Nur verwerfen, wenn der neue Schlüssel unabhängig geprüft wurde.",
+    "hostkey.forgetConfirm": "Verwerfen",
+    "hostkey.forgetDone": "{n} Eintrag/Einträge aus dem hortcmd-Speicher entfernt.",
+    "hostkey.forgetRemaining":
+      "{file} enthält weiterhin Einträge für diesen Server — diese Datei ändert hortcmd nicht.",
+
     "cred.title": "Zugangsdaten-Speicher",
     "cred.manage": "Speicher …",
     "cred.backend": "Speicher",
@@ -748,6 +770,28 @@ export const DICT = {
     "net.share": "Share",
     "net.ftpWarning":
       "Warning: plain FTP transmits username, password and data unencrypted. Use FTPS where possible.",
+
+    // SSH host keys (TICKET-028)
+    "hostkey.unknownTitle": "Unknown host key",
+    "hostkey.unknownHint":
+      "This server has never been connected to. Compare the fingerprint against a trusted source before confirming — until then, neither password nor key has been sent.",
+    "hostkey.changedTitle": "Host key has changed",
+    "hostkey.changedHint":
+      "The server presents a different key than the stored one. That can be a rebuilt server — or an attack. The connection was rejected. Only after verifying it, drop the stored key in the connection manager.",
+    "hostkey.server": "Server",
+    "hostkey.fingerprint": "Fingerprint (SHA-256)",
+    "hostkey.presented": "Presented key",
+    "hostkey.stored": "Stored key",
+    "hostkey.trust": "Trust and connect",
+    "hostkey.close": "Close",
+    "hostkey.forget": "Drop host key…",
+    "hostkey.forgetTitle": "Drop stored host keys",
+    "hostkey.forgetWarning":
+      "Afterwards the server counts as unknown again and the next fingerprint has to be confirmed anew. Only drop it once the new key has been verified independently.",
+    "hostkey.forgetConfirm": "Drop",
+    "hostkey.forgetDone": "Removed {n} entry/entries from the hortcmd store.",
+    "hostkey.forgetRemaining":
+      "{file} still holds entries for this server — hortcmd does not change that file.",
 
     "cred.title": "Credential store",
     "cred.manage": "Store …",

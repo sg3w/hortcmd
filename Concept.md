@@ -144,15 +144,21 @@ vfs/                         VFS abstraction (identical UI) — tickets 020/022�
 └── live_tests.rs            Integrationstests gegen echte Server (SFTP/FTP/WebDAV/SMB
                              + SSH-Shell), `#[ignore]`; Docker-Startbefehle stehen an
                              jedem Test: `cargo test --lib live_ -- --ignored --nocapture`
-net/                         Remote connection base (identical UI) — tickets 021/026/027
+net/                         Remote connection base (identical UI) — tickets 021/026/027/028
 ├── credentials.rs           CredentialStore trait + KeychainStore (keyring; OS keychain,
 │                            no plaintext fallback) · KeepassStore (portable .kdbx,
 │                            KeePassXC-compatible) · Store routes to the configured
 │                            backend; net_cred_* commands (TICKET-027)
+├── hostkey.rs               SSH-Host-Key-Prüfung: HostId (kanonisch host/port) ·
+│                            known_hosts des Nutzers (nur lesen) + verwalteter Store
+│                            in <config>/hortcmd/known_hosts (atomar, 0600) ·
+│                            Decision trusted/unknown/mismatch · ConnectError
+│                            (typisiert statt Fehlertext); TICKET-028
 ├── session.rs               Profile (persisted, no secret) · session registry
 │                            (connect/disconnect/reconnect) · net_* commands
 ├── ssh.rs                   SshSession: authentifizierte SSH-Verbindung (russh);
-│                            SFTP-Subsystem und Terminal teilen sie sich
+│                            check_server_key prüft die Host-Identität *vor* jeder
+│                            Auth-Methode; SFTP-Subsystem und Terminal teilen sie sich
 └── terminal.rs              Interaktive Shell: PTY-Kanal, Ein-/Ausgabe (base64-Events),
                              Resize, Sitzungsende; ssh_* commands
 commands/fs/
@@ -444,6 +450,8 @@ is organized into the following categories. Legend: **✅ present · ⏳ planned
 
 ### Network
 - SFTP ⏳ · FTP/FTPS ⏳ · SMB ⏳ · WebDAV ⏳ *(large effort, per protocol)*
+- SSH host-key trust ✅ *(no setting — the confirmation and the explicit
+  "Drop host key…" action live in the connection manager; TICKET-028)*
 
 ### Plugins
 - Installed plugins ⏳ · updates ⏳ · preview plugins ⏳ · packer plugins ⏳
@@ -918,10 +926,11 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
 ### P4 — Large subsystems
 - [x] **Network** (identical UI): **SFTP first**, then SMB, WebDAV, FTP/FTPS;
       SSH terminal
-      *(broken down in ticket series `tickets/020`–`026`: **020 VFS abstraction
+      *(broken down in ticket series `tickets/020`–`028`: **020 VFS abstraction
       (foundation) ✅ → 021 connections/credentials (OS keychain) ✅ →
       022 SFTP ✅ → 023 SMB ✅, 024 WebDAV ✅, 025 FTP/FTPS ✅ →
-      026 SSH terminal ✅ → 027 optional KeePass backend ✅**.
+      026 SSH terminal ✅ → 027 optional KeePass backend ✅ →
+      028 SSH host-key verification ✅**.
       "Identical UI" via provider trait + schema registry; secrets via
       `CredentialStore` — OS keychain by default, optionally a portable
       `.kdbx` file (TICKET-027). The store is picked in the connection
@@ -934,6 +943,23 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
       (Argon2 parameters of the file are preserved, writes go through a
       temp file + rename); legacy KDBX 3 files are read-only, with a
       message naming the upgrade)*
+      **Server authentication** closes the last gap of the SSH stack
+      (TICKET-028): `check_server_key` no longer accepts everything but
+      matches the presented key against the user's own `known_hosts`
+      (read only) and a hortcmd-managed store in the config directory.
+      The check runs once while the shared SSH session is built — before
+      password, key, agent or none auth — so SFTP *and* the terminal on
+      it are covered by one place, and a cancelled prompt sends no
+      secret at all. An unknown host returns a typed challenge
+      (`ConnectOutcome`, not a parsed message) with host, port, key type
+      and SHA-256 fingerprint; the one-shot trust token keeps the key in
+      the backend, so only the key actually shown can be confirmed. A
+      *changed* key is a hard failure showing both fingerprints with
+      their source file and line, deliberately without a bypass button —
+      replacing it is the separate "Drop host key…" action, which
+      touches hortcmd's store only and reports conflicting entries in
+      the user's files instead of editing them. A conflict in either
+      source outweighs a match in the other.
       The **connection manager has its own toolbar button** (`CommandBar`, `Server`
       icon in its own section between navigation and file actions; TICKET-016) and
       opens globally via `useNet.getState().openManager()` — the toolbar is always

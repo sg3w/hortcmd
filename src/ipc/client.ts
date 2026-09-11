@@ -8,6 +8,7 @@ import type {
   Checksums,
   CollisionReq,
   ConnectionStatus,
+  ConnectOutcome,
   CredConfig,
   CredStatus,
   DiffEntry,
@@ -18,6 +19,7 @@ import type {
   Drive,
   FileDiff,
   FileProps,
+  ForgetResult,
   GitStatus,
   GitStatusEvent,
   LevelDiff,
@@ -95,8 +97,22 @@ export async function netDeleteProfile(id: string): Promise<void> {
   return invoke<void>("net_delete_profile", { id });
 }
 
-export async function netConnect(id: string): Promise<ConnectionStatus> {
-  return invoke<ConnectionStatus>("net_connect", { id });
+export async function netConnect(id: string): Promise<ConnectOutcome> {
+  return invoke<ConnectOutcome>("net_connect", { id });
+}
+
+/** Confirms a host key shown by `net_connect` and retries (ticket 028). */
+export async function netTrustHostKey(
+  id: string,
+  token: string,
+): Promise<ConnectOutcome> {
+  return invoke<ConnectOutcome>("net_trust_host_key", { id, token });
+}
+
+/** Drops the host keys hortcmd stores for a profile's endpoint. */
+export async function netForgetHostKey(id: string): Promise<ForgetResult> {
+  if (!hasTauri) return { removed: 0, remaining: [] };
+  return invoke<ForgetResult>("net_forget_host_key", { id });
 }
 
 export async function netDisconnect(id: string): Promise<void> {

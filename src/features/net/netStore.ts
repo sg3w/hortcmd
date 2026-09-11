@@ -17,6 +17,8 @@ import type {
   ConnectionStatus,
   CredConfig,
   CredStatus,
+  ForgetResult,
+  HostKeyChallenge,
   Profile,
 } from "@/ipc/bindings";
 import { usePanes } from "@/store/panesStore";
@@ -28,9 +30,11 @@ import {
   netCredUnlock,
   netDeleteProfile,
   netDisconnect,
+  netForgetHostKey,
   netListConnections,
   netListProfiles,
   netSaveProfile,
+  netTrustHostKey,
 } from "@/ipc/client";
 
 /** Marker the backend puts on every "KeePass file is locked" error. */
@@ -41,7 +45,7 @@ function isLocked(e: unknown): boolean {
 }
 
 /** Which panel the manager shows; the edit form rides on `editing`. */
-export type NetPanel = "list" | "store" | "unlock";
+export type NetPanel = "list" | "store" | "unlock" | "hostkey" | "forget";
 
 interface NetState {
   profiles: Profile[];
@@ -57,6 +61,16 @@ interface NetState {
   panel: NetPanel;
   /** Action parked behind the unlock prompt, replayed after unlocking. */
   pending: (() => Promise<void>) | null;
+
+  // ----- SSH host keys (ticket 028) -----
+  /** Host-key question raised by the last connect attempt. */
+  hostKey: HostKeyChallenge | null;
+  /** Profile the challenge belongs to — the retry needs its secret. */
+  hostKeyProfile: string | null;
+  /** Profile whose stored host keys the user is about to drop. */
+  forgetting: Profile | null;
+  /** Result of the last `forgetHostKey`, shown as a confirmation. */
+  forgot: ForgetResult | null;
 
   refresh: () => Promise<void>;
   /** `keepError` shows the manager *with* the last error — the Netz menu
@@ -77,6 +91,15 @@ interface NetState {
   setCredBackend: (config: CredConfig) => Promise<boolean>;
   credUnlock: (password: string, remember: boolean, create: boolean) => Promise<void>;
   credLock: () => Promise<void>;
+
+  /** Persists the offered host key and retries; returns the address. */
+  trustHostKey: () => Promise<string | null>;
+  /** Drops the challenge without trusting anything. */
+  dismissHostKey: () => void;
+  /** Opens the "drop stored host keys" confirmation for a profile. */
+  startForget: (profile: Profile) => void;
+  /** Carries it out; the user's own known_hosts files stay untouched. */
+  forgetHostKey: () => Promise<void>;
 }
 
 export const useNet = create<NetState>((set, get) => ({
@@ -88,6 +111,10 @@ export const useNet = create<NetState>((set, get) => ({
   cred: null,
   panel: "list",
   pending: null,
+  hostKey: null,
+  hostKeyProfile: null,
+  forgetting: null,
+  forgot: null,
 
   refresh: async () => {
     try {
@@ -106,14 +133,26 @@ export const useNet = create<NetState>((set, get) => ({
     // be written back afterwards — otherwise the manager opens blank right
     // after the failure it was opened to explain.
     const kept = keepError ? get().error : null;
-    set({ managerOpen: true, editing: null, panel: "list", error: kept });
+    // A pending host-key question outlives the reopen — the menu opens the
+    // manager right after the connect attempt that raised it.
+    const panel: NetPanel = get().hostKey ? "hostkey" : "list";
+    set({ managerOpen: true, editing: null, panel, error: kept });
     void get().refresh().then(() => {
       if (kept && get().managerOpen) set({ error: kept });
     });
     void get().refreshCred();
   },
   closeManager: () =>
-    set({ managerOpen: false, editing: null, panel: "list", pending: null }),
+    set({
+      managerOpen: false,
+      editing: null,
+      panel: "list",
+      pending: null,
+      hostKey: null,
+      hostKeyProfile: null,
+      forgetting: null,
+      forgot: null,
+    }),
 
   startEdit: (profile) => set({ editing: profile, error: null }),
   cancelEdit: () => set({ editing: null }),
@@ -135,10 +174,23 @@ export const useNet = create<NetState>((set, get) => ({
 
   connect: async (id) => {
     try {
-      const status = await netConnect(id);
-      set({ error: null });
+      const outcome = await netConnect(id);
+      if (outcome.kind === "hostKey") {
+        // Nothing was authenticated — the server identity has to be
+        // settled first (ticket 028).
+        set({
+          hostKey: outcome.data,
+          hostKeyProfile: id,
+          managerOpen: true,
+          panel: "hostkey",
+          editing: null,
+          error: null,
+        });
+        return null;
+      }
+      set({ error: null, hostKey: null, hostKeyProfile: null });
       await get().refresh();
-      return status.address;
+      return outcome.data.address;
     } catch (e) {
       if (!isLocked(e)) {
         set({ error: String(e) });
@@ -212,6 +264,43 @@ export const useNet = create<NetState>((set, get) => ({
       set({ cred: await netCredLock(), error: null });
     } catch (e) {
       set({ error: String(e) });
+    }
+  },
+
+  // ----- SSH host keys (ticket 028) -----
+
+  trustHostKey: async () => {
+    const { hostKey, hostKeyProfile } = get();
+    if (!hostKey?.token || !hostKeyProfile) return null;
+    try {
+      const outcome = await netTrustHostKey(hostKeyProfile, hostKey.token);
+      if (outcome.kind === "hostKey") {
+        // The server answered with a different key than the one shown.
+        set({ hostKey: outcome.data, panel: "hostkey", error: null });
+        return null;
+      }
+      set({ hostKey: null, hostKeyProfile: null, panel: "list", error: null });
+      await get().refresh();
+      return outcome.data.address;
+    } catch (e) {
+      set({ error: String(e), hostKey: null, hostKeyProfile: null, panel: "list" });
+      return null;
+    }
+  },
+
+  dismissHostKey: () =>
+    set({ hostKey: null, hostKeyProfile: null, panel: "list" }),
+
+  startForget: (profile) =>
+    set({ forgetting: profile, forgot: null, panel: "forget", error: null }),
+
+  forgetHostKey: async () => {
+    const profile = get().forgetting;
+    if (!profile) return;
+    try {
+      set({ forgot: await netForgetHostKey(profile.id), error: null });
+    } catch (e) {
+      set({ error: String(e), forgetting: null, panel: "list" });
     }
   },
 }));

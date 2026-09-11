@@ -13,9 +13,28 @@
 // ============================================================
 
 use super::Provider;
+use crate::net::hostkey::{self, ConnectError, HostId};
 use crate::net::session::Profile;
 use std::io::{Read, Write};
 use std::path::Path;
+use std::sync::Arc;
+
+/// SFTP connect for the live tests. A fresh test server is always an
+/// unknown host, so the host-key prompt (ticket 028) is answered here
+/// exactly the way the connection manager answers it.
+fn sftp_connect(prof: &Profile, secret: &str) -> Arc<dyn Provider> {
+    match super::sftp::connect(prof, Some(secret)) {
+        Ok(provider) => provider,
+        Err(ConnectError::HostKey(challenge)) => {
+            let token = challenge
+                .token
+                .expect("an unknown host must offer a trust token");
+            hostkey::trust(&token).expect("persist the accepted host key");
+            super::sftp::connect(prof, Some(secret)).expect("sftp connect after trusting")
+        }
+        Err(e) => panic!("sftp connect: {}", e),
+    }
+}
 
 fn profile(
     protocol: &str,
@@ -118,9 +137,75 @@ fn exercise(p: &dyn Provider, base: &str) {
 #[ignore]
 fn live_sftp() {
     let prof = profile("sftp", "127.0.0.1", 22, "demo", "password", "/upload");
-    let p = super::sftp::connect(&prof, Some("demo123")).expect("sftp connect");
+    let p = sftp_connect(&prof, "demo123");
     println!("SFTP store_id={}", p.store_id());
     exercise(&*p, "/upload");
+}
+
+/// Host-key verification (ticket 028) against a server with a fixed
+/// key: first contact prompts, trusting persists, the reconnect is
+/// silent, and a rotated key is rejected outright.
+///
+/// Same server as `live_ssh_shell`:
+/// `docker run -d --name hortcmd-ssh -p 2222:2222 -e PASSWORD_ACCESS=true \
+///   -e USER_NAME=demo -e USER_PASSWORD=demo123 -e SUDO_ACCESS=false \
+///   lscr.io/linuxserver/openssh-server`
+#[test]
+#[ignore]
+fn live_ssh_host_key() {
+    let prof = profile("sftp", "127.0.0.1", 2222, "demo", "password", "/config");
+    let id = HostId::new(&prof.host, prof.port);
+    hostkey::forget(&id).expect("clean slate");
+
+    // 1. First contact. The password is deliberately wrong: reaching the
+    //    challenge instead of an auth failure proves the host key is
+    //    checked *before* any authentication method runs.
+    let challenge = match super::sftp::connect(&prof, Some("definitely-wrong")) {
+        Err(ConnectError::HostKey(c)) => c,
+        Ok(_) => panic!("an unknown host must not connect"),
+        Err(e) => panic!("expected a host-key challenge, got: {}", e),
+    };
+    assert_eq!(challenge.status, "unknown");
+    assert!(challenge.stored.is_empty());
+    assert!(
+        challenge.fingerprint.starts_with("SHA256:"),
+        "fingerprint: {}",
+        challenge.fingerprint
+    );
+    println!(
+        "  host key {} {} {}:{}",
+        challenge.key_type, challenge.fingerprint, challenge.host, challenge.port
+    );
+
+    // 2. Trusting persists the key; the retried connection succeeds.
+    hostkey::trust(&challenge.token.expect("trust token")).expect("persist host key");
+    let p = super::sftp::connect(&prof, Some("demo123")).expect("connect after trusting");
+    drop(p);
+
+    // 3. A later connection with the same key must not prompt again.
+    super::sftp::connect(&prof, Some("demo123")).expect("silent reconnect");
+
+    // 4. Rotate the stored key: the server now presents something else.
+    hostkey::forget(&id).expect("drop the trusted key");
+    let rotated = russh::keys::parse_public_key_base64(
+        "AAAAC3NzaC1lZDI1NTE5AAAAIJdD7y3aLq454yWBdwLWbieU1ebz9/cu7/QEXn9OIeZJ",
+    )
+    .expect("fixture key");
+    hostkey::record(&id, &rotated).expect("stage the rotated key");
+
+    match super::sftp::connect(&prof, Some("demo123")) {
+        Err(ConnectError::HostKey(c)) => {
+            assert_eq!(c.status, "mismatch");
+            assert!(c.token.is_none(), "a mismatch must offer no bypass");
+            assert_eq!(c.stored.len(), 1);
+            assert_ne!(c.stored[0].fingerprint, c.fingerprint);
+            println!("  rejected: stored {} vs {}", c.stored[0].fingerprint, c.fingerprint);
+        }
+        Ok(_) => panic!("a changed host key must not connect"),
+        Err(e) => panic!("expected a mismatch, got: {}", e),
+    }
+
+    hostkey::forget(&id).expect("clean up");
 }
 
 /// SSH terminal (ticket 026): opens a PTY shell on the SFTP connection,
@@ -141,7 +226,9 @@ fn live_ssh_shell() {
     use russh::ChannelMsg;
 
     let prof = profile("sftp", "127.0.0.1", 2222, "demo", "password", "/config");
-    let p = super::sftp::connect(&prof, Some("demo123")).expect("sftp connect");
+    let p = sftp_connect(&prof, "demo123");
+    // The terminal rides on the connection the host-key check already
+    // verified — it never opens a second, unverified one (ticket 028).
     let ssh = p.ssh().expect("sftp provider must carry its SSH session");
 
     runtime().block_on(async move {

@@ -44,6 +44,28 @@ hortcmd/
         └── commands/fs.rs      # list_dir, list_drives, home_dir (+ ts-rs)
 ```
 
+## Security
+
+**SSH host keys** (TICKET-028). Every SSH connection — SFTP browsing and the
+integrated terminal, which share one session — authenticates the *server*
+before a password, key signature or agent signature is sent. The presented key
+is matched against the user's own OpenSSH `known_hosts` files (read only, never
+rewritten) and a hortcmd-managed store at `<config>/hortcmd/known_hosts`:
+
+- **Known key** → connects without a prompt.
+- **Unknown host** → the connection stops *before* authentication and the
+  connection manager shows host, port, key type and the SHA-256 fingerprint.
+  *Trust and connect* stores that exact key and retries; cancelling sends
+  nothing.
+- **Changed key** → hard failure showing both the stored and the presented
+  fingerprint, with no one-click bypass. Replacing a trusted key is an explicit
+  step in the connection manager (*Drop host key…*), which only clears hortcmd's
+  own store and reports — never edits — conflicting entries in your
+  `known_hosts`.
+
+A conflict in *either* source blocks the connection; a match in one never
+overrides it.
+
 ## Requirements
 
 - **Rust** (stable): https://rustup.rs → `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`

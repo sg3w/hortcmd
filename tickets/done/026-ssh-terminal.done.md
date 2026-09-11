@@ -129,8 +129,11 @@ alive).
   and the same ResizeObserver pattern is already used by `FileTable`/`TabBar`.
 
 ### Deferred
-- **Host-key verification** is still trust-on-first-use (inherited from 022, not
-  widened here) — a `known_hosts` check belongs to the SSH layer as a whole.
+- ~~**Host-key verification** is still trust-on-first-use (inherited from 022, not
+  widened here) — a `known_hosts` check belongs to the SSH layer as a whole.~~
+  Done in **TICKET-028** exactly there: `SshSession::connect` verifies the host
+  once, so the shell channel inherits the verified connection and never opens a
+  second, unverified one.
 - Multiple simultaneous shells (would need a non-modal terminal window).
 - Local shells inside the app: "Open in terminal" still hands local folders to the
   configured external terminal.

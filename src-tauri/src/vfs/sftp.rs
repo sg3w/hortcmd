@@ -13,6 +13,7 @@
 
 use super::{Provider, Stat};
 use crate::commands::fs::dir::{DirEntry, DirListing};
+use crate::net::hostkey::ConnectError;
 use crate::net::session::runtime;
 use crate::net::ssh::SshSession;
 use russh_sftp::client::SftpSession;
@@ -35,7 +36,7 @@ pub struct SftpConnection {
 pub fn connect(
     profile: &crate::net::session::Profile,
     secret: Option<&str>,
-) -> Result<Arc<dyn Provider>, String> {
+) -> Result<Arc<dyn Provider>, ConnectError> {
     let conn = runtime().block_on(connect_async(profile, secret))?;
     Ok(SftpProvider::new(profile.connection_key(), Arc::new(conn)))
 }
@@ -43,7 +44,7 @@ pub fn connect(
 async fn connect_async(
     profile: &crate::net::session::Profile,
     secret: Option<&str>,
-) -> Result<SftpConnection, String> {
+) -> Result<SftpConnection, ConnectError> {
     let ssh = SshSession::connect(profile, secret).await?;
 
     let channel = ssh.open_channel().await?;
