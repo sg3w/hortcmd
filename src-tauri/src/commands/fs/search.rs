@@ -408,7 +408,7 @@ fn run_search(
                 Flow::Continue
             });
             let mut sorted: Vec<_> = heap.into_iter().map(|Reverse(t)| t).collect();
-            sorted.sort_by(|a, b| b.0.cmp(&a.0)); // größte zuerst
+            sorted.sort_by_key(|t| Reverse(t.0)); // größte zuerst
             for (size, modified, path) in sorted {
                 if !sink.push(hit(&path, size, modified, String::new(), 0)) {
                     break;

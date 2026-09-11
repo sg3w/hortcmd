@@ -383,9 +383,21 @@ mod tests {
         // Each remote scheme keeps its authority and fills in its
         // default port for the connection key.
         for (raw, scheme, key) in [
-            ("ftp://bob@files.example/pub", Scheme::Ftp, "bob@files.example:21"),
-            ("smb://u@nas.local/share/dir", Scheme::Smb, "u@nas.local:445"),
-            ("webdav://u@dav.example/remote", Scheme::Webdav, "u@dav.example:443"),
+            (
+                "ftp://bob@files.example/pub",
+                Scheme::Ftp,
+                "bob@files.example:21",
+            ),
+            (
+                "smb://u@nas.local/share/dir",
+                Scheme::Smb,
+                "u@nas.local:445",
+            ),
+            (
+                "webdav://u@dav.example/remote",
+                Scheme::Webdav,
+                "u@dav.example:443",
+            ),
         ] {
             let a = parse_address(raw).unwrap();
             assert_eq!(a.scheme, scheme, "scheme of {}", raw);

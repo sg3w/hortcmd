@@ -92,17 +92,17 @@ continuous compilation outside the developer's primary platform.
 
 ## Acceptance criteria
 
-- [ ] `cargo fmt --check` passes from a clean checkout.
-- [ ] Strict Clippy passes for all targets and features without broad allowances.
-- [ ] Rust library tests, frontend tests, TypeScript checking, binding generation,
+- [x] `cargo fmt --check` passes from a clean checkout.
+- [x] Strict Clippy passes for all targets and features without broad allowances.
+- [x] Rust library tests, frontend tests, TypeScript checking, binding generation,
       and the production build pass through one documented local command.
-- [ ] Frontend tests run in CI without a native Tauri process.
-- [ ] Initial tests cover path handling, rename/color rules, critical store logic,
+- [x] Frontend tests run in CI without a native Tauri process.
+- [x] Initial tests cover path handling, rename/color rules, critical store logic,
       keyboard/dialog isolation, and IPC subscriptions.
-- [ ] Ubuntu, macOS, and Windows jobs compile and exercise platform-gated code.
-- [ ] The MSRV job succeeds on Rust 1.85 with locked dependencies.
-- [ ] Pull-request CI has no write permission and receives no live-test secrets.
-- [ ] Ignored live tests remain available through a documented manual workflow.
+- [x] Ubuntu, macOS, and Windows jobs compile and exercise platform-gated code.
+- [x] The MSRV job succeeds on Rust 1.85 with locked dependencies.
+- [x] Pull-request CI has no write permission and receives no live-test secrets.
+- [x] Ignored live tests remain available through a documented manual workflow.
 
 ## Tests
 
@@ -127,3 +127,87 @@ continuous compilation outside the developer's primary platform.
   baseline and deterministic tests.
 - Concept.md records CI and automated test coverage as cross-cutting infrastructure.
 - Rename this file to `033-ci-and-frontend-test-foundation.done.md`.
+
+---
+
+## Implementation
+
+### Clean baseline
+
+- `cargo fmt` applied; `cargo fmt --check` is green from a clean checkout.
+- All 10 strict-Clippy findings resolved **without** allowances:
+  - `copy_file_prog` / `copy_tree` / `transfer_one` / `parallel_copy_file` /
+    `run_parallel_copy` now share a `CopyTuning { limit, verify, buf_size }`
+    value instead of threading three unrelated parameters through every level.
+    That also removed two pre-existing `#[allow(clippy::too_many_arguments)]`.
+  - `run_extract` takes an `ExtractJob` — the five parts are one request.
+  - `ConnectError::HostKey` is boxed: the challenge carries six strings, which
+    otherwise sized every `Result<_, ConnectError>` in the connect path by its
+    rarest case.
+  - `SftpProvider::new` → `shared`, since it returns `Arc<dyn Provider>`.
+  - `&PathBuf` → `&Path` in four test helpers, `sort_by` → `sort_by_key`,
+    `&*sp` → `sp.as_ref()`, `&[path.clone()]` → `std::slice::from_ref(&path)`,
+    and a named `ArchiveCase` alias for the format table.
+- `check:bindings` confirms the generated bindings match the Rust types.
+
+### Frontend test setup
+
+- Vitest (already present) plus React Testing Library, `user-event` and
+  `jest-dom`.
+- `src/test/setup.ts`: an in-memory `localStorage` (installed at module load —
+  the stores are created on import, before the first `beforeEach`), and a reset
+  after every test of the DOM, timers, mocks, the Tauri harness and every
+  Zustand store. Stores are tracked by wrapping `create`/`createStore` through
+  `vi.mock("zustand")`; `zustand/middleware` keeps resolving to the real
+  package.
+- `src/test/tauri.ts`: `useDemo()` / `useTauri({ commands })`, recorded calls,
+  event pushes, and a loud failure for an unmocked command.
+- `src/test/fixtures.ts`: typed `DirEntry`/`Row` builders, so a new field on the
+  Rust side is one edit rather than a dozen.
+- Scripts: `test`, `test:watch`, `check` plus the `check:*` steps it composes.
+  Tests live beside their module; `src/test/` holds only shared machinery.
+
+### Initial coverage (196 frontend tests, 14 files)
+
+`path` (19) · `renameRules` (21) · `fileColors` (17) · `panesStore` (9) ·
+`transferQueue` (6) · `useKeyboard` (12) · `ipc/events` (9) · `AppDialog` (7) ·
+`FileContextMenu` (14), on top of the existing `preview` (19) and the suites
+from TICKET-031/032 (63).
+
+One real bug surfaced while writing them: `ancestorChain("sftp://u@host/")`
+returned the non-canonical `"sftp://u@host"`, so a breadcrumb's root crumb did
+not match the pane's own path. Fixed in `src/lib/path.ts`.
+
+### GitHub Actions
+
+- `ci.yml` — three jobs: the full gate on Linux (each `check:*` as its own step,
+  so the failing one is visible in the step list), an Ubuntu/macOS/Windows Rust
+  matrix for the `cfg`-gated code, and an MSRV 1.85 job with `--locked`.
+  `npm ci`, `cargo --locked`, npm and Cargo caches keyed on the lockfiles,
+  Tauri's Linux prerequisites named explicitly, `permissions: contents: read`,
+  and no secrets anywhere.
+- `live-tests.yml` — manual dispatch only, with an acknowledgement input; run
+  without the servers it exits with the exact local command and the Docker
+  hints instead of pretending to pass.
+
+### Documentation
+
+README gained a "Tests and CI" section (the canonical commands, the test
+layout, how to pick demo vs. mocked-Tauri mode, the live-test command, the CI
+jobs) and updated toolchain requirements. AGENTS.md now points at
+`npm run check`. Concept.md records the whole thing as cross-cutting
+infrastructure.
+
+### Verified
+
+`npm run check` exits 0 end to end. Each gate was then deliberately broken on a
+scratch edit and confirmed to fail: formatting (exit 1), a Clippy finding
+(101), a stale generated binding (1), a TypeScript error (2), a failing Vitest
+assertion (1), and a failing Rust test (101) — each reverted afterwards.
+Determinism was checked by running the suite three times with different shuffle
+seeds, once with `--no-file-parallelism` and once in a single thread: 196
+passed every time.
+
+Not verified here: the workflows have not been executed on GitHub's runners —
+that needs a push, which this ticket does not do. The macOS/Windows matrix and
+the Linux prerequisite list are therefore declared, not yet observed green.

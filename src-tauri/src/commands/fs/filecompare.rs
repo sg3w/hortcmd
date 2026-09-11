@@ -6,8 +6,8 @@
 // files don't block the UI; results are hard-limited.
 // ============================================================
 
-use serde::Serialize;
 use crate::vfs::caps::{self, Capability};
+use serde::Serialize;
 use similar::{ChangeTag, TextDiff};
 use std::fs::File;
 use std::io::{BufReader, Read};
@@ -245,7 +245,8 @@ fn compare_impl(left: String, right: String) -> Result<FileDiff, String> {
         // Limit to a smaller window for the hex view.
         let lhex = &lbytes[..lbytes.len().min(MAX_HEX_BYTES)];
         let rhex = &rbytes[..rbytes.len().min(MAX_HEX_BYTES)];
-        let truncated = lmore || rmore || lbytes.len() > MAX_HEX_BYTES || rbytes.len() > MAX_HEX_BYTES;
+        let truncated =
+            lmore || rmore || lbytes.len() > MAX_HEX_BYTES || rbytes.len() > MAX_HEX_BYTES;
         Ok(FileDiff {
             mode: "binary".into(),
             identical,

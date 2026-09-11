@@ -515,7 +515,10 @@ mod tests {
         assert_ne!(one.generation, two.generation);
         cancel(&one.id);
         assert!(one.cancelled());
-        assert!(!two.cancelled(), "cancelling one profile must not touch the other");
+        assert!(
+            !two.cancelled(),
+            "cancelling one profile must not touch the other"
+        );
         forget(&a);
         forget(&b);
     }
@@ -581,7 +584,11 @@ mod tests {
         // The old attempt is cancelled first (that is what disconnect and
         // a fresh connect do), so a new one may start.
         cancel(&old.id);
-        settle(&old, Err(ConnFailure::new(FailureKind::Cancelled, "x")), || {});
+        settle(
+            &old,
+            Err(ConnFailure::new(FailureKind::Cancelled, "x")),
+            || {},
+        );
         let new = match begin(&p) {
             Start::Started(a) => a,
             _ => panic!(),
@@ -590,8 +597,14 @@ mod tests {
         assert!(is_current(&new));
         assert!(!is_current(&old));
         // The old worker finishes late and must lose.
-        assert!(!settle(&old, Ok(()), || panic!("a stale generation must not install")));
-        assert_eq!(snapshot(&p).0, Phase::Connecting, "the new attempt still owns the profile");
+        assert!(!settle(&old, Ok(()), || panic!(
+            "a stale generation must not install"
+        )));
+        assert_eq!(
+            snapshot(&p).0,
+            Phase::Connecting,
+            "the new attempt still owns the profile"
+        );
         forget(&p);
     }
 
@@ -648,7 +661,11 @@ mod tests {
         assert_eq!(pending.as_deref(), Some(attempt.id.as_str()));
 
         // …and so does a recorded failure.
-        settle(&attempt, Err(ConnFailure::new(FailureKind::Auth, "nope")), || {});
+        settle(
+            &attempt,
+            Err(ConnFailure::new(FailureKind::Auth, "nope")),
+            || {},
+        );
         let (phase, _, error) = reconcile(&p, false);
         assert_eq!(phase, Phase::Failed);
         assert_eq!(error.unwrap().kind, FailureKind::Auth);
@@ -666,7 +683,10 @@ mod tests {
         // A connection found to be gone records why.
         set_disconnected(
             &p,
-            Some(ConnFailure::new(FailureKind::Protocol, "Verbindung verloren")),
+            Some(ConnFailure::new(
+                FailureKind::Protocol,
+                "Verbindung verloren",
+            )),
         );
         let (phase, _, error) = snapshot(&p);
         assert_eq!(phase, Phase::Failed);

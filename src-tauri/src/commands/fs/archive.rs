@@ -21,9 +21,9 @@ use zip::write::SimpleFileOptions;
 use zip::{ZipArchive, ZipWriter};
 
 use super::attrs;
-use crate::vfs::caps::{self, Capability};
 use super::dir::{DirEntry, DirListing};
 use super::file::{spawn_op, OpDone, Prog};
+use crate::vfs::caps::{self, Capability};
 
 /// Sentinel error: the archive/entry is encrypted, but no password
 /// was provided. The frontend detects this and asks for one.
@@ -135,7 +135,8 @@ fn tar_raw(reader: Box<dyn Read>) -> Result<Vec<RawEntry>, String> {
 
 /// Reads the member list of a 7z archive (with a password if needed).
 fn sevenz_raw(archive: &str, pw: &Option<String>) -> Result<Vec<RawEntry>, String> {
-    let ar = sevenz_rust::Archive::open_with_password(archive, &password(pw)).map_err(map_7z_err)?;
+    let ar =
+        sevenz_rust::Archive::open_with_password(archive, &password(pw)).map_err(map_7z_err)?;
     Ok(ar
         .files
         .iter()
@@ -451,8 +452,7 @@ fn extract_7z(
     prog.emit("", 0, 0, true);
 
     // Pass 2: extract via the streaming reader.
-    let mut reader =
-        sevenz_rust::SevenZReader::open(archive, password(pw)).map_err(map_7z_err)?;
+    let mut reader = sevenz_rust::SevenZReader::open(archive, password(pw)).map_err(map_7z_err)?;
     let mut ok = 0u32;
     let mut errors = Vec::new();
     reader
@@ -479,18 +479,35 @@ fn extract_7z(
     Ok((ok, errors))
 }
 
+/// What to extract and where to. Carried as one value because the five
+/// parts are one request — the archive, the level inside it, the chosen
+/// members, the destination and the password — and splitting them
+/// across a parameter list only made the signature harder to read.
+struct ExtractJob {
+    archive: String,
+    /// Level inside the archive the names are relative to.
+    base_inner: String,
+    /// Chosen members; empty means the whole level.
+    names: Vec<String>,
+    dest_dir: String,
+    pw: Option<String>,
+}
+
 /// Extracts selected entries (or the whole archive if `names` is empty).
 fn run_extract(
     app: AppHandle,
     id: String,
-    archive: String,
-    base_inner: String,
-    names: Vec<String>,
-    dest_dir: String,
-    pw: Option<String>,
+    job: ExtractJob,
     cancel: Arc<AtomicBool>,
     pause: Arc<AtomicBool>,
 ) {
+    let ExtractJob {
+        archive,
+        base_inner,
+        names,
+        dest_dir,
+        pw,
+    } = job;
     // Source archive and destination folder are separate questions
     // (TICKET-031). A refusal is reported through the same `fs-done`
     // event as any other failure, so the transfer window shows it.
@@ -667,7 +684,8 @@ fn pack_one(
     opts: SimpleFileOptions,
     prog: &mut Prog,
 ) -> Result<(), String> {
-    zip.start_file(entry_name, opts).map_err(|e| e.to_string())?;
+    zip.start_file(entry_name, opts)
+        .map_err(|e| e.to_string())?;
     let file_total = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
     let mut f = File::open(path).map_err(|e| e.to_string())?;
     let mut buf = vec![0u8; 64 * 1024];
@@ -707,7 +725,6 @@ fn fail_op(app: &AppHandle, id: String, op: &str, err: String) {
 
 // ---------- Commands ----------
 
-
 /// Starts the extraction in the background.
 #[tauri::command]
 pub fn extract_entries(
@@ -720,8 +737,15 @@ pub fn extract_entries(
     password: Option<String>,
 ) {
     let id2 = id.clone();
+    let job = ExtractJob {
+        archive,
+        base_inner: base,
+        names,
+        dest_dir,
+        pw: password,
+    };
     spawn_op(id, move |cancel, pause| {
-        run_extract(app, id2, archive, base, names, dest_dir, password, cancel, pause)
+        run_extract(app, id2, job, cancel, pause)
     });
 }
 
@@ -729,13 +753,18 @@ pub fn extract_entries(
 #[tauri::command]
 pub fn create_archive(app: AppHandle, id: String, sources: Vec<String>, dest_zip: String) {
     let id2 = id.clone();
-    spawn_op(id, move |cancel, pause| run_pack(app, id2, sources, dest_zip, cancel, pause));
+    spawn_op(id, move |cancel, pause| {
+        run_pack(app, id2, sources, dest_zip, cancel, pause)
+    });
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Write;
+
+    /// One format under test: its file name and the builder for it.
+    type ArchiveCase = (&'static str, fn(&Path));
 
     // Expected contents of the test archives: one file in the root and
     // one in a subfolder.
@@ -831,7 +860,7 @@ mod tests {
     #[test]
     fn listing_all_formats() {
         let dir = tmp_dir("list");
-        let cases: [(&str, fn(&Path)); 5] = [
+        let cases: [ArchiveCase; 5] = [
             ("a.zip", make_zip),
             ("a.tar", make_tar),
             ("a.tar.gz", make_tar_gz),

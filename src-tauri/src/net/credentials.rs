@@ -199,7 +199,12 @@ impl Store {
     /// Opens the `.kdbx`. `remember` keeps it open for the session,
     /// otherwise it re-locks after the next credential access.
     /// `create` allows starting a fresh database at the configured path.
-    pub fn unlock(&self, password: &str, remember: bool, create: bool) -> Result<CredStatus, String> {
+    pub fn unlock(
+        &self,
+        password: &str,
+        remember: bool,
+        create: bool,
+    ) -> Result<CredStatus, String> {
         let cfg = self.config();
         if !cfg.is_keepass() {
             return Err("Der KeePass-Speicher ist nicht aktiv".to_string());
@@ -408,11 +413,14 @@ impl KeepassStore {
 
     /// Runs `f` against the open database. A one-shot session is dropped
     /// afterwards, so the next access asks for the master password again.
-    fn with_session<T>(&self, f: impl FnOnce(&mut Session) -> Result<T, String>) -> Result<T, String> {
+    fn with_session<T>(
+        &self,
+        f: impl FnOnce(&mut Session) -> Result<T, String>,
+    ) -> Result<T, String> {
         let mut guard = self.open.lock().unwrap();
-        let session = guard.as_mut().ok_or_else(|| {
-            format!("{}: KeePass-Datei ist gesperrt — bitte entsperren", LOCKED)
-        })?;
+        let session = guard
+            .as_mut()
+            .ok_or_else(|| format!("{}: KeePass-Datei ist gesperrt — bitte entsperren", LOCKED))?;
         let result = f(session);
         if guard.as_ref().is_some_and(|s| s.one_shot) {
             *guard = None;
@@ -701,7 +709,8 @@ pub(crate) mod tests {
 
     /// A `.kdbx` path in a fresh temp dir, plus the config pointing at it.
     fn kdbx_config(name: &str) -> (PathBuf, CredConfig) {
-        let dir = std::env::temp_dir().join(format!("hortcmd-kdbx-{}-{}", name, std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("hortcmd-kdbx-{}-{}", name, std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("secrets.kdbx");
         let _ = std::fs::remove_file(&path);

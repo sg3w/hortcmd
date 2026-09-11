@@ -115,7 +115,10 @@ pub struct ForgetResult {
 pub enum ConnectError {
     /// The server identity is unknown or has changed. Nothing was
     /// authenticated and no secret was sent.
-    HostKey(HostKeyChallenge),
+    /// Boxed: the challenge carries six strings, which would otherwise
+    /// make every `Result<_, ConnectError>` in the connect path as large
+    /// as the failure case nobody hits.
+    HostKey(Box<HostKeyChallenge>),
     /// Anything else, already phrased for the user.
     Message(String),
 }
@@ -217,11 +220,7 @@ fn entries_for(id: &HostId, path: &Path) -> Result<Vec<(usize, PublicKey)>, Stri
 fn unreadable(path: &Path, reason: &str) -> String {
     let lines = malformed_lines(path);
     if lines.is_empty() {
-        return format!(
-            "{} konnte nicht gelesen werden: {}",
-            path.display(),
-            reason
-        );
+        return format!("{} konnte nicht gelesen werden: {}", path.display(), reason);
     }
     let list: Vec<String> = lines.iter().map(|l| l.to_string()).collect();
     format!(
@@ -491,11 +490,8 @@ mod tests {
     }
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "hortcmd-hostkey-{}-{}",
-            std::process::id(),
-            name
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("hortcmd-hostkey-{}-{}", std::process::id(), name));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("scratch dir");
         dir.join("known_hosts")
@@ -594,7 +590,7 @@ mod tests {
         let path = scratch("broken");
         std::fs::write(&path, "example.com ssh-ed25519 not-a-key\n").unwrap();
         let id = HostId::new("example.com", 22);
-        let err = scan(&id, &key(KEY_A), &[path.clone()]).unwrap_err();
+        let err = scan(&id, &key(KEY_A), std::slice::from_ref(&path)).unwrap_err();
         assert!(err.contains(&path.display().to_string()), "{}", err);
         assert!(err.contains("Zeile 1"), "{}", err);
     }
@@ -625,7 +621,10 @@ mod tests {
         let hashed = key("AAAAC3NzaC1lZDI1NTE5AAAAILIG2T/B0l0gaqj3puu510tu9N1OkQ4znY3LYuEm5zCF");
         let (matched, conflicts) = scan(&id, &hashed, &[path]).unwrap();
         assert!(matched, "hashed hostnames must be matched");
-        assert!(conflicts.is_empty(), "the commented-out key must be ignored");
+        assert!(
+            conflicts.is_empty(),
+            "the commented-out key must be ignored"
+        );
     }
 
     #[test]
@@ -639,7 +638,7 @@ mod tests {
         assert_eq!(remove_from(&path, &gone).unwrap(), 1);
         assert_eq!(remove_from(&path, &gone).unwrap(), 0);
 
-        let (matched, _) = scan(&stays, &key(KEY_B), &[path.clone()]).unwrap();
+        let (matched, _) = scan(&stays, &key(KEY_B), std::slice::from_ref(&path)).unwrap();
         assert!(matched);
         let (matched, conflicts) = scan(&gone, &key(KEY_A), &[path]).unwrap();
         assert!(!matched);

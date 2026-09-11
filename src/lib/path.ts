@@ -73,7 +73,11 @@ export function baseName(p: string): string {
 
 /** Chain from the root to the path (inclusive), e.g. ["/","/Users","/Users/x"]. */
 export function ancestorChain(path: string): string[] {
-  let cur = path.replace(/[\\/]+$/, "") || rootOf(path);
+  const trimmed = path.replace(/[\\/]+$/, "");
+  // A path that *is* a root keeps the canonical spelling `rootOf` gives
+  // it. Trimming alone would turn "sftp://u@host/" into "sftp://u@host",
+  // and a crumb built from that no longer matches the pane's own path.
+  let cur = !trimmed || isRoot(trimmed) ? rootOf(path) : trimmed;
   const chain = [cur];
   while (!isRoot(cur)) {
     const parent = parentPath(cur);

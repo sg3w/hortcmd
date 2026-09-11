@@ -110,9 +110,14 @@ kept away from it in layers:
 
 ## Requirements
 
-- **Rust** (stable): https://rustup.rs → `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
-- **Node.js** ≥ 18 (installed: v26)
+- **Rust**: stable for day-to-day work; the declared minimum is **1.85**
+  (`rust-version` in `src-tauri/Cargo.toml`, verified by its own CI job).
+  Install via https://rustup.rs →
+  `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+- **Node.js** ≥ 20 (CI uses 22)
 - Tauri CLI: `npm run tauri` (via devDependency)
+- Linux additionally needs Tauri's build prerequisites — the exact package list
+  is in `.github/workflows/ci.yml`, which is what CI installs.
 
 ## Development
 
@@ -125,8 +130,10 @@ npm run tauri dev      # native app: Vite + Rust backend
 ## Scripts
 
 ```bash
+npm run check          # everything CI runs, in the same order
 npm run typecheck      # tsc --noEmit
-npm run test           # vitest: preview sanitization security tests
+npm run test           # vitest, non-watch (CI mode)
+npm run test:watch     # vitest in watch mode
 npm run build          # frontend production build
 npm run gen:types      # ts-rs: Rust structs → src/ipc/bindings/*.ts
 npm run tauri build    # build native app
@@ -134,3 +141,58 @@ npm run tauri build    # build native app
 
 > Without a running Tauri runtime (pure browser) the IPC client automatically
 > uses demo data – handy for layout work without a Rust build.
+
+## Tests and CI
+
+`npm run check` is the whole gate, and it is exactly what
+`.github/workflows/ci.yml` runs — a red build is reproducible locally with the
+same command. In order:
+
+```bash
+npm run check:fmt       # cargo fmt --check
+npm run check:clippy    # clippy, all targets and features, warnings are errors
+npm run check:rust      # cargo test --locked
+npm run check:bindings  # regenerate ts-rs bindings; the tree must stay clean
+npm run typecheck       # tsc --noEmit
+npm test                # vitest
+npm run build           # production bundle
+```
+
+**Layout.** Tests live beside the module they cover (`src/lib/path.test.ts`,
+`src/store/panesStore.test.ts`, …). `src/test/` holds only the shared
+machinery: `setup.ts` (localStorage shim plus the reset of DOM, timers, mocks,
+Tauri harness and Zustand stores between tests), `tauri.ts` (the typed IPC
+stand-ins) and `fixtures.ts`.
+
+**Choosing a mode.** The IPC client behaves differently with and without a
+Tauri runtime, and both are real. A test says which it wants:
+
+```ts
+import { useDemo, useTauri } from "@/test/tauri";
+
+useDemo();                                   // browser build: demo fallbacks
+const tauri = useTauri({ commands: { … } }); // mocked runtime + event pushes
+```
+
+`useDemo()` is the default, so the frontend suite needs no native process —
+which is what lets it run in CI. An unmocked command fails loudly rather than
+returning `undefined`.
+
+**Live tests.** The protocol tests (SFTP, FTP/FTPS, SMB, WebDAV, the SSH
+terminal, the connection timeout) and the OS-keychain tests are `#[ignore]`d:
+they need real servers and real credentials, so they never run in pull-request
+CI. The Docker command for each server is in the doc comment above its test.
+
+```bash
+cargo test --manifest-path src-tauri/Cargo.toml --lib live_ \
+  -- --ignored --nocapture --test-threads=1
+```
+
+`.github/workflows/live-tests.yml` is the manual counterpart; dispatched
+without those servers it stops with the setup instructions rather than
+pretending to pass.
+
+**CI jobs.** `check` (the full gate, Linux), `rust` (Ubuntu/macOS/Windows, so
+the `cfg`-gated platform code keeps compiling and its portable tests keep
+passing) and `msrv` (Rust 1.85 with `--locked`). Workflow permissions are
+`contents: read`, and no job receives secrets.

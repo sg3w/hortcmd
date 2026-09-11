@@ -6,8 +6,8 @@
 // Windows, macOS, and Linux stay in one place.
 // ============================================================
 
-use serde::Serialize;
 use crate::vfs::caps::{self, Capability};
+use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 use ts_rs::TS;
@@ -36,8 +36,7 @@ pub struct VolumeInfo {
 /// Compares component-wise, so "/Volumes/Data" does not match
 /// the volume "/Volumes/Dat".
 fn mount_rank(path: &Path, mount: &Path) -> Option<usize> {
-    path.starts_with(mount)
-        .then(|| mount.components().count())
+    path.starts_with(mount).then(|| mount.components().count())
 }
 
 fn info_of(disk: &sysinfo::Disk) -> VolumeInfo {

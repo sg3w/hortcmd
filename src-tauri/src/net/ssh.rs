@@ -68,7 +68,7 @@ impl SshSession {
         match checked {
             Some(Ok(Decision::Trusted)) => {}
             Some(Ok(Decision::Challenge(challenge))) => {
-                return Err(ConnectError::HostKey(challenge))
+                return Err(ConnectError::HostKey(Box::new(challenge)))
             }
             Some(Err(message)) => return Err(ConnectError::Message(message)),
             None => {

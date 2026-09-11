@@ -33,13 +33,18 @@ export default defineConfig({
     minify: process.env.TAURI_DEBUG ? false : "esbuild",
     sourcemap: !!process.env.TAURI_DEBUG,
   },
-  // Sicherheitstests der Vorschau-Sanitisierung (TICKET-030) brauchen ein
-  // echtes DOM — DOMPurify arbeitet auf Knoten, nicht auf Strings.
+  // Tests run in jsdom: the preview sanitisation (TICKET-030) works on
+  // real nodes, and the component tests need a document at all.
   test: {
     environment: "jsdom",
-    include: ["src/**/*.test.ts"],
-    // jsdom here has no usable localStorage; the stores persist through
-    // it, so one in-memory shim runs before every test file.
+    include: ["src/**/*.test.{ts,tsx}"],
+    // One setup for every file: a working localStorage, and a reset of
+    // the DOM, timers, mocks, Tauri harness and Zustand stores between
+    // tests (TICKET-033).
     setupFiles: ["src/test/setup.ts"],
+    restoreMocks: true,
+    clearMocks: true,
+    unstubEnvs: true,
+    unstubGlobals: true,
   },
 });

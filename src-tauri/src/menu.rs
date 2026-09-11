@@ -139,8 +139,7 @@ mod imp {
             true,
             None::<&str>,
         )?;
-        let settings =
-            MenuItem::with_id(app, ID_SETTINGS, l.settings, true, Some("CmdOrCtrl+,"))?;
+        let settings = MenuItem::with_id(app, ID_SETTINGS, l.settings, true, Some("CmdOrCtrl+,"))?;
         let quit = MenuItem::with_id(
             app,
             ID_QUIT,

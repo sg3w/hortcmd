@@ -117,6 +117,7 @@ const { useClipboard } = await import("@/store/clipboardStore");
 const { commandState, runCommand } = await import("./commands");
 const { guard, pairState } = await import("./guard");
 const { runDelete, runMkdir, runQuickLook } = await import("./fileOps");
+const { file } = await import("@/test/fixtures");
 
 /** Puts a pane on `path` with one file under the cursor. */
 function place(
@@ -124,16 +125,7 @@ function place(
   path: string,
   opts: { archive?: string | null; dir?: boolean } = {},
 ): void {
-  const entry = {
-    name: "datei.txt",
-    is_dir: opts.dir ?? false,
-    is_symlink: false,
-    size: 10,
-    modified: 0,
-    hidden: false,
-    readonly: false,
-    executable: false,
-  };
+  const entry = file("datei.txt", { is_dir: opts.dir ?? false, size: 10 });
   usePanes.setState((s) => ({
     [side]: {
       ...s[side],

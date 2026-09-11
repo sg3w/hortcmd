@@ -4,8 +4,8 @@
 // cancel, name conflicts) that the archive module also uses.
 // ============================================================
 
-use crate::vfs::{self, Provider};
 use crate::vfs::caps::{self, Capability};
+use crate::vfs::{self, Provider};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::io::{ErrorKind, Read, Write};
@@ -270,20 +270,36 @@ impl Prog {
     }
 }
 
+/// The three knobs every copy shares, from the settings down to the
+/// innermost block loop. Carried as one value so the recursive and
+/// parallel paths do not thread three unrelated parameters through
+/// every level — which is what pushed several of these functions past
+/// a readable signature.
+#[derive(Clone, Copy)]
+struct CopyTuning {
+    /// Speed cap in bytes per second; 0 = unlimited.
+    limit: u64,
+    /// Compare the SHA-256 of source and target after copying.
+    verify: bool,
+    /// Block size of the copy loop.
+    buf_size: usize,
+}
+
 /// Copies a file in blocks; reacts to cancel (the partial file is
-/// removed) and pause. `limit` optionally caps the speed
-/// (bytes/s, 0 = unlimited). With `verify`, the SHA-256 checksum of
-/// source and target is compared after copying.
+/// removed) and pause.
 fn copy_file_prog(
     srcp: &dyn Provider,
     dstp: &dyn Provider,
     src: &Path,
     dst: &Path,
     prog: &mut Prog,
-    limit: u64,
-    verify: bool,
-    buf_size: usize,
+    tune: CopyTuning,
 ) -> std::io::Result<()> {
+    let CopyTuning {
+        limit,
+        verify,
+        buf_size,
+    } = tune;
     use sha2::{Digest, Sha256};
 
     let file_total = srcp.stat(src)?.len;
@@ -535,28 +551,25 @@ fn stale_working_entries(provider: &dyn Provider, dir: &Path) -> Vec<String> {
 }
 
 /// Copies recursively (file or directory tree) from `srcp` to `dstp`.
-#[allow(clippy::too_many_arguments)]
 fn copy_tree(
     srcp: &dyn Provider,
     dstp: &dyn Provider,
     src: &Path,
     dst: &Path,
     prog: &mut Prog,
-    limit: u64,
-    verify: bool,
-    buf_size: usize,
+    tune: CopyTuning,
 ) -> std::io::Result<()> {
     if srcp.is_dir(src) {
         dstp.create_dir_all(dst)?;
         for child in srcp.read_dir(src)? {
             let name = child.file_name().unwrap_or_default();
-            copy_tree(srcp, dstp, &child, &dst.join(name), prog, limit, verify, buf_size)?;
+            copy_tree(srcp, dstp, &child, &dst.join(name), prog, tune)?;
         }
     } else {
         if let Some(parent) = dst.parent() {
             dstp.create_dir_all(parent)?;
         }
-        copy_file_prog(srcp, dstp, src, dst, prog, limit, verify, buf_size)?;
+        copy_file_prog(srcp, dstp, src, dst, prog, tune)?;
     }
     Ok(())
 }
@@ -610,23 +623,12 @@ fn transfer_one(
     src: &Path,
     plan: &Plan,
     prog: &mut Prog,
-    limit: u64,
-    verify: bool,
-    buf_size: usize,
+    tune: CopyTuning,
     remove_source: bool,
     errors: &mut Vec<String>,
 ) -> std::io::Result<()> {
     transfer_one_with(srcp, dstp, src, plan, remove_source, errors, || {
-        copy_tree(
-            srcp,
-            dstp,
-            src,
-            &plan.write_to,
-            prog,
-            limit,
-            verify,
-            buf_size,
-        )
+        copy_tree(srcp, dstp, src, &plan.write_to, prog, tune)
     })
 }
 
@@ -773,14 +775,14 @@ fn flatten_tree(
 }
 
 /// Copies a file block by block with shared bookkeeping (parallel path).
-fn parallel_copy_file(
-    task: &CopyTask,
-    sp: &SharedProg,
-    limit: u64,
-    verify: bool,
-    buf_size: usize,
-) -> std::io::Result<()> {
+fn parallel_copy_file(task: &CopyTask, sp: &SharedProg, tune: CopyTuning) -> std::io::Result<()> {
     use sha2::{Digest, Sha256};
+
+    let CopyTuning {
+        limit,
+        verify,
+        buf_size,
+    } = tune;
 
     let srcp = &*sp.srcp;
     let dstp = &*sp.dstp;
@@ -849,9 +851,7 @@ fn run_parallel_copy(
     jobs: Vec<(PathBuf, Plan)>,
     cancel: Arc<AtomicBool>,
     pause: Arc<AtomicBool>,
-    limit: u64,
-    verify: bool,
-    buf_size: usize,
+    tune: CopyTuning,
     threads: u32,
     files_total: u32,
     bytes_total: u64,
@@ -905,7 +905,7 @@ fn run_parallel_copy(
                     break;
                 }
                 let task = &tasks[i];
-                match parallel_copy_file(task, &*sp, limit, verify, buf_size) {
+                match parallel_copy_file(task, sp.as_ref(), tune) {
                     Ok(()) => {}
                     Err(e) if e.kind() == ErrorKind::Interrupted => break, // Abbruch
                     Err(e) => {
@@ -983,7 +983,11 @@ fn run_transfer(
     threads: u32,
     safe: bool,
 ) {
-    let buf_size = resolve_buf(buf_kb);
+    let tune = CopyTuning {
+        limit,
+        verify,
+        buf_size: resolve_buf(buf_kb),
+    };
     let mode = if safe { "safe" } else { "direct" };
     let fail = |id: String, op: String, err: String| {
         let _ = app.emit(
@@ -1126,8 +1130,8 @@ fn run_transfer(
 
     let mut ok = 0u32;
     let mut default_res: Option<Resolution> = None; // „Für alle übernehmen"
-    // In parallel mode the resolved pairs are collected and afterwards
-    // copied in parallel (collisions are resolved here sequentially/interactively).
+                                                    // In parallel mode the resolved pairs are collected and afterwards
+                                                    // copied in parallel (collisions are resolved here sequentially/interactively).
     let mut copy_jobs: Vec<(PathBuf, Plan)> = Vec::new();
 
     'outer: for (s, files, bytes) in &measured {
@@ -1200,9 +1204,7 @@ fn run_transfer(
                 src,
                 &plan,
                 &mut prog,
-                limit,
-                verify,
-                buf_size,
+                tune,
                 remove_source,
                 &mut errors,
             )
@@ -1226,9 +1228,7 @@ fn run_transfer(
             copy_jobs,
             cancel.clone(),
             pause.clone(),
-            limit,
-            verify,
-            buf_size,
+            tune,
             threads,
             files_total,
             bytes_total,
@@ -1284,11 +1284,7 @@ pub fn make_dir(path: String) -> Result<String, String> {
 /// returning `Ok(false)` signals the name conflict to the frontend.
 /// `Ok(true)` = written, `Err` = a real I/O error.
 #[tauri::command]
-pub fn write_text_file(
-    path: String,
-    contents: String,
-    overwrite: bool,
-) -> Result<bool, String> {
+pub fn write_text_file(path: String, contents: String, overwrite: bool) -> Result<bool, String> {
     caps::require(&path, Capability::Create)?;
     let (provider, resolved) = vfs::resolve(&path)?;
     let p = Path::new(&resolved);
@@ -1438,8 +1434,19 @@ pub fn copy_entries(
     let id2 = id.clone();
     spawn_op(id, move |cancel, pause| {
         run_transfer(
-            app, id2, "copy".into(), sources, dest_dir, false, cancel, pause, limit, verify,
-            buf_kb, threads, safe,
+            app,
+            id2,
+            "copy".into(),
+            sources,
+            dest_dir,
+            false,
+            cancel,
+            pause,
+            limit,
+            verify,
+            buf_kb,
+            threads,
+            safe,
         )
     });
 }
@@ -1463,8 +1470,19 @@ pub fn move_entries(
     let id2 = id.clone();
     spawn_op(id, move |cancel, pause| {
         run_transfer(
-            app, id2, "move".into(), sources, dest_dir, true, cancel, pause, limit, verify,
-            buf_kb, threads, safe,
+            app,
+            id2,
+            "move".into(),
+            sources,
+            dest_dir,
+            true,
+            cancel,
+            pause,
+            limit,
+            verify,
+            buf_kb,
+            threads,
+            safe,
         )
     });
 }
@@ -1534,7 +1552,9 @@ pub fn delete_entries(paths: Vec<String>) -> OpResult {
         let res = caps::require(p, Capability::DeletePermanent)
             .and_then(|_| vfs::resolve(p))
             .and_then(|(provider, resolved)| {
-                provider.remove(Path::new(&resolved)).map_err(|e| e.to_string())
+                provider
+                    .remove(Path::new(&resolved))
+                    .map_err(|e| e.to_string())
             });
         match res {
             Ok(_) => ok += 1,
@@ -1555,7 +1575,7 @@ mod tests {
     };
     use crate::vfs::local::LocalProvider;
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -1572,13 +1592,13 @@ mod tests {
         dir
     }
 
-    fn write(dir: &PathBuf, name: &str, content: &str) {
+    fn write(dir: &Path, name: &str, content: &str) {
         fs::write(dir.join(name), content).unwrap();
     }
-    fn read(dir: &PathBuf, name: &str) -> String {
+    fn read(dir: &Path, name: &str) -> String {
         fs::read_to_string(dir.join(name)).unwrap()
     }
-    fn exists(dir: &PathBuf, name: &str) -> bool {
+    fn exists(dir: &Path, name: &str) -> bool {
         dir.join(name).exists()
     }
     fn ren(a: &str, b: &str) -> (String, String) {
@@ -1713,7 +1733,10 @@ mod tests {
         let p = d.join("list.txt").to_string_lossy().into_owned();
         assert_eq!(write_text_file(p.clone(), "first".into(), false), Ok(true));
         // Without overwrite: untouched -> Ok(false), the content stays.
-        assert_eq!(write_text_file(p.clone(), "second".into(), false), Ok(false));
+        assert_eq!(
+            write_text_file(p.clone(), "second".into(), false),
+            Ok(false)
+        );
         assert_eq!(read(&d, "list.txt"), "first");
         // With overwrite: written anew.
         assert_eq!(write_text_file(p.clone(), "second".into(), true), Ok(true));
@@ -1988,7 +2011,10 @@ mod safe_tests {
         let stale = stale_working_entries(&*fake, Path::new("/dst"));
         assert_eq!(stale, vec![".hortcmd-stage-9-1".to_string()]);
         // Reporting is all it does.
-        assert_eq!(fake.get("/dst/.hortcmd-stage-9-1").as_deref(), Some("half a copy"));
+        assert_eq!(
+            fake.get("/dst/.hortcmd-stage-9-1").as_deref(),
+            Some("half a copy")
+        );
     }
 
     // ---------- Commit ----------
@@ -1997,7 +2023,13 @@ mod safe_tests {
     fn a_new_destination_is_committed_with_one_rename() {
         let fake = Fake::new(false);
         fake.put("/dst/.stage", "new");
-        commit(&*fake, Path::new("/dst/.stage"), Path::new("/dst/f.txt"), false).unwrap();
+        commit(
+            &*fake,
+            Path::new("/dst/.stage"),
+            Path::new("/dst/f.txt"),
+            false,
+        )
+        .unwrap();
         assert_eq!(fake.get("/dst/f.txt").as_deref(), Some("new"));
         assert!(fake.get("/dst/.stage").is_none());
     }
@@ -2007,10 +2039,19 @@ mod safe_tests {
         let fake = Fake::new(true);
         fake.put("/dst/f.txt", "old");
         fake.put("/dst/.stage", "new");
-        commit(&*fake, Path::new("/dst/.stage"), Path::new("/dst/f.txt"), true).unwrap();
+        commit(
+            &*fake,
+            Path::new("/dst/.stage"),
+            Path::new("/dst/f.txt"),
+            true,
+        )
+        .unwrap();
         assert_eq!(fake.get("/dst/f.txt").as_deref(), Some("new"));
         // No backup was needed, so none is left behind.
-        assert!(fake.names_in("/dst").iter().all(|n| !n.starts_with(BACKUP_PREFIX)));
+        assert!(fake
+            .names_in("/dst")
+            .iter()
+            .all(|n| !n.starts_with(BACKUP_PREFIX)));
     }
 
     #[test]
@@ -2018,7 +2059,13 @@ mod safe_tests {
         let fake = Fake::new(false);
         fake.put("/dst/f.txt", "old");
         fake.put("/dst/.stage", "new");
-        commit(&*fake, Path::new("/dst/.stage"), Path::new("/dst/f.txt"), true).unwrap();
+        commit(
+            &*fake,
+            Path::new("/dst/.stage"),
+            Path::new("/dst/f.txt"),
+            true,
+        )
+        .unwrap();
         assert_eq!(fake.get("/dst/f.txt").as_deref(), Some("new"));
         // The backup is cleared only after the new name is in place.
         assert_eq!(fake.names_in("/dst"), vec!["f.txt".to_string()]);
@@ -2034,8 +2081,13 @@ mod safe_tests {
             .unwrap()
             .insert(PathBuf::from("/dst/.stage"));
 
-        let err = commit(&*fake, Path::new("/dst/.stage"), Path::new("/dst/f.txt"), true)
-            .unwrap_err();
+        let err = commit(
+            &*fake,
+            Path::new("/dst/.stage"),
+            Path::new("/dst/f.txt"),
+            true,
+        )
+        .unwrap_err();
         assert!(err.to_string().contains("abgelehnt"));
         // Byte-for-byte the same file as before, under its own name.
         assert_eq!(fake.get("/dst/f.txt").as_deref(), Some("old"));
@@ -2092,7 +2144,11 @@ mod safe_tests {
             || Err(io::Error::new(ErrorKind::Interrupted, "abgebrochen")),
         );
         assert!(!fake.exists(Path::new("/dst/new.txt")));
-        assert!(fake.names_in("/dst").is_empty(), "{:?}", fake.names_in("/dst"));
+        assert!(
+            fake.names_in("/dst").is_empty(),
+            "{:?}",
+            fake.names_in("/dst")
+        );
     }
 
     #[test]
@@ -2101,12 +2157,20 @@ mod safe_tests {
         let plan = Plan::staged(&*fake, PathBuf::from("/dst/new.txt"), false);
 
         let mut errors = Vec::new();
-        transfer_one_with(&*fake, &*fake, Path::new("/src/new.txt"), &plan, false, &mut errors, || {
-            // Mid-copy: the bytes exist, the final name does not.
-            fake.put(plan.write_to.to_str().unwrap(), "all of it");
-            assert!(!fake.exists(Path::new("/dst/new.txt")));
-            Ok(())
-        })
+        transfer_one_with(
+            &*fake,
+            &*fake,
+            Path::new("/src/new.txt"),
+            &plan,
+            false,
+            &mut errors,
+            || {
+                // Mid-copy: the bytes exist, the final name does not.
+                fake.put(plan.write_to.to_str().unwrap(), "all of it");
+                assert!(!fake.exists(Path::new("/dst/new.txt")));
+                Ok(())
+            },
+        )
         .unwrap();
 
         assert_eq!(fake.get("/dst/new.txt").as_deref(), Some("all of it"));
@@ -2118,13 +2182,24 @@ mod safe_tests {
         let fake = Fake::new(false);
         fake.put("/dst/f.txt", "old");
         let plan = Plan::staged(&*fake, PathBuf::from("/dst/f.txt"), true);
-        fake.fail_rename.lock().unwrap().insert(plan.write_to.clone());
+        fake.fail_rename
+            .lock()
+            .unwrap()
+            .insert(plan.write_to.clone());
 
         let mut errors = Vec::new();
-        let err = transfer_one_with(&*fake, &*fake, Path::new("/src/f.txt"), &plan, false, &mut errors, || {
-            fake.put(plan.write_to.to_str().unwrap(), "new");
-            Ok(())
-        })
+        let err = transfer_one_with(
+            &*fake,
+            &*fake,
+            Path::new("/src/f.txt"),
+            &plan,
+            false,
+            &mut errors,
+            || {
+                fake.put(plan.write_to.to_str().unwrap(), "new");
+                Ok(())
+            },
+        )
         .unwrap_err();
 
         assert!(err.to_string().contains("abgelehnt"));
@@ -2139,12 +2214,20 @@ mod safe_tests {
         let plan = Plan::staged(&*fake, PathBuf::from("/dst/f.txt"), false);
 
         let mut errors = Vec::new();
-        transfer_one_with(&*fake, &*fake, Path::new("/src/f.txt"), &plan, true, &mut errors, || {
-            fake.put(plan.write_to.to_str().unwrap(), "payload");
-            // Still the only committed copy at this point.
-            assert!(fake.exists(Path::new("/src/f.txt")));
-            Ok(())
-        })
+        transfer_one_with(
+            &*fake,
+            &*fake,
+            Path::new("/src/f.txt"),
+            &plan,
+            true,
+            &mut errors,
+            || {
+                fake.put(plan.write_to.to_str().unwrap(), "payload");
+                // Still the only committed copy at this point.
+                assert!(fake.exists(Path::new("/src/f.txt")));
+                Ok(())
+            },
+        )
         .unwrap();
 
         assert_eq!(fake.get("/dst/f.txt").as_deref(), Some("payload"));
@@ -2181,10 +2264,18 @@ mod safe_tests {
         let plan = Plan::staged(&*fake, PathBuf::from("/dst/f.txt"), false);
 
         let mut errors = Vec::new();
-        transfer_one_with(&*fake, &*fake, Path::new("/src/f.txt"), &plan, true, &mut errors, || {
-            fake.put(plan.write_to.to_str().unwrap(), "payload");
-            Ok(())
-        })
+        transfer_one_with(
+            &*fake,
+            &*fake,
+            Path::new("/src/f.txt"),
+            &plan,
+            true,
+            &mut errors,
+            || {
+                fake.put(plan.write_to.to_str().unwrap(), "payload");
+                Ok(())
+            },
+        )
         .unwrap();
 
         // The committed destination is never rolled back to "repair" this.
@@ -2199,7 +2290,10 @@ mod safe_tests {
         let fake = Fake::new(false);
         let plan = Plan::staged(&*fake, PathBuf::from("/dst/f.txt"), false);
         fake.put(plan.write_to.to_str().unwrap(), "half");
-        fake.fail_remove.lock().unwrap().insert(plan.write_to.clone());
+        fake.fail_remove
+            .lock()
+            .unwrap()
+            .insert(plan.write_to.clone());
 
         let mut errors = Vec::new();
         let err = transfer_one_with(
@@ -2224,10 +2318,18 @@ mod safe_tests {
         let plan = Plan::direct(PathBuf::from("/dst/f.txt"));
 
         let mut errors = Vec::new();
-        transfer_one_with(&*fake, &*fake, Path::new("/src/f.txt"), &plan, false, &mut errors, || {
-            fake.put("/dst/f.txt", "written directly");
-            Ok(())
-        })
+        transfer_one_with(
+            &*fake,
+            &*fake,
+            Path::new("/src/f.txt"),
+            &plan,
+            false,
+            &mut errors,
+            || {
+                fake.put("/dst/f.txt", "written directly");
+                Ok(())
+            },
+        )
         .unwrap();
 
         // No staging entry is created and none has to be cleaned up.

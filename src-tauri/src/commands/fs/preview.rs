@@ -3,8 +3,8 @@
 // Additionally: open with the default program (F4).
 // ============================================================
 
-use crate::vfs::{self, Provider};
 use crate::vfs::caps::{self, Capability};
+use crate::vfs::{self, Provider};
 use base64::Engine as _;
 use serde::Serialize;
 use std::io::{self, Cursor, Read};
@@ -70,7 +70,12 @@ fn hex_dump(bytes: &[u8]) -> String {
                 }
             })
             .collect();
-        out.push_str(&format!("{:08x}  {:<47}  {}\n", i * 16, hex.join(" "), ascii));
+        out.push_str(&format!(
+            "{:08x}  {:<47}  {}\n",
+            i * 16,
+            hex.join(" "),
+            ascii
+        ));
     }
     out
 }
@@ -203,10 +208,7 @@ pub fn is_safe_external_url(url: &str) -> bool {
         return false;
     }
     // Everything up to the first `/`, `?` or `#` is the authority.
-    let authority = rest
-        .split(['/', '?', '#'])
-        .next()
-        .unwrap_or_default();
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
     // Credentials in the URL are a phishing aid, not something a file
     // preview needs — and the host after `@` is easy to misread.
     if authority.is_empty() || authority.contains('@') {
@@ -560,10 +562,7 @@ pub fn open_system_properties(path: String) -> Result<(), String> {
         // and `gdbus` take every argument as its own argv entry, so the
         // URI needs no further quoting.
         let attempts: [(&str, Vec<String>); 4] = [
-            (
-                "dbus-send",
-                dbus_send_args("ShowItemProperties", &uri),
-            ),
+            ("dbus-send", dbus_send_args("ShowItemProperties", &uri)),
             ("gdbus", gdbus_args("ShowItemProperties", &uri)),
             ("dbus-send", dbus_send_args("ShowItems", &uri)),
             ("gdbus", gdbus_args("ShowItems", &uri)),

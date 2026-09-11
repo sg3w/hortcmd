@@ -223,12 +223,9 @@ fn sync_copy_impl(items: Vec<(String, String)>) -> OpResult {
         // `fs::copy` — one pair at a time, both ends checked, so a
         // single unsupported pair fails on its own instead of aborting
         // the whole synchronization (TICKET-031).
-        if let Err(e) = caps::require_pair(
-            src,
-            Capability::CompareDirs,
-            dst,
-            Capability::CompareDirs,
-        ) {
+        if let Err(e) =
+            caps::require_pair(src, Capability::CompareDirs, dst, Capability::CompareDirs)
+        {
             errors.push(format!("{} → {}: {}", src, dst, e));
             continue;
         }

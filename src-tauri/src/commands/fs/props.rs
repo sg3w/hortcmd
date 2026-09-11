@@ -115,7 +115,9 @@ fn read_xattrs(_path: &Path) -> Vec<XattrItem> {
 /// UTF-8 text preview of a raw value, if it is printable (otherwise None).
 fn printable_preview(raw: &[u8]) -> Option<String> {
     let s = std::str::from_utf8(raw).ok()?;
-    if s.chars().any(|c| c.is_control() && c != '\n' && c != '\t' && c != '\r') {
+    if s.chars()
+        .any(|c| c.is_control() && c != '\n' && c != '\t' && c != '\r')
+    {
         return None;
     }
     let trimmed: String = s.chars().take(256).collect();

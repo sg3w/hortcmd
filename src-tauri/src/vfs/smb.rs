@@ -17,12 +17,12 @@
 use super::{Provider, Stat};
 use crate::commands::fs::dir::{DirEntry, DirListing};
 use crate::net::session::Profile;
+use smb::binrw_util::sized_string::SizedWideString;
 use smb::resource::{FileCreateArgs, Resource};
 use smb::{
     Client, ClientConfig, CreateOptions, FileAccessMask, FileAttributes,
     FileIdBothDirectoryInformation, FileRenameInformation, UncPath,
 };
-use smb::binrw_util::sized_string::SizedWideString;
 use std::collections::HashSet;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -140,8 +140,8 @@ impl SmbProvider {
 
     /// UNC path for a provider path (share must be attached first).
     fn unc_of(&self, path: &str) -> Result<UncPath, String> {
-        let (share, rest) = split_share(path)
-            .ok_or_else(|| "Pfad enthält keinen Share".to_string())?;
+        let (share, rest) =
+            split_share(path).ok_or_else(|| "Pfad enthält keinen Share".to_string())?;
         self.ensure_share(&share)?;
         let mut unc = UncPath::new(&self.server)
             .and_then(|u| u.with_share(&share))
@@ -180,7 +180,12 @@ impl SmbProvider {
         })?;
         Ok(shares
             .iter()
-            .map(|s| s.netname.as_ref().map(|n| n.to_string()).unwrap_or_default())
+            .map(|s| {
+                s.netname
+                    .as_ref()
+                    .map(|n| n.to_string())
+                    .unwrap_or_default()
+            })
             .filter(|name| !name.is_empty())
             // Administrative shares end with `$` — keep them, but hidden.
             .map(|name| DirEntry {
@@ -398,8 +403,8 @@ impl Provider for SmbProvider {
     }
 
     fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
-        let (_, to_rest) = split_share(&p(to))
-            .ok_or_else(|| io::Error::other("Zielpfad enthält keinen Share"))?;
+        let (_, to_rest) =
+            split_share(&p(to)).ok_or_else(|| io::Error::other("Zielpfad enthält keinen Share"))?;
         // A rename needs DELETE on the source; attribute rights are added
         // because some servers reject SET_INFO on a delete-only handle.
         let resource = self
@@ -433,8 +438,7 @@ impl Provider for SmbProvider {
 
     fn remove_file(&self, path: &Path) -> io::Result<()> {
         // DELETE_ON_CLOSE is the SMB way to unlink.
-        let mut args =
-            FileCreateArgs::make_open_existing(FileAccessMask::new().with_delete(true));
+        let mut args = FileCreateArgs::make_open_existing(FileAccessMask::new().with_delete(true));
         args.options = CreateOptions::new().with_delete_on_close(true);
         close_resource(self.open(&p(path), &args).map_err(to_io)?)
     }
@@ -448,8 +452,7 @@ impl Provider for SmbProvider {
                 self.remove_file(&child)?;
             }
         }
-        let mut args =
-            FileCreateArgs::make_open_existing(FileAccessMask::new().with_delete(true));
+        let mut args = FileCreateArgs::make_open_existing(FileAccessMask::new().with_delete(true));
         args.options = CreateOptions::new()
             .with_delete_on_close(true)
             .with_directory_file(true);

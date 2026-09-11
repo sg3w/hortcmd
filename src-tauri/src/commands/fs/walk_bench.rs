@@ -38,7 +38,12 @@ fn rss_kb() -> u64 {
         .args(["-o", "rss=", "-p", &std::process::id().to_string()])
         .output()
         .ok()
-        .and_then(|out| String::from_utf8_lossy(&out.stdout).trim().parse::<u64>().ok())
+        .and_then(|out| {
+            String::from_utf8_lossy(&out.stdout)
+                .trim()
+                .parse::<u64>()
+                .ok()
+        })
         .unwrap_or(0)
 }
 
@@ -56,7 +61,10 @@ fn with_peak_rss<T>(body: impl FnOnce(Instant) -> T) -> (T, u64, Duration) {
     let pid = std::process::id();
     let sampler = thread::spawn(move || {
         while !d.load(Ordering::Relaxed) {
-            if let Ok(out) = Command::new("ps").args(["-o", "rss=", "-p", &pid.to_string()]).output() {
+            if let Ok(out) = Command::new("ps")
+                .args(["-o", "rss=", "-p", &pid.to_string()])
+                .output()
+            {
                 if let Ok(kb) = String::from_utf8_lossy(&out.stdout).trim().parse::<u64>() {
                     p.fetch_max(kb, Ordering::Relaxed);
                 }
@@ -69,7 +77,11 @@ fn with_peak_rss<T>(body: impl FnOnce(Instant) -> T) -> (T, u64, Duration) {
     let total = start.elapsed();
     done.store(true, Ordering::Relaxed);
     let _ = sampler.join();
-    (value, peak.load(Ordering::Relaxed).saturating_sub(base), total)
+    (
+        value,
+        peak.load(Ordering::Relaxed).saturating_sub(base),
+        total,
+    )
 }
 
 /// Builds `branch^depth` folders with `files` files each, plus one
@@ -206,17 +218,11 @@ fn best_of(n: usize, mut run: impl FnMut() -> Sample) -> Sample {
 
 fn report(title: &str, samples: &[Sample]) {
     println!("\n### {}", title);
-    println!(
-        "| walker | entries | time to 1st | total | RSS growth |\n|---|---:|---:|---:|---:|"
-    );
+    println!("| walker | entries | time to 1st | total | RSS growth |\n|---|---:|---:|---:|---:|");
     for s in samples {
         println!(
             "| {} | {} | {:?} | {:?} | {} KB |",
-            s.label,
-            s.entries,
-            s.first,
-            s.total,
-            s.peak_kb,
+            s.label, s.entries, s.first, s.total, s.peak_kb,
         );
     }
 }
@@ -253,7 +259,11 @@ fn traversal_benchmark() {
         ];
         let expected = samples[0].entries;
         for s in &samples {
-            assert_eq!(s.entries, expected, "{} disagrees on the entry count", s.label);
+            assert_eq!(
+                s.entries, expected,
+                "{} disagrees on the entry count",
+                s.label
+            );
         }
         report(title, &samples);
     }

@@ -25,11 +25,11 @@
 // ============================================================
 
 use jwalk::{Parallelism, WalkDirGeneric};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::UNIX_EPOCH;
-use std::fs;
 
 /// Default reader threads. Measured sweet spot: two threads halve the
 /// scan time of a wide tree, four add no speed but a rayon pool worth
@@ -392,7 +392,11 @@ mod tests {
             ..WalkOptions::default()
         };
         let (entries, report) = collect_local(&d, &o);
-        let empty: Vec<_> = entries.iter().filter(|e| e.dir_empty).map(|e| &e.name).collect();
+        let empty: Vec<_> = entries
+            .iter()
+            .filter(|e| e.dir_empty)
+            .map(|e| &e.name)
+            .collect();
         assert_eq!(empty, vec!["leer"]);
         // Files are still counted even though they are not reported.
         assert_eq!(report.files, 1);

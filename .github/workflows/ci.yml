@@ -1,0 +1,163 @@
+# ============================================================
+# Continuous integration (TICKET-033).
+#
+# Every check here is one of the `npm run check:*` scripts, so a red
+# build is reproducible locally with the same command — that is the
+# point of routing CI through package scripts rather than inlining
+# cargo/vitest invocations.
+#
+# Three jobs:
+#   check   – the full gate on Linux (format, clippy, Rust tests,
+#             generated bindings, types, frontend tests, build)
+#   rust    – Ubuntu/macOS/Windows, so the cfg-gated platform code
+#             (Quick Look, Finder tags, Unix rights, trash, terminals)
+#             keeps compiling and its portable tests keep passing
+#   msrv    – the declared minimum Rust, with locked dependencies
+#
+# Live network and OS-keychain tests are `#[ignore]`d and never run
+# here: they need real servers and real credentials. `live-tests.yml`
+# is the documented manual path for them.
+# ============================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least privilege: nothing in this workflow writes to the repository,
+# and a pull request from a fork gets no secrets.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # A failing CI run should not also be a slow one.
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: 1
+
+jobs:
+  check:
+    name: Full check (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Tauri's Linux prerequisites — webkit2gtk and its build deps.
+      # Named explicitly rather than pulled in by a helper action, so a
+      # missing package is a readable error.
+      - name: Install Tauri build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          # The lockfile decides the cache; a dependency bump gets a
+          # fresh one instead of a stale half-match.
+          key: ${{ hashFiles('src-tauri/Cargo.lock') }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Each step separately, so the failing check is visible in the
+      # job's step list rather than buried in one long log.
+      - name: Rust formatting
+        run: npm run check:fmt
+      - name: Clippy (strict)
+        run: npm run check:clippy
+      - name: Rust library tests
+        run: npm run check:rust
+      - name: Generated bindings are current
+        run: npm run check:bindings
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Frontend tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+
+  rust:
+    name: Rust (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Tauri build prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.os }}-${{ hashFiles('src-tauri/Cargo.lock') }}
+
+      # The portable tests only. Everything needing a live server or the
+      # OS keychain is `#[ignore]`d and stays that way here.
+      - name: Library tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked --lib
+
+  msrv:
+    name: MSRV (Rust 1.85)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Tauri build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
+
+      # The version declared as `rust-version` in Cargo.toml. Pinned
+      # here on purpose: raising the MSRV should be a deliberate edit in
+      # two places, not something a toolchain update does quietly.
+      - uses: dtolnay/rust-toolchain@1.85
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: msrv-${{ hashFiles('src-tauri/Cargo.lock') }}
+
+      - name: Compile with the minimum supported Rust
+        run: cargo check --manifest-path src-tauri/Cargo.toml --locked --all-targets

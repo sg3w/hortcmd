@@ -180,9 +180,9 @@ mod tests {
 
     /// Walks without a live channel receiver – `send` errors are ignored,
     /// exactly like in the command.
-    fn walk(root: &PathBuf) -> DirSize {
+    fn walk(root: &std::path::Path) -> DirSize {
         let channel = Channel::new(|_| Ok(()));
-        walk_size(root.clone(), &AtomicBool::new(false), &channel)
+        walk_size(root.to_path_buf(), &AtomicBool::new(false), &channel)
     }
 
     #[test]

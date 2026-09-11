@@ -107,9 +107,18 @@ fn exercise(p: &dyn Provider, base: &str) {
     let kids = p.read_dir(Path::new(&dir)).expect("read_dir");
     let names: Vec<String> = kids
         .iter()
-        .map(|k| k.file_name().unwrap_or_default().to_string_lossy().into_owned())
+        .map(|k| {
+            k.file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned()
+        })
         .collect();
-    assert!(names.contains(&"hello.txt".to_string()), "read_dir: {:?}", names);
+    assert!(
+        names.contains(&"hello.txt".to_string()),
+        "read_dir: {:?}",
+        names
+    );
 
     // --- rename ---
     p.rename(Path::new(&file), Path::new(&renamed))
@@ -169,8 +178,15 @@ fn exercise_staging(p: &dyn Provider, base: &str) {
     // --- commit of a new destination ---
     write(&stage_new, b"first");
     commit(p, Path::new(&stage_new), Path::new(&target), false).expect("commit new");
-    assert_eq!(read(&target), b"first", "commit must publish the staged bytes");
-    assert!(!p.exists(Path::new(&stage_new)), "staging entry must be gone");
+    assert_eq!(
+        read(&target),
+        b"first",
+        "commit must publish the staged bytes"
+    );
+    assert!(
+        !p.exists(Path::new(&stage_new)),
+        "staging entry must be gone"
+    );
 
     // --- commit over an existing destination ---
     write(&stage_replace, b"second");
@@ -206,7 +222,11 @@ fn exercise_capabilities(p: Arc<dyn Provider>, address: &str, ssh_expected: bool
     crate::net::session::register_live(p);
 
     let caps = caps::for_address(address).expect("capabilities of a live address");
-    assert!(caps.connected, "{} should be reported as connected", address);
+    assert!(
+        caps.connected,
+        "{} should be reported as connected",
+        address
+    );
     assert_eq!(caps.store_id, store_id, "cache identity of {}", address);
 
     // Everything `exercise` just proved against the real server.
@@ -253,9 +273,14 @@ fn exercise_capabilities(p: Arc<dyn Provider>, address: &str, ssh_expected: bool
         Capability::ArchiveExtractFrom,
         Capability::ArchivePackFrom,
     ] {
-        assert!(!caps.has(cap), "{} must not advertise {}", address, cap.id());
-        let err = caps::require(address, cap)
-            .expect_err("an unadvertised capability must be refused");
+        assert!(
+            !caps.has(cap),
+            "{} must not advertise {}",
+            address,
+            cap.id()
+        );
+        let err =
+            caps::require(address, cap).expect_err("an unadvertised capability must be refused");
         assert!(err.starts_with(UNSUPPORTED), "untyped refusal: {}", err);
     }
     println!("  OK: capability matrix matches the exercised behavior");
@@ -371,7 +396,10 @@ fn live_ssh_host_key() {
             assert!(c.token.is_none(), "a mismatch must offer no bypass");
             assert_eq!(c.stored.len(), 1);
             assert_ne!(c.stored[0].fingerprint, c.fingerprint);
-            println!("  rejected: stored {} vs {}", c.stored[0].fingerprint, c.fingerprint);
+            println!(
+                "  rejected: stored {} vs {}",
+                c.stored[0].fingerprint, c.fingerprint
+            );
         }
         Ok(_) => panic!("a changed host key must not connect"),
         Err(e) => panic!("expected a mismatch, got: {}", e),

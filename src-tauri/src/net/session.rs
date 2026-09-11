@@ -10,16 +10,14 @@
 // ============================================================
 
 use super::credentials::{self, CredentialStore};
-use super::hostkey::{self, ConnectError, ForgetResult, HostKeyChallenge, HostId};
-use super::lifecycle::{
-    self, Attempt, ConnFailure, FailureKind, Phase, Start, OVERALL_TIMEOUT,
-};
+use super::hostkey::{self, ConnectError, ForgetResult, HostId, HostKeyChallenge};
+use super::lifecycle::{self, Attempt, ConnFailure, FailureKind, Phase, Start, OVERALL_TIMEOUT};
 use crate::vfs::Provider;
-use tauri::{AppHandle, Emitter};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
+use tauri::{AppHandle, Emitter};
 use ts_rs::TS;
 
 // ---------- Types ----------
@@ -315,10 +313,7 @@ pub fn report_connection_lost(store_id: &str, reason: &str) {
     // Outside the lock: closing a shell is network I/O.
     super::terminal::close_for_store(store_id);
     if let Some(id) = profile_id {
-        lifecycle::set_disconnected(
-            &id,
-            Some(ConnFailure::new(FailureKind::Protocol, reason)),
-        );
+        lifecycle::set_disconnected(&id, Some(ConnFailure::new(FailureKind::Protocol, reason)));
     }
 }
 
@@ -433,7 +428,7 @@ fn run_attempt(attempt: &Attempt, profile: &Profile) -> Result<Opened, ConnFailu
 
     match opened {
         Ok(provider) => Ok(Opened::Provider(provider)),
-        Err(ConnectError::HostKey(challenge)) => Ok(Opened::HostKey(challenge)),
+        Err(ConnectError::HostKey(challenge)) => Ok(Opened::HostKey(*challenge)),
         Err(ConnectError::Message(message)) => Err(lifecycle::classify_protocol_error(&message)),
     }
 }
@@ -551,7 +546,7 @@ pub fn net_connect(app: AppHandle, id: String) -> Result<ConnectOutcome, String>
                 &attempt,
                 Err(ConnFailure::new(
                     FailureKind::HostKey,
-                    ConnectError::HostKey(challenge.clone()).message(),
+                    ConnectError::HostKey(Box::new(challenge.clone())).message(),
                 )),
                 || {},
             );

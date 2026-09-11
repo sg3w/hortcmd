@@ -8,8 +8,8 @@
 // clear error.
 // ============================================================
 
-use serde::{Deserialize, Serialize};
 use crate::vfs::caps::{self, Capability};
+use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// A Finder tag: name plus color index (0 = none, 1–7 = Finder colors).
@@ -89,9 +89,7 @@ mod macos {
             _ => return Ok(Vec::new()),
         };
         let value = Value::from_reader(Cursor::new(raw)).map_err(|e| e.to_string())?;
-        let arr = value
-            .as_array()
-            .ok_or("Tag-Attribut ist kein Array")?;
+        let arr = value.as_array().ok_or("Tag-Attribut ist kein Array")?;
         Ok(arr
             .iter()
             .filter_map(|v| v.as_string())
@@ -109,10 +107,7 @@ mod macos {
                 Err(e) => Err(e.to_string()),
             };
         }
-        let arr: Vec<Value> = tags
-            .iter()
-            .map(|t| Value::String(encode_tag(t)))
-            .collect();
+        let arr: Vec<Value> = tags.iter().map(|t| Value::String(encode_tag(t))).collect();
         let mut buf = Vec::new();
         Value::Array(arr)
             .to_writer_binary(&mut buf)
@@ -145,8 +140,14 @@ mod macos {
             assert!(get_tags(path.clone()).unwrap().is_empty());
 
             let tags = vec![
-                Tag { name: "Wichtig".into(), color: 6 },
-                Tag { name: "Projekt".into(), color: 0 },
+                Tag {
+                    name: "Wichtig".into(),
+                    color: 6,
+                },
+                Tag {
+                    name: "Projekt".into(),
+                    color: 0,
+                },
             ];
             set_tags(path.clone(), tags).unwrap();
 

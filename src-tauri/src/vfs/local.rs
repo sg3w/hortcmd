@@ -118,9 +118,7 @@ impl Provider for LocalProvider {
     }
 
     fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
-        fs::read_dir(path)?
-            .map(|e| e.map(|d| d.path()))
-            .collect()
+        fs::read_dir(path)?.map(|e| e.map(|d| d.path())).collect()
     }
 
     fn open_read(&self, path: &Path) -> io::Result<Box<dyn Read + Send>> {

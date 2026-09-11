@@ -10,7 +10,13 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:watch": "vitest",
     "gen:types": "cargo test --manifest-path src-tauri/Cargo.toml export_bindings",
+    "check:bindings": "node scripts/check-bindings.mjs",
+    "check:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
+    "check:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets --all-features -- -D warnings",
+    "check:rust": "cargo test --manifest-path src-tauri/Cargo.toml --locked",
+    "check": "npm run check:fmt && npm run check:clippy && npm run check:rust && npm run check:bindings && npm run typecheck && npm test && npm run build",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -37,6 +43,9 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.7.0",

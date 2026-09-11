@@ -5,8 +5,8 @@
 // installed `git` CLI; without Git, `is_repo=false` is reported.
 // ============================================================
 
-use serde::Serialize;
 use crate::vfs::caps::{self, Capability};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;

@@ -46,7 +46,12 @@ pub fn connect(profile: &Profile, secret: Option<&str>) -> Result<Arc<dyn Provid
             profile.host.as_str(),
         ),
     };
-    let host = format!("{}://{}:{}", url_scheme, bare_host.trim_end_matches('/'), profile.port);
+    let host = format!(
+        "{}://{}:{}",
+        url_scheme,
+        bare_host.trim_end_matches('/'),
+        profile.port
+    );
 
     let client = ClientBuilder::new()
         .set_host(host.clone())
@@ -166,9 +171,12 @@ impl Provider for WebdavProvider {
                     f.content_length.max(0) as u64,
                     f.last_modified.timestamp().max(0) as u64,
                 ),
-                ListEntity::Folder(d) => {
-                    (d.href, true, 0u64, d.last_modified.timestamp().max(0) as u64)
-                }
+                ListEntity::Folder(d) => (
+                    d.href,
+                    true,
+                    0u64,
+                    d.last_modified.timestamp().max(0) as u64,
+                ),
             };
             // PROPFIND depth 1 includes the collection itself — skip it.
             if norm(&href).ends_with(&self_key) {

@@ -58,20 +58,34 @@ Avoid:
 
 After completing each ticket, create a local Git commit containing only the changes for that ticket. Do not push commits.
 
-Check after changes:
+Check after changes — one command, the same one CI runs:
 
 ```bash
-cargo check
-npm run typecheck
-npm run test
-npm run build
+npm run check
 ```
 
-For changes to IPC types additionally:
+It runs, in order: `cargo fmt --check`, strict Clippy (all targets and
+features, warnings are errors), `cargo test --locked`, a regeneration of the
+ts-rs bindings that must leave the tree clean, `tsc --noEmit`, the Vitest suite
+and the production build. Any of them can also be run on its own — see
+`check:*` in `package.json`.
+
+For changes to IPC types, regenerate and commit the bindings:
 
 ```bash
 npm run gen:types
 ```
+
+## Tests
+
+Tests live beside the module they cover; `src/test/` holds only the shared
+machinery (setup and reset, the typed Tauri stand-ins, fixtures). A frontend
+test picks its mode explicitly — `useDemo()` for the browser build's demo
+fallbacks, `useTauri({ commands })` for a mocked runtime — so no native process
+is ever needed.
+
+Protocol and keychain tests are `#[ignore]`d and never run in ordinary CI; see
+the "Tests and CI" section of README.md for the local command.
 
 ## Priorities
 

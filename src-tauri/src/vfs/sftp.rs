@@ -38,7 +38,10 @@ pub fn connect(
     secret: Option<&str>,
 ) -> Result<Arc<dyn Provider>, ConnectError> {
     let conn = runtime().block_on(connect_async(profile, secret))?;
-    Ok(SftpProvider::new(profile.connection_key(), Arc::new(conn)))
+    Ok(SftpProvider::shared(
+        profile.connection_key(),
+        Arc::new(conn),
+    ))
 }
 
 async fn connect_async(
@@ -71,7 +74,10 @@ pub struct SftpProvider {
 }
 
 impl SftpProvider {
-    pub fn new(key: String, conn: Arc<SftpConnection>) -> Arc<dyn Provider> {
+    /// The provider behind one connection, as the shared trait object
+    /// the registry stores. Named `shared` rather than `new` because it
+    /// hands back an `Arc<dyn Provider>`, not a `Self`.
+    pub fn shared(key: String, conn: Arc<SftpConnection>) -> Arc<dyn Provider> {
         Arc::new(SftpProvider { key, conn })
     }
 

@@ -1232,6 +1232,53 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
 - [ ] **Multi-column view** (2–4 panels), multiple windows
 - [ ] **Integrate Spotlight search** (macOS)
 
+### Cross-cutting — automated checks (TICKET-033)
+
+One command is the whole gate, and `.github/workflows/ci.yml` runs exactly it,
+so a red build is reproducible locally:
+
+```bash
+npm run check   # fmt → clippy → cargo test → bindings → tsc → vitest → build
+```
+
+- **Rust baseline**: `cargo fmt --check` and Clippy across all targets *and*
+  features with `-D warnings`, no crate- or module-level allowances. The debt
+  that existed was resolved rather than silenced — the two signatures Clippy
+  flagged got the grouping structs they wanted (`CopyTuning` for the copy
+  knobs, `ExtractJob` for one extraction request), the host-key challenge is
+  boxed so the connect path's `Result` is not sized by its rarest case, and
+  `SftpProvider::shared` is named for what it returns.
+- **Generated bindings**: `check:bindings` regenerates from the Rust types and
+  fails if the tree changes — a stale binding type-checks fine and breaks at
+  runtime, which is precisely what CI should catch.
+- **Frontend suite**: Vitest + React Testing Library in jsdom, with **no native
+  process**. `src/test/setup.ts` gives every file a working `localStorage` and
+  resets the DOM, timers, mocks, the Tauri harness and every Zustand store
+  between tests; `src/test/tauri.ts` lets a test choose its mode explicitly —
+  `useDemo()` for the browser build's fallbacks, `useTauri({ commands })` for a
+  mocked runtime with event pushes. An unmocked command fails loudly rather
+  than answering `undefined`. The suite is verified deterministic under
+  shuffled order and in a single worker.
+- **Initial coverage** is aimed at what compile-time checks cannot see: path
+  handling (roots, ancestors, Windows paths, remote authorities, spaces,
+  non-ASCII), batch-rename rules and their conflict statuses, file-colour
+  matching and priority, pane behaviours that touch data safety (selection
+  across a refresh, reveal by name, session-restore fallback), transfer
+  queueing and its settings snapshot, keyboard/dialog isolation
+  (**TICKET-014**), IPC subscription fan-out and unsubscribe, and two component
+  tests — the shared dialog shell and the capability-controlled context menu
+  across all four protocols (**TICKET-031**).
+- **Platforms**: an Ubuntu/macOS/Windows job keeps the `cfg`-gated code (Quick
+  Look, Finder tags, Unix rights, trash, terminals) compiling and its portable
+  tests passing; a separate job holds the declared MSRV **1.85** with
+  `--locked`.
+- **Live tests stay out.** Protocol and keychain tests are `#[ignore]`d, need
+  real servers and credentials, and never run in pull-request CI.
+  `live-tests.yml` is the documented manual path and stops with setup
+  instructions when the servers are not there. Workflow permissions are
+  `contents: read`; no job receives secrets, so a fork's pull request cannot
+  reach them.
+
 ### Cross-cutting — performance
 - [~] Directory watcher (P1) ✅ · **library-backed, streaming, bounded local traversal**
       (`commands/fs/walk.rs`, jwalk; TICKET-013) ✅ · directory cache ⏳ ·
