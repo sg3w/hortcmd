@@ -1,4 +1,4 @@
-# TICKET-060: Markierung vereinheitlichen, F9-Umschaltung und klare Auswahl-/Git-Farben
+# TICKET-060: Markierung vereinheitlichen, Shift-Umschaltung und klare Auswahl-/Git-Farben
 
 ## Priorität und Reihenfolge
 
@@ -9,8 +9,8 @@ Bereits laufende Arbeit sauber abschließen, danach dieses Ticket vorziehen.
 
 ## Ziel
 
-Dateien und Ordner lassen sich gleich markieren und wieder abwählen. Eine einzelne
-Funktionstaste schaltet den Eintrag unter dem Cursor um, ohne Shift/Ctrl/Cmd.
+Dateien und Ordner lassen sich gleich markieren und wieder abwählen. Ein einzelner
+Shift-Tastendruck schaltet den Eintrag unter dem Cursor um, ohne weitere Taste.
 Markierte Einträge haben einen blauen Hintergrund und deutlich gelbe Schrift.
 Nicht markierte Git-Einträge zeigen neue Dateien grün, geänderte blau und
 untracked rot. Alle Ansichten und Bedienwege global auf Konsistenz prüfen.
@@ -30,24 +30,32 @@ untracked rot. Alle Ansichten und Bedienwege global auf Konsistenz prüfen.
 
 ## Anforderungen
 
-### Eine Taste zum Markieren und Aufheben
+### Shift allein zum Markieren und Aufheben
 
-- **F9 = Markierung umschalten** für den Cursor-Eintrag: unmarkiert → markiert,
-  markiert → unmarkiert. Kein Modifier erforderlich, keine automatische Navigation;
-  Cursor bleibt auf dem Eintrag. Vor Umsetzung globale Shortcut-Konflikte prüfen.
-- F9 in Funktionstastenleiste und Tastaturhilfe anzeigen, als klickbare Schaltfläche
-  auch auf Mac-Tastaturen mit Medienbelegung erreichbar. Betriebssystembedingt kann
-  Fn erforderlich sein; innerhalb der App ist kein Shift/Ctrl/Cmd nötig.
+- **Shift allein drücken und loslassen = Markierung umschalten** für den
+  Cursor-Eintrag: unmarkiert → markiert, markiert → unmarkiert. Linke und rechte
+  Shift-Taste unterstützen. Cursor bleibt auf dem Eintrag; keine Navigation.
+- Umschalten erst beim Loslassen auslösen, wenn seit dem Drücken keine andere
+  Taste und keine Maus-/Pointeraktion beteiligt war. Shift+Pfeil, Shift+Klick,
+  Shift+Funktionstaste und sonstige Kombinationen dürfen keine zusätzliche
+  Markierungsumschaltung auslösen. Autorepeat und beide Shift-Tasten zusammen
+  dürfen keine doppelten Umschaltungen erzeugen.
+- Begann die Geste außerhalb des Dateipanels oder wechselten Fokus, aktiver Tab,
+  Cursorziel oder Fensteraktivierung, die ausstehende Umschaltung verwerfen.
+  Beim Fokusverlust/Blur Tastenzustand zurücksetzen, damit kein späteres Keyup
+  versehentlich markiert.
+- In Menü/Hilfe als „Shift (einzeln)“ beschriften und zusätzlich einen klickbaren
+  Markieren/Abwählen-Befehl anbieten. F9 erhält durch dieses Ticket keine Belegung.
 - Vorhandene Insert-/Mehrfachauswahlkürzel dürfen als kompatible Alternativen bleiben.
   Shift-Bereichsauswahl und Cmd/Ctrl-Klick werden nicht entfernt, sind aber keine
   Voraussetzung mehr. Quick Look auf macOS bleibt erhalten.
-- F9 darf in Textfeldern, contenteditable, Dialogen und Terminal keine Dateiauswahl
+- Shift allein darf in Textfeldern, contenteditable, Dialogen und Terminal keine Dateiauswahl
   verändern. Menü-, Toolbar- und Tastaturausführung nutzen dieselbe Aktion genau einmal.
-- „..“ und ein leeres Panel bleiben nicht markierbar; kein Öffnen durch F9.
+- „..“ und ein leeres Panel bleiben nicht markierbar; kein Öffnen durch Shift allein.
 
 ### Dateien und Ordner gleich behandeln
 
-- Einheitliche Auswahlregeln für F9, Insert, Klick mit Modifier, Bereichsauswahl,
+- Einheitliche Auswahlregeln für Shift allein, Insert, Klick mit Modifier, Bereichsauswahl,
   Musterauswahl, Alles markieren, Auswahl umkehren und Auswahl aufheben.
 - Allgemeine Musterauswahl bezieht Ordner genauso wie Dateien ein; die bisherige
   Ordner-Opt-in-Regel aus 059 entfällt. Labels „Alle Einträge markieren“ und
@@ -103,14 +111,14 @@ Die navigierende Baumkomponente von der auswählbaren Dateiliste unterscheiden:
 keine neue unabhängige Auswahl im Navigationsbaum einführen.
 
 Alle Auswahlwege aus 059 prüfen, einschließlich Snapshot und Auswahl-Dateien;
-Farbvorschauen, Eigenschaften-Farblegende, Kontextmenü, Funktionstastenleiste,
+Farbvorschauen, Eigenschaften-Farblegende, Kontextmenü, Aktionsleiste,
 Menüeinträge aus 040/058 und deren Hilfe/Übersetzungen abgleichen. Lokale und
 Remote-Verzeichnisse, Archive und deaktiviertes Git einbeziehen. Andere Dialog-
 Checkboxen (etwa Synchronisationsauswahl) nicht mit der Panel-Auswahl vermischen.
 
 ## Akzeptanzkriterien und Tests
 
-- [ ] F9 markiert und entmarkiert Dateien und Ordner ohne Modifier, ohne Cursorbewegung.
+- [ ] Shift allein markiert und entmarkiert Dateien und Ordner ohne Modifier, ohne Cursorbewegung.
 - [ ] Allgemeine Sammel-/Muster-/Bereichsauswahl behandelt Dateien und Ordner identisch;
       nur „..“ ausgeschlossen. Gemischte Operationsziele sind korrekt.
 - [ ] Markierte Einträge sind mit Standardfarben in beiden Themes blau/gelb,
@@ -120,7 +128,9 @@ Checkboxen (etwa Synchronisationsauswahl) nicht mit der Panel-Auswahl vermischen
       sind durch Rust-Tests auf Bedeutung und Priorität geprüft.
 - [ ] UI-Tests für Markierung → Git-Refresh → Abwahl bestätigen korrekte Farben;
       Detail-/Gridansichten sowie inaktives Panel und Ordner sind abgedeckt.
-- [ ] F9 in Dialog/Text/Terminal löst keine Panelaktion aus; Quick Look bleibt nutzbar.
+- [ ] Shift-Kombinationen, Autorepeat, beide Shift-Tasten, Fokus-/Tabwechsel und
+      Fenster-Blur erzeugen keine zusätzliche oder verspätete Umschaltung.
+- [ ] Shift allein in Dialog/Text/Terminal löst keine Panelaktion aus; Quick Look bleibt nutzbar.
 - [ ] Bestehende eigene Farben, Defaults/Migration, Legende, Hilfe und de/en stimmen.
 - [ ] Manuelle globale Prüfmatrix mit macOS/Windows/Linux, lokal/remote/Archiv,
       Git an/aus und Tastatur ohne Insert dokumentiert.
