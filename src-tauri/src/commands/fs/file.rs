@@ -5,6 +5,7 @@
 // ============================================================
 
 use crate::vfs::{self, Provider};
+use crate::vfs::caps::{self, Capability};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::io::{ErrorKind, Read, Write};
@@ -998,6 +999,22 @@ fn run_transfer(
         );
     };
 
+    // Source and destination are asked for their own capability before
+    // anything is resolved (TICKET-031): an allowed source is no licence
+    // for the target, and a move additionally needs to remove at the
+    // source. A refusal ends the operation through the same `fs-done`
+    // event as any other failure.
+    let src_cap = if remove_source {
+        Capability::Move
+    } else {
+        Capability::CopyFrom
+    };
+    for src in &sources {
+        if let Err(e) = caps::require_pair(src, src_cap, &dest_dir, Capability::CopyTo) {
+            return fail(id, op, e);
+        }
+    }
+
     // Resolve the destination and the source location through the VFS
     // registry. The engine holds a source provider and a destination
     // provider, so a transfer may cross providers (local↔remote).
@@ -1254,6 +1271,7 @@ where
 /// Creates a directory (recursively).
 #[tauri::command]
 pub fn make_dir(path: String) -> Result<String, String> {
+    caps::require(&path, Capability::Create)?;
     let (provider, resolved) = vfs::resolve(&path)?;
     provider
         .create_dir_all(Path::new(&resolved))
@@ -1271,6 +1289,7 @@ pub fn write_text_file(
     contents: String,
     overwrite: bool,
 ) -> Result<bool, String> {
+    caps::require(&path, Capability::Create)?;
     let (provider, resolved) = vfs::resolve(&path)?;
     let p = Path::new(&resolved);
     if !overwrite && provider.exists(p) {
@@ -1286,6 +1305,7 @@ pub fn write_text_file(
 /// Refuses to overwrite an already existing target name.
 #[tauri::command]
 pub fn rename_entry(from: String, to: String) -> Result<(), String> {
+    caps::require_pair(&from, Capability::Move, &to, Capability::CopyTo)?;
     let (provider, from_r) = vfs::resolve(&from)?;
     let (_, to_r) = vfs::resolve(&to)?;
     let from_p = Path::new(&from_r);
@@ -1319,6 +1339,12 @@ fn unique_temp(provider: &dyn Provider, base: &Path) -> PathBuf {
 /// then to the target names) so that chains and name swaps work too.
 #[tauri::command]
 pub fn rename_batch(dir: String, renames: Vec<(String, String)>) -> OpResult {
+    if let Err(e) = caps::require(&dir, Capability::Move) {
+        return OpResult {
+            ok: 0,
+            errors: vec![e],
+        };
+    }
     let (provider, base_str) = match vfs::resolve(&dir) {
         Ok(v) => v,
         Err(e) => {
@@ -1483,6 +1509,13 @@ pub fn trash_entries(paths: Vec<String>) -> OpResult {
     let mut errors = Vec::new();
 
     for p in &paths {
+        // The OS trash only holds local entries; a remote address must
+        // never reach `trash::delete`, which would read it as a
+        // relative path in the working directory (TICKET-031).
+        if let Err(e) = caps::require(p, Capability::Trash) {
+            errors.push(format!("{}: {}", p, e));
+            continue;
+        }
         match trash::delete(p) {
             Ok(_) => ok += 1,
             Err(e) => errors.push(format!("{}: {}", p, e)),
@@ -1498,7 +1531,8 @@ pub fn delete_entries(paths: Vec<String>) -> OpResult {
     let mut errors = Vec::new();
 
     for p in &paths {
-        let res = vfs::resolve(p)
+        let res = caps::require(p, Capability::DeletePermanent)
+            .and_then(|_| vfs::resolve(p))
             .and_then(|(provider, resolved)| {
                 provider.remove(Path::new(&resolved)).map_err(|e| e.to_string())
             });

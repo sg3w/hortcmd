@@ -13,6 +13,7 @@
 // resolved per address into an `Arc<dyn Provider>`.
 // ============================================================
 
+pub mod caps;
 pub mod ftp;
 pub mod local;
 pub mod sftp;

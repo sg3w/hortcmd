@@ -65,6 +65,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            vfs::caps::location_capabilities,
             commands::fs::dir::list_dir,
             commands::fs::dir::list_drives,
             commands::fs::dir::home_dir,

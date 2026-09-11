@@ -21,6 +21,7 @@ use zip::write::SimpleFileOptions;
 use zip::{ZipArchive, ZipWriter};
 
 use super::attrs;
+use crate::vfs::caps::{self, Capability};
 use super::dir::{DirEntry, DirListing};
 use super::file::{spawn_op, OpDone, Prog};
 
@@ -209,6 +210,10 @@ pub fn list_archive(
     inner: String,
     password: Option<String>,
 ) -> Result<DirListing, String> {
+    // Every reader below opens the archive with `std::fs` (TICKET-031);
+    // browsing an archive that lives on a remote share needs the
+    // archive commands routed through the VFS first.
+    caps::require(&archive, Capability::ArchiveBrowse)?;
     let kind = archive_kind(&archive).ok_or_else(|| "Unbekanntes Archivformat".to_string())?;
     let raw = match kind {
         ArchiveKind::Zip => zip_raw(&archive)?,
@@ -486,6 +491,17 @@ fn run_extract(
     cancel: Arc<AtomicBool>,
     pause: Arc<AtomicBool>,
 ) {
+    // Source archive and destination folder are separate questions
+    // (TICKET-031). A refusal is reported through the same `fs-done`
+    // event as any other failure, so the transfer window shows it.
+    if let Err(e) = caps::require_pair(
+        &archive,
+        Capability::ArchiveExtractFrom,
+        &dest_dir,
+        Capability::ArchiveExtractTo,
+    ) {
+        return fail_op(&app, id, "extract", e);
+    }
     let dest = PathBuf::from(&dest_dir);
     let base = inner_prefix(&base_inner);
     let targets: HashSet<String> = names.into_iter().collect();
@@ -562,6 +578,16 @@ fn run_pack(
     cancel: Arc<AtomicBool>,
     pause: Arc<AtomicBool>,
 ) {
+    for src in &sources {
+        if let Err(e) = caps::require_pair(
+            src,
+            Capability::ArchivePackFrom,
+            &dest_zip,
+            Capability::ArchivePackTo,
+        ) {
+            return fail_op(&app, id, "pack", e);
+        }
+    }
     let mut files: Vec<(PathBuf, String)> = Vec::new();
     for s in &sources {
         let src = Path::new(s);
@@ -660,6 +686,23 @@ fn pack_one(
     prog.files_done += 1;
     prog.emit(&name, file_total, file_total, true);
     Ok(())
+}
+
+/// Reports a refusal that happened before any work started, through the
+/// same `fs-done` event the frontend already listens on — a blocked
+/// operation must not leave the transfer window waiting forever.
+fn fail_op(app: &AppHandle, id: String, op: &str, err: String) {
+    let _ = app.emit(
+        "fs-done",
+        OpDone {
+            id,
+            op: op.to_string(),
+            ok: 0,
+            errors: vec![err],
+            cancelled: false,
+            mode: String::new(),
+        },
+    );
 }
 
 // ---------- Commands ----------

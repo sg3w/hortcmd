@@ -4,6 +4,7 @@
 // ============================================================
 
 use crate::vfs::{self, Provider};
+use crate::vfs::caps::{self, Capability};
 use base64::Engine as _;
 use serde::Serialize;
 use std::io::{self, Cursor, Read};
@@ -174,6 +175,9 @@ pub fn read_preview(path: String, max_bytes: u32) -> Result<Preview, String> {
 /// a preview can never turn this into a general launcher (TICKET-030).
 #[tauri::command]
 pub fn open_path(path: String) -> Result<(), String> {
+    // The OS launcher only understands a local path; `sftp://host/x`
+    // would reach it as an opaque string (TICKET-031).
+    caps::require(&path, Capability::SystemOpen)?;
     opener::open(&path).map_err(|e| e.to_string())
 }
 
@@ -229,6 +233,8 @@ pub fn open_external(url: String) -> Result<(), String> {
 /// Opens the native macOS Quick Look preview (Space). macOS only.
 #[tauri::command]
 pub fn quick_look(path: String) -> Result<(), String> {
+    // macOS-only and local-only — both gates live in the capability.
+    caps::require(&path, Capability::QuickLook)?;
     #[cfg(target_os = "macos")]
     {
         use std::process::{Command, Stdio};
@@ -254,6 +260,7 @@ pub fn quick_look(path: String) -> Result<(), String> {
 pub fn open_with(path: String, program: String) -> Result<(), String> {
     use std::process::Command;
 
+    caps::require(&path, Capability::OpenWith)?;
     let program = program.trim();
     if program.is_empty() {
         return open_path(path);
@@ -294,6 +301,10 @@ pub fn open_with(path: String, program: String) -> Result<(), String> {
 pub fn open_terminal(path: String, program: Option<String>) -> Result<(), String> {
     use std::process::Command;
 
+    // A local terminal has no notion of a remote location. SFTP folders
+    // get a shell through `ssh_open_shell` on the live connection (026),
+    // which is the `sshTerminal` capability — not this one.
+    caps::require(&path, Capability::LocalTerminal)?;
     let dir = Path::new(&path);
     if !dir.is_dir() {
         return Err("Kein Verzeichnis".into());
@@ -421,11 +432,9 @@ fn file_uri(path: &Path) -> String {
 #[tauri::command]
 pub fn open_system_properties(path: String) -> Result<(), String> {
     // Remote addresses (sftp://, smb://, …) are rejected here as well,
-    // not only hidden in the UI.
+    // not only hidden in the UI (TICKET-031).
+    caps::require(&path, Capability::SystemOpen)?;
     let addr = vfs::parse_address(&path)?;
-    if addr.scheme != vfs::Scheme::Local {
-        return Err("Systeminformationen gibt es nur für lokale Dateien".into());
-    }
 
     // `symlink_metadata`, so a symlink (even a broken one) is its own
     // entry — the info window is about the link, not its target.
@@ -630,8 +639,11 @@ mod system_properties_tests {
             "webdav://host/a.txt",
         ] {
             let err = open_system_properties(addr.to_string()).unwrap_err();
+            // Since TICKET-031 the refusal is the typed capability
+            // error, so the frontend recognizes it without reading prose.
             assert!(
-                err.contains("lokale"),
+                err.starts_with(crate::vfs::caps::UNSUPPORTED)
+                    && err.contains(Capability::SystemOpen.id()),
                 "unerwartete Meldung für {addr}: {err}"
             );
         }

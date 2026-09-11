@@ -25,6 +25,7 @@
 
 use super::cancel;
 use super::walk::{walk_local, Flow, WalkOptions, WALK_THREADS};
+use crate::vfs::caps::{self, Capability};
 use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
@@ -538,6 +539,9 @@ pub async fn search(
     token: String,
     on_batch: Channel<Vec<SearchHit>>,
 ) -> Result<SearchSummary, String> {
+    // The traversal is the local jwalk engine (TICKET-013); a remote
+    // root would be walked as a relative local path (TICKET-031).
+    caps::require(&root, Capability::Search)?;
     let root_path = PathBuf::from(&root);
     // Register first, so every path out of here also unregisters again.
     let cancel_flag = cancel::register(KIND, &token);

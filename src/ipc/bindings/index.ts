@@ -4,6 +4,8 @@ export type { Drive } from "./Drive";
 export type { DirSize } from "./DirSize";
 export type { DirSizeStats } from "./DirSizeStats";
 export type { VolumeInfo } from "./VolumeInfo";
+export type { Capability } from "./Capability";
+export type { LocationCapabilities } from "./LocationCapabilities";
 export type { OpProgress } from "./OpProgress";
 export type { OpDone } from "./OpDone";
 export type { Leftovers } from "./Leftovers";

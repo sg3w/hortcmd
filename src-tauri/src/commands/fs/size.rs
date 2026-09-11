@@ -11,6 +11,7 @@
 // ============================================================
 
 use super::cancel;
+use crate::vfs::caps::{self, Capability};
 use serde::Serialize;
 use std::fs;
 use std::path::PathBuf;
@@ -143,6 +144,8 @@ pub async fn dir_size(
     token: String,
     on_progress: Channel<DirSizeStats>,
 ) -> Result<DirSize, String> {
+    // Same local traversal as the search (TICKET-031).
+    caps::require(&path, Capability::RecursiveSize)?;
     let root = PathBuf::from(&path);
     // Register first, so every path out of here also unregisters again.
     let flag = cancel::register(KIND, &token);

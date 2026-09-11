@@ -5,6 +5,7 @@
 
 import { panelOf, usePanes, type Side } from "@/store/panesStore";
 import { openPath } from "@/ipc/client";
+import { guard } from "./guard";
 import { joinPath, parentPath } from "@/lib/path";
 import { isArchive } from "@/lib/archive";
 import { useOps } from "@/store/opsStore";
@@ -43,6 +44,9 @@ export function openEntry(side: Side, index: number): void {
   } else {
     // A broken symlink lands here (it is not a directory), and so does any
     // other unopenable file: report the reason rather than doing nothing.
+    // Handing a path to the OS is a capability of the location
+    // (TICKET-031), so a remote entry says so instead of being launched.
+    if (!guard(side, p.path, "systemOpen")) return;
     void openPath(joinPath(p.path, entry.name)).catch((e) => {
       useOps.getState().requestConfirm({
         title: translate("open.error"),

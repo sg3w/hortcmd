@@ -27,8 +27,8 @@ import {
 import { reloadBoth } from "@/features/commander/fileOps";
 import { formatDate, formatMode, formatPercent, formatSize } from "@/lib/format";
 import { writeClipboard } from "@/lib/clipboard";
-import { isMacOS } from "@/lib/platform";
-import { schemeOf } from "@/lib/path";
+import { useCapability } from "@/store/capsStore";
+import { explain } from "@/features/commander/guard";
 import type {
   Checksums,
   DirSizeStats,
@@ -157,11 +157,23 @@ export function PropertiesDialog() {
   const [tags, setTagList] = useState<Tag[]>([]);
   const [sysBusy, setSysBusy] = useState(false);
 
+  // What this location supports (TICKET-031). Every section below asks
+  // the contract instead of testing the platform or the scheme itself.
+  const capPath = path ?? "";
+  const canTags = useCapability(capPath, "finderTags");
+  const canPerms = useCapability(capPath, "permissions");
+  const canSystemOpen = useCapability(capPath, "systemOpen");
+  const canSize = useCapability(capPath, "recursiveSize");
+  const canVolume = useCapability(capPath, "volumeInfo");
+  const canChecksums = useCapability(capPath, "checksums");
+
   // Both derive from the loaded properties, not from `path`: only then is
   // it certain whether the entry is a folder, and both restart cleanly
   // when switching entries.
-  const size = useDirSize(data?.is_dir ? data.path : null);
-  const volume = useVolume(data?.path ?? null);
+  const size = useDirSize(
+    data?.is_dir && canSize ? data.path : null,
+  );
+  const volume = useVolume(canVolume ? (data?.path ?? null) : null);
 
   // On open (or path change), load the properties. Closing the dialog
   // (path = null) must drop `data` too: the folder-size task and the
@@ -183,7 +195,9 @@ export function PropertiesDialog() {
         setGroupText(p.group ?? (p.gid != null ? String(p.gid) : ""));
       })
       .catch((e) => alive && setError(String(e)));
-    if (isMacOS) {
+    // Finder tags are a capability of the location, not merely of the
+    // platform (TICKET-031) — a remote folder on a Mac has none.
+    if (canTags) {
       void getTags(path).then((tg) => alive && setTagList(tg));
     }
     return () => {
@@ -274,9 +288,9 @@ export function PropertiesDialog() {
   // open this dialog while a pane is inside an archive.
   const sysReason = !path
     ? null
-    : schemeOf(path)
-      ? t("props.system.remote")
-      : null;
+    : canSystemOpen
+      ? null
+      : (explain(path, "systemOpen") ?? t("props.system.remote"));
 
   const openSystem = async () => {
     if (!path || sysReason) return;
@@ -389,8 +403,8 @@ export function PropertiesDialog() {
                   )}
                 </Section>
 
-                {/* Finder tags (macOS only) */}
-                {isMacOS && (
+                {/* Finder tags — where the location offers them */}
+                {canTags && (
                   <Section label={t("props.tags")}>
                     <TagEditor
                       tags={tags}
@@ -400,7 +414,7 @@ export function PropertiesDialog() {
                   </Section>
                 )}
 
-                {!data.unix ? (
+                {!canPerms ? (
                   <p className="text-[12px] text-dim">{t("props.unsupported")}</p>
                 ) : (
                   <>
@@ -578,7 +592,12 @@ export function PropertiesDialog() {
                     ) : (
                       <button
                         onClick={compute}
-                        disabled={computing}
+                        disabled={computing || !canChecksums}
+                        title={
+                          canChecksums
+                            ? undefined
+                            : (explain(capPath, "checksums") ?? undefined)
+                        }
                         className="flex items-center gap-1.5 self-start rounded border border-edge bg-panel px-3 py-1 text-[12px] text-text hover:border-accent disabled:opacity-50"
                       >
                         {computing && (

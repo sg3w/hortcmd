@@ -9,6 +9,7 @@
 // ============================================================
 
 use super::attrs;
+use crate::vfs::caps::{self, Capability};
 use serde::Serialize;
 use std::fs;
 use std::io::Read;
@@ -137,6 +138,9 @@ fn read_acl(_path: &Path) -> Vec<String> {
 /// Reads all properties of an entry together.
 #[tauri::command]
 pub fn file_props(path: String) -> Result<FileProps, String> {
+    // Ownership, xattrs and ACLs are read with platform APIs that only
+    // understand a local path (TICKET-031).
+    caps::require(&path, Capability::Stat)?;
     let p = Path::new(&path);
     // symlink_metadata: describe the link itself, not the target.
     let meta = fs::symlink_metadata(p).map_err(|e| e.to_string())?;
@@ -185,6 +189,7 @@ pub fn file_props(path: String) -> Result<FileProps, String> {
 /// (0..=0o7777, incl. setuid/setgid/sticky).
 #[tauri::command]
 pub fn set_permissions(path: String, mode: u32) -> Result<(), String> {
+    caps::require(&path, Capability::Permissions)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -203,6 +208,7 @@ pub fn set_permissions(path: String, mode: u32) -> Result<(), String> {
 /// respective value unchanged. Usually requires root privileges.
 #[tauri::command]
 pub fn set_owner(path: String, owner: Option<String>, group: Option<String>) -> Result<(), String> {
+    caps::require(&path, Capability::Permissions)?;
     #[cfg(unix)]
     {
         let uid = match owner {

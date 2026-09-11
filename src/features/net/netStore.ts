@@ -21,6 +21,7 @@ import type {
   HostKeyChallenge,
   Profile,
 } from "@/ipc/bindings";
+import { useCaps } from "@/store/capsStore";
 import { usePanes } from "@/store/panesStore";
 import {
   netConnect,
@@ -39,6 +40,15 @@ import {
 
 /** Marker the backend puts on every "KeePass file is locked" error. */
 const LOCKED = "KEEPASS_LOCKED";
+
+/** Which connections are live — the part a capability answer depends on. */
+function liveSignature(connections: ConnectionStatus[]): string {
+  return connections
+    .filter((c) => c.connected)
+    .map((c) => c.address)
+    .sort()
+    .join("|");
+}
 
 function isLocked(e: unknown): boolean {
   return String(e).includes(LOCKED);
@@ -122,6 +132,13 @@ export const useNet = create<NetState>((set, get) => ({
         netListProfiles(),
         netListConnections(),
       ]);
+      // Connecting, disconnecting and reconnecting change what the
+      // remote locations support, so the cached capability answers go
+      // (TICKET-031). Compared rather than dropped unconditionally:
+      // `refresh` also runs when the manager merely opens.
+      if (liveSignature(connections) !== liveSignature(get().connections)) {
+        useCaps.getState().invalidateRemote();
+      }
       set({ profiles, connections, error: null });
     } catch (e) {
       set({ error: String(e) });

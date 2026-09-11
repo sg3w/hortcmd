@@ -22,6 +22,8 @@ import {
   trashEntries,
 } from "@/ipc/client";
 import { joinPath } from "@/lib/path";
+import { allows } from "@/store/capsStore";
+import { guard, guardPair } from "./guard";
 import { splitName } from "@/lib/format";
 import { isArchive } from "@/lib/archive";
 import {
@@ -251,8 +253,13 @@ export function runCopy(side: Side): void {
   const dest = destOf(side);
   if (dest === null) return; // Kopieren in ein Archiv wird nicht unterstützt
   if (src.archive) {
+    // Copying out of an archive is an extraction (TICKET-031).
+    if (!guardPair(side, src.archive, "archiveExtractFrom", dest, "archiveExtractTo")) {
+      return;
+    }
     beginExtract(src.archive, src.path, selectedNames(side), dest);
   } else {
+    if (!guardPair(side, src.path, "copyFrom", dest, "copyTo")) return;
     beginTransfer("copy", targetPaths(side), dest);
   }
 }
@@ -263,8 +270,12 @@ export function runMove(side: Side): void {
   if (dest === null) return;
   // "Moving" out of an archive = extracting (the archive stays unchanged).
   if (src.archive) {
+    if (!guardPair(side, src.archive, "archiveExtractFrom", dest, "archiveExtractTo")) {
+      return;
+    }
     beginExtract(src.archive, src.path, selectedNames(side), dest);
   } else {
+    if (!guardPair(side, src.path, "move", dest, "copyTo")) return;
     beginTransfer("move", targetPaths(side), dest);
   }
 }
@@ -279,8 +290,21 @@ export function runPaste(side: Side, destDir?: string): void {
   const dst = panelOf(usePanes.getState(), side);
   if (dst.archive) return; // nicht in ein Archiv einfügen
   const target = destDir ?? dst.path;
-  const sources = clip.names.map((n) => joinPath(clip.sourcePath, n));
   const op = clip.mode === "cut" ? "move" : "copy";
+  // The clipboard's source folder is a location of its own and may have
+  // gone offline since the copy (TICKET-031).
+  if (
+    !guardPair(
+      side,
+      clip.sourcePath,
+      op === "move" ? "move" : "copyFrom",
+      target,
+      "copyTo",
+    )
+  ) {
+    return;
+  }
+  const sources = clip.names.map((n) => joinPath(clip.sourcePath, n));
   beginTransfer(op, sources, target);
   if (clip.mode === "cut") clip.clear();
 }
@@ -292,6 +316,12 @@ export function runExtractArchive(side: Side): void {
   const dest = destOf(side);
   if (dest === null) return;
   const archives = selectedNames(side).filter(isArchive);
+  if (
+    archives.length &&
+    !guardPair(side, src.path, "archiveExtractFrom", dest, "archiveExtractTo")
+  ) {
+    return;
+  }
   for (const name of archives) {
     beginExtract(joinPath(src.path, name), "", [], dest);
   }
@@ -305,6 +335,9 @@ export function runPack(side: Side): void {
   if (dest === null) return;
   const sources = targetPaths(side);
   if (!sources.length) return;
+  if (!guardPair(side, src.path, "archivePackFrom", dest, "archivePackTo")) {
+    return;
+  }
 
   useOps.getState().requestPrompt({
     title: translate("archive.title"),
@@ -328,6 +361,7 @@ export function runEdit(side: Side): void {
   if (p.archive) return;
   const cur = p.entries[p.cursor];
   if (!cur || cur.parent || cur.is_dir) return;
+  if (!guard(side, p.path, "systemOpen")) return;
   openPath(joinPath(p.path, cur.name));
 }
 
@@ -339,6 +373,10 @@ export function runQuickLook(side: Side): boolean {
   const p = panelOf(usePanes.getState(), side);
   const cur = p.entries[p.cursor];
   if (!cur || cur.parent || p.archive) return false;
+  // Space falls back to "select the row" where Quick Look is not
+  // available, so a missing capability is not an error here — it is the
+  // other meaning of the key.
+  if (!allows(p.path, "quickLook")) return false;
   quickLook(joinPath(p.path, cur.name));
   return true;
 }
@@ -361,6 +399,7 @@ export function runEditWith(side: Side): void {
   if (p.archive) return;
   const cur = p.entries[p.cursor];
   if (!cur || cur.parent || cur.is_dir) return;
+  if (!guard(side, p.path, "openWith")) return;
   const prog = programForExtension(splitName(cur).ext);
   const program = prog?.path ?? useSettings.getState().defaultEditor;
   openWith(joinPath(p.path, cur.name), program); // leer = System-Standard
@@ -369,13 +408,16 @@ export function runEditWith(side: Side): void {
 /** Open a file with a specific program (context menu). */
 export function runOpenWithProgram(side: Side, program: string): void {
   const full = cursorFile(side);
-  if (full) openWith(full, program);
+  if (!full) return;
+  if (!guard(side, panelOf(usePanes.getState(), side).path, "openWith")) return;
+  openWith(full, program);
 }
 
 /** "Other program …": choose a program via the file browser and open. */
 export function runOpenWithBrowse(side: Side): void {
   const full = cursorFile(side);
   if (!full) return;
+  if (!guard(side, panelOf(usePanes.getState(), side).path, "openWith")) return;
   openFileBrowser({
     title: translate("ctx.openWithOther"),
     selectMode: "file",
@@ -403,8 +445,18 @@ export function runDelete(side: Side, opts?: { permanent?: boolean }): void {
   const paths = targetPaths(side);
   if (!paths.length) return;
 
+  const dir = panelOf(usePanes.getState(), side).path;
+  if (!guard(side, dir, "deletePermanent")) return;
+
   const n = String(paths.length);
-  const toTrash = useSettings.getState().useTrash && !opts?.permanent;
+  // A location without an OS trash (every remote one so far) deletes
+  // permanently instead — with the permanent-delete confirmation, so
+  // the irreversible step is never taken behind a "moves to trash"
+  // wording (TICKET-031).
+  const toTrash =
+    useSettings.getState().useTrash &&
+    !opts?.permanent &&
+    allows(dir, "trash");
 
   if (toTrash) {
     useOps.getState().requestConfirm({
@@ -445,6 +497,8 @@ export function runRename(side: Side): void {
   if (p.archive) return; // in Archiven nicht umbenennen
   const cur = p.entries[p.cursor];
   if (!cur || cur.parent) return;
+
+  if (!guard(side, p.path, "move")) return;
 
   const oldName = cur.name;
   const base = p.path;
@@ -489,6 +543,7 @@ export function runRename(side: Side): void {
 }
 
 export function runMkdir(side: Side): void {
+  if (!guard(side, panelOf(usePanes.getState(), side).path, "create")) return;
   useOps.getState().requestPrompt({
     title: translate("op.mkdir.title"),
     label: translate("op.mkdir.label"),

@@ -10,7 +10,7 @@
 
 import { create } from "zustand";
 import { sshClose } from "@/ipc/client";
-import { schemeOf } from "@/lib/path";
+import { allows } from "@/store/capsStore";
 
 export type TermStatus = "opening" | "open" | "closed";
 
@@ -112,7 +112,13 @@ export const useTerminals = create<TermState>((set, get) => ({
   },
 }));
 
-/** Whether an address is served by an SSH connection (SFTP → shell). */
+/**
+ * Whether an address is served by an SSH connection and can therefore
+ * carry a shell. Read from the capability contract (TICKET-031), not
+ * from the scheme name: the backend only advertises `sshTerminal` for a
+ * provider that really holds an SSH session, so FTP/SMB/WebDAV — and a
+ * dropped SFTP connection — answer false here without a second rule.
+ */
 export function supportsSshTerminal(address: string): boolean {
-  return schemeOf(address) === "sftp";
+  return allows(address, "sshTerminal");
 }

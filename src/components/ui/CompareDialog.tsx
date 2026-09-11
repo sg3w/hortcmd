@@ -25,6 +25,7 @@ import { useCompareDialog } from "@/store/compareStore";
 import { useOps } from "@/store/opsStore";
 import { useSettings, useT } from "@/store/settingsStore";
 import { compareDirs, syncCopy } from "@/ipc/client";
+import { explainPair } from "@/features/commander/guard";
 import { joinPath } from "@/lib/path";
 import { formatDate, formatSize } from "@/lib/format";
 import type { TransKey } from "@/i18n/dictionaries";
@@ -120,6 +121,17 @@ export function CompareDialog() {
     setTruncated(false);
     setSelected(new Set());
     setEntries([]);
+    // Both folders are edited here independently, so each is asked for
+    // its own capability before the backend is called (TICKET-031) — an
+    // allowed left side is no licence for the right one.
+    const blocked = await explainPair(l, "compareDirs", r, "compareDirs");
+    if (blocked) {
+      if (runToken.current === token) {
+        setError(blocked);
+        setLoading(false);
+      }
+      return;
+    }
     try {
       const cut = await compareDirs(l, r, rec, (batch) => {
         if (runToken.current !== token) return; // stale run
@@ -220,6 +232,16 @@ export function CompareDialog() {
       }
     }
     if (!items.length) return;
+
+    // Synchronizing writes into the other side — asked for separately
+    // from the read side, and re-asked here rather than trusting the
+    // answer the comparison ran with (TICKET-031).
+    const [from, to] = dir === "toRight" ? [left, right] : [right, left];
+    const blocked = await explainPair(from, "compareDirs", to, "compareDirs");
+    if (blocked) {
+      setStatus({ ok: false, text: blocked });
+      return;
+    }
 
     const res = await syncCopy(items);
 

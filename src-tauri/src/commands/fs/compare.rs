@@ -7,6 +7,7 @@
 // ============================================================
 
 use super::file::OpResult;
+use crate::vfs::caps::{self, Capability};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -189,6 +190,15 @@ pub async fn compare_dirs(
     recursive: bool,
     on_batch: Channel<Vec<DiffEntry>>,
 ) -> Result<bool, String> {
+    // Both trees are walked with `std::fs`; each side is asked
+    // separately, so a local left pane never licenses a remote right
+    // one (TICKET-031).
+    caps::require_pair(
+        &left,
+        Capability::CompareDirs,
+        &right,
+        Capability::CompareDirs,
+    )?;
     let lp = PathBuf::from(&left);
     let rp = PathBuf::from(&right);
     if !lp.is_dir() {
@@ -210,6 +220,18 @@ fn sync_copy_impl(items: Vec<(String, String)>) -> OpResult {
     let mut ok = 0u32;
     let mut errors = Vec::new();
     for (src, dst) in &items {
+        // `fs::copy` — one pair at a time, both ends checked, so a
+        // single unsupported pair fails on its own instead of aborting
+        // the whole synchronization (TICKET-031).
+        if let Err(e) = caps::require_pair(
+            src,
+            Capability::CompareDirs,
+            dst,
+            Capability::CompareDirs,
+        ) {
+            errors.push(format!("{} → {}: {}", src, dst, e));
+            continue;
+        }
         let dpath = Path::new(dst);
         if let Some(parent) = dpath.parent() {
             if let Err(e) = fs::create_dir_all(parent) {

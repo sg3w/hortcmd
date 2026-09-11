@@ -5,6 +5,7 @@
 // ============================================================
 
 import type {
+  Capability,
   Checksums,
   CollisionReq,
   ConnectionStatus,
@@ -23,6 +24,7 @@ import type {
   GitStatus,
   GitStatusEvent,
   Leftovers,
+  LocationCapabilities,
   LevelDiff,
   LevelEntry,
   OpDone,
@@ -39,6 +41,7 @@ import type {
   TermData,
   VolumeInfo,
 } from "./bindings";
+import { isMacOS, isUnixLike } from "@/lib/platform";
 
 export const hasTauri =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -220,6 +223,26 @@ export async function cancelDirSize(token: string): Promise<void> {
 export async function volumeInfo(path: string): Promise<VolumeInfo | null> {
   if (!hasTauri) return demoVolume();
   return invoke<VolumeInfo | null>("volume_info", { path });
+}
+
+// ---------- Location capabilities (TICKET-031) ----------
+
+/**
+ * What the location behind `address` supports right now. Resolved
+ * through the same parser and session registry as the file-system
+ * commands, so the answer describes the location the commands would
+ * actually act on — including "nothing" for a dropped connection.
+ *
+ * The browser demo has no backend and therefore one deterministic
+ * answer: the local set, with the same platform gates the Rust matrix
+ * applies (Quick Look and Finder tags on macOS, rights editing on
+ * Unix — the demo counts macOS as Unix, which is what it runs on).
+ */
+export async function locationCapabilities(
+  address: string,
+): Promise<LocationCapabilities> {
+  if (!hasTauri) return demoCapabilities();
+  return invoke<LocationCapabilities>("location_capabilities", { address });
 }
 
 // ---------- File operations ----------
@@ -1243,6 +1266,43 @@ function demoDrives(): Drive[] {
     { name: "/", mount: "/", total: 500_000_000_000, free: 210_000_000_000 },
     { name: "~", mount: "/Users/demo", total: 500_000_000_000, free: 210_000_000_000 },
   ];
+}
+
+/**
+ * The demo's capability set — the local matrix of `vfs::caps`, so the
+ * browser build disables and enables exactly the actions the packaged
+ * app does on the same platform.
+ */
+function demoCapabilities(): LocationCapabilities {
+  const caps: Capability[] = [
+    "browse",
+    "preview",
+    "copyFrom",
+    "copyTo",
+    "move",
+    "create",
+    "deletePermanent",
+    "trash",
+    "archiveBrowse",
+    "archiveExtractFrom",
+    "archiveExtractTo",
+    "archivePackFrom",
+    "archivePackTo",
+    "stat",
+    "recursiveSize",
+    "checksums",
+    "search",
+    "compareDirs",
+    "compareFiles",
+    "gitStatus",
+    "volumeInfo",
+    "systemOpen",
+    "openWith",
+    "localTerminal",
+  ];
+  if (isUnixLike) caps.push("permissions");
+  if (isMacOS) caps.push("quickLook", "finderTags");
+  return { scheme: "local", store_id: "local", connected: true, caps };
 }
 
 function demoVolume(): VolumeInfo {

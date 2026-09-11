@@ -6,6 +6,7 @@
 // ============================================================
 
 use serde::Serialize;
+use crate::vfs::caps::{self, Capability};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -180,6 +181,19 @@ fn compute_git_status(path: &str) -> GitStatus {
 /// other IPC calls, even for very large repositories.
 #[tauri::command]
 pub async fn git_status_watch(app: AppHandle, path: String) {
+    // The `git` CLI runs in a local working directory. A remote folder
+    // reports "no Git support" rather than having its address handed to
+    // a subprocess as a relative path (TICKET-031).
+    if caps::require(&path, Capability::GitStatus).is_err() {
+        let _ = app.emit(
+            "git-support-ready",
+            GitStatusEvent {
+                path,
+                status: empty(false),
+            },
+        );
+        return;
+    }
     let status = tauri::async_runtime::spawn_blocking({
         let path = path.clone();
         move || compute_git_status(&path)

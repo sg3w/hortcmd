@@ -19,6 +19,8 @@ import {
   XCircle,
 } from "lucide-react";
 import type { SearchHit, SearchStatus } from "@/ipc/bindings";
+import { explain } from "@/features/commander/guard";
+import { loadCaps } from "@/store/capsStore";
 import {
   cancelSearch,
   search,
@@ -52,6 +54,13 @@ let nextToken = 0;
  * Warning shown for a result that is not the full answer. `complete`
  * needs none; `partial` only says that unreadable entries were skipped.
  */
+/** Why `root` cannot be searched, or null. The traversal is the local
+ *  walker, so a remote root has no search capability yet (TICKET-031). */
+async function explainRoot(root: string): Promise<string | null> {
+  await loadCaps(root);
+  return explain(root, "search");
+}
+
 const STATUS_WARNING: Partial<Record<SearchStatus, TransKey>> = {
   truncated: "search.truncated",
   limited: "search.limited",
@@ -80,6 +89,10 @@ export function SearchDialog() {
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [running, setRunning] = useState(false);
   const [status, setStatus] = useState<SearchStatus | null>(null);
+  /** Why the chosen root cannot be searched, or null (TICKET-031). The
+   *  root is a free-text field, so the answer is re-checked per run
+   *  rather than taken from the pane the dialog was opened over. */
+  const [blocked, setBlocked] = useState<string | null>(null);
   const [skipped, setSkipped] = useState(0);
   const [ran, setRan] = useState(false);
   const runToken = useRef(0);
@@ -129,6 +142,14 @@ export function SearchDialog() {
     setStatus(null);
     setSkipped(0);
     setRan(true);
+    setBlocked(null);
+    const reason = await explainRoot(root);
+    if (reason) {
+      setBlocked(reason);
+      setRunning(false);
+      if (activeToken.current === token) activeToken.current = null;
+      return;
+    }
     const options: SearchOptions = {
       mode,
       name,
@@ -330,6 +351,7 @@ export function SearchDialog() {
             <span>
               {hits.length} {t("search.results")}
             </span>
+            {blocked && <span className="text-amber-400">{blocked}</span>}
             {warning && (
               <span
                 className={cn(

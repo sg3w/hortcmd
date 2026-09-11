@@ -7,6 +7,7 @@
 // ============================================================
 
 use serde::Serialize;
+use crate::vfs::caps::{self, Capability};
 use similar::{ChangeTag, TextDiff};
 use std::fs::File;
 use std::io::{BufReader, Read};
@@ -274,6 +275,14 @@ fn compare_impl(left: String, right: String) -> Result<FileDiff, String> {
 /// Compares two files by content (text diff or hex comparison).
 #[tauri::command]
 pub async fn compare_files(left: String, right: String) -> Result<FileDiff, String> {
+    // Both files are read with `std::fs`; each side is asked for its own
+    // capability, so one local file never licenses a remote partner.
+    caps::require_pair(
+        &left,
+        Capability::CompareFiles,
+        &right,
+        Capability::CompareFiles,
+    )?;
     tauri::async_runtime::spawn_blocking(move || compare_impl(left, right))
         .await
         .map_err(|e| e.to_string())?

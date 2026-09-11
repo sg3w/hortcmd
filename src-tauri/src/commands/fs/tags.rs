@@ -9,6 +9,7 @@
 // ============================================================
 
 use serde::{Deserialize, Serialize};
+use crate::vfs::caps::{self, Capability};
 use ts_rs::TS;
 
 /// A Finder tag: name plus color index (0 = none, 1–7 = Finder colors).
@@ -26,6 +27,9 @@ const TAGS_ATTR: &str = "com.apple.metadata:_kMDItemUserTags";
 /// Reads the Finder tags of an entry.
 #[tauri::command]
 pub fn get_tags(path: String) -> Result<Vec<Tag>, String> {
+    // Finder tags are a macOS extended attribute of a local file
+    // (TICKET-031) — the capability already carries the platform gate.
+    caps::require(&path, Capability::FinderTags)?;
     #[cfg(target_os = "macos")]
     {
         macos::read_tags(&path)
@@ -40,6 +44,7 @@ pub fn get_tags(path: String) -> Result<Vec<Tag>, String> {
 /// Writes the Finder tags of an entry (an empty list removes the attribute).
 #[tauri::command]
 pub fn set_tags(path: String, tags: Vec<Tag>) -> Result<(), String> {
+    caps::require(&path, Capability::FinderTags)?;
     #[cfg(target_os = "macos")]
     {
         macos::write_tags(&path, &tags)

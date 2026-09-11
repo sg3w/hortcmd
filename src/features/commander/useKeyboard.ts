@@ -18,6 +18,7 @@ import {
   selectSameExt,
 } from "./selection";
 import { runCompare } from "./compareLevel";
+import { guard } from "./guard";
 import { openEntry } from "./navigate";
 import { openProps } from "@/store/propsStore";
 import { openSearch } from "@/store/searchStore";
@@ -146,9 +147,11 @@ export function useKeyboard(): void {
         e.preventDefault();
         const p = panelOf(s, side);
         const cur = p.entries[p.cursor];
-        if (cur && !cur.parent && p.archive === null) {
-          openProps(joinPath(p.path, cur.name), p.git?.entries[cur.name]);
-        }
+        if (!cur || cur.parent || p.archive !== null) return;
+        // A shortcut for something this location cannot do says so
+        // rather than doing nothing (TICKET-031).
+        if (!guard(side, p.path, "stat")) return;
+        openProps(joinPath(p.path, cur.name), p.git?.entries[cur.name]);
         return;
       }
 
@@ -308,6 +311,7 @@ export function useKeyboard(): void {
       // Alt+F7: open search (TC shortcut).
       if (e.altKey && e.key === "F7") {
         e.preventDefault();
+        if (!guard(side, panelOf(s, side).path, "search")) return;
         openSearch(side);
         return;
       }

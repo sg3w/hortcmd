@@ -20,7 +20,6 @@
 
 import type { LevelDiff, LevelEntry } from "@/ipc/bindings";
 import { compareLevels } from "@/ipc/client";
-import { connectionFor } from "@/features/net/netStore";
 import {
   locationOf,
   panelOf,
@@ -29,7 +28,7 @@ import {
   type Side,
 } from "@/store/panesStore";
 import { notify } from "@/store/noticeStore";
-import { schemeOf } from "@/lib/path";
+import { locationLive } from "./guard";
 
 /** Runs while a comparison is in flight (the menu entries disable). */
 let running = false;
@@ -47,8 +46,9 @@ export function compareReady(): boolean {
     const p = panelOf(s, side);
     if (!p.path) return false;
     // A remote folder whose connection is gone cannot be compared, and
-    // neither can a listing we never received.
-    return schemeOf(p.path) === null || connectionFor(p.path) !== null;
+    // neither can a listing we never received. Asked through the same
+    // capability contract as every other availability check (TICKET-031).
+    return locationLive(p.path);
   });
 }
 

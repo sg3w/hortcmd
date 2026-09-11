@@ -42,6 +42,7 @@ import { usePanes } from "@/store/panesStore";
 import { useSettings, useT } from "@/store/settingsStore";
 import { useClipboard } from "@/store/clipboardStore";
 import { useHistory } from "@/store/historyStore";
+import { fillVars } from "@/store/noticeStore";
 import { useTransfers } from "@/store/transfersStore";
 import { markDialogKey } from "@/lib/keys";
 import { formatShortcut } from "@/lib/shortcut";
@@ -122,9 +123,14 @@ function CommandItem({ id }: { id: CommandId }) {
   if (st.hidden) return null;
 
   const label = labelOf(cmd, t);
-  // A disabled entry must explain itself: the reason becomes part of the
-  // accessible name, so a screen reader reads it with the label.
-  const aria = st.disabled && st.reason ? `${label} – ${t(st.reason)}` : label;
+  // A disabled entry must explain itself (TICKET-031): the reason goes
+  // into the accessible name, so a screen reader reads it with the
+  // label, and into the tooltip, so a pointer user sees the same words.
+  const why =
+    st.disabled && st.reason
+      ? fillVars(t(st.reason), st.reasonVars)
+      : undefined;
+  const aria = why ? `${label} – ${why}` : label;
 
   if (cmd.role === "check") {
     return (
@@ -133,6 +139,7 @@ function CommandItem({ id }: { id: CommandId }) {
         checked={!!st.checked}
         disabled={st.disabled}
         aria-label={aria}
+        title={why}
         onSelect={() => runCommand(id)}
       >
         <Mark checked={st.checked} />
@@ -147,6 +154,7 @@ function CommandItem({ id }: { id: CommandId }) {
       className={itemCls}
       disabled={st.disabled}
       aria-label={aria}
+      title={why}
       onSelect={() => runCommand(id)}
     >
       <Mark />

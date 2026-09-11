@@ -13,6 +13,7 @@ import type { FileDiff } from "@/ipc/bindings";
 import { useFileCompareDialog } from "@/store/fileCompareStore";
 import { useT } from "@/store/settingsStore";
 import { compareFiles } from "@/ipc/client";
+import { explainPair } from "@/features/commander/guard";
 import { baseName } from "@/lib/path";
 import { formatSize } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -46,8 +47,17 @@ export function FileCompareDialog() {
     setData(null);
     setError(null);
     let alive = true;
-    void compareFiles(left, right)
-      .then((d) => alive && setData(d))
+    // Each file is a location of its own (TICKET-031): the comparison
+    // reads both with the local reader, so both ends are asked.
+    void explainPair(left, "compareFiles", right, "compareFiles")
+      .then((blocked) => {
+        if (!alive) return;
+        if (blocked) {
+          setError(blocked);
+          return;
+        }
+        return compareFiles(left, right).then((d) => alive && setData(d));
+      })
       .catch((e) => alive && setError(String(e)));
     return () => {
       alive = false;

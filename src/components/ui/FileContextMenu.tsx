@@ -41,7 +41,14 @@ import { isMacOS } from "@/lib/platform";
 import { openProps } from "@/store/propsStore";
 import { openPath, openTerminal } from "@/ipc/client";
 import { writeClipboard } from "@/lib/clipboard";
-import { baseName, joinPath, schemeOf } from "@/lib/path";
+import { baseName, joinPath } from "@/lib/path";
+import { locationKey, useCaps } from "@/store/capsStore";
+import {
+  guard,
+  locationReason,
+  pairState,
+} from "@/features/commander/guard";
+import type { Capability } from "@/ipc/bindings";
 import {
   supportsSshTerminal,
   useTerminals,
@@ -60,25 +67,45 @@ interface Props {
 }
 
 export function FileContextMenu({ side, targetRef, children }: Props) {
+  const t = useT();
   const setActive = usePanes((s) => s.setActive);
   const hasClip = useClipboard((s) => s.mode !== null && s.names.length > 0);
   const inArchive = usePanes((s) => panelOf(s, side).archive !== null);
   const terminalProgram = useSettings((s) => s.terminalProgram);
   const programs = useSettings((s) => s.programs);
   const defaultEditor = useSettings((s) => s.defaultEditor);
-  // Only local folders and SSH-backed remote folders have a terminal —
-  // FTP/WebDAV/SMB offer no shell.
-  const noTerminal = usePanes((s) => {
-    const scheme = schemeOf(panelOf(s, side).path);
-    return scheme !== null && scheme !== "sftp";
-  });
+  const path = usePanes((s) => panelOf(s, side).path);
+  const clipSource = useClipboard((s) => s.sourcePath);
+  const clipMode = useClipboard((s) => s.mode);
+  // What this location supports comes from the backend's matrix
+  // (TICKET-031) — never from a scheme name here. Subscribing to the
+  // cache re-renders the menu when a connection drops while it is open,
+  // so an item cannot stay enabled against a dead session.
+  const caps = useCaps((s) => s.known[locationKey(path)]);
+  const can = (cap: Capability) => !!caps?.includes(cap);
+  // One explanation for every item this location cannot run — the same
+  // wording the application menu shows. `useT` above is what makes the
+  // text follow a language switch while the menu is open.
+  const why = locationReason(path);
+  // A terminal is either a local one or an SSH shell on the connection.
+  const canTerminal = can("localTerminal") || can("sshTerminal");
+  const canOpenWith = can("openWith");
+  // Pasting spans two locations: the clipboard's source folder and this
+  // one. Each is asked for its own half.
+  const pasteOk =
+    !clipMode ||
+    !pairState(
+      clipSource,
+      clipMode === "cut" ? "move" : "copyFrom",
+      path,
+      "copyTo",
+    ).disabled;
   // Whether the current cursor entry is an (openable) file.
   const cursorIsFile = usePanes((s) => {
     const p = panelOf(s, side);
     const cur = p.entries[p.cursor];
     return !!cur && !cur.parent && !cur.is_dir && p.archive === null;
   });
-  const t = useT();
 
   // Target folder: right-click on a folder → that folder, otherwise
   // (file/empty space) → current folder of the window.
@@ -108,10 +135,18 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
   // start the configured terminal program.
   const onTerminal = () => {
     const dir = targetDir();
-    if (supportsSshTerminal(dir)) useTerminals.getState().openFor(dir);
-    else openTerminal(dir, terminalProgram);
+    if (supportsSshTerminal(dir)) {
+      useTerminals.getState().openFor(dir);
+    } else if (guard(side, dir, "localTerminal")) {
+      openTerminal(dir, terminalProgram);
+    }
   };
-  const onOpenFolder = () => openPath(targetDir());
+  const onOpenFolder = () => {
+    const dir = targetDir();
+    // The right-click may have landed on a subfolder — the capability is
+    // re-asked for that target, not for the pane (TICKET-031).
+    if (guard(side, dir, "systemOpen")) void openPath(dir);
+  };
 
   // Properties/permissions of the right-clicked entry (otherwise the cursor).
   const onProps = () => {
@@ -143,6 +178,7 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
     <ContextMenu.Item
       className={itemCls}
       disabled={opts?.disabled}
+      title={opts?.disabled ? why : undefined}
       onSelect={() => runAction(id, side)}
     >
       <Icon size={14} className="shrink-0 text-dim" aria-hidden />
@@ -172,7 +208,8 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
           {item("clip-cut", "ctx.cut", Scissors, { shortcut: "⌘X" })}
           <ContextMenu.Item
             className={itemCls}
-            disabled={!hasClip}
+            disabled={!hasClip || !pasteOk}
+            title={hasClip && !pasteOk ? why : undefined}
             onSelect={onPaste}
           >
             <ClipboardPaste size={14} className="shrink-0 text-dim" aria-hidden />
@@ -181,12 +218,19 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
           </ContextMenu.Item>
           <ContextMenu.Separator className="my-1 h-px bg-edge" />
           {item("open-tab", "ctx.openNewTab", FolderSymlink)}
-          {item("rename", "ctx.rename", PenLine, { shortcut: "F2" })}
-          {item("view", "ctx.view", Eye, { shortcut: "F3" })}
+          {item("rename", "ctx.rename", PenLine, {
+            shortcut: "F2",
+            disabled: !can("move"),
+          })}
+          {item("view", "ctx.view", Eye, {
+            shortcut: "F3",
+            disabled: !can("preview"),
+          })}
           {isMacOS && (
             <ContextMenu.Item
               className={itemCls}
-              disabled={inArchive}
+              disabled={inArchive || !can("quickLook")}
+              title={can("quickLook") ? undefined : why}
               onSelect={() => runQuickLook(side)}
             >
               <ScanEye size={14} className="shrink-0 text-dim" aria-hidden />
@@ -194,9 +238,15 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
               <span className="ml-auto pl-6 text-dim">Space</span>
             </ContextMenu.Item>
           )}
-          {item("edit", "ctx.edit", Pencil, { shortcut: "F4" })}
+          {item("edit", "ctx.edit", Pencil, {
+            shortcut: "F4",
+            disabled: !canOpenWith,
+          })}
           <ContextMenu.Sub>
-            <ContextMenu.SubTrigger className={itemCls} disabled={!cursorIsFile}>
+            <ContextMenu.SubTrigger
+              className={itemCls}
+              disabled={!cursorIsFile || !canOpenWith}
+            >
               <AppWindow size={14} className="shrink-0 text-dim" aria-hidden />
               <span>{t("ctx.openWith")}</span>
               <span className="ml-auto pl-6 text-dim">›</span>
@@ -239,11 +289,15 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
               </ContextMenu.SubContent>
             </ContextMenu.Portal>
           </ContextMenu.Sub>
-          {item("mkdir", "ctx.mkdir", FolderPlus, { shortcut: "F7" })}
+          {item("mkdir", "ctx.mkdir", FolderPlus, {
+            shortcut: "F7",
+            disabled: !can("create"),
+          })}
           <ContextMenu.Separator className="my-1 h-px bg-edge" />
           <ContextMenu.Item
             className={itemCls}
-            disabled={inArchive || noTerminal}
+            disabled={inArchive || !canTerminal}
+            title={canTerminal ? undefined : why}
             onSelect={onTerminal}
           >
             <Terminal size={14} className="shrink-0 text-dim" aria-hidden />
@@ -251,7 +305,8 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
           </ContextMenu.Item>
           <ContextMenu.Item
             className={itemCls}
-            disabled={inArchive}
+            disabled={inArchive || !can("systemOpen")}
+            title={can("systemOpen") ? undefined : why}
             onSelect={onOpenFolder}
           >
             <FolderOpen size={14} className="shrink-0 text-dim" aria-hidden />
@@ -275,12 +330,15 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
             <span>{t("ctx.copyName")}</span>
           </ContextMenu.Item>
           <ContextMenu.Separator className="my-1 h-px bg-edge" />
-          {item("pack", "ctx.pack", Package)}
-          {item("extract", "ctx.extract", PackageOpen)}
+          {item("pack", "ctx.pack", Package, { disabled: !can("archivePackFrom") })}
+          {item("extract", "ctx.extract", PackageOpen, {
+            disabled: !can("archiveExtractFrom"),
+          })}
           <ContextMenu.Separator className="my-1 h-px bg-edge" />
           <ContextMenu.Item
             className={itemCls}
-            disabled={inArchive}
+            disabled={inArchive || !can("stat")}
+            title={can("stat") ? undefined : why}
             onSelect={onProps}
           >
             <ShieldCheck size={14} className="shrink-0 text-dim" aria-hidden />
@@ -288,7 +346,10 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
             <span className="ml-auto pl-6 text-dim">⌥⏎</span>
           </ContextMenu.Item>
           <ContextMenu.Separator className="my-1 h-px bg-edge" />
-          {item("delete", "ctx.delete", Trash2, { shortcut: "F8" })}
+          {item("delete", "ctx.delete", Trash2, {
+            shortcut: "F8",
+            disabled: !can("deletePermanent"),
+          })}
         </ContextMenu.Content>
       </ContextMenu.Portal>
     </ContextMenu.Root>

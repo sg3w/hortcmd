@@ -8,6 +8,7 @@ import { useOps } from "@/store/opsStore";
 import { readPreview } from "@/ipc/client";
 import { joinPath } from "@/lib/path";
 import { translate } from "@/store/settingsStore";
+import { guard } from "./guard";
 
 const MAX_PREVIEW_BYTES = 256 * 1024;
 
@@ -15,6 +16,8 @@ export async function runView(side: Side): Promise<void> {
   const p = panelOf(usePanes.getState(), side);
   const cur = p.entries[p.cursor];
   if (!cur || cur.parent || cur.is_dir) return;
+
+  if (!guard(side, p.path, "preview")) return;
 
   const full = joinPath(p.path, cur.name);
   try {

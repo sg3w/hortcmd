@@ -7,6 +7,7 @@
 import { create } from "zustand";
 import type { DirEntry, GitStatus } from "@/ipc/bindings";
 import { homeDir, listArchive, listDir, requestGitStatus } from "@/ipc/client";
+import { allows, primeCaps } from "./capsStore";
 import type { SavedSession, SavedSide } from "./sessionStore";
 import { splitName } from "@/lib/format";
 import { isRoot } from "@/lib/path";
@@ -403,6 +404,10 @@ export const usePanes = create<PanesStore>((set, get) => ({
 
 
   loadDir: async (side, path, record = true) => {
+    // Ask what the new location supports while the listing is on its
+    // way (TICKET-031), so the menus and the command bar have their
+    // answer by the time the folder is on screen.
+    primeCaps(path);
     const res = await listDir(path);
     set(
       withActiveTab(get(), side, (t) => {
@@ -560,7 +565,15 @@ export const usePanes = create<PanesStore>((set, get) => ({
       return;
     }
     // Fire-and-forget: runs in the background in the backend, the result comes
-    // via the "git-support-ready" event → applyGitStatus.
+    // via the "git-support-ready" event → applyGitStatus. A location
+    // without Git support is not asked at all (TICKET-031) — the `git`
+    // CLI only runs in a local working directory.
+    if (!allows(tab.path, "gitStatus")) {
+      if (tab.git) {
+        set(withActiveTab(get(), side, (t) => ({ ...t, git: null })));
+      }
+      return;
+    }
     requestGitStatus(tab.path);
   },
 

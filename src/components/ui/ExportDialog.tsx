@@ -18,6 +18,8 @@ import { openFileBrowser } from "@/store/fileBrowserStore";
 import { useOps } from "@/store/opsStore";
 import { useSettings, useT } from "@/store/settingsStore";
 import { writeTextFile } from "@/ipc/client";
+import { explain } from "@/features/commander/guard";
+import { loadCaps } from "@/store/capsStore";
 import { writeClipboard } from "@/lib/clipboard";
 import { baseName, joinPath, parentPath } from "@/lib/path";
 import { Check, Radio, Section } from "@/components/ui/dialogControls";
@@ -190,6 +192,14 @@ export function ExportDialog() {
   };
 
   const writeTo = async (target: string, overwrite: boolean) => {
+    // The target folder is a free-text field here, so it is a location
+    // of its own and is asked for the write capability (TICKET-031).
+    await loadCaps(destDir);
+    const blocked = explain(destDir, "create");
+    if (blocked) {
+      setStatus({ ok: false, text: blocked });
+      return;
+    }
     try {
       const written = await writeTextFile(target, fullText, overwrite);
       if (!written) {

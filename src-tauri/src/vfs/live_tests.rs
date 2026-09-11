@@ -192,6 +192,75 @@ fn exercise_staging(p: &dyn Provider, base: &str) {
     println!("  OK: staging commit (new + replace), nothing left behind");
 }
 
+/// Checks the capability answer for a *live* connection (ticket 031).
+///
+/// Called after [`exercise`], so every capability asserted here has just
+/// been performed against the real server — the matrix reports tested
+/// behavior, not what happened to compile. The local-only commands are
+/// asserted to be refused with the typed `UNSUPPORTED` marker, so the
+/// frontend disabling them is backed by a backend that says no.
+fn exercise_capabilities(p: Arc<dyn Provider>, address: &str, ssh_expected: bool) {
+    use crate::vfs::caps::{self, Capability, UNSUPPORTED};
+
+    let store_id = p.store_id();
+    crate::net::session::register_live(p);
+
+    let caps = caps::for_address(address).expect("capabilities of a live address");
+    assert!(caps.connected, "{} should be reported as connected", address);
+    assert_eq!(caps.store_id, store_id, "cache identity of {}", address);
+
+    // Everything `exercise` just proved against the real server.
+    for cap in [
+        Capability::Browse,
+        Capability::Preview,
+        Capability::CopyFrom,
+        Capability::CopyTo,
+        Capability::Move,
+        Capability::Create,
+        Capability::DeletePermanent,
+    ] {
+        assert!(caps.has(cap), "{} must advertise {}", address, cap.id());
+        caps::require(address, cap).expect("advertised capability must pass the gate");
+    }
+
+    // A shell only where the connection really carries one.
+    assert_eq!(
+        caps.has(Capability::SshTerminal),
+        ssh_expected,
+        "ssh terminal on {}",
+        address
+    );
+
+    // Local-only command implementations stay refused until their own
+    // ticket routes them through the VFS.
+    for cap in [
+        Capability::Trash,
+        Capability::SystemOpen,
+        Capability::OpenWith,
+        Capability::QuickLook,
+        Capability::LocalTerminal,
+        Capability::VolumeInfo,
+        Capability::GitStatus,
+        Capability::FinderTags,
+        Capability::Search,
+        Capability::RecursiveSize,
+        Capability::Checksums,
+        Capability::Stat,
+        Capability::Permissions,
+        Capability::CompareDirs,
+        Capability::CompareFiles,
+        Capability::ArchiveBrowse,
+        Capability::ArchiveExtractFrom,
+        Capability::ArchivePackFrom,
+    ] {
+        assert!(!caps.has(cap), "{} must not advertise {}", address, cap.id());
+        let err = caps::require(address, cap)
+            .expect_err("an unadvertised capability must be refused");
+        assert!(err.starts_with(UNSUPPORTED), "untyped refusal: {}", err);
+    }
+    println!("  OK: capability matrix matches the exercised behavior");
+}
+
 /// SFTP. Server:
 /// `docker run -d --name sftp -p 22:22 emberstack/sftp demo:demo123:::upload`
 #[test]
@@ -202,6 +271,7 @@ fn live_sftp() {
     println!("SFTP store_id={}", p.store_id());
     exercise(&*p, "/upload");
     exercise_staging(&*p, "/upload");
+    exercise_capabilities(p, "sftp://demo@127.0.0.1:22/upload", true);
 }
 
 /// Host-key verification (ticket 028) against a server with a fixed
@@ -342,6 +412,7 @@ fn live_ftp() {
     println!("FTP store_id={}", p.store_id());
     exercise(&*p, "/ftp/one");
     exercise_staging(&*p, "/ftp/one");
+    exercise_capabilities(p, "ftp://one@127.0.0.1:21/ftp/one", false);
 }
 
 /// SMB. Server:
@@ -368,6 +439,7 @@ fn live_smb() {
 
     exercise(&*p, "/Data");
     exercise_staging(&*p, "/Data");
+    exercise_capabilities(p, "smb://samba@127.0.0.1:445/Data", false);
 }
 
 /// WebDAV. Server:
@@ -384,4 +456,5 @@ fn live_webdav() {
     println!("WebDAV store_id={}", p.store_id());
     exercise(&*p, "/");
     exercise_staging(&*p, "/");
+    exercise_capabilities(p, "webdav://dav@127.0.0.1:8080/", false);
 }

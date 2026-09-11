@@ -160,6 +160,19 @@ fn registry() -> &'static Mutex<Registry> {
     })
 }
 
+/// Puts a provider into the live registry the way `net_connect` does.
+/// The live provider tests need a registered session so that the
+/// address-based lookups (`vfs::resolve`, `vfs::caps`) see the very
+/// connection the test just opened (ticket 031).
+#[cfg(test)]
+pub(crate) fn register_live(provider: Arc<dyn Provider>) {
+    registry()
+        .lock()
+        .unwrap()
+        .live
+        .insert(provider.store_id(), provider);
+}
+
 /// Shared multi-thread Tokio runtime driving the async protocol clients
 /// (SFTP via russh, WebDAV via reqwest). Static, so sessions and their
 /// spawned tasks stay alive; the synchronous provider/transfer threads

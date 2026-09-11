@@ -22,6 +22,8 @@ import type { Lang, TransKey } from "@/i18n/dictionaries";
 import type { Shortcut } from "@/lib/shortcut";
 import { isMacOS } from "@/lib/platform";
 import { schemeOf } from "@/lib/path";
+import type { Capability } from "@/ipc/bindings";
+import { capState, guard, locationLive, pairState } from "./guard";
 import { openPath, openTerminal } from "@/ipc/client";
 import {
   panelOf,
@@ -90,6 +92,8 @@ export interface CommandState {
   disabled?: boolean;
   /** Why it is not executable — read out next to the label. */
   reason?: TransKey;
+  /** Replacements for "{name}" placeholders in `reason` (TICKET-031). */
+  reasonVars?: Record<string, string>;
   /** Checkbox / radio state. */
   checked?: boolean;
 }
@@ -118,9 +122,54 @@ const activePanel = () => {
   return panelOf(s, s.active);
 };
 
-/** False only for a remote folder whose connection is gone (TICKET-031). */
+/** False only for a remote folder whose connection is gone (TICKET-031).
+ *  Reads the capability contract, like every other availability question
+ *  here — a location that supports nothing at all is one whose session
+ *  is gone, and there is no second opinion about it anywhere in the UI. */
 function sessionLive(path = activePanel().path): boolean {
-  return schemeOf(path) === null || connectionFor(path) !== null;
+  return locationLive(path);
+}
+
+/** The folder of the opposite pane — destination of every two-pane
+ *  operation, and null while that pane is inside an archive. */
+function otherPanel() {
+  const s = usePanes.getState();
+  return panelOf(s, s.active === "left" ? "right" : "left");
+}
+
+/** Disabled unless the active folder offers `cap` (TICKET-031). */
+function needs(cap: Capability, path = activePanel().path): CommandState {
+  return capState(path, cap);
+}
+
+/** Disabled unless *both* ends of a two-location operation offer theirs.
+ *  A destination inside an archive is refused before the question is
+ *  even asked — an archive is not a writable location. */
+function needsPair(
+  fromCap: Capability,
+  toCap: Capability,
+  from = activePanel().path,
+): CommandState {
+  const dst = otherPanel();
+  if (dst.archive !== null) {
+    return { disabled: true, reason: "menu.why.archive" };
+  }
+  return pairState(from, fromCap, dst.path, toCap);
+}
+
+/** Combines an existing state check with a capability requirement. */
+function withCap(cap: Capability, base: () => CommandState): CommandState {
+  const st = base();
+  return st.disabled || st.hidden ? st : needs(cap);
+}
+
+/** Same, for a requirement that spans both panes. */
+function withPair(
+  base: () => CommandState,
+  caps: () => CommandState,
+): CommandState {
+  const st = base();
+  return st.disabled || st.hidden ? st : caps();
 }
 
 /** Disabled state for everything that touches the current folder. */
@@ -183,14 +232,12 @@ function notInArchive(extra: () => CommandState = () => ({})): CommandState {
   return extra();
 }
 
-/** Disabled for remote folders (the command only works on local paths). */
-function localOnly(): CommandState {
-  const p = activePanel();
-  if (p.archive !== null) return { disabled: true, reason: "menu.why.archive" };
-  if (schemeOf(p.path) !== null) {
-    return { disabled: true, reason: "menu.why.localOnly" };
-  }
-  return {};
+/** Disabled inside an archive and wherever the location lacks `cap`.
+ *  Replaces the former `scheme === …` test: which locations can hand a
+ *  path to the OS is the backend's matrix to state, not the UI's to
+ *  guess (TICKET-031). */
+function osAction(cap: Capability): CommandState {
+  return notInArchive(() => needs(cap));
 }
 
 /** F4 honours the editor setting, exactly like the global key handler. */
@@ -224,20 +271,29 @@ export const COMMANDS = {
     dialog: true,
     shortcut: { key: "F3" },
     run: () => runAction("view", activeSide()),
-    state: cursorIsFile,
+    state: () => withCap("preview", cursorIsFile),
   },
   "file.edit": {
     label: "menu.file.edit",
     shortcut: { key: "F4" },
     run: runEditLikeF4,
-    state: () => notInArchive(cursorIsFile),
+    // F4 hands the file either to the system default (`systemOpen`) or
+    // to a configured program (`openWith`) — the setting decides which
+    // capability is actually needed.
+    state: () =>
+      withCap(
+        useSettings.getState().editorTrigger === "f4"
+          ? "openWith"
+          : "systemOpen",
+        () => notInArchive(cursorIsFile),
+      ),
   },
   "file.openWithOther": {
     label: "menu.file.openWithOther",
     dialog: true,
     // Same picker the context menu uses — pick a binary, open the file with it.
     run: () => runOpenWithBrowse(activeSide()),
-    state: () => notInArchive(cursorIsFile),
+    state: () => withCap("openWith", () => notInArchive(cursorIsFile)),
   },
   "file.programs": {
     label: "menu.file.programs",
@@ -249,42 +305,55 @@ export const COMMANDS = {
     dialog: true,
     shortcut: { key: "F5" },
     run: () => runAction("copy", activeSide()),
-    state: hasTarget,
+    // Copying out of an archive is an extraction; otherwise both ends
+    // are asked for their own half of the transfer.
+    state: () =>
+      withPair(hasTarget, () =>
+        activePanel().archive !== null
+          ? needsPair("archiveExtractFrom", "archiveExtractTo")
+          : needsPair("copyFrom", "copyTo"),
+      ),
   },
   "file.move": {
     label: "menu.file.move",
     dialog: true,
     shortcut: { key: "F6" },
     run: () => runAction("move", activeSide()),
-    state: () => notInArchive(hasTarget),
+    state: () =>
+      withPair(
+        () => notInArchive(hasTarget),
+        () => needsPair("move", "copyTo"),
+      ),
   },
   "file.rename": {
     label: "menu.file.rename",
     dialog: true,
     shortcut: { key: "F2" },
     run: () => runAction("rename", activeSide()),
-    state: () => notInArchive(hasTarget),
+    state: () => withCap("move", () => notInArchive(hasTarget)),
   },
   "file.mkdir": {
     label: "menu.file.mkdir",
     dialog: true,
     shortcut: { key: "F7" },
     run: () => runAction("mkdir", activeSide()),
-    state: () => notInArchive(),
+    state: () => withCap("create", () => notInArchive()),
   },
   "file.delete": {
     label: "menu.file.delete",
     dialog: true,
     shortcut: { key: "F8" },
     run: () => runDelete(activeSide()),
-    state: () => notInArchive(hasTarget),
+    // Deleting falls back to a permanent delete where the location has
+    // no trash, so that is the capability the command really needs.
+    state: () => withCap("deletePermanent", () => notInArchive(hasTarget)),
   },
   "file.deletePerm": {
     label: "menu.file.deletePerm",
     dialog: true,
     shortcut: { mods: ["Shift"], key: "F8" },
     run: () => runDelete(activeSide(), { permanent: true }),
-    state: () => notInArchive(hasTarget),
+    state: () => withCap("deletePermanent", () => notInArchive(hasTarget)),
   },
   "file.clipCopy": {
     label: "menu.file.clipCopy",
@@ -308,7 +377,16 @@ export const COMMANDS = {
         if (!clip.mode || clip.names.length === 0) {
           return { disabled: true, reason: "menu.why.clipEmpty" };
         }
-        return folderReady();
+        const base = folderReady();
+        if (base.disabled) return base;
+        // The clipboard names a source folder of its own — it may have
+        // gone offline since the copy (TICKET-031).
+        return pairState(
+          clip.sourcePath,
+          clip.mode === "cut" ? "move" : "copyFrom",
+          activePanel().path,
+          "copyTo",
+        );
       }),
   },
   "file.pack": {
@@ -316,19 +394,27 @@ export const COMMANDS = {
     dialog: true,
     shortcut: { mods: ["Alt"], key: "F5" },
     run: () => runAction("pack", activeSide()),
-    state: () => notInArchive(hasTarget),
+    state: () =>
+      withPair(
+        () => notInArchive(hasTarget),
+        () => needsPair("archivePackFrom", "archivePackTo"),
+      ),
   },
   "file.extract": {
     label: "menu.file.extract",
     dialog: true,
     run: () => runAction("extract", activeSide()),
-    state: () => notInArchive(hasTarget),
+    state: () =>
+      withPair(
+        () => notInArchive(hasTarget),
+        () => needsPair("archiveExtractFrom", "archiveExtractTo"),
+      ),
   },
   "file.batchRename": {
     label: "menu.file.batchRename",
     dialog: true,
     run: () => openRename(activeSide()),
-    state: () => notInArchive(hasTarget),
+    state: () => withCap("move", () => notInArchive(hasTarget)),
   },
   "file.compareFiles": {
     label: "menu.file.compareFiles",
@@ -343,7 +429,15 @@ export const COMMANDS = {
         const cur = p.entries[p.cursor];
         return p.archive === null && !!cur && !cur.parent && !cur.is_dir;
       });
-      return ok ? {} : { disabled: true, reason: "menu.why.needTwoFiles" };
+      if (!ok) return { disabled: true, reason: "menu.why.needTwoFiles" };
+      // Both files are read by the same local comparison; each side is
+      // asked for its own capability (TICKET-031).
+      return pairState(
+        panelOf(s, "left").path,
+        "compareFiles",
+        panelOf(s, "right").path,
+        "compareFiles",
+      );
     },
   },
   "file.props": {
@@ -357,7 +451,11 @@ export const COMMANDS = {
       openProps(joinPath(p.path, cur.name), p.git?.entries[cur.name]);
     },
     state: () =>
-      notInArchive(() => (cursorRow() ? {} : { disabled: true, reason: "menu.why.noTarget" })),
+      withCap("stat", () =>
+        notInArchive(() =>
+          cursorRow() ? {} : { disabled: true, reason: "menu.why.noTarget" },
+        ),
+      ),
   },
   "app.quit": {
     label: "menu.app.quit",
@@ -486,30 +584,37 @@ export const COMMANDS = {
     dialog: true,
     shortcut: { mods: ["Alt"], key: "F7" },
     run: () => openSearch(activeSide()),
-    state: () => notInArchive(),
+    state: () => withCap("search", () => notInArchive()),
   },
   "cmd.searchDuplicates": {
     label: "search.mode.duplicates",
     dialog: true,
     run: () => openSearch(activeSide(), "duplicates"),
-    state: () => notInArchive(),
+    state: () => withCap("search", () => notInArchive()),
   },
   "cmd.searchEmptyDirs": {
     label: "search.mode.emptyDirs",
     dialog: true,
     run: () => openSearch(activeSide(), "empty_dirs"),
-    state: () => notInArchive(),
+    state: () => withCap("search", () => notInArchive()),
   },
   "cmd.searchLargeFiles": {
     label: "search.mode.largeFiles",
     dialog: true,
     run: () => openSearch(activeSide(), "large_files"),
-    state: () => notInArchive(),
+    state: () => withCap("search", () => notInArchive()),
   },
   "cmd.compareDirs": {
     label: "menu.cmd.compareDirs",
     dialog: true,
     run: () => openCompare(),
+    // The dialog lets both folders be edited, so it only needs *a*
+    // supported starting point; it validates each side itself.
+    state: () =>
+      withPair(
+        () => notInArchive(),
+        () => needsPair("compareDirs", "compareDirs"),
+      ),
   },
   "nav.back": {
     label: "menu.nav.back",
@@ -557,24 +662,29 @@ export const COMMANDS = {
     label: "menu.cmd.terminal",
     run: () => {
       const dir = activePanel().path;
-      if (supportsSshTerminal(dir)) useTerminals.getState().openFor(dir);
-      else openTerminal(dir, useSettings.getState().terminalProgram);
+      if (supportsSshTerminal(dir)) {
+        useTerminals.getState().openFor(dir);
+      } else if (guard(activeSide(), dir, "localTerminal")) {
+        openTerminal(dir, useSettings.getState().terminalProgram);
+      }
     },
     state: () =>
       notInArchive(() => {
+        // A local folder starts the configured terminal program; a
+        // connection that carries a shell opens one in place. Which is
+        // which comes from the capability matrix, not from a scheme name.
         const p = activePanel();
-        const scheme = schemeOf(p.path);
-        // Only local folders and SSH-backed remotes have a shell.
-        if (scheme !== null && scheme !== "sftp") {
-          return { disabled: true, reason: "menu.why.noShell" };
-        }
-        return folderReady();
+        if (supportsSshTerminal(p.path)) return needs("sshTerminal");
+        const st = needs("localTerminal");
+        return st.disabled && schemeOf(p.path) !== null && sessionLive()
+          ? { disabled: true, reason: "menu.why.noShell" }
+          : st;
       }),
   },
   "cmd.openFolder": {
     label: "menu.cmd.openFolder",
     run: () => void openPath(activePanel().path),
-    state: localOnly,
+    state: () => osAction("systemOpen"),
   },
 
   // ----- Netz -----
@@ -607,9 +717,9 @@ export const COMMANDS = {
       if (!supportsSshTerminal(path)) {
         return { disabled: true, reason: "menu.why.noSftp" };
       }
-      return connectionFor(path)
-        ? {}
-        : { disabled: true, reason: "menu.why.offline" };
+      // The connection itself decides — the backend only advertises
+      // `sshTerminal` for a provider that really carries an SSH session.
+      return needs("sshTerminal", path);
     },
   },
 
@@ -770,7 +880,7 @@ export const COMMANDS = {
       if (!isMacOS) return { hidden: true };
       return notInArchive(() =>
         cursorRow()
-          ? localOnly()
+          ? needs("quickLook")
           : { disabled: true, reason: "menu.why.noTarget" },
       );
     },

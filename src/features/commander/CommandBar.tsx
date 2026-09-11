@@ -43,6 +43,9 @@ import type { TransKey } from "@/i18n/dictionaries";
 import { baseName } from "@/lib/path";
 import { openEntry } from "./navigate";
 import { runAction } from "./actions";
+import { commandState, runCommand, type CommandId } from "./commands";
+import { useCaps } from "@/store/capsStore";
+import { fillVars } from "@/store/noticeStore";
 import { cn } from "@/lib/cn";
 
 /** Start the left↔right file comparison; otherwise show a hint. */
@@ -97,11 +100,17 @@ export function CommandBar() {
         disabled={!canForward}
         onClick={() => goForward(active)}
       />
-      <ToolButton title={t("tb.up")} Icon={ArrowUp} onClick={goUp} />
-      <ToolButton
+      <CommandButton
+        id="nav.up"
+        title={t("tb.up")}
+        Icon={ArrowUp}
+        onClick={goUp}
+      />
+      <CommandButton
+        id="view.refresh"
         title={t("tb.refresh")}
         Icon={RefreshCw}
-        onClick={() => refresh(active)}
+        onClick={() => void refresh(active)}
       />
       <RecentMenu />
 
@@ -116,42 +125,50 @@ export function CommandBar() {
 
       <Divider />
 
-      <ToolButton
+      <CommandButton
+        id="file.mkdir"
         title={t("tb.mkdir")}
         Icon={FolderPlus}
         onClick={() => runAction("mkdir", active)}
       />
-      <ToolButton
+      <CommandButton
+        id="file.view"
         title={t("tb.view")}
         Icon={Eye}
         onClick={() => runAction("view", active)}
       />
-      <ToolButton
+      <CommandButton
+        id="file.pack"
         title={t("tb.pack")}
         Icon={FileArchive}
         onClick={() => runAction("pack", active)}
       />
-      <ToolButton
+      <CommandButton
+        id="file.batchRename"
         title={t("tb.rename")}
         Icon={Replace}
         onClick={() => openRename(active)}
       />
-      <ToolButton
+      <CommandButton
+        id="mark.export"
         title={t("tb.export")}
         Icon={ListTree}
         onClick={() => openExport(active)}
       />
-      <ToolButton
+      <CommandButton
+        id="cmd.compareDirs"
         title={t("tb.compare")}
         Icon={FolderSync}
         onClick={() => openCompare()}
       />
-      <ToolButton
+      <CommandButton
+        id="file.compareFiles"
         title={t("tb.filecompare")}
         Icon={GitCompare}
         onClick={runFileCompare}
       />
-      <ToolButton
+      <CommandButton
+        id="cmd.search"
         title={t("tb.search")}
         Icon={Search}
         onClick={() => openSearch(active)}
@@ -251,6 +268,46 @@ function RecentMenu() {
 
 function Divider() {
   return <span className="mx-0.5 h-5 w-px bg-edge" aria-hidden />;
+}
+
+/**
+ * A toolbar button backed by a command from the shared table
+ * (TICKET-031). It reads its enabled state and its "why not" from
+ * `commandState`, so the toolbar, the menus and the keyboard agree on
+ * what a location can do instead of each deciding for itself.
+ *
+ * The label stays the toolbar's own short wording; only the reason for
+ * a disabled button is appended, which is what the tooltip has to say.
+ */
+function CommandButton({
+  id,
+  title,
+  Icon,
+  onClick,
+}: {
+  id: CommandId;
+  title: string;
+  Icon: LucideIcon;
+  onClick?: () => void;
+}) {
+  const t = useT();
+  // Subscribing to the pane and capability stores keeps the state fresh
+  // — a connection dropping re-renders the bar.
+  usePanes((s) => s.active);
+  useCaps((s) => s.known);
+  const st = commandState(id);
+  const why =
+    st.disabled && st.reason
+      ? fillVars(t(st.reason), st.reasonVars)
+      : undefined;
+  return (
+    <ToolButton
+      title={why ? `${title} – ${why}` : title}
+      Icon={Icon}
+      disabled={!!st.disabled || !!st.hidden}
+      onClick={onClick ?? (() => runCommand(id))}
+    />
+  );
 }
 
 interface ButtonProps {

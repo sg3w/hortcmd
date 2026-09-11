@@ -129,10 +129,14 @@ menu.rs                     reduced native macOS menu (app/edit/window only;
                             transfer guard applies. About/Settings/Quit emit the
                             `native-menu` event; `set_menu_language` rebuilds it.
                             No native menu on Windows/Linux.
-vfs/                         VFS abstraction (identical UI) — tickets 020/022–025
+vfs/                         VFS abstraction (identical UI) — tickets 020/022–025/031
 ├── mod.rs                   Provider trait · Scheme · Address parser · scheme registry
 │                            (resolve: address → Arc<Provider> + provider path);
 │                            local + sftp/ftp/webdav/smb, alle über die Session-Registry
+├── caps.rs                  Capability/LocationCapabilities + location_capabilities:
+│                            was ein Ort *jetzt* kann (Provider, Plattform, Verbindung);
+│                            caps::require/require_pair ist das Tor vor jedem nur-lokalen
+│                            Kommando (typisierter UNSUPPORTED_LOCATION-Fehler); TICKET-031
 ├── local.rs                 LocalProvider (std::fs) — local fs logic lives here
 ├── sftp.rs                  SftpProvider über russh/russh-sftp (async → sync via block_on)
 ├── ftp.rs                   FtpProvider über suppaftp (synchron); FTP + FTPS
@@ -224,6 +228,76 @@ layers — each one holds on its own if another is bypassed:
 Capabilities (`capabilities/default.json`) are pruned to what is actually
 called; each entry names its caller. Live HTML preview stays deliberately
 unimplemented.
+
+---
+
+### Location capabilities (TICKET-031)
+
+Local and remote locations share one UI, but they do not share one feature set:
+the VFS `Provider` trait covers browsing, preview, the streaming transfer
+primitives, mkdir, rename and delete — everything else (trash, Quick Look, Git,
+Finder tags, search, archives, comparisons, volume data, recursive size,
+extended properties, local terminals) still runs against `std::fs` or a
+platform API and only works on a **local** address.
+
+`vfs/caps.rs` is the single place that states this. It answers, per address,
+which operations that location supports right now; `location_capabilities(address)`
+hands the answer to the frontend, and `caps::require` / `caps::require_pair` is
+the gate every local-only command puts in front of its work. A refused command
+returns an error carrying the marker `UNSUPPORTED_LOCATION` plus the capability
+id, so a remote address is never read as a relative local path — and the
+frontend recognizes the refusal without parsing prose (same pattern as the
+KeePass `LOCKED` marker).
+
+Two rules keep the matrix honest: a capability is advertised only where its
+command is really routed through the VFS **and** covered by the live provider
+tests (`vfs/live_tests.rs` asserts the matrix right after exercising the real
+server), and remote capabilities are reported for a **live** session only — a
+disconnected location supports nothing, which is what the UI must show the
+moment a connection drops.
+
+**Initial matrix** (identifiers are stable and forward-compatible with the
+planned plugin and MCP surfaces, tickets 201–208 and 041):
+
+| Capability | local | SFTP | FTP/FTPS | SMB | WebDAV |
+|---|---|---|---|---|---|
+| `browse`, `preview` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `copyFrom`, `copyTo`, `move`, `create`, `deletePermanent` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `sshTerminal` | – | ✅ | – | – | – |
+| `trash` | ✅ | – | – | – | – |
+| `systemOpen`, `openWith`, `localTerminal` | ✅ | – | – | – | – |
+| `quickLook`, `finderTags` | macOS | – | – | – | – |
+| `permissions` | Unix | – | – | – | – |
+| `stat`, `recursiveSize`, `checksums` | ✅ | – | – | – | – |
+| `search`, `compareDirs`, `compareFiles` | ✅ | – | – | – | – |
+| `archiveBrowse`, `archiveExtractFrom/To`, `archivePackFrom/To` | ✅ | – | – | – | – |
+| `gitStatus`, `volumeInfo` | ✅ | – | – | – | – |
+
+A dash is *not* a statement that the protocol could never do it — it says the
+command implementation is still local-only. Each future ticket that routes one
+through the VFS moves exactly one row, without touching the UI contract.
+`sshTerminal` is read off the provider (`Provider::ssh()`), not matched against
+a scheme name, so it is true only for a connection that really carries an SSH
+session.
+
+**Frontend.** `store/capsStore.ts` caches the answer under the location's
+identity (`local`, `sftp:user@host:port`) — one IPC call per location, never one
+per menu item — and drops every remote answer on connect/disconnect/reconnect.
+`features/commander/guard.ts` is the shared selector: the command table
+(`commands.ts`, read by the in-window menu, the reduced native macOS menu and
+the command bar), the context menu and the keyboard all ask it, so no surface
+decides for itself and none can disagree with another. Unsupported actions are
+disabled with a localized tooltip (`menu.why.unsupported` /
+`menu.why.destUnsupported` / `menu.why.offline`); a blocked *keyboard* shortcut
+raises the same wording as a pane notice instead of doing nothing. Dialogs that
+combine two locations — copy, pack, extract, comparison, synchronization — ask
+each side for its own half, so an allowed source is never a licence for the
+target. Every execution path re-asks immediately before it acts: an item drawn
+before a disconnect is not authorization to run afterwards. The browser demo
+returns one deterministic local set with the same platform gates.
+
+Direct frontend scheme tests (`scheme === "sftp"`) are gone; the platform is
+only consulted where the answer is needed before the backend has spoken.
 
 ---
 
@@ -391,6 +465,7 @@ the running-transfer guard from TICKET-004 still applies.
 | `compare_levels` | `left[], right[]` (`LevelEntry`) | `LevelDiff[]` (TICKET-059) | ✅ |
 | `save_selection` | `path, location, entries[], overwrite` | `boolean` (false = exists) | ✅ |
 | `load_selection` | `path` | `SelectionFile` (validated) | ✅ |
+| `location_capabilities` | `address` | `LocationCapabilities` (TICKET-031) | ✅ |
 | `set_menu_language` | `lang` | – (rebuilds the native macOS menu) | ✅ |
 
 **Events:** `fs-progress` (`OpProgress` – per-file + overall progress), `fs-done`
@@ -999,11 +1074,12 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
 ### P4 — Large subsystems
 - [x] **Network** (identical UI): **SFTP first**, then SMB, WebDAV, FTP/FTPS;
       SSH terminal
-      *(broken down in ticket series `tickets/020`–`028`: **020 VFS abstraction
+      *(broken down in ticket series `tickets/020`–`028` plus `031`:
+      **020 VFS abstraction
       (foundation) ✅ → 021 connections/credentials (OS keychain) ✅ →
       022 SFTP ✅ → 023 SMB ✅, 024 WebDAV ✅, 025 FTP/FTPS ✅ →
       026 SSH terminal ✅ → 027 optional KeePass backend ✅ →
-      028 SSH host-key verification ✅**.
+      028 SSH host-key verification ✅ → 031 capability contract ✅**.
       "Identical UI" via provider trait + schema registry; secrets via
       `CredentialStore` — OS keychain by default, optionally a portable
       `.kdbx` file (TICKET-027). The store is picked in the connection
@@ -1033,6 +1109,22 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
       touches hortcmd's store only and reports conflicting entries in
       the user's files instead of editing them. A conflict in either
       source outweighs a match in the other.
+      **What a location can do** is no longer guessed by the UI
+      (TICKET-031): `location_capabilities(address)` answers per address,
+      resolved through the same parser and session registry as the
+      file-system commands, and `caps::require` refuses a local-only
+      command that is handed a remote address — with a typed
+      `UNSUPPORTED_LOCATION` error, never by reading `sftp://host/x` as a
+      relative local path. Connected remote providers advertise the VFS
+      core (browse, preview, copy, move, create, permanent delete) and,
+      for SFTP alone, the SSH terminal; everything else stays local-only
+      until its command implementation is VFS-routed and covered by the
+      live provider tests. A disconnected location advertises nothing.
+      The frontend caches the answer per connection identity and feeds
+      one selector to the command table, the context menu, the toolbar,
+      the native menu and the keyboard, so a disabled item, a blocked
+      shortcut and a two-location dialog all explain themselves in the
+      same words. The matrix is in §4 "Location capabilities".
       The **connection manager has its own toolbar button** (`CommandBar`, `Server`
       icon in its own section between navigation and file actions; TICKET-016) and
       opens globally via `useNet.getState().openManager()` — the toolbar is always

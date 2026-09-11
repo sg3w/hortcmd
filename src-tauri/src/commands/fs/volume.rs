@@ -7,6 +7,7 @@
 // ============================================================
 
 use serde::Serialize;
+use crate::vfs::caps::{self, Capability};
 use std::fs;
 use std::path::{Path, PathBuf};
 use ts_rs::TS;
@@ -96,6 +97,9 @@ pub fn free_space_of(path: &Path) -> Option<u64> {
 /// can be slow (network shares, spun-down drives).
 #[tauri::command]
 pub async fn volume_info(path: String) -> Result<Option<VolumeInfo>, String> {
+    // `sysinfo` only knows locally mounted volumes; a remote address has
+    // no disk of its own here (TICKET-031).
+    caps::require(&path, Capability::VolumeInfo)?;
     tauri::async_runtime::spawn_blocking(move || {
         let raw = PathBuf::from(&path);
         // Resolve symlinks: only the real path lies under the right mount.
