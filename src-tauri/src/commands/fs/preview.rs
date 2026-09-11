@@ -3,11 +3,10 @@
 // Additionally: open with the default program (F4).
 // ============================================================
 
+use crate::vfs::{self, Provider};
 use base64::Engine as _;
 use serde::Serialize;
-use std::fs;
-use std::fs::File;
-use std::io::{Cursor, Read};
+use std::io::{self, Cursor, Read};
 use std::path::Path;
 use ts_rs::TS;
 
@@ -75,15 +74,43 @@ fn hex_dump(bytes: &[u8]) -> String {
     out
 }
 
-/// Reads up to `max_bytes` of a file for the preview.
+/// Reads the whole file through the provider (for images).
+fn read_all(provider: &dyn Provider, p: &Path) -> io::Result<Vec<u8>> {
+    let mut r = provider.open_read(p)?;
+    let mut buf = Vec::new();
+    r.read_to_end(&mut buf)?;
+    Ok(buf)
+}
+
+/// Reads up to `cap` bytes through the provider, looping over short
+/// reads (a single `read` may return a partial chunk, especially over
+/// SFTP).
+fn read_upto(provider: &dyn Provider, p: &Path, cap: usize) -> io::Result<Vec<u8>> {
+    let mut r = provider.open_read(p)?;
+    let mut buf = Vec::with_capacity(cap.min(1 << 20));
+    let mut chunk = vec![0u8; 64 * 1024];
+    while buf.len() < cap {
+        let want = (cap - buf.len()).min(chunk.len());
+        let n = r.read(&mut chunk[..want])?;
+        if n == 0 {
+            break;
+        }
+        buf.extend_from_slice(&chunk[..n]);
+    }
+    Ok(buf)
+}
+
+/// Reads up to `max_bytes` of a file for the preview. Works for local
+/// and remote (VFS-resolved) paths alike.
 #[tauri::command]
 pub fn read_preview(path: String, max_bytes: u32) -> Result<Preview, String> {
-    let p = Path::new(&path);
-    let meta = fs::metadata(p).map_err(|e| e.to_string())?;
-    if meta.is_dir() {
+    let (provider, rpath) = vfs::resolve(&path)?;
+    let p = Path::new(&rpath);
+    let st = provider.stat(p).map_err(|e| e.to_string())?;
+    if st.is_dir {
         return Err("Verzeichnis kann nicht angezeigt werden".into());
     }
-    let size = meta.len();
+    let size = st.len;
     let name = p
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -95,7 +122,7 @@ pub fn read_preview(path: String, max_bytes: u32) -> Result<Preview, String> {
 
     // Return images as a data URL.
     if IMAGE_EXTS.contains(&ext.as_str()) {
-        let bytes = fs::read(p).map_err(|e| e.to_string())?;
+        let bytes = read_all(&*provider, p).map_err(|e| e.to_string())?;
         let mime = match ext.as_str() {
             "jpg" | "jpeg" => "image/jpeg",
             "gif" => "image/gif",
@@ -120,11 +147,8 @@ pub fn read_preview(path: String, max_bytes: u32) -> Result<Preview, String> {
 
     // Read a text excerpt.
     let cap = (max_bytes as u64).min(size) as usize;
-    let mut f = File::open(p).map_err(|e| e.to_string())?;
-    let mut buf = vec![0u8; cap];
-    let n = f.read(&mut buf).map_err(|e| e.to_string())?;
-    buf.truncate(n);
-    let truncated = (n as u64) < size;
+    let buf = read_upto(&*provider, p, cap).map_err(|e| e.to_string())?;
+    let truncated = (buf.len() as u64) < size;
 
     // Null bytes in the initial region → treat as binary (hex view).
     let is_binary = buf.iter().take(8000).any(|&b| b == 0);

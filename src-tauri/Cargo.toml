@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "Dateicommander im Total-Commander-Stil"
 authors = ["you"]
 edition = "2021"
-rust-version = "1.77"
+# 1.85 wird vom reinen Rust-SMB-Client (`smb`) verlangt; ältere MSRV zwingt
+# Cargo außerdem zu veralteten, untereinander inkompatiblen Transitiv-Deps.
+rust-version = "1.85"
 
 [lib]
 name = "hortcmd_lib"
@@ -36,6 +38,19 @@ md-5 = "0.10"        # Prüfsummen MD5 (Modulname `md5`)
 hex = "0.4"          # Hex-Kodierung der Prüfsummen
 similar = "2"        # Zeilen-Diff (Myers) für den Dateivergleich
 regex = "1"          # Regex für die Suche (Name + Inhalt)
+keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+russh = "0.53"       # SSH-Client (reines Rust, async) für den SFTP-Provider
+russh-sftp = "2.4.0" # SFTP-Client über einen russh-Kanal
+tokio = { version = "1", features = ["rt-multi-thread", "io-util", "net", "sync", "time", "macros", "fs"] }
+# FTP/FTPS (synchron, TLS über system-native-tls). `deprecated` liefert
+# `connect_secure_implicit` — implizites FTPS (Port 990) verlangt Ticket 025.
+suppaftp = { version = "6.2.0", features = ["native-tls", "deprecated"] }
+reqwest_dav = "0.3.3" # WebDAV (PROPFIND/GET/PUT/MKCOL/MOVE/COPY) über reqwest, Basic + Digest
+# Reiner Rust-SMB2/3-Client; `multi_threaded` = synchrone API (keine C-Bibliothek,
+# damit auch unter Windows nutzbar). Ohne kerberos/quic, um die Deps klein zu halten.
+smb = { version = "0.11.1", default-features = false, features = ["multi_threaded", "sign", "encrypt"] }
+tokio-util = { version = "0.7.19", features = ["io"] }
+reqwest = { version = "0.13", features = ["stream"] }
 
 # Unix-spezifische Rechte-Funktionen (Besitzer, Extended Attributes, ACL).
 # Auf Windows nicht verfügbar → dort liefert das Backend leere/None-Werte.

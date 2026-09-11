@@ -7,7 +7,7 @@
 // before so local paths keep working unchanged.
 // ============================================================
 
-use super::{Provider, Scheme, Stat};
+use super::{Provider, Stat};
 use crate::commands::fs::attrs;
 use crate::commands::fs::dir::{DirEntry, DirListing};
 use std::fs;
@@ -19,8 +19,8 @@ use std::time::UNIX_EPOCH;
 pub struct LocalProvider;
 
 impl Provider for LocalProvider {
-    fn scheme(&self) -> Scheme {
-        Scheme::Local
+    fn store_id(&self) -> String {
+        "local".to_string()
     }
 
     /// Reads the contents of a directory. Mirrors the former

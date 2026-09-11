@@ -3,6 +3,7 @@
 // ============================================================
 
 mod commands;
+mod net;
 mod vfs;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -46,6 +47,16 @@ pub fn run() {
             commands::fs::props::file_checksums,
             commands::fs::tags::get_tags,
             commands::fs::tags::set_tags,
+            net::session::net_list_profiles,
+            net::session::net_save_profile,
+            net::session::net_delete_profile,
+            net::session::net_connect,
+            net::session::net_disconnect,
+            net::session::net_list_connections,
+            net::terminal::ssh_open_shell,
+            net::terminal::ssh_send,
+            net::terminal::ssh_resize,
+            net::terminal::ssh_close,
         ])
         .run(tauri::generate_context!())
         .expect("Fehler beim Start der Tauri-Anwendung");

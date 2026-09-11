@@ -7,6 +7,7 @@
 import type {
   Checksums,
   CollisionReq,
+  ConnectionStatus,
   DiffEntry,
   DirEntry,
   DirListing,
@@ -21,8 +22,11 @@ import type {
   OpProgress,
   OpResult,
   Preview,
+  Profile,
   SearchHit,
   Tag,
+  TermClosed,
+  TermData,
   VolumeInfo,
 } from "./bindings";
 
@@ -62,6 +66,74 @@ export async function listDrives(): Promise<Drive[]> {
 export async function homeDir(): Promise<string> {
   if (!hasTauri) return "/Users/demo";
   return invoke<string>("home_dir");
+}
+
+// ---------- Remote connections (SFTP, ticket 021/022) ----------
+
+export async function netListProfiles(): Promise<Profile[]> {
+  if (!hasTauri) return [];
+  return invoke<Profile[]>("net_list_profiles");
+}
+
+export async function netSaveProfile(
+  profile: Profile,
+  secret: string | null,
+): Promise<void> {
+  if (!hasTauri) return;
+  return invoke<void>("net_save_profile", { profile, secret });
+}
+
+export async function netDeleteProfile(id: string): Promise<void> {
+  if (!hasTauri) return;
+  return invoke<void>("net_delete_profile", { id });
+}
+
+export async function netConnect(id: string): Promise<ConnectionStatus> {
+  return invoke<ConnectionStatus>("net_connect", { id });
+}
+
+export async function netDisconnect(id: string): Promise<void> {
+  if (!hasTauri) return;
+  return invoke<void>("net_disconnect", { id });
+}
+
+export async function netListConnections(): Promise<ConnectionStatus[]> {
+  if (!hasTauri) return [];
+  return invoke<ConnectionStatus[]>("net_list_connections");
+}
+
+// ---------- SSH terminal (ticket 026) ----------
+
+/** Opens an interactive shell on the SSH connection behind `address`,
+ *  starting in that address' remote directory. Returns the session id. */
+export async function sshOpenShell(
+  address: string,
+  cols: number,
+  rows: number,
+): Promise<string> {
+  return invoke<string>("ssh_open_shell", { address, cols, rows });
+}
+
+/** Sends keyboard input to a shell session. */
+export async function sshSend(id: string, data: string): Promise<void> {
+  if (!hasTauri) return;
+  return invoke<void>("ssh_send", { id, data });
+}
+
+/** Reports the terminal size to the remote side. */
+export async function sshResize(
+  id: string,
+  cols: number,
+  rows: number,
+): Promise<void> {
+  if (!hasTauri) return;
+  return invoke<void>("ssh_resize", { id, cols, rows });
+}
+
+/** Closes a shell session (unknown ids are ignored by the backend). */
+export async function sshClose(id: string): Promise<void> {
+  if (!hasTauri) return;
+  return invoke<void>("ssh_close", { id });
 }
 
 /**
@@ -280,6 +352,8 @@ const doneSubs = new Set<(d: OpDone) => void>();
 const collisionSubs = new Set<(c: CollisionReq) => void>();
 const changedSubs = new Set<(dir: string) => void>();
 const gitReadySubs = new Set<(path: string, status: GitStatus) => void>();
+const termDataSubs = new Set<(d: TermData) => void>();
+const termClosedSubs = new Set<(c: TermClosed) => void>();
 let tauriWired = false;
 
 async function ensureTauriEvents(): Promise<void> {
@@ -299,6 +373,26 @@ async function ensureTauriEvents(): Promise<void> {
   listen<GitStatusEvent>("git-support-ready", (e) =>
     gitReadySubs.forEach((f) => f(e.payload.path, e.payload.status)),
   );
+  listen<TermData>("ssh-term-data", (e) =>
+    termDataSubs.forEach((f) => f(e.payload)),
+  );
+  listen<TermClosed>("ssh-term-closed", (e) =>
+    termClosedSubs.forEach((f) => f(e.payload)),
+  );
+}
+
+/** Subscribes to shell output (base64 chunks) of all SSH terminals. */
+export function onSshTermData(cb: (d: TermData) => void): () => void {
+  termDataSubs.add(cb);
+  void ensureTauriEvents();
+  return () => termDataSubs.delete(cb);
+}
+
+/** Subscribes to the end of an SSH terminal session. */
+export function onSshTermClosed(cb: (c: TermClosed) => void): () => void {
+  termClosedSubs.add(cb);
+  void ensureTauriEvents();
+  return () => termClosedSubs.delete(cb);
 }
 
 export function onFsProgress(cb: (p: OpProgress) => void): () => void {

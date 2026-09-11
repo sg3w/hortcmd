@@ -44,6 +44,8 @@ import { FileCompareDialog } from "@/components/ui/FileCompareDialog";
 import { PreviewDialog } from "@/components/ui/PreviewDialog";
 import { PropertiesDialog } from "@/components/ui/PropertiesDialog";
 import { SearchDialog } from "@/components/ui/SearchDialog";
+import { ConnectionsDialog } from "@/features/net/ConnectionsDialog";
+import { SshTerminalWindow } from "@/features/net/SshTerminal";
 import { TransferTray, TransferWindow } from "@/components/ui/TransferView";
 
 const MENU: { key: TransKey; action?: "settings" }[] = [
@@ -334,6 +336,8 @@ export default function App() {
       <PreviewDialog />
       <PropertiesDialog />
       <SearchDialog />
+      <ConnectionsDialog />
+      <SshTerminalWindow />
       <TransferWindow />
     </div>
   );

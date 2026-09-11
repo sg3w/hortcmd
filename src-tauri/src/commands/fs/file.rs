@@ -255,7 +255,8 @@ impl Prog {
 /// (bytes/s, 0 = unlimited). With `verify`, the SHA-256 checksum of
 /// source and target is compared after copying.
 fn copy_file_prog(
-    provider: &dyn Provider,
+    srcp: &dyn Provider,
+    dstp: &dyn Provider,
     src: &Path,
     dst: &Path,
     prog: &mut Prog,
@@ -265,10 +266,10 @@ fn copy_file_prog(
 ) -> std::io::Result<()> {
     use sha2::{Digest, Sha256};
 
-    let file_total = provider.stat(src)?.len;
+    let file_total = srcp.stat(src)?.len;
     let name = src.to_string_lossy().into_owned();
-    let mut reader = provider.open_read(src)?;
-    let mut writer = provider.create_write(dst)?;
+    let mut reader = srcp.open_read(src)?;
+    let mut writer = dstp.create_write(dst)?;
     let mut buf = vec![0u8; buf_size];
     let mut file_done = 0u64;
     let mut hasher = verify.then(Sha256::new);
@@ -279,7 +280,7 @@ fn copy_file_prog(
 
     let abort = |writer: Box<dyn Write + Send>, dst: &Path| {
         drop(writer);
-        let _ = provider.remove_file(dst); // unvollständige Zieldatei verwerfen
+        let _ = dstp.remove_file(dst); // unvollständige Zieldatei verwerfen
         std::io::Error::new(ErrorKind::Interrupted, "abgebrochen")
     };
 
@@ -324,7 +325,7 @@ fn copy_file_prog(
     // Verification: read the target again and compare checksums.
     if let Some(h) = hasher {
         let src_hash = h.finalize();
-        let dst_hash = hash_file_sha256(provider, dst)?;
+        let dst_hash = hash_file_sha256(dstp, dst)?;
         if src_hash.as_slice() != dst_hash.as_slice() {
             return Err(std::io::Error::new(
                 ErrorKind::InvalidData,
@@ -354,9 +355,11 @@ fn hash_file_sha256(provider: &dyn Provider, path: &Path) -> std::io::Result<Vec
     Ok(h.finalize().to_vec())
 }
 
-/// Copies recursively (file or directory tree).
+/// Copies recursively (file or directory tree) from `srcp` to `dstp`.
+#[allow(clippy::too_many_arguments)]
 fn copy_tree(
-    provider: &dyn Provider,
+    srcp: &dyn Provider,
+    dstp: &dyn Provider,
     src: &Path,
     dst: &Path,
     prog: &mut Prog,
@@ -364,17 +367,17 @@ fn copy_tree(
     verify: bool,
     buf_size: usize,
 ) -> std::io::Result<()> {
-    if provider.is_dir(src) {
-        provider.create_dir_all(dst)?;
-        for child in provider.read_dir(src)? {
+    if srcp.is_dir(src) {
+        dstp.create_dir_all(dst)?;
+        for child in srcp.read_dir(src)? {
             let name = child.file_name().unwrap_or_default();
-            copy_tree(provider, &child, &dst.join(name), prog, limit, verify, buf_size)?;
+            copy_tree(srcp, dstp, &child, &dst.join(name), prog, limit, verify, buf_size)?;
         }
     } else {
         if let Some(parent) = dst.parent() {
-            provider.create_dir_all(parent)?;
+            dstp.create_dir_all(parent)?;
         }
-        copy_file_prog(provider, src, dst, prog, limit, verify, buf_size)?;
+        copy_file_prog(srcp, dstp, src, dst, prog, limit, verify, buf_size)?;
     }
     Ok(())
 }
@@ -398,7 +401,8 @@ fn resolve_buf(buf_kb: u64) -> usize {
 
 /// Thread-safe progress for the parallel copy path.
 struct SharedProg {
-    provider: &'static dyn Provider,
+    srcp: Arc<dyn Provider>,
+    dstp: Arc<dyn Provider>,
     app: AppHandle,
     id: String,
     op: String,
@@ -493,23 +497,24 @@ struct CopyTask {
 /// Flattens a source tree into individual file tasks, creating the
 /// target folders along the way. `idx` refers to the top-level source.
 fn flatten_tree(
-    provider: &dyn Provider,
+    srcp: &dyn Provider,
+    dstp: &dyn Provider,
     src: &Path,
     dst: &Path,
     idx: usize,
     tasks: &mut Vec<CopyTask>,
 ) {
-    if provider.is_dir(src) {
-        let _ = provider.create_dir_all(dst);
-        if let Ok(children) = provider.read_dir(src) {
+    if srcp.is_dir(src) {
+        let _ = dstp.create_dir_all(dst);
+        if let Ok(children) = srcp.read_dir(src) {
             for child in children {
                 let name = child.file_name().unwrap_or_default();
-                flatten_tree(provider, &child, &dst.join(name), idx, tasks);
+                flatten_tree(srcp, dstp, &child, &dst.join(name), idx, tasks);
             }
         }
     } else {
         if let Some(parent) = dst.parent() {
-            let _ = provider.create_dir_all(parent);
+            let _ = dstp.create_dir_all(parent);
         }
         tasks.push(CopyTask {
             idx,
@@ -529,18 +534,19 @@ fn parallel_copy_file(
 ) -> std::io::Result<()> {
     use sha2::{Digest, Sha256};
 
-    let provider = sp.provider;
-    let file_total = provider.stat(&task.src)?.len;
+    let srcp = &*sp.srcp;
+    let dstp = &*sp.dstp;
+    let file_total = srcp.stat(&task.src)?.len;
     let name = task.src.to_string_lossy().into_owned();
-    let mut reader = provider.open_read(&task.src)?;
-    let mut writer = provider.create_write(&task.dst)?;
+    let mut reader = srcp.open_read(&task.src)?;
+    let mut writer = dstp.create_write(&task.dst)?;
     let mut buf = vec![0u8; buf_size];
     let mut hasher = verify.then(Sha256::new);
     let mut file_done = 0u64;
 
     let abort = |writer: Box<dyn Write + Send>, dst: &Path| {
         drop(writer);
-        let _ = provider.remove_file(dst);
+        let _ = dstp.remove_file(dst);
         std::io::Error::new(ErrorKind::Interrupted, "abgebrochen")
     };
 
@@ -569,7 +575,7 @@ fn parallel_copy_file(
 
     if let Some(h) = hasher {
         let src_hash = h.finalize();
-        let dst_hash = hash_file_sha256(provider, &task.dst)?;
+        let dst_hash = hash_file_sha256(dstp, &task.dst)?;
         if src_hash.as_slice() != dst_hash.as_slice() {
             return Err(std::io::Error::new(
                 ErrorKind::InvalidData,
@@ -587,7 +593,8 @@ fn parallel_copy_file(
 /// worker threads. Returns: (successful sources, error messages).
 #[allow(clippy::too_many_arguments)]
 fn run_parallel_copy(
-    provider: &'static dyn Provider,
+    srcp: Arc<dyn Provider>,
+    dstp: Arc<dyn Provider>,
     app: AppHandle,
     id: String,
     op: String,
@@ -604,11 +611,12 @@ fn run_parallel_copy(
     // Flatten all source trees into file tasks (target folders are created).
     let mut tasks = Vec::new();
     for (i, (src, target)) in jobs.iter().enumerate() {
-        flatten_tree(provider, src, target, i, &mut tasks);
+        flatten_tree(&*srcp, &*dstp, src, target, i, &mut tasks);
     }
 
     let sp = Arc::new(SharedProg {
-        provider,
+        srcp,
+        dstp,
         app,
         id,
         op,
@@ -690,45 +698,55 @@ fn run_transfer(
     threads: u32,
 ) {
     let buf_size = resolve_buf(buf_kb);
-    // Resolve the destination through the VFS registry; the returned
-    // provider serves every file operation of this transfer.
-    let (provider, dest_path) = match vfs::resolve(&dest_dir) {
+    let fail = |id: String, op: String, err: String| {
+        let _ = app.emit(
+            "fs-done",
+            OpDone {
+                id,
+                op,
+                ok: 0,
+                errors: vec![err],
+                cancelled: false,
+            },
+        );
+    };
+
+    // Resolve the destination and the source location through the VFS
+    // registry. The engine holds a source provider and a destination
+    // provider, so a transfer may cross providers (local↔remote).
+    let (dstp, dest_path) = match vfs::resolve(&dest_dir) {
         Ok(v) => v,
-        Err(e) => {
-            let _ = app.emit(
-                "fs-done",
-                OpDone {
-                    id,
-                    op,
-                    ok: 0,
-                    errors: vec![e],
-                    cancelled: false,
-                },
-            );
-            return;
-        }
+        Err(e) => return fail(id, op, e),
     };
     let dest = PathBuf::from(&dest_path);
-    // Parallel path only for pure copying and thread count > 1.
-    // Move stays sequential (rename is immediate anyway; copy fallback is rare).
-    let parallel = !remove_source && threads > 1;
+    // All sources of one operation come from the same location; resolve
+    // the source provider from the first and require the rest to match.
+    let srcp = match sources.first() {
+        Some(first) => match vfs::resolve(first) {
+            Ok((p, _)) => p,
+            Err(e) => return fail(id, op, e),
+        },
+        None => return fail(id, op, "Keine Quellen angegeben".into()),
+    };
+    // The in-place `rename` fast-path only applies within one store.
+    let same_store = srcp.store_id() == dstp.store_id();
+
+    // Parallel path only for pure copying within one store and thread
+    // count > 1. Cross-store copies stay sequential (streamed).
+    let parallel = !remove_source && threads > 1 && same_store;
 
     // Resolve + measure each source up front (totals + bookkeeping for a
     // rename move). `measured` holds the resolved provider-local path.
-    // Sources on another provider (cross-scheme) are not supported yet.
     let mut errors: Vec<String> = Vec::new();
     let measured: Vec<(String, u32, u64)> = sources
         .iter()
         .filter_map(|s| match vfs::resolve(s) {
-            Ok((sp, spath)) if sp.scheme() == provider.scheme() => {
-                let (f, b) = measure(provider, Path::new(&spath));
+            Ok((sp, spath)) if sp.store_id() == srcp.store_id() => {
+                let (f, b) = measure(&*srcp, Path::new(&spath));
                 Some((spath, f, b))
             }
             Ok(_) => {
-                errors.push(format!(
-                    "{}: providerübergreifende Übertragung wird noch nicht unterstützt",
-                    s
-                ));
+                errors.push(format!("{}: Quelle aus einem anderen Speicher", s));
                 None
             }
             Err(e) => {
@@ -775,11 +793,11 @@ fn run_transfer(
         }
 
         // Name conflict: ask the frontend (or apply the remembered choice).
-        if provider.exists(&target) {
+        if dstp.exists(&target) {
             let res = match default_res {
                 Some(r) => r,
                 None => {
-                    let (r, apply_all) = ask_collision(&app, provider, &id, &target, &cancel);
+                    let (r, apply_all) = ask_collision(&app, &*dstp, &id, &target, &cancel);
                     if apply_all {
                         default_res = Some(r);
                     }
@@ -788,9 +806,9 @@ fn run_transfer(
             };
             match res {
                 Resolution::Skip => continue,
-                Resolution::Rename => target = free_name(provider, &target),
+                Resolution::Rename => target = free_name(&*dstp, &target),
                 Resolution::Overwrite => {
-                    if let Err(e) = provider.remove(&target) {
+                    if let Err(e) = dstp.remove(&target) {
                         errors.push(format!("{}: {}", s, e));
                         continue;
                     }
@@ -805,19 +823,20 @@ fn run_transfer(
         }
 
         let result = if remove_source {
-            // Move: first rename (immediate); otherwise copy + delete the source.
-            match provider.rename(src, &target) {
-                Ok(_) => {
-                    prog.files_done += files;
-                    prog.bytes_done += bytes;
-                    prog.emit(&src.to_string_lossy(), *bytes, *bytes, true);
-                    Ok(())
-                }
-                Err(_) => copy_tree(provider, src, &target, &mut prog, limit, verify, buf_size)
-                    .and_then(|_| provider.remove(src)),
+            // Move: within one store try an immediate rename; across
+            // stores (or if rename fails) copy then delete the source.
+            let renamed = same_store && dstp.rename(src, &target).is_ok();
+            if renamed {
+                prog.files_done += files;
+                prog.bytes_done += bytes;
+                prog.emit(&src.to_string_lossy(), *bytes, *bytes, true);
+                Ok(())
+            } else {
+                copy_tree(&*srcp, &*dstp, src, &target, &mut prog, limit, verify, buf_size)
+                    .and_then(|_| srcp.remove(src))
             }
         } else {
-            copy_tree(provider, src, &target, &mut prog, limit, verify, buf_size)
+            copy_tree(&*srcp, &*dstp, src, &target, &mut prog, limit, verify, buf_size)
         };
 
         match result {
@@ -830,7 +849,8 @@ fn run_transfer(
     // Parallel copy phase (all collisions are already resolved).
     if parallel && !copy_jobs.is_empty() && !prog.cancelled() {
         let (pok, perrors) = run_parallel_copy(
-            provider,
+            srcp.clone(),
+            dstp.clone(),
             app.clone(),
             id.clone(),
             op.clone(),
@@ -995,7 +1015,7 @@ pub fn rename_batch(dir: String, renames: Vec<(String, String)>) -> OpResult {
     // Phase 1: all sources to temporary names.
     let mut staged: Vec<(PathBuf, &str, &str)> = Vec::new(); // (temp, to, from)
     for (from, to) in &valid {
-        let tmp = unique_temp(provider, base);
+        let tmp = unique_temp(&*provider, base);
         match provider.rename(&base.join(from), &tmp) {
             Ok(_) => staged.push((tmp, to, from)),
             Err(e) => errors.push(format!("{}: {}", from, e)),
@@ -1264,7 +1284,7 @@ mod tests {
         let dst = root.join("dst");
 
         let mut tasks: Vec<CopyTask> = Vec::new();
-        flatten_tree(&LocalProvider, &src, &dst, 0, &mut tasks);
+        flatten_tree(&LocalProvider, &LocalProvider, &src, &dst, 0, &mut tasks);
 
         assert_eq!(tasks.len(), 2, "zwei Dateien erwartet");
         assert!(dst.join("sub").is_dir(), "Zielordner angelegt");

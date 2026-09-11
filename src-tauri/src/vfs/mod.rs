@@ -3,26 +3,35 @@
 //
 // A `Provider` trait hides all file-system operations behind a
 // uniform interface. A scheme registry maps an address scheme
-// (`local`, later `sftp`/`smb`/`webdav`/`ftp`) to its provider, so
+// (`local`, `sftp`, later `smb`/`webdav`/`ftp`) to its provider, so
 // the commands in `commands/fs/*` operate schema-agnostically —
 // the basis for the "identical UI" across local and remote
 // locations (Concept.md §10 P4, ticket series 020–026).
 //
-// This foundation only wires up the `local` provider; the reserved
-// remote schemes are recognized by the parser but resolve to a
-// clear "not yet supported" error.
+// Local providers are stateless singletons; remote providers are
+// bound to a live connection (see `net::session`) and are therefore
+// resolved per address into an `Arc<dyn Provider>`.
 // ============================================================
 
+pub mod ftp;
 pub mod local;
+pub mod sftp;
+pub mod smb;
+pub mod webdav;
+
+// Live protocol tests against real servers (ignored by default).
+#[cfg(test)]
+mod live_tests;
 
 use crate::commands::fs::dir::DirListing;
 use local::LocalProvider;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, OnceLock};
 
-/// Address scheme. `Local` is the only implemented provider today;
-/// the remaining variants are reserved for the upcoming network
-/// providers and are parsed but not yet resolvable.
+/// Address scheme. `Local` and `Sftp` are implemented; the remaining
+/// variants are reserved for upcoming providers and are parsed but
+/// not yet resolvable.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Scheme {
     Local,
@@ -56,86 +65,134 @@ impl Scheme {
             _ => None,
         }
     }
+
+    /// Default port for a remote scheme (used when the address omits it).
+    pub fn default_port(&self) -> Option<u16> {
+        match self {
+            Scheme::Sftp => Some(22),
+            Scheme::Ftp => Some(21),
+            Scheme::Smb => Some(445),
+            Scheme::Webdav => Some(443),
+            Scheme::Local => None,
+        }
+    }
 }
 
-/// A parsed address: a scheme plus the provider-local path. Plain
-/// local paths (no `scheme://`) map to `Scheme::Local` with the path
-/// unchanged, so existing local paths keep working verbatim.
+/// A parsed address: a scheme, an optional remote authority, and the
+/// provider-local path. Plain local paths (no `scheme://`) map to
+/// `Scheme::Local` with the path unchanged, so existing local paths
+/// keep working verbatim.
 #[derive(Clone, Debug)]
 pub struct Address {
     pub scheme: Scheme,
+    /// Remote user (from `user@host`), if any.
+    pub user: Option<String>,
+    /// Remote host, if any.
+    pub host: Option<String>,
+    /// Remote port (explicit `:port`), if any.
+    pub port: Option<u16>,
     /// Path as seen by the provider. For `local` this is the raw
-    /// file-system path; for remote schemes it is the path portion
-    /// after `scheme://[user@host]`.
+    /// file-system path; for a remote scheme it is the path portion
+    /// after `scheme://[user@host[:port]]`.
     pub path: String,
 }
 
-/// Parses a raw address string into a scheme + provider-local path.
+impl Address {
+    /// Stable identity of the connection an address points at
+    /// (`user@host:port`); `None` for local addresses. Two addresses
+    /// with the same key share a session/store.
+    pub fn connection_key(&self) -> Option<String> {
+        let host = self.host.as_ref()?;
+        let port = self.port.or_else(|| self.scheme.default_port());
+        let user = self.user.clone().unwrap_or_default();
+        Some(match port {
+            Some(p) => format!("{}@{}:{}", user, host, p),
+            None => format!("{}@{}", user, host),
+        })
+    }
+}
+
+/// Parses a raw address string into a scheme, optional authority, and
+/// provider-local path.
 ///
 /// - No `scheme://` prefix → a local path, used verbatim.
 /// - `file://…` / `local://…` → local path (the leading slashes of an
 ///   absolute `file:///…` URL stay part of the path).
-/// - A reserved remote scheme (`sftp`, `smb`, `webdav`, `ftp`) is
-///   accepted here; resolving it fails later with a clear message.
+/// - `sftp://[user@]host[:port]/path` → remote scheme + authority.
 /// - Any other scheme → an error.
 pub fn parse_address(raw: &str) -> Result<Address, String> {
     let Some(idx) = raw.find("://") else {
         // No scheme: a plain local path.
-        return Ok(Address {
-            scheme: Scheme::Local,
-            path: raw.to_string(),
-        });
+        return Ok(local_address(raw));
     };
 
     let scheme_str = &raw[..idx];
     let rest = &raw[idx + 3..];
     match Scheme::from_scheme_str(scheme_str) {
-        Some(Scheme::Local) => Ok(Address {
-            scheme: Scheme::Local,
-            // `file:///Users/x` → `/Users/x`; `file://relative` → `relative`.
-            path: rest.to_string(),
-        }),
-        Some(scheme) => Ok(Address {
-            scheme,
-            // Drop an optional `user@host` authority; keep the path.
-            path: remote_path(rest),
-        }),
+        Some(Scheme::Local) => Ok(local_address(rest)),
+        Some(scheme) => Ok(parse_remote(scheme, rest)),
         None => Err(format!("Unbekanntes Adressschema: {}://", scheme_str)),
     }
 }
 
-/// Extracts the path portion of a remote address body `user@host/path`.
-/// Returns `/` when only an authority is given.
-fn remote_path(rest: &str) -> String {
-    match rest.find('/') {
-        Some(pos) => rest[pos..].to_string(),
-        None => "/".to_string(),
+fn local_address(path: &str) -> Address {
+    Address {
+        scheme: Scheme::Local,
+        user: None,
+        host: None,
+        port: None,
+        path: path.to_string(),
     }
 }
 
-/// Returns the provider registered for a scheme, or `None` for a
-/// reserved-but-unimplemented remote scheme.
-pub fn provider_for(scheme: Scheme) -> Option<&'static dyn Provider> {
-    static LOCAL: LocalProvider = LocalProvider;
-    match scheme {
-        Scheme::Local => Some(&LOCAL),
-        // Reserved for tickets 022–025; no backend yet.
-        Scheme::Sftp | Scheme::Smb | Scheme::Webdav | Scheme::Ftp => None,
+/// Splits a remote address body `user@host:port/path` into parts.
+/// A missing path defaults to `/`.
+fn parse_remote(scheme: Scheme, rest: &str) -> Address {
+    let (authority, path) = match rest.find('/') {
+        Some(pos) => (&rest[..pos], rest[pos..].to_string()),
+        None => (rest, "/".to_string()),
+    };
+
+    let (user, host_port) = match authority.rsplit_once('@') {
+        Some((u, hp)) => (Some(u.to_string()), hp),
+        None => (None, authority),
+    };
+    let (host, port) = match host_port.rsplit_once(':') {
+        Some((h, p)) => (h.to_string(), p.parse::<u16>().ok()),
+        None => (host_port.to_string(), None),
+    };
+
+    Address {
+        scheme,
+        user,
+        host: (!host.is_empty()).then_some(host),
+        port,
+        path,
     }
+}
+
+/// The shared, stateless local provider.
+fn local_provider() -> Arc<dyn Provider> {
+    static LOCAL: OnceLock<Arc<LocalProvider>> = OnceLock::new();
+    LOCAL.get_or_init(|| Arc::new(LocalProvider)).clone()
 }
 
 /// Resolves a raw address to its provider and provider-local path.
-/// Unknown schemes and reserved-but-unimplemented schemes return a
-/// clear error instead of silently falling back to local.
-pub fn resolve(raw: &str) -> Result<(&'static dyn Provider, String), String> {
+/// Local addresses use the shared local provider; `sftp` addresses are
+/// bound to an active connection (see `net::session`). Unknown and
+/// reserved-but-unimplemented schemes return a clear error.
+pub fn resolve(raw: &str) -> Result<(Arc<dyn Provider>, String), String> {
     let addr = parse_address(raw)?;
-    match provider_for(addr.scheme) {
-        Some(provider) => Ok((provider, addr.path)),
-        None => Err(format!(
-            "Schema '{}://' wird noch nicht unterstützt",
-            addr.scheme.as_str()
-        )),
+    if addr.scheme == Scheme::Local {
+        return Ok((local_provider(), addr.path));
     }
+    // Every remote scheme is served by a live connection from the
+    // session registry (opened via the connection manager, ticket 021).
+    let key = addr
+        .connection_key()
+        .ok_or_else(|| format!("{}-Adresse ohne Host", addr.scheme.as_str().to_uppercase()))?;
+    let provider = crate::net::session::remote_provider(addr.scheme.as_str(), &key)?;
+    Ok((provider, addr.path))
 }
 
 /// Lightweight metadata subset used by the transfer engine.
@@ -144,21 +201,25 @@ pub struct Stat {
     pub len: u64,
 }
 
-/// Uniform file-system interface. Every provider (local today,
-/// remote later) implements these operations; the commands call
-/// only through [`resolve`], never `std::fs` directly.
+/// Uniform file-system interface. Every provider (local, sftp, …)
+/// implements these operations; the commands call only through
+/// [`resolve`], never `std::fs` directly.
 ///
-/// The nine core operations from the ticket map as follows:
-/// `list`, `stat`, `read` = [`open_read`], `write` = [`write`] /
+/// The nine core operations from ticket 020 map as follows: `list`,
+/// `stat`, `read` = [`open_read`], `write` = [`write`] /
 /// [`create_write`], `mkdir` = [`create_dir_all`], `rename`,
-/// `delete` = [`remove`]. **copy** and **move** are not single calls
-/// but are built from the streaming primitives `open_read` /
-/// `create_write` plus `rename` / `remove` (see the transfer engine
-/// in `commands/fs/file.rs`), so progress, pause, cancel and
-/// checksums work uniformly across providers.
+/// `delete` = [`remove`]. **copy** and **move** are built from the
+/// streaming primitives `open_read` / `create_write` plus `rename` /
+/// `remove` (see the transfer engine in `commands/fs/file.rs`), so
+/// progress, pause, cancel and checksums work uniformly and — since
+/// the engine holds a source *and* a destination provider — across
+/// providers (local↔remote, remote↔remote).
 pub trait Provider: Send + Sync {
-    /// Which scheme this provider serves.
-    fn scheme(&self) -> Scheme;
+    /// Identity of the underlying store: `"local"` for the local file
+    /// system, `"sftp:user@host:port"` for a remote connection. The
+    /// transfer engine only takes the in-place `rename` fast-path when
+    /// source and destination share a `store_id`.
+    fn store_id(&self) -> String;
 
     /// Full directory listing (drives the `list_dir` command).
     fn list(&self, path: &str) -> Result<DirListing, String>;
@@ -196,6 +257,13 @@ pub trait Provider: Send + Sync {
     /// Removes a directory and its contents recursively.
     fn remove_dir_all(&self, path: &Path) -> io::Result<()>;
 
+    /// The SSH connection carrying this provider, if it has one (SFTP).
+    /// The SSH terminal (ticket 026) opens its shell channel on it, so
+    /// no second login is needed; every other provider returns `None`.
+    fn ssh(&self) -> Option<Arc<crate::net::ssh::SshSession>> {
+        None
+    }
+
     /// Removes an entry regardless of kind (file or directory).
     fn remove(&self, path: &Path) -> io::Result<()> {
         if self.is_dir(path) {
@@ -215,6 +283,7 @@ mod tests {
         let a = parse_address("/Users/x/file.txt").unwrap();
         assert_eq!(a.scheme, Scheme::Local);
         assert_eq!(a.path, "/Users/x/file.txt");
+        assert_eq!(a.connection_key(), None);
     }
 
     #[test]
@@ -232,11 +301,32 @@ mod tests {
     }
 
     #[test]
-    fn sftp_scheme_parses_but_does_not_resolve() {
-        let a = parse_address("sftp://user@host/srv/data").unwrap();
+    fn sftp_authority_is_parsed() {
+        let a = parse_address("sftp://alice@host.example:2222/srv/data").unwrap();
         assert_eq!(a.scheme, Scheme::Sftp);
+        assert_eq!(a.user.as_deref(), Some("alice"));
+        assert_eq!(a.host.as_deref(), Some("host.example"));
+        assert_eq!(a.port, Some(2222));
         assert_eq!(a.path, "/srv/data");
-        // Reserved scheme: recognized, but no provider yet.
+        assert_eq!(
+            a.connection_key().as_deref(),
+            Some("alice@host.example:2222")
+        );
+    }
+
+    #[test]
+    fn sftp_defaults_user_and_port() {
+        let a = parse_address("sftp://host/only").unwrap();
+        assert_eq!(a.user, None);
+        assert_eq!(a.host.as_deref(), Some("host"));
+        assert_eq!(a.port, None);
+        // Default port 22 fills in for the connection key.
+        assert_eq!(a.connection_key().as_deref(), Some("@host:22"));
+    }
+
+    #[test]
+    fn sftp_without_active_connection_errors() {
+        // Parsed fine, but no session is registered → clear error.
         assert!(resolve("sftp://user@host/srv/data").is_err());
     }
 
@@ -247,9 +337,37 @@ mod tests {
     }
 
     #[test]
+    fn all_remote_schemes_parse_with_defaults() {
+        // Each remote scheme keeps its authority and fills in its
+        // default port for the connection key.
+        for (raw, scheme, key) in [
+            ("ftp://bob@files.example/pub", Scheme::Ftp, "bob@files.example:21"),
+            ("smb://u@nas.local/share/dir", Scheme::Smb, "u@nas.local:445"),
+            ("webdav://u@dav.example/remote", Scheme::Webdav, "u@dav.example:443"),
+        ] {
+            let a = parse_address(raw).unwrap();
+            assert_eq!(a.scheme, scheme, "scheme of {}", raw);
+            assert_eq!(a.connection_key().as_deref(), Some(key), "key of {}", raw);
+        }
+    }
+
+    #[test]
+    fn remote_schemes_without_connection_error() {
+        // Parsed fine, but nothing is connected → clear error, never a
+        // silent fallback to the local file system.
+        for raw in [
+            "ftp://bob@files.example/pub",
+            "smb://u@nas.local/share",
+            "webdav://u@dav.example/remote",
+        ] {
+            assert!(resolve(raw).is_err(), "{} should not resolve", raw);
+        }
+    }
+
+    #[test]
     fn local_address_resolves_to_local_provider() {
         let (p, path) = resolve("/tmp/x").unwrap();
-        assert_eq!(p.scheme(), Scheme::Local);
+        assert_eq!(p.store_id(), "local");
         assert_eq!(path, "/tmp/x");
     }
 }

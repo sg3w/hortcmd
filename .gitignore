@@ -1,7 +1,7 @@
 # Node / Frontend
 node_modules/
 dist/
-tickets/
+#tickets/
 *.log
 
 # Rust / Tauri

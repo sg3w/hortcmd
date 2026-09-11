@@ -35,6 +35,9 @@ interface Props {
   /** No drag handle — fixed size (e.g. when the content cannot be
    *  scaled sensibly). Default: resizable. */
   fixedSize?: boolean;
+  /** Keeps `Esc` inside the dialog instead of closing it — needed where
+   *  the content consumes the key itself (SSH terminal, ticket 026). */
+  keepEscape?: boolean;
   children: ReactNode;
 }
 
@@ -75,6 +78,7 @@ export function AppDialog({
   defaultSize,
   minSize,
   fixedSize,
+  keepEscape,
   children,
 }: Props) {
   const min = minSize ?? defaultSize;
@@ -141,6 +145,7 @@ export function AppDialog({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/50" />
         <Dialog.Content
+          onEscapeKeyDown={keepEscape ? (e) => e.preventDefault() : undefined}
           style={{ width: size.w, height: size.h }}
           className="fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] max-w-[90vw] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-edge bg-panel shadow-2xl"
           aria-describedby={undefined}

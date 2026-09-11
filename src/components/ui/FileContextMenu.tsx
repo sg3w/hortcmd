@@ -41,7 +41,11 @@ import { isMacOS } from "@/lib/platform";
 import { openProps } from "@/store/propsStore";
 import { openPath, openTerminal } from "@/ipc/client";
 import { writeClipboard } from "@/lib/clipboard";
-import { baseName, joinPath } from "@/lib/path";
+import { baseName, joinPath, schemeOf } from "@/lib/path";
+import {
+  supportsSshTerminal,
+  useTerminals,
+} from "@/features/net/terminalStore";
 import { useSettings, useT } from "@/store/settingsStore";
 import type { TransKey } from "@/i18n/dictionaries";
 
@@ -62,6 +66,12 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
   const terminalProgram = useSettings((s) => s.terminalProgram);
   const programs = useSettings((s) => s.programs);
   const defaultEditor = useSettings((s) => s.defaultEditor);
+  // Only local folders and SSH-backed remote folders have a terminal —
+  // FTP/WebDAV/SMB offer no shell.
+  const noTerminal = usePanes((s) => {
+    const scheme = schemeOf(panelOf(s, side).path);
+    return scheme !== null && scheme !== "sftp";
+  });
   // Whether the current cursor entry is an (openable) file.
   const cursorIsFile = usePanes((s) => {
     const p = panelOf(s, side);
@@ -94,7 +104,13 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
     }
   };
 
-  const onTerminal = () => openTerminal(targetDir(), terminalProgram);
+  // Remote folders open an SSH shell in place (ticket 026); local ones
+  // start the configured terminal program.
+  const onTerminal = () => {
+    const dir = targetDir();
+    if (supportsSshTerminal(dir)) useTerminals.getState().openFor(dir);
+    else openTerminal(dir, terminalProgram);
+  };
   const onOpenFolder = () => openPath(targetDir());
 
   // Properties/permissions of the right-clicked entry (otherwise the cursor).
@@ -227,7 +243,7 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
           <ContextMenu.Separator className="my-1 h-px bg-edge" />
           <ContextMenu.Item
             className={itemCls}
-            disabled={inArchive}
+            disabled={inArchive || noTerminal}
             onSelect={onTerminal}
           >
             <Terminal size={14} className="shrink-0 text-dim" aria-hidden />

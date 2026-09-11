@@ -100,6 +100,9 @@ features/panel/              Panel · TabBar · DriveSelect · PathBar · Status
                              · FileTable (Table+Virtual) · columns
 features/commander/          useKeyboard · navigate · actions · fileOps · preview
                              · selection · FunctionBar
+features/net/                remote connections (021): netStore · ConnectionsDialog
+                             (profiles CRUD + connect/disconnect; DriveSelect group);
+                             SSH terminal (026): terminalStore · SshTerminal (xterm.js)
 components/ui/               FileContextMenu · SettingsDialog · OperationDialogs
                              · PreviewDialog · TransferView
 lib/                         format · fileIcon · cn · path · glob
@@ -109,11 +112,30 @@ lib/                         format · fileIcon · cn · path · glob
 
 ```
 main.rs · lib.rs             binary entry + command registration
-vfs/                         VFS abstraction (identical UI, foundation) — ticket 020
+vfs/                         VFS abstraction (identical UI) — tickets 020/022–025
 ├── mod.rs                   Provider trait · Scheme · Address parser · scheme registry
-│                            (resolve: address → provider + local path); local only today,
-│                            sftp/smb/webdav/ftp reserved (parsed, "not yet supported")
-└── local.rs                 LocalProvider (std::fs) — where the local fs logic lives now
+│                            (resolve: address → Arc<Provider> + provider path);
+│                            local + sftp/ftp/webdav/smb, alle über die Session-Registry
+├── local.rs                 LocalProvider (std::fs) — local fs logic lives here
+├── sftp.rs                  SftpProvider über russh/russh-sftp (async → sync via block_on)
+├── ftp.rs                   FtpProvider über suppaftp (synchron); FTP + FTPS
+│                            (explizit/implizit), Transfers mit eigener Verbindung
+├── webdav.rs                WebdavProvider über reqwest_dav (PROPFIND/GET/PUT/
+│                            MKCOL/DELETE/MOVE), Basic + Digest, TLS validiert
+├── smb.rs                   SmbProvider über den reinen Rust-Client `smb` (SMB2/3,
+│                            synchron); erstes Pfadsegment = Share, Wurzel listet Shares
+└── live_tests.rs            Integrationstests gegen echte Server (SFTP/FTP/WebDAV/SMB
+                             + SSH-Shell), `#[ignore]`; Docker-Startbefehle stehen an
+                             jedem Test: `cargo test --lib live_ -- --ignored --nocapture`
+net/                         Remote connection base (identical UI) — tickets 021/026
+├── credentials.rs           CredentialStore trait + KeychainStore (keyring; OS keychain,
+│                            no plaintext fallback)
+├── session.rs               Profile (persisted, no secret) · session registry
+│                            (connect/disconnect/reconnect) · net_* commands
+├── ssh.rs                   SshSession: authentifizierte SSH-Verbindung (russh);
+│                            SFTP-Subsystem und Terminal teilen sie sich
+└── terminal.rs              Interaktive Shell: PTY-Kanal, Ein-/Ausgabe (base64-Events),
+                             Resize, Sitzungsende; ssh_* commands
 commands/fs/
 ├── mod.rs                   declares the submodules
 ├── dir.rs                   list_dir (→ vfs) · list_drives · home_dir (+ DirEntry/DirListing/Drive)
@@ -306,6 +328,11 @@ is organized into the following categories. Legend: **✅ present · ⏳ planned
 - Installed plugins ⏳ · updates ⏳ · preview plugins ⏳ · packer plugins ⏳
   *(requires the plugin system)*
 
+### MCP interface
+- Server on/off ⏳ · port ⏳ · token (keychain) ⏳ · capability tiers
+  (read/write/delete) ⏳ · allowed roots ⏳ · confirmation for write/delete ⏳ ·
+  max read size ⏳ · audit log ⏳ *(TICKET-041)*
+
 ### Keyboard
 - Edit shortcuts ⏳ · profiles (TC mode / Finder mode) ⏳
 
@@ -491,7 +518,10 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
       (TICKET-009).
       Open: diff view, status in the tree/tab
 - [x] **Terminal in the current folder** (context menu "Open in terminal"; default terminal
-      configurable in the settings, empty = system default) + "Open in file manager"
+      configurable in the settings, empty = system default) + "Open in file manager".
+      On an **SFTP folder** the same entry opens an **integrated SSH shell** in that
+      remote directory (PTY, resize, scrollback; TICKET-026) — the shell rides on the
+      connection that already serves SFTP, so there is no second login
 - [x] **Open file in editor** (configurable editor, alternative to F4): program assignable per
       extension (two views "By extension"/"By program") + global default
       editor; trigger selectable (Shift+F4 / context menu only / F4). Programs are chosen via
@@ -630,11 +660,12 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
       copy fallback rare) and the existing single-thread path is unchanged.
 
 ### P4 — Large subsystems
-- [ ] **Network** (identical UI): **SFTP first**, then SMB, WebDAV, FTP/FTPS;
+- [x] **Network** (identical UI): **SFTP first**, then SMB, WebDAV, FTP/FTPS;
       SSH terminal
       *(broken down in ticket series `tickets/020`–`026`: **020 VFS abstraction
-      (foundation) ✅** → 021 connections/credentials (OS keychain) → 022 SFTP → 023 SMB,
-      024 WebDAV, 025 FTP/FTPS → 026 SSH terminal; 027 optional KeePass backend.
+      (foundation) ✅ → 021 connections/credentials (OS keychain) ✅ →
+      022 SFTP ✅ → 023 SMB ✅, 024 WebDAV ✅, 025 FTP/FTPS ✅ →
+      026 SSH terminal ✅**; 027 optional KeePass backend.
       "Identical UI" via provider trait + schema registry; secrets via
       `CredentialStore` in the OS keychain (KeePass optional))*
 - [ ] **Plugin system**: **define the API early**, then Rust/JS plugins,
@@ -644,6 +675,13 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
       104 context handoff → 105 mediated actions/events → 106 management →
       107 demo plugin. Broker as the sole mediation, default-deny permissions; JS
       sandboxable, native plugins trust-based)*
+- [ ] **MCP interface**: hortcmd as an **MCP server** on localhost, so an AI host
+      reaches the VFS incl. the *active* remote connections and the panel context
+      *(ticket `tickets/041`; bearer token in the keychain, default-deny capability
+      tiers, root allowlist, confirmation for write/delete, audit log; stdio bridge
+      binary for hosts that only speak stdio. Independent of the plugin series
+      100–107 — there foreign code runs inside hortcmd, here hortcmd is the server.
+      hortcmd as MCP *client* is deliberately not part of it)*
 - [ ] **Multi-column view** (2–4 panels), multiple windows
 - [ ] **Integrate Spotlight search** (macOS)
 
