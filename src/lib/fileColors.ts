@@ -17,10 +17,8 @@
 // a new rule needs no UI change.
 // ============================================================
 
-import { useEffect, useMemo } from "react";
 import type { TransKey } from "@/i18n/dictionaries";
 import { globToRegExp } from "@/lib/glob";
-import { useSettings } from "@/store/settingsStore";
 
 export type ThemeMode = "dark" | "light";
 
@@ -308,25 +306,4 @@ export function resolveFileColor(
   ctx: FileColorContext,
 ): FileColorDef | undefined {
   return rules.find((r) => r.match?.(ctx));
-}
-
-/** All active rules (custom first), sorted by priority. */
-export function useFileColorRules(): FileColorDef[] {
-  const custom = useSettings((s) => s.customColorRules);
-  return useMemo(
-    () =>
-      [...fileColorDefs(), ...customColorDefs(custom)]
-        .filter((d) => d.kind === "rule")
-        .sort((a, b) => a.priority - b.priority),
-    [custom],
-  );
-}
-
-/** Keeps the published CSS variables in sync with theme and settings. */
-export function useFileColorVars(theme: ThemeMode): void {
-  const overrides = useSettings((s) => s.fileColors);
-  const custom = useSettings((s) => s.customColorRules);
-  useEffect(() => {
-    applyFileColors(theme, overrides, custom);
-  }, [theme, overrides, custom]);
 }

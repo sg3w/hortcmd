@@ -36,11 +36,11 @@ import { RowIcon } from "@/lib/fileIcon";
 import {
   fileColorRef,
   resolveFileColor,
-  useFileColorRules,
   type FileColorDef,
 } from "@/lib/fileColors";
 import { buildColumns, SORTABLE } from "./columns";
 import { cn } from "@/lib/cn";
+import { useFileColorRules } from "@/store/fileColorRules";
 
 /** Font and icon size (px) per scaling step. */
 const FONT_PX = { sm: 11, md: 12, lg: 14 } as const;

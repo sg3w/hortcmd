@@ -172,12 +172,23 @@ net/                         Remote connection base (identical UI) — tickets 0
                              Resize, Sitzungsende; ssh_* commands
 commands/fs/
 ├── mod.rs                   declares the submodules
+├── transfer/                die Transfer-Engine, nach Verantwortung geteilt
+│                            (TICKET-035); Abhängigkeiten laufen strikt abwärts:
+│   ├── events.rs            OpProgress/OpDone/Leftovers/CollisionReq/OpResult
+│   │                        (ts-rs — der Vertrag mit dem Frontend)
+│   ├── registry.rs          Abbruch-/Pause-Flags, Kollisionskanäle, spawn_op
+│   ├── progress.rs          Prog · SharedProg · ProgressSink (macht die
+│   │                        Kopierpfade ohne laufende App testbar)
+│   ├── plan.rs              Zielnamen, Staging, Commit, Reste (TICKET-029)
+│   ├── copy.rs              sequenzieller Pfad + die Move-Reihenfolge
+│   ├── parallel.rs          Worker-Pool-Pfad + jobweises Commit
+│   ├── engine.rs            ein Transfer von Anfang bis Ende
+│   └── tests.rs             Charakterisierungstests (Fake-Provider mit
+│                            injizierbaren Fehlern, Recorder-Sink)
 ├── dir.rs                   list_dir (→ vfs) · list_drives · home_dir (+ DirEntry/DirListing/Drive)
-├── file.rs                  copy/move/delete/mkdir/rename + transfer infra (Prog, spawn_op,
-│                            collision, cancel) — all fs ops routed through the vfs registry;
-│                            pub(crate), also used by archive. Ausfallsichere Übertragung
-│                            (TICKET-029): Plan/staging + commit, Rollback über
-│                            Backup-Rename, Reste-Meldung (`fs-leftovers`)
+├── file.rs                  die Kommando-Adapter (copy/move/delete/mkdir/rename):
+│                            Capability prüfen, Adresse über die VFS-Registry
+│                            auflösen, an `transfer/` übergeben — mehr nicht
 ├── preview.rs               read_preview (F3) · open_path (F4) · open_external
 │                            (validierte http(s)-Links in den Systembrowser,
 │                            TICKET-030)
@@ -1292,6 +1303,57 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
       hortcmd as MCP *client* is deliberately not part of it)*
 - [ ] **Multi-column view** (2–4 panels), multiple windows
 - [ ] **Integrate Spotlight search** (macOS)
+
+### Cross-cutting — module boundaries (TICKET-035)
+
+Five modules had grown into catch-alls. They were split along what they are
+*about*, with the dependency direction stated and then checked:
+
+| was | now |
+|---|---|
+| `commands/fs/file.rs` (2,470) | `file.rs` (411, command adapters) + `transfer/` — events, registry, progress, plan, copy, parallel, engine |
+| `ipc/client.ts` (1,413) | `invoke.ts`, `events.ts`, `demo.ts`, `domains/*.ts`, `client.ts` (34, the public surface) |
+| `i18n/dictionaries.ts` (1,508) | ten feature namespaces + `dictionaries.ts` (81) |
+| `components/ui/SettingsDialog.tsx` (1,297) | the shell (155) + one module per page + a shared control vocabulary |
+| `store/panesStore.ts` (942) | `panesStore.ts` (755, stateful and async) + `panes/state.ts` (247, pure) |
+
+Three of those splits changed more than the file layout:
+
+- **`ProgressSink`.** The transfer engine reported progress through an
+  `AppHandle`, which cannot be built outside a running application — so the
+  copy loops, the part most worth testing, could only be exercised end to end.
+  Behind a trait, a test drives a real copy and reads the reports back. That
+  immediately exposed a latent bug: verification read the target back *before*
+  the writer was flushed. Harmless for a local `File`; for a buffering remote
+  writer it compares against an incomplete copy and reports a corruption that
+  is not there.
+- **Demo separated from native.** A browser-demo reply that drifts from the
+  typed contract fails only in the browser build, where nothing is watching.
+  With `demo.ts` beside the domain clients, a contract test runs the same cases
+  against both — and caught a wrong `CredStatus` shape on its first run.
+- **`ns()` for translations.** German is the source of truth and English is
+  typed as `Record<keyof de, string>`, so a missing translation is now a
+  compile error. Before, the two languages were independent literals.
+
+**The rules are enforced, not agreed.** `scripts/check-boundaries.mjs`
+(`npm run check:boundaries`, part of `npm run check` and of CI) walks the
+import graph and fails on a cycle or on a layer violation:
+
+- `lib/` is leaf — pure, reusable, unaware of stores and UI. Establishing this
+  moved `useFileColorRules`/`useFileColorVars` out of `lib/fileColors.ts` into
+  `store/fileColorRules.ts`: the colour *logic* is a utility, reading the
+  user's configuration is not.
+- The IPC foundation (`invoke`/`events`/`demo`/`types`) sits below the domain
+  clients; the IPC layer as a whole knows nothing of stores or UI.
+- Translations are data: nothing may reach into them.
+- `panes/state.ts` must not depend on the store that uses it — the point of
+  extracting it.
+- The Rust transfer modules run strictly downwards, in the order their
+  `mod.rs` documents.
+
+Type-only imports are ignored: they are erased at build time and cannot form a
+runtime cycle. Every rule carries its reason, and the failure prints it — a
+rule nobody can explain is a rule nobody will keep.
 
 ### Cross-cutting — automated checks (TICKET-033)
 

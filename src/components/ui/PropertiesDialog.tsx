@@ -42,10 +42,10 @@ import {
   fileColorLabel,
   fileColorRef,
   resolveFileColor,
-  useFileColorRules,
 } from "@/lib/fileColors";
 import { cn } from "@/lib/cn";
 import { consumeDialogKey, markDialogKey } from "@/lib/keys";
+import { useFileColorRules } from "@/store/fileColorRules";
 
 // Permission bits of the three classes (owner/group/other) and the special bits.
 const CLASSES = [

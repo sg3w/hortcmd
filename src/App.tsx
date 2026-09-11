@@ -26,7 +26,7 @@ import { useTransfers } from "@/store/transfersStore";
 import { useOps } from "@/store/opsStore";
 import { useSettings, useT } from "@/store/settingsStore";
 import { initWindowState } from "@/lib/windowState";
-import { useFileColorVars, type ThemeMode } from "@/lib/fileColors";
+import type { ThemeMode } from "@/lib/fileColors";
 import { useKeyboard } from "@/features/commander/useKeyboard";
 import { useNativeMenu } from "@/features/commander/nativeMenu";
 import {
@@ -45,6 +45,7 @@ import { Panel } from "@/features/panel/Panel";
 import { OperationDialogs } from "@/components/ui/OperationDialogs";
 import { TransferTray, TransferWindow } from "@/components/ui/TransferView";
 import { LazyDialogs } from "@/features/LazyDialogs";
+import { useFileColorVars } from "@/store/fileColorRules";
 
 export default function App() {
   const [drives, setDrives] = useState<Drive[]>([]);
