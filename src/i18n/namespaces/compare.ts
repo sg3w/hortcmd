@@ -1,0 +1,108 @@
+// ============================================================
+// Comparison (TICKET-035).
+//
+// Two directory trees, two single files, and the one-level pane
+// comparison from the Mark menu.
+// ============================================================
+
+import { ns } from "./ns";
+
+export const compare = ns(
+  {
+  "compare.title": "Verzeichnisse vergleichen & synchronisieren",
+  "compare.left": "Links",
+  "compare.right": "Rechts",
+  "compare.refresh": "Neu vergleichen",
+  "compare.recursive": "Rekursiv (Unterordner)",
+  "compare.loading": "Vergleiche …",
+  "compare.error": "Vergleich fehlgeschlagen: {err}",
+  "compare.truncated":
+    "Ergebnis auf 200.000 Dateien begrenzt – bitte den Vergleich verkleinern (z. B. Unterordner deaktivieren oder kleinere Ordner wählen).",
+  "compare.identical": "Die Verzeichnisse sind identisch.",
+  "compare.empty": "Keine Einträge für die aktuellen Filter.",
+  "compare.more": "… und {n} weitere",
+  "compare.col.path": "Pfad",
+  "compare.filter.same": "Gleiche",
+  "compare.filter.diff": "Unterschiede",
+  "compare.filter.leftOnly": "Nur links",
+  "compare.filter.rightOnly": "Nur rechts",
+  "compare.status.same": "Gleich",
+  "compare.status.newer_left": "Links neuer",
+  "compare.status.newer_right": "Rechts neuer",
+  "compare.status.different": "Unterschiedlich",
+  "compare.status.left_only": "Nur links",
+  "compare.status.right_only": "Nur rechts",
+  "compare.selectAll": "Alle sichtbaren wählen",
+  "compare.toLeft": "Nach links",
+  "compare.toRight": "Nach rechts",
+  "compare.summary":
+    "{total} Einträge · {diff} unterschiedlich · {left} nur links · {right} nur rechts",
+  "compare.copied": "{n} kopiert",
+  "compare.resize": "Zum Vergrößern ziehen",
+  "fcmp.title": "Dateivergleich",
+  "fcmp.text": "Text",
+  "fcmp.binary": "Binär",
+  "fcmp.identical": "Dateien sind identisch",
+  "fcmp.different": "Dateien unterscheiden sich",
+  "fcmp.truncated": "gekürzt",
+  "fcmp.empty": "Keine Zeilen",
+  "fcmp.needTwo.title": "Dateivergleich",
+  "fcmp.needTwo.msg":
+    "Bitte im linken und im rechten Fenster je eine Datei markieren.",
+    // ----- Anwendungsmenü (TICKET-040) -----
+  "cmp.bar.label": "Vergleich",
+  "cmp.bar.hidden": "{n} gleiche Datei(en) ausgeblendet",
+  "cmp.bar.clear": "Vergleichsfilter aufheben",
+  "cmp.marked": "{n} abweichende Datei(en) markiert",
+  "cmp.none": "Keine Unterschiede gefunden",
+  "cmp.error": "Vergleich fehlgeschlagen: {err}",
+  },
+  {
+  "compare.title": "Compare & synchronize directories",
+  "compare.left": "Left",
+  "compare.right": "Right",
+  "compare.refresh": "Compare again",
+  "compare.recursive": "Recursive (subfolders)",
+  "compare.loading": "Comparing …",
+  "compare.error": "Comparison failed: {err}",
+  "compare.truncated":
+    "Result limited to 200,000 files – please narrow the comparison (e.g. turn off subfolders or pick smaller folders).",
+  "compare.identical": "The directories are identical.",
+  "compare.empty": "No entries for the current filters.",
+  "compare.more": "… and {n} more",
+  "compare.col.path": "Path",
+  "compare.filter.same": "Equal",
+  "compare.filter.diff": "Differences",
+  "compare.filter.leftOnly": "Left only",
+  "compare.filter.rightOnly": "Right only",
+  "compare.status.same": "Equal",
+  "compare.status.newer_left": "Left newer",
+  "compare.status.newer_right": "Right newer",
+  "compare.status.different": "Different",
+  "compare.status.left_only": "Left only",
+  "compare.status.right_only": "Right only",
+  "compare.selectAll": "Select all visible",
+  "compare.toLeft": "To left",
+  "compare.toRight": "To right",
+  "compare.summary":
+    "{total} entries · {diff} different · {left} left only · {right} right only",
+  "compare.copied": "{n} copied",
+  "compare.resize": "Drag to resize",
+  "fcmp.title": "File comparison",
+  "fcmp.text": "Text",
+  "fcmp.binary": "Binary",
+  "fcmp.identical": "Files are identical",
+  "fcmp.different": "Files differ",
+  "fcmp.truncated": "truncated",
+  "fcmp.empty": "No lines",
+  "fcmp.needTwo.title": "File comparison",
+  "fcmp.needTwo.msg": "Select one file in the left pane and one in the right pane.",
+    // ----- Application menu (TICKET-040) -----
+  "cmp.bar.label": "Comparison",
+  "cmp.bar.hidden": "{n} identical file(s) hidden",
+  "cmp.bar.clear": "Clear comparison filter",
+  "cmp.marked": "{n} differing file(s) selected",
+  "cmp.none": "No differences found",
+  "cmp.error": "Comparison failed: {err}",
+  },
+);

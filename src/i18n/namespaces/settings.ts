@@ -1,0 +1,251 @@
+// ============================================================
+// Settings (TICKET-035).
+//
+// Every page of the settings dialog, and the About box beside it.
+// ============================================================
+
+import { ns } from "./ns";
+
+export const settings = ns(
+  {
+  "settings.title": "Einstellungen",
+  "settings.cat.general": "Allgemein",
+  "settings.cat.view": "Dateiansicht",
+  "settings.cat.files": "Dateien",
+  "settings.cat.operations": "Dateioperationen",
+  "settings.cat.programs": "Öffnen mit",
+  "settings.cat.favorites": "Favoriten",
+  "settings.trash": "Papierkorb verwenden",
+  "settings.trash.hint":
+    "Beim Löschen in den Papierkorb verschieben (wiederherstellbar). Mit ⇧ Shift wird endgültig gelöscht.",
+  "settings.queue": "Kopier-Warteschlange",
+  "settings.queue.hint":
+    "Kopier-/Verschiebevorgänge nacheinander abarbeiten statt gleichzeitig.",
+  "settings.verify": "Kopien prüfen (Prüfsummen)",
+  "settings.verify.hint":
+    "Nach dem Kopieren Quelle und Ziel per SHA-256 vergleichen. Sicherer, aber langsamer.",
+  "settings.speed": "Geschwindigkeitslimit",
+  "settings.speed.hint": "Obergrenze beim Kopieren/Verschieben (0 = unbegrenzt).",
+  "settings.buffer": "Puffergröße",
+  "settings.buffer.hint": "Blockgröße beim Kopieren (Standard 256 KB, 4–16384).",
+  "settings.threads": "Parallele Kopien",
+  "settings.threads.hint":
+    "Threads beim Kopieren (1 = sequenziell). Auf HDDs kann >1 langsamer sein.",
+  "settings.safeTransfers": "Ausfallsichere Übertragung",
+  "settings.safeTransfers.hint":
+    "Kopiert zuerst in einen versteckten Zwischeneintrag am Ziel und veröffentlicht ihn erst am Ende unter dem endgültigen Namen. Braucht vorübergehend Platz am Ziel, verhindert aber, dass ein fehlgeschlagenes Überschreiben die bisherige Zieldatei zerstört.",
+  "settings.safeTransfers.warning":
+    "Ausgeschaltet: Ein fehlgeschlagenes Überschreiben kann die bisherige Zieldatei verlieren oder unvollständige Daten unter dem endgültigen Namen hinterlassen.",
+  "settings.favorites.hint":
+    "Favoriten erscheinen in der Speicherort-Auswahl über den Laufwerken.",
+  "settings.favorites.name": "Bezeichnung",
+  "settings.favorites.path": "Pfad",
+  "settings.favorites.add": "Hinzufügen",
+  "settings.favorites.empty": "Noch keine Favoriten.",
+  "settings.language": "Sprache",
+  "settings.theme": "Erscheinungsbild",
+  "settings.theme.dark": "Dunkel",
+  "settings.theme.light": "Hell",
+  "settings.theme.system": "System",
+  "settings.fontScale": "Schriftgröße",
+  "settings.iconScale": "Symbolgröße",
+  "settings.scale.sm": "Klein",
+  "settings.scale.md": "Mittel",
+  "settings.scale.lg": "Groß",
+  "settings.foldersFirst": "Ordner zuerst",
+  "settings.foldersFirst.hint":
+    "Ordner werden unabhängig von der Sortierung immer vor Dateien einsortiert.",
+  "settings.showExt": "Endungs-Spalte anzeigen",
+  "settings.showExt.hint":
+    "Zeigt die Dateiendung in einer eigenen Spalte. Aus: vollständiger Name in der Namensspalte.",
+  "settings.showPerms": "Rechte-Spalte anzeigen",
+  "settings.showPerms.hint":
+    "Zeigt die Unix-Zugriffsrechte (z. B. rwxr-xr-x). Unter Windows leer.",
+  "settings.sizeFormat": "Größenformat",
+  "settings.sizeFormat.auto": "Automatisch",
+  "settings.sizeFormat.bytes": "Bytes",
+  "settings.dateFormat": "Datumsformat",
+  "settings.dateFormat.medium": "TT.MM.JJJJ",
+  "settings.dateFormat.short": "TT.MM.JJ",
+  "settings.dateFormat.iso": "JJJJ-MM-TT",
+  "settings.hideSystem": "Systemdateien ausblenden",
+  "settings.hideSystem.hint":
+    "Blendet versteckte Dateien und Ordner aus (Namen, die mit einem Punkt beginnen).",
+  "settings.git": "Git-Status anzeigen",
+  "settings.git.hint":
+    "Färbt Einträge nach ihrem Git-Status und zeigt den Branch, wenn der Ordner in einem Git-Repository liegt.",
+  "settings.terminal": "Terminal-Programm",
+  "settings.terminal.placeholder": "Standard verwenden",
+  "settings.terminal.hint":
+    "Programm für das Öffnen im Terminal. Leer = System-Standard (macOS: Terminal, Windows: cmd).",
+  "settings.editor.trigger": "„Im Editor öffnen“ auslösen",
+  "settings.editor.trigger.hint":
+    "Wie die endungsbasierte Zuordnung geöffnet wird. Das Kontextmenü „Öffnen mit“ steht immer zur Verfügung.",
+  "settings.editor.trigger.shiftF4": "Umschalt+F4",
+  "settings.editor.trigger.contextOnly": "Nur Kontextmenü",
+  "settings.editor.trigger.f4": "F4",
+  "settings.editor.default": "Standard-Editor",
+  "settings.editor.default.hint":
+    "Wird verwendet, wenn die Endung kein eigenes Programm hat. Leer = System-Standard.",
+  "settings.editor.browse": "Durchsuchen …",
+  "settings.editor.change": "Ändern …",
+  "settings.editor.remove": "Entfernen",
+  "settings.editor.none": "System-Standard",
+  "settings.editor.byExt": "Nach Endung",
+  "settings.editor.byProgram": "Nach Programm",
+  "settings.editor.addProgram": "Programm hinzufügen",
+  "settings.editor.noPrograms": "Noch keine Programme.",
+  "settings.editor.noAssoc": "Noch keine Zuordnungen.",
+  "settings.editor.extensions": "Endungen",
+  "settings.editor.extPlaceholder": "z. B. txt",
+  "settings.editor.program": "Programm",
+  "settings.editor.addAssoc": "Zuordnung hinzufügen",
+  "settings.editor.programName": "Programmname",
+  "settings.close": "Schließen",
+  "settings.cat.colors": "Dateifarben",
+  "settings.colors.hint":
+    "Die erste zutreffende Regel färbt den Eintrag. Die Eigenschaften einer Datei zeigen stets, welche Regel gerade greift.",
+  "settings.colors.preview": "Vorschau",
+  "settings.colors.dark": "Dunkel",
+  "settings.colors.light": "Hell",
+  "settings.colors.rules": "Farbregeln",
+  "settings.colors.states": "Zustände",
+  "settings.colors.reset": "Standardfarben wiederherstellen",
+  "settings.colors.resetOne": "Auf Standard zurücksetzen",
+  "settings.colors.custom": "Eigene Regeln",
+  "settings.colors.custom.hint":
+    "Eigene Regeln werden vor den eingebauten Regeln geprüft — die oberste zuerst.",
+  "settings.colors.custom.add": "Regel hinzufügen",
+  "settings.colors.custom.empty": "Noch keine eigenen Regeln.",
+  "settings.colors.custom.name": "Name",
+  "settings.colors.custom.pattern": "*.log *.tmp",
+  "settings.colors.custom.up": "Nach oben",
+  "settings.colors.custom.down": "Nach unten",
+  "settings.colors.custom.remove": "Regel entfernen",
+  "about.version": "Version",
+  "about.tagline":
+    "Dateicommander im Total-Commander-Stil, gebaut mit Rust, Tauri und React.",
+  "about.license":
+    "Veröffentlicht unter der MIT-Lizenz. © 2026 Jörg Hammel.",
+  },
+  {
+  "settings.title": "Settings",
+  "settings.cat.general": "General",
+  "settings.cat.view": "File view",
+  "settings.cat.files": "Files",
+  "settings.cat.operations": "File operations",
+  "settings.cat.programs": "Open with",
+  "settings.cat.favorites": "Favorites",
+  "settings.trash": "Use trash",
+  "settings.trash.hint":
+    "Move deleted items to the trash (recoverable). Hold ⇧ Shift to delete permanently.",
+  "settings.queue": "Copy queue",
+  "settings.queue.hint":
+    "Process copy/move operations one after another instead of in parallel.",
+  "settings.verify": "Verify copies (checksums)",
+  "settings.verify.hint":
+    "After copying, compare source and target via SHA-256. Safer but slower.",
+  "settings.speed": "Speed limit",
+  "settings.speed.hint": "Cap for copy/move throughput (0 = unlimited).",
+  "settings.buffer": "Buffer size",
+  "settings.buffer.hint": "Block size when copying (default 256 KB, 4–16384).",
+  "settings.threads": "Parallel copies",
+  "settings.threads.hint":
+    "Threads when copying (1 = sequential). On HDDs, >1 can be slower.",
+  "settings.safeTransfers": "Failure-safe transfers",
+  "settings.safeTransfers.hint":
+    "Copies into a hidden staging entry at the destination first and publishes it under the final name only at the end. Needs temporary room at the destination, but keeps a failed overwrite from destroying the previous destination file.",
+  "settings.safeTransfers.warning":
+    "Off: a failed overwrite can lose the previous destination file or leave incomplete data under the final name.",
+  "settings.favorites.hint":
+    "Favorites appear in the location picker above the drives.",
+  "settings.favorites.name": "Label",
+  "settings.favorites.path": "Path",
+  "settings.favorites.add": "Add",
+  "settings.favorites.empty": "No favorites yet.",
+  "settings.language": "Language",
+  "settings.theme": "Appearance",
+  "settings.theme.dark": "Dark",
+  "settings.theme.light": "Light",
+  "settings.theme.system": "System",
+  "settings.fontScale": "Font size",
+  "settings.iconScale": "Icon size",
+  "settings.scale.sm": "Small",
+  "settings.scale.md": "Medium",
+  "settings.scale.lg": "Large",
+  "settings.foldersFirst": "Folders first",
+  "settings.foldersFirst.hint":
+    "Folders are always sorted before files, regardless of the sort order.",
+  "settings.showExt": "Show extension column",
+  "settings.showExt.hint":
+    "Shows the file extension in its own column. Off: full name in the name column.",
+  "settings.showPerms": "Show permissions column",
+  "settings.showPerms.hint":
+    "Shows the Unix access permissions (e.g. rwxr-xr-x). Empty on Windows.",
+  "settings.sizeFormat": "Size format",
+  "settings.sizeFormat.auto": "Automatic",
+  "settings.sizeFormat.bytes": "Bytes",
+  "settings.dateFormat": "Date format",
+  "settings.dateFormat.medium": "DD.MM.YYYY",
+  "settings.dateFormat.short": "DD.MM.YY",
+  "settings.dateFormat.iso": "YYYY-MM-DD",
+  "settings.hideSystem": "Hide system files",
+  "settings.hideSystem.hint":
+    "Hides hidden files and folders (names starting with a dot).",
+  "settings.git": "Show Git status",
+  "settings.git.hint":
+    "Colors entries by their Git status and shows the branch when the folder is in a Git repository.",
+  "settings.terminal": "Terminal program",
+  "settings.terminal.placeholder": "Use default",
+  "settings.terminal.hint":
+    "For “Open in terminal”. Empty = system default (macOS: Terminal, Windows: cmd).",
+  "settings.editor.trigger": "Trigger “Open in editor”",
+  "settings.editor.trigger.hint":
+    "How the extension-based association is opened. The “Open with” context menu is always available.",
+  "settings.editor.trigger.shiftF4": "Shift+F4",
+  "settings.editor.trigger.contextOnly": "Context menu only",
+  "settings.editor.trigger.f4": "F4",
+  "settings.editor.default": "Default editor",
+  "settings.editor.default.hint":
+    "Used when the extension has no specific program. Empty = system default.",
+  "settings.editor.browse": "Browse …",
+  "settings.editor.change": "Change …",
+  "settings.editor.remove": "Remove",
+  "settings.editor.none": "System default",
+  "settings.editor.byExt": "By extension",
+  "settings.editor.byProgram": "By program",
+  "settings.editor.addProgram": "Add program",
+  "settings.editor.noPrograms": "No programs yet.",
+  "settings.editor.noAssoc": "No associations yet.",
+  "settings.editor.extensions": "Extensions",
+  "settings.editor.extPlaceholder": "e.g. txt",
+  "settings.editor.program": "Program",
+  "settings.editor.addAssoc": "Add association",
+  "settings.editor.programName": "Program name",
+  "settings.close": "Close",
+  "settings.cat.colors": "File colors",
+  "settings.colors.hint":
+    "The first matching rule colors the entry. A file's properties always show which rule currently applies.",
+  "settings.colors.preview": "Preview",
+  "settings.colors.dark": "Dark",
+  "settings.colors.light": "Light",
+  "settings.colors.rules": "Color rules",
+  "settings.colors.states": "States",
+  "settings.colors.reset": "Restore default colors",
+  "settings.colors.resetOne": "Reset to default",
+  "settings.colors.custom": "Custom rules",
+  "settings.colors.custom.hint":
+    "Custom rules are checked before the built-in rules — topmost first.",
+  "settings.colors.custom.add": "Add rule",
+  "settings.colors.custom.empty": "No custom rules yet.",
+  "settings.colors.custom.name": "Name",
+  "settings.colors.custom.pattern": "*.log *.tmp",
+  "settings.colors.custom.up": "Move up",
+  "settings.colors.custom.down": "Move down",
+  "settings.colors.custom.remove": "Remove rule",
+  "about.version": "Version",
+  "about.tagline":
+    "A Total Commander style file manager built with Rust, Tauri and React.",
+  "about.license": "Released under the MIT license. © 2026 Jörg Hammel.",
+  },
+);
