@@ -15,9 +15,9 @@ to a *running* hortcmd therefore reaches `sftp://…` or `smb://…` addresses w
 **already open** connection — no second login, no credentials handed to the AI host —
 and it can see which folder and selection the user has in front of them.
 
-This is a **separate axis from the plugin system** (tickets 100–107): there, foreign
+This is a **separate axis from the plugin system** (tickets 201–208): there, foreign
 code runs *inside* hortcmd behind a broker; here, hortcmd is the *server* and foreign
-code stays outside. The permission thinking is deliberately borrowed from 100
+code stays outside. The permission thinking is deliberately borrowed from 201
 (capability strings, default-deny, user confirmation) — the mechanism is not shared,
 and 041 does not depend on the plugin tickets.
 
@@ -115,7 +115,7 @@ Three tiers, each separately switchable, `read` is the only default:
 - **hortcmd as MCP client** (consuming foreign MCP servers, e.g. a chat panel or
   AI-assisted rename inside the app) — separate feature, own ticket if wanted.
 - Remote/non-localhost exposure, multi-user access, OAuth — localhost + token only.
-- Any dependency on, or integration with, the plugin broker (100–107); if both exist
+- Any dependency on, or integration with, the plugin broker (201–208); if both exist
   later, a plugin exposing MCP tools is a follow-up, not this ticket.
 
 ## Acceptance criteria

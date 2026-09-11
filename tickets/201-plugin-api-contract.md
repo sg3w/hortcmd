@@ -1,9 +1,9 @@
-# TICKET-100: Plugin API & manifest (contract first)
+# TICKET-201: Plugin API & manifest (contract first)
 
 ## Goal
 The binding contract of the plugin system is in place: manifest schema, permission model,
 broker protocol, and the shared types. No execution of plugins yet — only the
-API that all following tickets (101–107) build on.
+API that all following tickets (202–208) build on.
 
 ## Background
 Concept.md (§10 P4, §Vision) explicitly requires **defining the plugin API early**,
@@ -29,7 +29,7 @@ contract prevents later breaks between the JS and the native Rust host.
   user at install time.
 - Define the **broker protocol** (runtime-agnostic): messages/commands
   (plugin → core) and events (core → plugin), each with a payload type and
-  the required permission. The transport stays host-specific (101/102), the protocol is not.
+  the required permission. The transport stays host-specific (202/203), the protocol is not.
   For views this includes at least:
   - core → plugin: `view:open` (`{ viewId, instanceId, path? , context? }`),
     `view:path` (`{ instanceId, path }` — the pane navigated; only for path-bound
@@ -43,13 +43,13 @@ contract prevents later breaks between the JS and the native Rust host.
   `PluginPermission`, `PluginContext`, `PluginContribution`, broker messages/events,
   and for the views `PluginPreviewContribution`, `PluginTabContribution`,
   `PluginViewMatch`, `PluginViewOpen`, `PluginViewPath`.
-- Define **`PluginContext`** (filled in 104): `path` (general/active),
+- Define **`PluginContext`** (filled in 205): `path` (general/active),
   `folderPath`, `filePath`, `selection[]`, `side`, `copyLimit`, optional
   copy operation.
 - **Directory convention**: plugins live in the app data folder under `plugins/<id>/`;
   a backend command **detects and validates** present manifests
   (`list_plugins` → list incl. validation errors), **without** executing plugins.
-- **Document the threat model** (in this ticket + referenced in 102): JS plugins can be
+- **Document the threat model** (in this ticket + referenced in 203): JS plugins can be
   contained in the WebView; **native plugins run with full process privileges and are
   not hard-sandboxable** — their protection is trust-based.
 - Location: `src-tauri/src/plugins/{manifest.rs, registry.rs}`,
@@ -57,7 +57,7 @@ contract prevents later breaks between the JS and the native Rust host.
   detection/validation.
 
 ### Views: preview and tabs (frontend-only surfaces)
-Besides its own window (101) a plugin can contribute **views that live inside the
+Besides its own window (202) a plugin can contribute **views that live inside the
 main window** and are handed a **path**: a preview renderer for the F3 preview, and
 tabs in the pane tab bar. Both are **pure frontend surfaces** — the plugin ships
 HTML/JS, the core renders it embedded and feeds it a path; no backend part of the
@@ -81,7 +81,7 @@ plugin is involved and no extra native window is opened.
 - `entry` defaults to the manifest `entry`; a view may point at its own HTML file, so
   one plugin can ship several distinct views.
 - **Runtime restriction:** view contributions require `runtime: "js"` — they render
-  HTML. A native plugin (102) contributes command-bar entries and actions, not views;
+  HTML. A native plugin (203) contributes command-bar entries and actions, not views;
   the manifest validation rejects the combination rather than silently ignoring it.
 - **Paths can be remote.** Since tickets 020–026 a path may be a VFS address
   (`sftp://user@host:port/…`), so a view must never assume a local file-system path.
@@ -89,16 +89,16 @@ plugin is involved and no extra native window is opened.
   resolves the address via the VFS — a plugin does not read files itself.
 - **Containment:** an embedded view is not part of the main window's DOM — it is a
   sandboxed frame with no Tauri `invoke`, reaching the core only through the broker
-  bridge from 101 and checked against the same permissions. The threat-model document
+  bridge from 202 and checked against the same permissions. The threat-model document
   states this explicitly, including that a *native* plugin has no such containment.
 
 ### Where the views get implemented (not in this ticket)
 This ticket only fixes the contract. The surfaces themselves belong to:
-**101** (JS host — the embedded frame variant of the bridge next to the separate
-window), **104** (feeding `path`/context into a running view), **106** (granting
-`ui:preview`/`ui:tab` at install time) and **107** (the demo plugin gains a preview
+**202** (JS host — the embedded frame variant of the bridge next to the separate
+window), **205** (feeding `path`/context into a running view), **207** (granting
+`ui:preview`/`ui:tab` at install time) and **208** (the demo plugin gains a preview
 renderer and a path-bound tab, which is what proves the contract).
-If the embedded-frame surface makes 101 too large, it is split out as **108
+If the embedded-frame surface makes 202 too large, it is split out as **209
 "Embedded plugin views"** — the contract here stays unchanged either way.
 
 ## Acceptance criteria

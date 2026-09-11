@@ -150,7 +150,7 @@ Die vorhandene Speicherung erfolgt automatisch. Kein Toolbar-Editor in diesem Ti
   wiederverwendet vom nativen App-Menü.
 
 Kein „Starter“-Menü ohne implementierte Starter-Funktion. Plugin-Befehle bleiben
-in der separaten Plugin-Toolbar aus TICKET-103; keine vorweggenommene Menü-API.
+in der separaten Plugin-Toolbar aus TICKET-204; keine vorweggenommene Menü-API.
 
 ## Minimales natives macOS-Menü
 
@@ -208,7 +208,7 @@ in der separaten Plugin-Toolbar aus TICKET-103; keine vorweggenommene Menü-API.
 | 043 | Übergreifende Accessibility/Übersetzung; 040 liefert bereits vollständige Menübedienbarkeit. |
 | 048 | Später Datei-Undo unter Dateien mit konkretem Aktionsnamen; derzeit kein Datei-Undo-Platzhalter. |
 | 056 | Später Speicherbelegungsanalyse unter Befehle; vorhandene Ordnergröße bleibt unter Eigenschaften. |
-| 103 / 106 | Separate Plugin-Toolbar und Plugin-Verwaltung; kein Starter-Menü in 040. |
+| 204 / 207 | Separate Plugin-Toolbar und Plugin-Verwaltung; kein Starter-Menü in 040. |
 | 012 (done) | Bestehende React-Dialoge wiederverwenden, keine neuen nativen Dialogfenster. |
 
 Die Menügrundlage einschließlich Ausgangskatalog bleibt in 040. Das ausdrücklich

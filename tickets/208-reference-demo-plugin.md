@@ -1,4 +1,4 @@
-# TICKET-107: Reference/demo plugin(s)
+# TICKET-208: Reference/demo plugin(s)
 
 ## Goal
 A complete example plugin exercises the entire API for real and serves third parties as a
@@ -13,12 +13,12 @@ action into a comprehensible example.
 - **JS reference plugin "Path tools"** (in the repo under `plugins/pfad-werkzeuge/`):
   - Manifest with a colorful icon, a `contributes.commandbar` button, and the permissions
     `read:context`, `op:copy`, `ui:window`, `notify`.
-  - The window shows the **current path, folder path, file path, and selection** (context from 104).
+  - The window shows the **current path, folder path, file path, and selection** (context from 205).
   - Action "Copy path" (to the clipboard) and "Copy selection to …"
-    (**mediated copy operation** from 105, respects the copy limit).
+    (**mediated copy operation** from 206, respects the copy limit).
 - **Minimal native Rust plugin** (e.g. `plugins/native-hello/`): loads, reports a
-  command-bar button, calls an allowed broker function — validates TICKET-102.
-- Both plugins are installable/activatable via the management (106).
+  command-bar button, calls an allowed broker function — validates TICKET-203.
+- Both plugins are installable/activatable via the management (207).
 - Short **author docs**: how to build a plugin (manifest, permissions, SDK shim/ABI).
 
 ## Acceptance criteria

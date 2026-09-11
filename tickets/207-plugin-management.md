@@ -1,4 +1,4 @@
-# TICKET-106: Plugin management (settings)
+# TICKET-207: Plugin management (settings)
 
 ## Goal
 Users manage plugins in the settings: install, activate/deactivate,
@@ -12,9 +12,9 @@ preview/packer plugins). Without management, the plugin system stays unusable.
 - Keep plugin management reachable through **Konfiguration → Einstellungen… →
   Plugins**, using the existing settings dialog and the menu architecture in
   [TICKET-040](040-native-application-menu.md). No separate Starter menu; plugin
-  execution entry points remain in the plugin command bar (TICKET-103).
+  execution entry points remain in the plugin command bar (TICKET-204).
 - Build out the **"Plugins"** category in `SettingsDialog.tsx`: list of detected plugins
-  (from `list_plugins`, TICKET-100) with name, version, icon, runtime, status.
+  (from `list_plugins`, TICKET-201) with name, version, icon, runtime, status.
 - **Install** from a local folder/archive into the app plugin folder (a marketplace
   is deliberately out of scope — see Concept.md "Later/to be clarified").
 - **Activate/deactivate** per plugin; **uninstall**; **update** (version
@@ -24,7 +24,7 @@ preview/packer plugins). Without management, the plugin system stays unusable.
 - **Persistence**: activated plugins + granted permissions (analogous to `settingsStore`
   persistence or backend state).
 - Security note for **native** plugins in the grant dialog (full process privileges,
-  see TICKET-102).
+  see TICKET-203).
 
 ## Acceptance criteria
 - [ ] Detected plugins are listed with metadata and status.
@@ -35,7 +35,7 @@ preview/packer plugins). Without management, the plugin system stays unusable.
 - [ ] For native plugins, the grant dialog points out the full process privileges.
 
 ## Tests
-- Install the demo plugin (TICKET-107), activate it (confirm permissions), the button
+- Install the demo plugin (TICKET-208), activate it (confirm permissions), the button
   appears; deactivate → button gone; a restart preserves the state.
 
 ## Definition of Done

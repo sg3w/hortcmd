@@ -251,5 +251,5 @@ described when it deliberately left peripheral commands local-only.
 
 No production API or behavior is changed by this analysis. The twenty-seven assessment
 tickets are implementation proposals for later work; TICKET-040, TICKET-041, and
-the TICKET-100 through TICKET-107 plugin series retain their existing subjects and
+the TICKET-201 through TICKET-208 plugin series retain their existing subjects and
 numbering.

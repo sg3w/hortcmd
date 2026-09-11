@@ -1,4 +1,4 @@
-# TICKET-103: Plugin command bar & colorful icons
+# TICKET-204: Plugin command bar & colorful icons
 
 ## Goal
 Plugins get their own command bar in the commander. Each activated plugin can
@@ -17,10 +17,10 @@ can have colorful icons." The existing `CommandBar.tsx` provides the pattern
   API as part of either ticket without a separate feature specification.
 - New **plugin command bar** as a second bar (below the main CommandBar), only
   visible when activated plugins contribute buttons.
-- Buttons from `contributes.commandbar` (TICKET-100): `title`, `icon`, `action`.
+- Buttons from `contributes.commandbar` (TICKET-201): `title`, `icon`, `action`.
 - **Colorful icons**: render emoji **or** data URI/SVG from the manifest (not limited to
   the monochrome Lucide icons); visually attributable per plugin.
-- Button `action`: `openWindow` (opens the plugin window via 101/102) or
+- Button `action`: `openWindow` (opens the plugin window via 202/203) or
   `command` (sends a command to the running plugin via the broker).
 - State via `src/features/plugins/pluginsStore.ts` (activated plugins + their
   contributions); reuse the `ToolButton` interaction pattern, but color-capable.
@@ -36,7 +36,7 @@ can have colorful icons." The existing `CommandBar.tsx` provides the pattern
 - [ ] The layout stays intact in light/dark and at a small window width.
 
 ## Tests
-- With the demo plugin (TICKET-107): button visible, icon colorful, click opens the window.
+- With the demo plugin (TICKET-208): button visible, icon colorful, click opens the window.
 
 ## Definition of Done
 - Code compiles (`cargo check`, `npm run typecheck`, `npm run build`)

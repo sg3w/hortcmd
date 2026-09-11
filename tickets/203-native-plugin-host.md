@@ -1,8 +1,8 @@
-# TICKET-102: Native Rust plugin host (dynamic library)
+# TICKET-203: Native Rust plugin host (dynamic library)
 
 ## Goal
 Native Rust plugins are loaded as a dynamic library and connected via the same
-broker mediation as JS plugins. The contract from TICKET-100 applies
+broker mediation as JS plugins. The contract from TICKET-201 applies
 unchanged; only the transport is native.
 
 ## Background
@@ -18,7 +18,7 @@ regulated.
   otherwise the plugin is rejected (no crash of the main process).
 - **Lifecycle**: load, initialize, unload; an error in the plugin must not take down the
   core (defensive call boundaries, catch panics at the FFI boundary).
-- **Permission enforcement via the same `PluginBroker`** as 101: every host callback checks
+- **Permission enforcement via the same `PluginBroker`** as 202: every host callback checks
   the plugin's granted permissions.
 - **Security documentation (binding)**: native plugins run with **full
   process privileges**; there is **no hard sandbox**. The "permission model" is here

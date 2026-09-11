@@ -1,4 +1,4 @@
-# TICKET-104: Context handoff to plugins
+# TICKET-205: Context handoff to plugins
 
 ## Goal
 Plugins receive the relevant working context of the commander: general path,
@@ -11,7 +11,7 @@ Explicitly requested by the user: handoff of **copy operations**,
 is the core of what a plugin needs to do meaningful work.
 
 ## Requirements
-- Pass `PluginContext` (from TICKET-100) on **window open** and additionally
+- Pass `PluginContext` (from TICKET-201) on **window open** and additionally
   make it retrievable **on request** (broker command).
 - Contents:
   - **General/active path** (`path`) and **folder path** (`folderPath`)
@@ -33,7 +33,7 @@ is the core of what a plugin needs to do meaningful work.
 - [ ] Without `read:context` no context is delivered.
 
 ## Tests
-- The demo plugin (TICKET-107) shows the current path/file path; after navigating in the
+- The demo plugin (TICKET-208) shows the current path/file path; after navigating in the
   main window, a fresh retrieval delivers the new values.
 
 ## Definition of Done

@@ -1,9 +1,9 @@
-# TICKET-101: JS plugin host (sandboxed WebviewWindow)
+# TICKET-202: JS plugin host (sandboxed WebviewWindow)
 
 ## Goal
 JS plugins run with their own UI in an isolated Tauri `WebviewWindow`. The
 communication with the commander happens exclusively via the mediated
-broker bridge from TICKET-100 — no direct IPC/file-system access.
+broker bridge from TICKET-201 — no direct IPC/file-system access.
 
 ## Background
 JS plugins are the cross-platform, safely containable default case. The

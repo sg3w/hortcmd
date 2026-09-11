@@ -945,17 +945,17 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
       (TICKET-040).
 - [ ] **Plugin system**: **define the API early**, then Rust/JS plugins,
       context-menu/preview/column/archive extensions, scripting (JS)
-      *(broken down in ticket series `tickets/100`–`107`: 100 API/manifest contract →
-      101 JS host, 102 native Rust host → 103 plugin command bar/colored icons →
-      104 context handoff → 105 mediated actions/events → 106 management →
-      107 demo plugin. Broker as the sole mediation, default-deny permissions; JS
+      *(broken down in ticket series `tickets/201`–`208`: 201 API/manifest contract →
+      202 JS host, 203 native Rust host → 204 plugin command bar/colored icons →
+      205 context handoff → 206 mediated actions/events → 207 management →
+      208 demo plugin. Broker as the sole mediation, default-deny permissions; JS
       sandboxable, native plugins trust-based)*
 - [ ] **MCP interface**: hortcmd as an **MCP server** on localhost, so an AI host
       reaches the VFS incl. the *active* remote connections and the panel context
       *(ticket `tickets/041`; bearer token in the keychain, default-deny capability
       tiers, root allowlist, confirmation for write/delete, audit log; stdio bridge
       binary for hosts that only speak stdio. Independent of the plugin series
-      100–107 — there foreign code runs inside hortcmd, here hortcmd is the server.
+      201–208 — there foreign code runs inside hortcmd, here hortcmd is the server.
       hortcmd as MCP *client* is deliberately not part of it)*
 - [ ] **Multi-column view** (2–4 panels), multiple windows
 - [ ] **Integrate Spotlight search** (macOS)
