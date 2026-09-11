@@ -1,4 +1,4 @@
-# TICKET-060: Markierung vereinheitlichen, Shift-Umschaltung und klare Auswahl-/Git-Farben
+# TICKET-060: Markierung vereinheitlichen, Space-Markierung und Enter-Schnellansicht und klare Auswahl-/Git-Farben
 
 ## Priorität und Reihenfolge
 
@@ -10,7 +10,8 @@ Bereits laufende Arbeit sauber abschließen, danach dieses Ticket vorziehen.
 ## Ziel
 
 Dateien und Ordner lassen sich gleich markieren und wieder abwählen. Ein einzelner
-Shift-Tastendruck schaltet den Eintrag unter dem Cursor um, ohne weitere Taste.
+Space-Tastendruck schaltet den Eintrag unter dem Cursor um. Shift behält sein
+bisheriges Verhalten; die Schnellansicht wandert von Space auf Enter.
 Markierte Einträge haben einen blauen Hintergrund und deutlich gelbe Schrift.
 Nicht markierte Git-Einträge zeigen neue Dateien grün, geänderte blau und
 untracked rot. Alle Ansichten und Bedienwege global auf Konsistenz prüfen.
@@ -30,32 +31,36 @@ untracked rot. Alle Ansichten und Bedienwege global auf Konsistenz prüfen.
 
 ## Anforderungen
 
-### Shift allein zum Markieren und Aufheben
+### Space zum Markieren, Enter für die Schnellansicht
 
-- **Shift allein drücken und loslassen = Markierung umschalten** für den
-  Cursor-Eintrag: unmarkiert → markiert, markiert → unmarkiert. Linke und rechte
-  Shift-Taste unterstützen. Cursor bleibt auf dem Eintrag; keine Navigation.
-- Umschalten erst beim Loslassen auslösen, wenn seit dem Drücken keine andere
-  Taste und keine Maus-/Pointeraktion beteiligt war. Shift+Pfeil, Shift+Klick,
-  Shift+Funktionstaste und sonstige Kombinationen dürfen keine zusätzliche
-  Markierungsumschaltung auslösen. Autorepeat und beide Shift-Tasten zusammen
-  dürfen keine doppelten Umschaltungen erzeugen.
-- Begann die Geste außerhalb des Dateipanels oder wechselten Fokus, aktiver Tab,
-  Cursorziel oder Fensteraktivierung, die ausstehende Umschaltung verwerfen.
-  Beim Fokusverlust/Blur Tastenzustand zurücksetzen, damit kein späteres Keyup
-  versehentlich markiert.
-- In Menü/Hilfe als „Shift (einzeln)“ beschriften und zusätzlich einen klickbaren
-  Markieren/Abwählen-Befehl anbieten. F9 erhält durch dieses Ticket keine Belegung.
-- Vorhandene Insert-/Mehrfachauswahlkürzel dürfen als kompatible Alternativen bleiben.
-  Shift-Bereichsauswahl und Cmd/Ctrl-Klick werden nicht entfernt, sind aber keine
-  Voraussetzung mehr. Quick Look auf macOS bleibt erhalten.
-- Shift allein darf in Textfeldern, contenteditable, Dialogen und Terminal keine Dateiauswahl
-  verändern. Menü-, Toolbar- und Tastaturausführung nutzen dieselbe Aktion genau einmal.
-- „..“ und ein leeres Panel bleiben nicht markierbar; kein Öffnen durch Shift allein.
+- **Space = Markierung umschalten** für den Cursor-Eintrag, bei Dateien und
+  Ordnern: unmarkiert → markiert, markiert → unmarkiert. Ohne Modifier und ohne
+  Cursorbewegung. Ein Tastendruck löst genau eine Umschaltung aus; Autorepeat ignorieren.
+- **Shift bleibt wie gehabt**: Bereichsauswahl mit Shift+Pfeil/Shift+Klick und
+  bestehende Shift-Kombinationen erhalten. Shift allein schaltet keine Markierung.
+  Die zwischenzeitlich vorgesehene Shift-Keyup-Geste entfällt vollständig.
+- **Enter = Schnellansicht der Cursor-Datei**, auf macOS über den bisherigen
+  Quick-Look-Ablauf, auf Windows/Linux über die vorhandene interne Vorschau.
+  Space öffnet auf keiner Plattform mehr eine Vorschau.
+- Enter auf Ordnern und „..“ navigiert weiterhin; der bisherige Einstieg in
+  unterstützte Archive bleibt erhalten. Dateivorschau ändert keine Auswahl.
+  Enter auf normalen Dateien startet nicht zusätzlich ein externes Programm.
+- Vorschau nur bei unterstütztem Kontext ausführen: vorhandene Provider-/Archiv-
+  Grenzen beachten, bei fehlender Unterstützung verständlich melden, ohne als
+  Ersatz zu markieren oder extern zu öffnen. Vorhandenes explizites Öffnen über
+  Kontextmenü/Doppelklick und F3-Anzeigen bleibt erreichbar.
+- Bestehende Insert-/Mehrfachauswahlkürzel und Cmd/Ctrl-Klick bleiben kompatible
+  Alternativen. F9 erhält durch dieses Ticket keine neue Belegung.
+- Space/Enter nur bei Dateipanel-Fokus abfangen; Textfelder, contenteditable,
+  Dialoge, Menüs, Schaltflächen und Terminal behalten ihre eigene Bedienung.
+  Insbesondere Enter zum Bestätigen eines Dialogs darf keine Schnellansicht öffnen.
+- Menü, Aktionsleiste, Hilfe und Übersetzungen auf „Space: Markieren/Abwählen“
+  und „Enter: Schnellansicht / Ordner öffnen“ abstimmen. Gemeinsame Aktionen nutzen.
+- „..“ und leere Panels bleiben nicht markierbar; Space öffnet keine Ordner.
 
 ### Dateien und Ordner gleich behandeln
 
-- Einheitliche Auswahlregeln für Shift allein, Insert, Klick mit Modifier, Bereichsauswahl,
+- Einheitliche Auswahlregeln für Space, Insert, Klick mit Modifier, Bereichsauswahl,
   Musterauswahl, Alles markieren, Auswahl umkehren und Auswahl aufheben.
 - Allgemeine Musterauswahl bezieht Ordner genauso wie Dateien ein; die bisherige
   Ordner-Opt-in-Regel aus 059 entfällt. Labels „Alle Einträge markieren“ und
@@ -118,7 +123,7 @@ Checkboxen (etwa Synchronisationsauswahl) nicht mit der Panel-Auswahl vermischen
 
 ## Akzeptanzkriterien und Tests
 
-- [ ] Shift allein markiert und entmarkiert Dateien und Ordner ohne Modifier, ohne Cursorbewegung.
+- [ ] Space markiert und entmarkiert Dateien und Ordner ohne Modifier, ohne Cursorbewegung.
 - [ ] Allgemeine Sammel-/Muster-/Bereichsauswahl behandelt Dateien und Ordner identisch;
       nur „..“ ausgeschlossen. Gemischte Operationsziele sind korrekt.
 - [ ] Markierte Einträge sind mit Standardfarben in beiden Themes blau/gelb,
@@ -128,9 +133,13 @@ Checkboxen (etwa Synchronisationsauswahl) nicht mit der Panel-Auswahl vermischen
       sind durch Rust-Tests auf Bedeutung und Priorität geprüft.
 - [ ] UI-Tests für Markierung → Git-Refresh → Abwahl bestätigen korrekte Farben;
       Detail-/Gridansichten sowie inaktives Panel und Ordner sind abgedeckt.
-- [ ] Shift-Kombinationen, Autorepeat, beide Shift-Tasten, Fokus-/Tabwechsel und
-      Fenster-Blur erzeugen keine zusätzliche oder verspätete Umschaltung.
-- [ ] Shift allein in Dialog/Text/Terminal löst keine Panelaktion aus; Quick Look bleibt nutzbar.
+- [ ] Shift allein verändert keine Auswahl; bisherige Shift-Kombinationen funktionieren.
+      Space-Autorepeat erzeugt keine wiederholte Umschaltung.
+- [ ] Enter zeigt Dateien in der Schnellansicht; Ordner/„..“ und Archive navigieren
+      weiterhin korrekt. Space öffnet nie die Vorschau; Enter startet nicht zugleich
+      ein externes Programm. Auswahl bleibt bei Vorschau erhalten.
+- [ ] Space/Enter in Dialog/Text/Menü/Terminal lösen keine Panelaktion aus;
+      Bestätigen und Schließen der Vorschau erzeugt kein durchgereichtes Enter.
 - [ ] Bestehende eigene Farben, Defaults/Migration, Legende, Hilfe und de/en stimmen.
 - [ ] Manuelle globale Prüfmatrix mit macOS/Windows/Linux, lokal/remote/Archiv,
       Git an/aus und Tastatur ohne Insert dokumentiert.
