@@ -49,6 +49,30 @@ export const DICT = {
     "net.ftpWarning":
       "Achtung: Klartext-FTP überträgt Benutzername, Passwort und Daten unverschlüsselt. Wenn möglich FTPS verwenden.",
 
+    "cred.title": "Zugangsdaten-Speicher",
+    "cred.manage": "Speicher …",
+    "cred.backend": "Speicher",
+    "cred.backend.keychain": "Schlüsselbund des Systems (Standard)",
+    "cred.backend.keepass": "KeePass-Datei (.kdbx)",
+    "cred.kdbxPath": "KeePass-Datei",
+    "cred.keyFile": "Schlüsseldatei (optional)",
+    "cred.masterInKeychain": "Masterpasswort im Schlüsselbund merken",
+    "cred.masterHint":
+      "Dauerhaft gespeichert — die Datei entsperrt dann ohne Nachfrage. Ohne diese Option wird das Masterpasswort nie geschrieben.",
+    "cred.keepassHint":
+      "Portabel und mit KeePassXC austauschbar; kein Sicherheitsgewinn gegenüber dem Schlüsselbund. Das Masterpasswort bleibt nur im Arbeitsspeicher.",
+    "cred.apply": "Übernehmen",
+    "cred.back": "Zurück",
+    "cred.state.unlocked": "Entsperrt",
+    "cred.state.locked": "Gesperrt",
+    "cred.lock": "Sperren",
+    "cred.unlock": "Entsperren",
+    "cred.unlockTitle": "KeePass-Datei entsperren",
+    "cred.master": "Masterpasswort",
+    "cred.remember": "Für diese Sitzung merken",
+    "cred.create": "Datei neu anlegen, falls nicht vorhanden",
+    "cred.cancel": "Abbrechen",
+
     "term.title": "SSH-Terminal",
     "term.opening": "Shell wird geöffnet …",
     "term.closed": "Sitzung beendet.",
@@ -724,6 +748,30 @@ export const DICT = {
     "net.share": "Share",
     "net.ftpWarning":
       "Warning: plain FTP transmits username, password and data unencrypted. Use FTPS where possible.",
+
+    "cred.title": "Credential store",
+    "cred.manage": "Store …",
+    "cred.backend": "Store",
+    "cred.backend.keychain": "System keychain (default)",
+    "cred.backend.keepass": "KeePass file (.kdbx)",
+    "cred.kdbxPath": "KeePass file",
+    "cred.keyFile": "Key file (optional)",
+    "cred.masterInKeychain": "Remember the master password in the keychain",
+    "cred.masterHint":
+      "Stored permanently — the file then unlocks without asking. Without this option the master password is never written anywhere.",
+    "cred.keepassHint":
+      "Portable and interchangeable with KeePassXC; no security gain over the keychain. The master password stays in memory only.",
+    "cred.apply": "Apply",
+    "cred.back": "Back",
+    "cred.state.unlocked": "Unlocked",
+    "cred.state.locked": "Locked",
+    "cred.lock": "Lock",
+    "cred.unlock": "Unlock",
+    "cred.unlockTitle": "Unlock KeePass file",
+    "cred.master": "Master password",
+    "cred.remember": "Remember for this session",
+    "cred.create": "Create the file if it does not exist",
+    "cred.cancel": "Cancel",
 
     "term.title": "SSH terminal",
     "term.opening": "Opening shell …",

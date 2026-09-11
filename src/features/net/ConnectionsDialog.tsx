@@ -1,14 +1,19 @@
 // ============================================================
-// Manage remote connections (SFTP, ticket 021).
+// Manage remote connections (SFTP, ticket 021) and the credential
+// backend behind them (ticket 027).
 //
-// Two views inside one dialog: a list of saved connection profiles
-// (connect / disconnect / edit / delete) and an add/edit form. Secrets
-// are entered here but sent straight to the backend (OS keychain); the
-// form never keeps them around after saving.
+// Panels inside one dialog: the list of saved profiles (connect /
+// disconnect / edit / delete), the add/edit form, the credential-store
+// settings (OS keychain ↔ KeePass file) and the KeePass unlock prompt.
+// Secrets are entered here but sent straight to the backend; neither
+// form keeps them around after submitting.
 // ============================================================
 
 import { useEffect, useState } from "react";
 import {
+  KeyRound,
+  Lock,
+  LockOpen,
   Pencil,
   Plug,
   PlugZap,
@@ -17,7 +22,7 @@ import {
   ShieldAlert,
   Trash2,
 } from "lucide-react";
-import type { Profile } from "@/ipc/bindings";
+import type { CredConfig, Profile } from "@/ipc/bindings";
 import { useNet } from "@/features/net/netStore";
 import { usePanes } from "@/store/panesStore";
 import { useT } from "@/store/settingsStore";
@@ -71,7 +76,9 @@ export function ConnectionsDialog() {
   const profiles = useNet((s) => s.profiles);
   const editing = useNet((s) => s.editing);
   const error = useNet((s) => s.error);
+  const panel = useNet((s) => s.panel);
   const startEdit = useNet((s) => s.startEdit);
+  const showPanel = useNet((s) => s.showPanel);
   const t = useT();
 
   return (
@@ -96,6 +103,10 @@ export function ConnectionsDialog() {
         )}
         {editing ? (
           <ProfileForm profile={editing} />
+        ) : panel === "store" ? (
+          <CredentialStoreForm />
+        ) : panel === "unlock" ? (
+          <UnlockForm />
         ) : (
           <>
             <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-auto">
@@ -115,13 +126,23 @@ export function ConnectionsDialog() {
                 );
               })}
             </div>
-            <button
-              onClick={() => startEdit(emptyProfile())}
-              className="flex items-center gap-1.5 self-start rounded border border-edge bg-panel px-3 py-1 text-[13px] text-text hover:border-accent"
-            >
-              <Plus size={14} />
-              {t("net.add")}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => startEdit(emptyProfile())}
+                className="flex items-center gap-1.5 rounded border border-edge bg-panel px-3 py-1 text-[13px] text-text hover:border-accent"
+              >
+                <Plus size={14} />
+                {t("net.add")}
+              </button>
+              <button
+                onClick={() => showPanel("store")}
+                title={t("cred.title")}
+                className="ml-auto flex items-center gap-1.5 rounded border border-edge bg-panel px-3 py-1 text-[13px] text-dim hover:border-accent hover:text-text"
+              >
+                <KeyRound size={14} />
+                {t("cred.manage")}
+              </button>
+            </div>
           </>
         )}
       </div>
@@ -383,6 +404,228 @@ function ProfileForm({ profile }: { profile: Profile }) {
           className="rounded bg-accent px-3 py-1 text-[13px] text-white hover:brightness-110 disabled:opacity-40"
         >
           {t("net.save")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Credential-store settings: OS keychain (default) ↔ KeePass file.
+ * The master password is never entered here — that is the unlock
+ * prompt's job, so nothing typed on this panel is a secret.
+ */
+function CredentialStoreForm() {
+  const cred = useNet((s) => s.cred);
+  const setCredBackend = useNet((s) => s.setCredBackend);
+  const showPanel = useNet((s) => s.showPanel);
+  const credLock = useNet((s) => s.credLock);
+  const t = useT();
+
+  const [form, setForm] = useState<CredConfig>(
+    cred?.config ?? {
+      backend: "keychain",
+      kdbx_path: "",
+      key_file: "",
+      master_in_keychain: false,
+    },
+  );
+
+  // Adopt the backend's own answer once it arrives / after a switch.
+  useEffect(() => {
+    if (cred) setForm(cred.config);
+  }, [cred]);
+
+  const set = <K extends keyof CredConfig>(key: K, value: CredConfig[K]) =>
+    setForm((f) => ({ ...f, [key]: value }));
+
+  const keepass = form.backend === "keepass";
+  const canApply = !keepass || form.kdbx_path.trim() !== "";
+
+  const apply = async () => {
+    if (!canApply) return;
+    const ok = await setCredBackend(form);
+    // Switching to KeePass leaves a locked file — ask for the master
+    // password right away instead of waiting for the next connect.
+    if (ok && keepass) showPanel("unlock");
+    else if (ok) showPanel("list");
+  };
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-auto">
+      <Field label={t("cred.backend")}>
+        <select
+          value={form.backend}
+          onChange={(e) => set("backend", e.target.value)}
+          className={inputCls}
+        >
+          <option value="keychain">{t("cred.backend.keychain")}</option>
+          <option value="keepass">{t("cred.backend.keepass")}</option>
+        </select>
+      </Field>
+
+      {keepass && (
+        <>
+          <p className="rounded border border-edge bg-panel-inactive px-2.5 py-1.5 text-[11px] text-dim">
+            {t("cred.keepassHint")}
+          </p>
+          <Field label={t("cred.kdbxPath")}>
+            <input
+              value={form.kdbx_path}
+              onChange={(e) => set("kdbx_path", e.target.value)}
+              placeholder="~/Documents/passwords.kdbx"
+              className={inputCls}
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </Field>
+          <Field label={t("cred.keyFile")}>
+            <input
+              value={form.key_file}
+              onChange={(e) => set("key_file", e.target.value)}
+              className={inputCls}
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </Field>
+          <label className="flex items-start gap-2 text-[12px] text-text">
+            <input
+              type="checkbox"
+              checked={form.master_in_keychain}
+              onChange={(e) => set("master_in_keychain", e.target.checked)}
+              className="mt-0.5"
+            />
+            <span className="flex flex-col gap-0.5">
+              {t("cred.masterInKeychain")}
+              <span className="text-[11px] text-dim">{t("cred.masterHint")}</span>
+            </span>
+          </label>
+          {cred?.config.backend === "keepass" && (
+            <div className="flex items-center gap-2 text-[12px]">
+              {cred.unlocked ? (
+                <>
+                  <LockOpen size={14} className="text-emerald-400" />
+                  <span className="text-dim">{t("cred.state.unlocked")}</span>
+                  <button
+                    onClick={() => void credLock()}
+                    className="rounded border border-edge px-2 py-0.5 text-dim hover:border-accent hover:text-text"
+                  >
+                    {t("cred.lock")}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Lock size={14} className="text-dim" />
+                  <span className="text-dim">{t("cred.state.locked")}</span>
+                  <button
+                    onClick={() => showPanel("unlock")}
+                    className="rounded border border-edge px-2 py-0.5 text-dim hover:border-accent hover:text-text"
+                  >
+                    {t("cred.unlock")}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      <div className="mt-1 flex justify-end gap-2">
+        <button
+          onClick={() => showPanel("list")}
+          className="rounded border border-edge bg-panel px-3 py-1 text-[13px] text-text hover:border-accent"
+        >
+          {t("cred.back")}
+        </button>
+        <button
+          onClick={() => void apply()}
+          disabled={!canApply}
+          className="rounded bg-accent px-3 py-1 text-[13px] text-white hover:brightness-110 disabled:opacity-40"
+        >
+          {t("cred.apply")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Asks for the KeePass master password. Shown on demand and whenever an
+ * action ran into the locked file — `credUnlock` then replays it, so the
+ * click the user made still happens.
+ */
+function UnlockForm() {
+  const cred = useNet((s) => s.cred);
+  const credUnlock = useNet((s) => s.credUnlock);
+  const showPanel = useNet((s) => s.showPanel);
+  const t = useT();
+
+  const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(true);
+  const [create, setCreate] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    if (busy) return;
+    setBusy(true);
+    // The password leaves this component with the call and is not kept.
+    const entered = password;
+    setPassword("");
+    await credUnlock(entered, remember, create);
+    setBusy(false);
+  };
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-auto">
+      <div className="flex items-center gap-2 text-[13px] text-text">
+        <Lock size={14} className="text-accent" />
+        {t("cred.unlockTitle")}
+      </div>
+      <p className="truncate font-mono text-[11px] text-dim">
+        {cred?.config.kdbx_path}
+      </p>
+      <Field label={t("cred.master")}>
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void submit();
+          }}
+          className={inputCls}
+          autoComplete="off"
+          autoFocus
+        />
+      </Field>
+      <label className="flex items-center gap-2 text-[12px] text-text">
+        <input
+          type="checkbox"
+          checked={remember}
+          onChange={(e) => setRemember(e.target.checked)}
+        />
+        {t("cred.remember")}
+      </label>
+      <label className="flex items-center gap-2 text-[12px] text-text">
+        <input
+          type="checkbox"
+          checked={create}
+          onChange={(e) => setCreate(e.target.checked)}
+        />
+        {t("cred.create")}
+      </label>
+      <div className="mt-1 flex justify-end gap-2">
+        <button
+          onClick={() => showPanel("store")}
+          className="rounded border border-edge bg-panel px-3 py-1 text-[13px] text-text hover:border-accent"
+        >
+          {t("cred.cancel")}
+        </button>
+        <button
+          onClick={() => void submit()}
+          disabled={busy}
+          className="rounded bg-accent px-3 py-1 text-[13px] text-white hover:brightness-110 disabled:opacity-40"
+        >
+          {t("cred.unlock")}
         </button>
       </div>
     </div>

@@ -54,6 +54,12 @@ reqwest_dav = "0.3.3" # WebDAV (PROPFIND/GET/PUT/MKCOL/MOVE/COPY) über reqwest,
 smb = { version = "0.11.1", default-features = false, features = ["multi_threaded", "sign", "encrypt"] }
 tokio-util = { version = "0.7.19", features = ["io"] }
 reqwest = { version = "0.13", features = ["stream"] }
+# Portabler KeePass-Speicher (.kdbx) als Alternative zum Schlüsselbund
+# (Ticket 027); `save_kdbx4` = schreiben, nicht nur lesen. Exakt gepinnt:
+# neuere Versionen verlangen `hmac ^0.13` (stabil), während `smb`/`sspi` auf
+# `hmac =0.13.0-rc.2` festnageln — Cargo kann das nicht vereinen. 0.10.5 ist
+# die neueste auflösbare Version; prüfen, sobald `sspi` das Pre-Release verlässt.
+keepass = { version = "=0.10.5", features = ["save_kdbx4"] }
 
 # Windows-spezifisch: die Shell-Eigenschaftenseite (TICKET-015) wird über
 # `ShellExecuteEx` mit dem Verb "properties" geöffnet; dafür werden COM und

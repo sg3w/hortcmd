@@ -29,5 +29,7 @@ export type { SearchStatus } from "./SearchStatus";
 export type { SearchSummary } from "./SearchSummary";
 export type { Profile } from "./Profile";
 export type { ConnectionStatus } from "./ConnectionStatus";
+export type { CredConfig } from "./CredConfig";
+export type { CredStatus } from "./CredStatus";
 export type { TermData } from "./TermData";
 export type { TermClosed } from "./TermClosed";

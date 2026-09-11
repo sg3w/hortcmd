@@ -2,13 +2,14 @@
 // Connection profiles + live session registry (ticket 021).
 //
 // Profiles (no secrets) are persisted as JSON in the app config dir;
-// secrets live in the OS keychain via `CredentialStore`. The registry
+// secrets live in the configured `CredentialStore` (OS keychain by
+// default, optionally a KeePass file — ticket 027). The registry
 // owns the live SSH/SFTP sessions (one per `user@host:port`), which
 // the `sftp` VFS provider drives through a shared Tokio runtime so the
 // async russh client fits the synchronous `Provider` trait.
 // ============================================================
 
-use super::credentials::{CredentialStore, KeychainStore};
+use super::credentials::{self, CredentialStore};
 use crate::vfs::Provider;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -135,7 +136,6 @@ fn store_profiles(profiles: &[Profile]) -> Result<(), String> {
 struct Registry {
     profiles: Vec<Profile>,
     live: HashMap<String, Arc<dyn Provider>>,
-    creds: Box<dyn CredentialStore>,
 }
 
 fn registry() -> &'static Mutex<Registry> {
@@ -144,7 +144,6 @@ fn registry() -> &'static Mutex<Registry> {
         Mutex::new(Registry {
             profiles: load_profiles(),
             live: HashMap::new(),
-            creds: Box::new(KeychainStore::new()),
         })
     })
 }
@@ -189,14 +188,16 @@ pub fn net_list_profiles() -> Vec<Profile> {
     registry().lock().unwrap().profiles.clone()
 }
 
-/// Creates or updates a profile. When `secret` is `Some`, it is stored
-/// in the OS keychain under the profile id (never in the JSON).
+/// Creates or updates a profile. When `secret` is `Some`, it goes to the
+/// configured credential store under the profile id (never into the JSON).
 #[tauri::command]
 pub fn net_save_profile(profile: Profile, secret: Option<String>) -> Result<(), String> {
-    let mut reg = registry().lock().unwrap();
-    if let Some(s) = secret {
-        reg.creds.set(&profile.id, &s)?;
+    // Written before the registry lock: a locked KeePass file fails here,
+    // and the profile list must not be touched when the secret is lost.
+    if let Some(s) = &secret {
+        credentials::store().set(&profile.id, s)?;
     }
+    let mut reg = registry().lock().unwrap();
     match reg.profiles.iter_mut().find(|p| p.id == profile.id) {
         Some(existing) => *existing = profile,
         None => reg.profiles.push(profile),
@@ -215,7 +216,7 @@ pub fn net_delete_profile(id: String) -> Result<(), String> {
         reg.profiles.remove(pos);
         closed = Some(store_id);
     }
-    let _ = reg.creds.delete(&id);
+    let _ = credentials::store().delete(&id);
     let result = store_profiles(&reg.profiles);
     drop(reg);
     if let Some(store_id) = closed {
@@ -237,7 +238,8 @@ pub fn net_connect(id: String) -> Result<ConnectionStatus, String> {
             .find(|p| p.id == id)
             .cloned()
             .ok_or_else(|| format!("Profil {} nicht gefunden", id))?;
-        let secret = reg.creds.get(&id)?;
+        drop(reg);
+        let secret = credentials::store().get(&id)?;
         (profile, secret)
     };
 

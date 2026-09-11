@@ -8,6 +8,8 @@ import type {
   Checksums,
   CollisionReq,
   ConnectionStatus,
+  CredConfig,
+  CredStatus,
   DiffEntry,
   DirEntry,
   DirListing,
@@ -105,6 +107,40 @@ export async function netDisconnect(id: string): Promise<void> {
 export async function netListConnections(): Promise<ConnectionStatus[]> {
   if (!hasTauri) return [];
   return invoke<ConnectionStatus[]>("net_list_connections");
+}
+
+// ---------- Credential backend (keychain / KeePass, ticket 027) ----------
+
+/** Demo default in the browser: the OS keychain, nothing to unlock. */
+const DEMO_CRED: CredStatus = {
+  config: { backend: "keychain", kdbx_path: "", key_file: "", master_in_keychain: false },
+  unlocked: false,
+  needs_unlock: false,
+};
+
+export async function netCredStatus(): Promise<CredStatus> {
+  if (!hasTauri) return DEMO_CRED;
+  return invoke<CredStatus>("net_cred_status");
+}
+
+export async function netCredSetBackend(config: CredConfig): Promise<CredStatus> {
+  if (!hasTauri) return DEMO_CRED;
+  return invoke<CredStatus>("net_cred_set_backend", { config });
+}
+
+/** Opens the `.kdbx`. `remember` keeps it open for the session,
+ *  `create` starts a new database at the configured path. */
+export async function netCredUnlock(
+  password: string,
+  remember: boolean,
+  create: boolean,
+): Promise<CredStatus> {
+  return invoke<CredStatus>("net_cred_unlock", { password, remember, create });
+}
+
+export async function netCredLock(): Promise<CredStatus> {
+  if (!hasTauri) return DEMO_CRED;
+  return invoke<CredStatus>("net_cred_lock");
 }
 
 // ---------- SSH terminal (ticket 026) ----------

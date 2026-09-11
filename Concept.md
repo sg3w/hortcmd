@@ -144,9 +144,11 @@ vfs/                         VFS abstraction (identical UI) — tickets 020/022�
 └── live_tests.rs            Integrationstests gegen echte Server (SFTP/FTP/WebDAV/SMB
                              + SSH-Shell), `#[ignore]`; Docker-Startbefehle stehen an
                              jedem Test: `cargo test --lib live_ -- --ignored --nocapture`
-net/                         Remote connection base (identical UI) — tickets 021/026
+net/                         Remote connection base (identical UI) — tickets 021/026/027
 ├── credentials.rs           CredentialStore trait + KeychainStore (keyring; OS keychain,
-│                            no plaintext fallback)
+│                            no plaintext fallback) · KeepassStore (portable .kdbx,
+│                            KeePassXC-compatible) · Store routes to the configured
+│                            backend; net_cred_* commands (TICKET-027)
 ├── session.rs               Profile (persisted, no secret) · session registry
 │                            (connect/disconnect/reconnect) · net_* commands
 ├── ssh.rs                   SshSession: authentifizierte SSH-Verbindung (russh);
@@ -919,9 +921,19 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
       *(broken down in ticket series `tickets/020`–`026`: **020 VFS abstraction
       (foundation) ✅ → 021 connections/credentials (OS keychain) ✅ →
       022 SFTP ✅ → 023 SMB ✅, 024 WebDAV ✅, 025 FTP/FTPS ✅ →
-      026 SSH terminal ✅**; 027 optional KeePass backend.
+      026 SSH terminal ✅ → 027 optional KeePass backend ✅**.
       "Identical UI" via provider trait + schema registry; secrets via
-      `CredentialStore` in the OS keychain (KeePass optional))*
+      `CredentialStore` — OS keychain by default, optionally a portable
+      `.kdbx` file (TICKET-027). The store is picked in the connection
+      manager ("Speicher …"): file path, optional key file, and the
+      clearly labeled opt-in to keep the master password in the keychain.
+      Without that opt-in the master password stays in memory only and
+      the file re-locks after one access ("do not remember"); a locked
+      file does not fail the click — the action is parked behind the
+      unlock prompt and replayed. KDBX 4 is read **and** written
+      (Argon2 parameters of the file are preserved, writes go through a
+      temp file + rename); legacy KDBX 3 files are read-only, with a
+      message naming the upgrade)*
       The **connection manager has its own toolbar button** (`CommandBar`, `Server`
       icon in its own section between navigation and file actions; TICKET-016) and
       opens globally via `useNet.getState().openManager()` — the toolbar is always
