@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 # hortcmd
 
@@ -55,6 +55,8 @@ Avoid:
 - logic in the frontend that belongs in the backend
 
 ## Development
+
+After completing each ticket, create a local Git commit containing only the changes for that ticket. Do not push commits.
 
 Check after changes:
 
