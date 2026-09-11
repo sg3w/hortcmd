@@ -8,6 +8,7 @@
 
 import { create } from "zustand";
 import type { ConnectionStatus, Profile } from "@/ipc/bindings";
+import { usePanes } from "@/store/panesStore";
 import {
   netConnect,
   netDeleteProfile,
@@ -108,8 +109,33 @@ export const useNet = create<NetState>((set, get) => ({
     try {
       await netDisconnect(id);
       await get().refresh();
+      // A comparison describes two reachable folders; losing a
+      // connection invalidates it, and its hidden files must come back
+      // rather than stay hidden behind a dead session (TICKET-059).
+      usePanes.getState().clearCompareFilter();
     } catch (e) {
       set({ error: String(e) });
     }
   },
 }));
+
+/** `scheme://authority` of a remote address; null for local paths. */
+function authorityOf(path: string): string | null {
+  const m = /^([a-z][a-z0-9+.-]*:\/\/[^/]*)/i.exec(path);
+  return m ? m[1].toLowerCase() : null;
+}
+
+/** The live connection serving `path`, or null (also null for a local
+ *  path). Lives here rather than next to the menu commands so that
+ *  every caller — menu, pane comparison, transfers — reaches it without
+ *  importing the command table. */
+export function connectionFor(path: string): ConnectionStatus | null {
+  const auth = authorityOf(path);
+  if (!auth) return null;
+  return (
+    useNet
+      .getState()
+      .connections.find((c) => c.connected && authorityOf(c.address) === auth) ??
+    null
+  );
+}

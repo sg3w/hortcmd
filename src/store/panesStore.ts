@@ -22,6 +22,21 @@ import {
 } from "@/features/commander/archivePw";
 
 export type Side = "left" | "right";
+
+/** How many names of a restore/load actually reached the selection. */
+export interface SelectionReport {
+  applied: number;
+  /** Names that no longer exist or are hidden by a filter. */
+  missing: number;
+}
+
+/** One side's outcome of a pane comparison. */
+export interface CompareApply {
+  /** File names to hide (null = no comparison filter on this side). */
+  hidden: Set<string> | null;
+  /** The new file selection of that side. */
+  selected: Set<string>;
+}
 export type SortKey = "name" | "ext" | "size" | "date";
 /** Rendering of the file list (per pane). */
 export type ViewMode = "details" | "list" | "thumbnails" | "tree";
@@ -44,6 +59,13 @@ export interface TabState {
   anchor: number; // Ankerzeile für Bereichsauswahl
   shiftBase: Set<string> | null; // Auswahl-Snapshot während einer Shift-Sitzung
   sort: { key: SortKey; asc: boolean };
+  /** Explicit selection snapshot ("Mark → remember", TICKET-059).
+   *  Bound to the canonical location, never to row indices, so sorting,
+   *  a refresh or a rename cannot make it select the wrong entry. */
+  snapshot: { location: string; names: string[] } | null;
+  /** Names hidden by the comparison filter (TICKET-059); null = no
+   *  comparison filter. Temporary and independent of `filter`. */
+  compareHidden: Set<string> | null;
   /** Git status of the folder (null = not loaded yet / disabled). */
   git: GitStatus | null;
   /** Navigation history of this tab (back/forward). */
@@ -110,8 +132,33 @@ interface PanesStore {
   toggleMark: (side: Side, index: number, advance?: boolean) => void;
   shiftMove: (side: Side, delta: number) => void;
   shiftTo: (side: Side, index: number) => void;
+  /** "*": invert the *file* selection; folder marks stay untouched. */
   invertSelection: (side: Side) => void;
-  selectPattern: (side: Side, pattern: string, add: boolean) => void;
+  /** Pattern selection; folders only take part with `includeFolders`. */
+  selectPattern: (
+    side: Side,
+    pattern: string,
+    add: boolean,
+    includeFolders?: boolean,
+  ) => void;
+  /** Mark every visible file; existing folder marks stay. */
+  selectAllFiles: (side: Side) => void;
+  /** Clear the whole selection of the active tab, folders included. */
+  clearSelection: (side: Side) => void;
+  /** Mark every visible file sharing the cursor file's extension. */
+  selectSameExt: (side: Side) => void;
+  /** Store the current selection as this tab's snapshot. */
+  rememberSelection: (side: Side) => void;
+  /** Replace the selection by the still existing, visible snapshot
+   *  names. Reports how many were applied and how many are gone. */
+  restoreSelection: (side: Side) => SelectionReport;
+  /** Replace the selection by the given names (selection file). */
+  applySelection: (side: Side, names: string[]) => SelectionReport;
+  /** Result of a pane comparison: hidden names + marks, both sides at
+   *  once so a half-applied comparison can never be seen. */
+  applyCompare: (result: Record<Side, CompareApply>) => void;
+  /** Drop the comparison filter of one side (or of both). */
+  clearCompareFilter: (side?: Side) => void;
   /** Toolbar/column click: same key toggles the direction. */
   setSort: (side: Side, key: SortKey) => void;
   /** Menu: set the sort key without toggling (TICKET-040). */
@@ -142,6 +189,8 @@ function newTab(path = ""): TabState {
     shiftBase: null,
     filter: "",
     sort: { key: "name", asc: true },
+    snapshot: null,
+    compareHidden: null,
     git: null,
     history: path ? [path] : [],
     historyIndex: path ? 0 : -1,
@@ -156,7 +205,14 @@ function applySort(
   return {
     ...t,
     sort,
-    entries: rebuildEntries(t.raw, t.path, sort, t.archive !== null, t.filter),
+    entries: rebuildEntries(
+      t.raw,
+      t.path,
+      sort,
+      t.archive !== null,
+      t.filter,
+      t.compareHidden,
+    ),
     cursor: 0,
     anchor: 0,
     shiftBase: null,
@@ -165,6 +221,41 @@ function applySort(
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
+}
+
+/**
+ * Canonical address of a tab: the provider identity and folder, plus the
+ * inner path when an archive is open. Selection snapshots and selection
+ * files are bound to this string — never to row positions, so sorting,
+ * a refresh or a rename cannot shift a remembered mark onto its
+ * neighbour (TICKET-059).
+ */
+export function locationOf(t: Pick<TabState, "path" | "archive">): string {
+  return t.archive ? `${t.archive}!${t.path}` : t.path;
+}
+
+/**
+ * Drops marks on entries that are not visible any more. A hidden entry
+ * must never stay a target for a later copy or delete (TICKET-059), so
+ * every path that changes the visible rows runs the selection through
+ * here. The snapshot is deliberately *not* pruned: it survives a filter.
+ */
+function pruneSelection(selected: Set<string>, entries: Row[]): Set<string> {
+  if (selected.size === 0) return selected;
+  const visible = new Set(entries.filter((e) => !e.parent).map((e) => e.name));
+  const next = new Set<string>();
+  for (const name of selected) if (visible.has(name)) next.add(name);
+  return next.size === selected.size ? selected : next;
+}
+
+/**
+ * Index of `name` in freshly built rows, falling back to the clamped old
+ * index. Hiding or re-showing rows must not drag the cursor onto an
+ * unrelated entry (TICKET-059).
+ */
+function cursorFor(entries: Row[], name: string | undefined, old: number): number {
+  const found = name ? entries.findIndex((r) => !r.parent && r.name === name) : -1;
+  return found >= 0 ? found : clamp(old, 0, Math.max(0, entries.length - 1));
 }
 
 /** Sorts real entries in place; folders first depending on the setting. */
@@ -199,6 +290,7 @@ function rebuildEntries(
   sort: TabState["sort"],
   inArchive: boolean,
   filter = "",
+  hidden: Set<string> | null = null,
 ): Row[] {
   const hideSystem = useSettings.getState().hideSystemFiles;
   let list = raw;
@@ -207,6 +299,9 @@ function rebuildEntries(
     const f = filter.toLowerCase();
     list = list.filter((e) => e.name.toLowerCase().includes(f));
   }
+  // Comparison filter (TICKET-059): only equal *files* disappear —
+  // folders and ".." always stay reachable.
+  if (hidden) list = list.filter((e) => e.is_dir || !hidden.has(e.name));
 
   const rows: Row[] = list.map((e) => ({ ...e }));
   sortEntries(rows, sort.key, sort.asc);
@@ -295,10 +390,13 @@ export const usePanes = create<PanesStore>((set, get) => ({
 
   selectTab: (side, index) => {
     const s = get()[side];
+    // A comparison always describes the two tabs that were visible when
+    // it ran; switching tabs invalidates it on both sides at once.
     set({
       active: side,
       [side]: { ...s, activeTab: clamp(index, 0, s.tabs.length - 1) },
     } as Pick<PanesStore, "active" | Side>);
+    get().clearCompareFilter();
   },
 
   // ---------- Navigation ----------
@@ -327,6 +425,10 @@ export const usePanes = create<PanesStore>((set, get) => ({
           selected: new Set<string>(),
           anchor: 0,
           shiftBase: null,
+          // Leaving the folder invalidates both the snapshot and a
+          // comparison result – they belong to the old location.
+          snapshot: null,
+          compareHidden: null,
           git: null,
           history,
           historyIndex,
@@ -334,6 +436,7 @@ export const usePanes = create<PanesStore>((set, get) => ({
       }),
     );
     if (record) pushRecent(res.path);
+    get().clearCompareFilter();
     get().loadGit(side);
   },
 
@@ -390,9 +493,12 @@ export const usePanes = create<PanesStore>((set, get) => ({
         selected: new Set<string>(),
         anchor: 0,
         shiftBase: null,
+        snapshot: null,
+        compareHidden: null,
         git: null,
       })),
     );
+    get().clearCompareFilter();
   },
 
   refresh: async (side, opts) => {
@@ -401,6 +507,9 @@ export const usePanes = create<PanesStore>((set, get) => ({
     const res = await listDir(panel.path);
     set(
       withActiveTab(get(), side, (t) => {
+        // A refresh means the contents may have moved on, so a
+        // comparison result from before it is dropped rather than left
+        // hiding entries that might no longer be equal (TICKET-059).
         const entries = rebuildEntries(res.entries, res.path, t.sort, false, t.filter);
         const names = new Set(entries.map((e) => e.name));
         // Select newly added entries if applicable and bring them into view
@@ -421,6 +530,7 @@ export const usePanes = create<PanesStore>((set, get) => ({
               cursor: entries.indexOf(added[0]),
               selected: new Set(added.map((e) => e.name)),
               shiftBase: null,
+              compareHidden: null,
             };
           }
         }
@@ -431,9 +541,11 @@ export const usePanes = create<PanesStore>((set, get) => ({
           cursor: clamp(t.cursor, 0, Math.max(0, entries.length - 1)),
           selected: new Set([...t.selected].filter((n) => names.has(n))),
           shiftBase: null,
+          compareHidden: null,
         };
       }),
     );
+    get().clearCompareFilter();
     get().loadGit(side);
   },
 
@@ -530,21 +642,28 @@ export const usePanes = create<PanesStore>((set, get) => ({
   invertSelection: (side) =>
     set(
       withActiveTab(get(), side, (t) => {
-        const selected = new Set<string>();
+        // File semantics (TICKET-059): only files flip, a folder the
+        // user marked by hand keeps its mark. Menu entry and "*" run
+        // through this very action, so they cannot disagree.
+        const selected = new Set(t.selected);
         for (const r of t.entries) {
-          if (!r.parent && !t.selected.has(r.name)) selected.add(r.name);
+          if (r.parent || r.is_dir) continue;
+          selected.has(r.name)
+            ? selected.delete(r.name)
+            : selected.add(r.name);
         }
         return { ...t, selected, shiftBase: null };
       }),
     ),
 
-  selectPattern: (side, pattern, add) =>
+  selectPattern: (side, pattern, add, includeFolders = false) =>
     set(
       withActiveTab(get(), side, (t) => {
         const re = globToRegExp(pattern);
         const selected = new Set(t.selected);
         for (const r of t.entries) {
           if (r.parent) continue;
+          if (r.is_dir && !includeFolders) continue;
           if (re.test(r.name)) {
             add ? selected.add(r.name) : selected.delete(r.name);
           }
@@ -552,6 +671,137 @@ export const usePanes = create<PanesStore>((set, get) => ({
         return { ...t, selected, shiftBase: null };
       }),
     ),
+
+  selectAllFiles: (side) =>
+    set(
+      withActiveTab(get(), side, (t) => {
+        const selected = new Set(t.selected);
+        for (const r of t.entries) {
+          if (!r.parent && !r.is_dir) selected.add(r.name);
+        }
+        return { ...t, selected, shiftBase: null };
+      }),
+    ),
+
+  clearSelection: (side) =>
+    set(
+      withActiveTab(get(), side, (t) =>
+        t.selected.size === 0
+          ? t
+          : { ...t, selected: new Set<string>(), shiftBase: null },
+      ),
+    ),
+
+  selectSameExt: (side) =>
+    set(
+      withActiveTab(get(), side, (t) => {
+        const cur = t.entries[t.cursor];
+        if (!cur || cur.parent || cur.is_dir) return t;
+        // "Last extension", case-insensitively: `a.tar.gz` groups by
+        // `gz`, while `.env` and `README` group by "no extension".
+        const extOf = (r: Row) => splitName(r).ext.toLowerCase();
+        const want = extOf(cur);
+        const selected = new Set(t.selected);
+        for (const r of t.entries) {
+          if (r.parent || r.is_dir) continue;
+          if (extOf(r) === want) selected.add(r.name);
+        }
+        return { ...t, selected, shiftBase: null };
+      }),
+    ),
+
+  rememberSelection: (side) =>
+    set(
+      withActiveTab(get(), side, (t) => ({
+        ...t,
+        // An empty selection is a valid snapshot; "remember" always
+        // replaces the previous one.
+        snapshot: { location: locationOf(t), names: [...t.selected] },
+      })),
+    ),
+
+  restoreSelection: (side) => {
+    const t = panelOf(get(), side);
+    const snap = t.snapshot;
+    if (!snap || snap.location !== locationOf(t)) return { applied: 0, missing: 0 };
+    return get().applySelection(side, snap.names);
+  },
+
+  applySelection: (side, names) => {
+    const t = panelOf(get(), side);
+    const visible = new Set(t.entries.filter((r) => !r.parent).map((r) => r.name));
+    const selected = new Set<string>();
+    let missing = 0;
+    for (const name of names) {
+      if (visible.has(name)) selected.add(name);
+      else missing += 1;
+    }
+    set(withActiveTab(get(), side, (tt) => ({ ...tt, selected, shiftBase: null })));
+    return { applied: selected.size, missing };
+  },
+
+  applyCompare: (result) =>
+    set((s) => {
+      const applySide = (side: Side): SideState => {
+        const { hidden, selected } = result[side];
+        const sd = s[side];
+        const tabs = sd.tabs.map((t, i) => {
+          if (i !== sd.activeTab) return t;
+          const entries = rebuildEntries(
+            t.raw,
+            t.path,
+            t.sort,
+            t.archive !== null,
+            t.filter,
+            hidden,
+          );
+          return {
+            ...t,
+            compareHidden: hidden,
+            entries,
+            // Hiding may remove the row under the cursor; otherwise the
+            // cursor stays on the same entry, not on the same index.
+            cursor: cursorFor(entries, t.entries[t.cursor]?.name, t.cursor),
+            selected: pruneSelection(selected, entries),
+            shiftBase: null,
+          };
+        });
+        return { ...sd, tabs };
+      };
+      return { left: applySide("left"), right: applySide("right") };
+    }),
+
+  clearCompareFilter: (side) =>
+    set((s) => {
+      const sides: Side[] = side ? [side] : ["left", "right"];
+      const next: Partial<Record<Side, SideState>> = {};
+      for (const sd of sides) {
+        const state = s[sd];
+        if (state.tabs.every((t) => t.compareHidden === null)) continue;
+        next[sd] = {
+          ...state,
+          tabs: state.tabs.map((t) => {
+            if (t.compareHidden === null) return t;
+            const entries = rebuildEntries(
+              t.raw,
+              t.path,
+              t.sort,
+              t.archive !== null,
+              t.filter,
+            );
+            // Lossless: the previously hidden files come back, the
+            // selection and the cursor entry are untouched.
+            return {
+              ...t,
+              compareHidden: null,
+              entries,
+              cursor: cursorFor(entries, t.entries[t.cursor]?.name, t.cursor),
+            };
+          }),
+        };
+      }
+      return next as Partial<PanesStore>;
+    }),
 
   setSort: (side, key) =>
     set(
@@ -575,6 +825,7 @@ export const usePanes = create<PanesStore>((set, get) => ({
           t.sort,
           t.archive !== null,
           filter,
+          t.compareHidden,
         );
         // Cursor to the first real match (after a possible ".." row).
         const first = entries.findIndex((e) => !e.parent);
@@ -585,6 +836,9 @@ export const usePanes = create<PanesStore>((set, get) => ({
           cursor: first >= 0 ? first : 0,
           anchor: first >= 0 ? first : 0,
           shiftBase: null,
+          // Entries the filter hides must not stay operation targets
+          // (TICKET-059); the snapshot keeps them regardless.
+          selected: pruneSelection(t.selected, entries),
         };
       }),
     ),
@@ -600,6 +854,7 @@ export const usePanes = create<PanesStore>((set, get) => ({
           t.sort,
           t.archive !== null,
           t.filter,
+          t.compareHidden,
         );
         return {
           ...t,

@@ -22,7 +22,6 @@ import type { Lang, TransKey } from "@/i18n/dictionaries";
 import type { Shortcut } from "@/lib/shortcut";
 import { isMacOS } from "@/lib/platform";
 import { schemeOf } from "@/lib/path";
-import { writeClipboard } from "@/lib/clipboard";
 import { openPath, openTerminal } from "@/ipc/client";
 import {
   panelOf,
@@ -32,7 +31,7 @@ import {
   type ViewMode,
 } from "@/store/panesStore";
 import { useClipboard } from "@/store/clipboardStore";
-import { useNet } from "@/features/net/netStore";
+import { connectionFor, useNet } from "@/features/net/netStore";
 import { translate, useSettings, type Theme } from "@/store/settingsStore";
 import { useHistory } from "@/store/historyStore";
 import { useTransfers, type TransferOp } from "@/store/transfersStore";
@@ -53,10 +52,32 @@ import {
   runOpenWithBrowse,
   runOpenWithProgram,
   runQuickLook,
-  targetPaths,
 } from "./fileOps";
 import { openEntry } from "./navigate";
-import { invertSelection, promptSelect } from "./selection";
+import {
+  hasSnapshot,
+  invertSelection,
+  promptSelect,
+  rememberSelection,
+  restoreSelection,
+  selectAllFiles,
+  selectNoFiles,
+  selectSameExt,
+} from "./selection";
+import {
+  copyNameDetails,
+  copyNames,
+  copyPathDetails,
+  copyPaths,
+} from "./markClipboard";
+import {
+  clearCompareFilter,
+  compareBusy,
+  compareFilterActive,
+  compareReady,
+  runCompare,
+} from "./compareLevel";
+import { openSelectionFile } from "@/store/selectionFileStore";
 import { joinPath, baseName } from "@/lib/path";
 
 // ---------- Command type ----------
@@ -97,25 +118,6 @@ const activePanel = () => {
   return panelOf(s, s.active);
 };
 
-/** `scheme://authority` of a remote address, null for local paths. */
-function authorityOf(path: string): string | null {
-  const m = /^([a-z][a-z0-9+.-]*:\/\/[^/]*)/i.exec(path);
-  return m ? m[1].toLowerCase() : null;
-}
-
-/** The live connection serving `path`, or null (also null for local paths). */
-export function connectionFor(path: string) {
-  const auth = authorityOf(path);
-  if (!auth) return null;
-  return (
-    useNet
-      .getState()
-      .connections.find(
-        (c) => c.connected && authorityOf(c.address) === auth,
-      ) ?? null
-  );
-}
-
 /** False only for a remote folder whose connection is gone (TICKET-031). */
 function sessionLive(path = activePanel().path): boolean {
   return schemeOf(path) === null || connectionFor(path) !== null;
@@ -140,6 +142,20 @@ function hasTarget(): CommandState {
   const base = folderReady();
   if (base.disabled) return base;
   if (targetCount() === 0) return { disabled: true, reason: "menu.why.noTarget" };
+  return {};
+}
+
+/** At least one real file is visible in the active tab. */
+function hasVisibleFile(): boolean {
+  return activePanel().entries.some((r) => !r.parent && !r.is_dir);
+}
+
+/** Shared availability of the two pane comparisons (TICKET-059). */
+function compareState(): CommandState {
+  if (compareBusy()) return { disabled: true, reason: "menu.why.compareBusy" };
+  if (!compareReady()) {
+    return { disabled: true, reason: "menu.why.compareOffline" };
+  }
   return {};
 }
 
@@ -181,10 +197,6 @@ function localOnly(): CommandState {
 function runEditLikeF4(): void {
   const trigger = useSettings.getState().editorTrigger;
   runAction(trigger === "f4" ? "edit-with" : "edit", activeSide());
-}
-
-function copyToSystemClipboard(values: string[]): void {
-  if (values.length) void writeClipboard(values.join("\n"));
 }
 
 // ---------- The commands ----------
@@ -354,7 +366,8 @@ export const COMMANDS = {
     state: () => ({ hidden: isMacOS }),
   },
 
-  // ----- Markieren -----
+  // ----- Markieren (TICKET-059) -----
+  // Group 1 – what is marked.
   "mark.selectGroup": {
     label: "menu.mark.selectGroup",
     dialog: true,
@@ -367,38 +380,104 @@ export const COMMANDS = {
     shortcut: { key: "-" },
     run: () => promptSelect(activeSide(), false),
   },
-  "mark.invert": {
-    label: "menu.mark.invert",
-    shortcut: { key: "*" },
-    run: () => invertSelection(activeSide()),
+  "mark.allFiles": {
+    label: "menu.mark.allFiles",
+    shortcut: { mods: ["Mod"], key: "Num+" },
+    run: () => selectAllFiles(activeSide()),
+    state: () => (hasVisibleFile() ? {} : { disabled: true, reason: "menu.why.empty" }),
   },
-  "mark.all": {
-    label: "menu.mark.all",
-    // Uses the existing pattern selection; ".." is excluded there.
-    run: () => usePanes.getState().selectPattern(activeSide(), "*", true),
-  },
-  "mark.none": {
-    label: "menu.mark.none",
-    run: () => usePanes.getState().selectPattern(activeSide(), "*", false),
+  "mark.noFiles": {
+    label: "menu.mark.noFiles",
+    shortcut: { mods: ["Mod"], key: "Num-" },
+    // Clears the whole selection of the tab, folders included.
+    run: () => selectNoFiles(activeSide()),
     state: () =>
       activePanel().selected.size > 0
         ? {}
         : { disabled: true, reason: "menu.why.noSelection" },
   },
+  "mark.invert": {
+    label: "menu.mark.invert",
+    shortcut: { key: "*" },
+    run: () => invertSelection(activeSide()),
+    state: () => (hasVisibleFile() ? {} : { disabled: true, reason: "menu.why.empty" }),
+  },
+  "mark.sameExt": {
+    label: "menu.mark.sameExt",
+    shortcut: { mods: ["Alt"], key: "Num+" },
+    run: () => selectSameExt(activeSide()),
+    state: cursorIsFile,
+  },
+
+  // Group 2 – remembering a selection.
+  "mark.remember": {
+    label: "menu.mark.remember",
+    run: () => rememberSelection(activeSide()),
+  },
+  "mark.restore": {
+    label: "menu.mark.restore",
+    shortcut: { key: "Num/" },
+    run: () => restoreSelection(activeSide()),
+    state: () =>
+      hasSnapshot(activeSide())
+        ? {}
+        : { disabled: true, reason: "menu.why.noSnapshot" },
+  },
+  "mark.saveFile": {
+    label: "menu.mark.saveFile",
+    dialog: true,
+    run: () => openSelectionFile(activeSide(), "save"),
+  },
+  "mark.loadFile": {
+    label: "menu.mark.loadFile",
+    dialog: true,
+    run: () => openSelectionFile(activeSide(), "load"),
+  },
+
+  // Group 3 – clipboard.
   "mark.copyNames": {
     label: "menu.mark.copyNames",
-    run: () => copyToSystemClipboard(targetPaths(activeSide()).map(baseName)),
+    run: () => copyNames(activeSide()),
     state: hasTarget,
   },
   "mark.copyPaths": {
     label: "menu.mark.copyPaths",
-    run: () => copyToSystemClipboard(targetPaths(activeSide())),
+    run: () => copyPaths(activeSide()),
+    state: () => notInArchive(hasTarget),
+  },
+  "mark.copyDetails": {
+    label: "menu.mark.copyDetails",
+    run: () => copyNameDetails(activeSide()),
+    state: hasTarget,
+  },
+  "mark.copyPathDetails": {
+    label: "menu.mark.copyPathDetails",
+    run: () => copyPathDetails(activeSide()),
     state: () => notInArchive(hasTarget),
   },
   "mark.export": {
     label: "menu.mark.export",
     dialog: true,
     run: () => openExport(activeSide()),
+  },
+
+  // Group 4 – comparing the two panes.
+  "mark.compare": {
+    label: "menu.mark.compare",
+    shortcut: { mods: ["Shift"], key: "F2" },
+    run: () => void runCompare("differences"),
+    state: compareState,
+  },
+  "mark.compareHideSame": {
+    label: "menu.mark.compareHideSame",
+    run: () => void runCompare("newerHideSame"),
+    state: compareState,
+  },
+  "mark.clearCompare": {
+    label: "menu.mark.clearCompare",
+    run: () => clearCompareFilter(),
+    state: () =>
+      compareFilterActive() ? {} : { disabled: true, reason: "menu.why.noCompare" },
   },
 
   // ----- Befehle -----
@@ -1002,14 +1081,25 @@ export const MENUS: MenuCategory[] = [
     nodes: [
       item("mark.selectGroup"),
       item("mark.unselectGroup"),
+      item("mark.allFiles"),
+      item("mark.noFiles"),
       item("mark.invert"),
+      item("mark.sameExt"),
       sep(),
-      item("mark.all"),
-      item("mark.none"),
+      item("mark.remember"),
+      item("mark.restore"),
+      item("mark.saveFile"),
+      item("mark.loadFile"),
       sep(),
       item("mark.copyNames"),
       item("mark.copyPaths"),
+      item("mark.copyDetails"),
+      item("mark.copyPathDetails"),
       item("mark.export"),
+      sep(),
+      item("mark.compare"),
+      item("mark.compareHideSame"),
+      item("mark.clearCompare"),
     ],
   },
   {

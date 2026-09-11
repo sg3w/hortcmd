@@ -4,12 +4,20 @@
 // ============================================================
 
 import { useEffect } from "react";
-import { panelOf, usePanes } from "@/store/panesStore";
+import { panelOf, usePanes, type Side } from "@/store/panesStore";
 import { useSettings } from "@/store/settingsStore";
 import { isMacOS } from "@/lib/platform";
 import { runAction, type ActionId } from "./actions";
 import { runDelete, runQuickLook } from "./fileOps";
-import { invertSelection, promptSelect } from "./selection";
+import {
+  invertSelection,
+  promptSelect,
+  restoreSelection,
+  selectAllFiles,
+  selectNoFiles,
+  selectSameExt,
+} from "./selection";
+import { runCompare } from "./compareLevel";
 import { openEntry } from "./navigate";
 import { openProps } from "@/store/propsStore";
 import { openSearch } from "@/store/searchStore";
@@ -18,6 +26,40 @@ import { joinPath } from "@/lib/path";
 import { isDialogKey } from "@/lib/keys";
 
 const PAGE = 20; // Zeilen pro Seiten-Sprung
+
+/**
+ * Numeric-keypad selection keys (TICKET-059), addressed by `code` and
+ * not by `key`: the keypad reports the same `key` as the main block, so
+ * only `code` tells "Num +" and "+" apart. The plain keys of the main
+ * block keep working unchanged; the keypad merely adds the modifier
+ * combinations Total Commander users expect. Every one of them is also
+ * reachable from the "Mark" menu, so a keyboard without a keypad loses
+ * nothing.
+ */
+function numpadSelection(e: KeyboardEvent, side: Side): boolean {
+  const mod = e.metaKey || e.ctrlKey;
+  switch (e.code) {
+    case "NumpadAdd":
+      if (mod) selectAllFiles(side);
+      else if (e.altKey) selectSameExt(side);
+      else promptSelect(side, true);
+      return true;
+    case "NumpadSubtract":
+      if (e.altKey) return false;
+      mod ? selectNoFiles(side) : promptSelect(side, false);
+      return true;
+    case "NumpadMultiply":
+      if (mod || e.altKey) return false;
+      invertSelection(side);
+      return true;
+    case "NumpadDivide":
+      if (mod || e.altKey) return false;
+      restoreSelection(side);
+      return true;
+    default:
+      return false;
+  }
+}
 
 const F_KEYS: Record<string, ActionId> = {
   F2: "rename",
@@ -107,6 +149,23 @@ export function useKeyboard(): void {
         if (cur && !cur.parent && p.archive === null) {
           openProps(joinPath(p.path, cur.name), p.git?.entries[cur.name]);
         }
+        return;
+      }
+
+      // ----- Selection keys of the numeric keypad (TICKET-059) -----
+      // Before the Cmd/Ctrl and quick-filter blocks: Cmd+Num+ must
+      // select everything, not fall through to a clipboard shortcut.
+      if (numpadSelection(e, side)) {
+        e.preventDefault();
+        return;
+      }
+
+      // Shift+F2: compare the two panes. Modifier combinations are
+      // decided before the plain F-keys further down, so this cannot
+      // end up in "rename" (F2).
+      if (e.shiftKey && !mod && !e.altKey && e.key === "F2") {
+        e.preventDefault();
+        void runCompare("differences");
         return;
       }
 

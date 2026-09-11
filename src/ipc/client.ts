@@ -18,6 +18,8 @@ import type {
   FileProps,
   GitStatus,
   GitStatusEvent,
+  LevelDiff,
+  LevelEntry,
   OpDone,
   OpProgress,
   OpResult,
@@ -25,6 +27,8 @@ import type {
   Profile,
   SearchHit,
   SearchSummary,
+  SelEntry,
+  SelectionFile,
   Tag,
   TermClosed,
   TermData,
@@ -589,6 +593,44 @@ export async function compareDirs(
   });
 }
 
+/**
+ * Compares the two directory levels the panes already hold (TICKET-059).
+ * No directory is scanned again, so the same call serves local folders,
+ * every remote provider and the inside of an archive alike.
+ */
+export async function compareLevels(
+  left: LevelEntry[],
+  right: LevelEntry[],
+): Promise<LevelDiff[]> {
+  if (!hasTauri) return demoCompareLevels(left, right);
+  return invoke<LevelDiff[]>("compare_levels", { left, right });
+}
+
+/**
+ * Writes a selection file. Like `write_text_file`, `false` reports an
+ * existing target instead of overwriting it.
+ */
+export async function saveSelection(
+  path: string,
+  location: string,
+  entries: SelEntry[],
+  overwrite: boolean,
+): Promise<boolean> {
+  if (!hasTauri) {
+    console.log("[demo] save_selection", path, `${entries.length} Eintrag/Einträge`);
+    return true;
+  }
+  return invoke<boolean>("save_selection", { path, location, entries, overwrite });
+}
+
+/** Reads and validates a selection file (format checks live in Rust). */
+export async function loadSelection(path: string): Promise<SelectionFile> {
+  if (!hasTauri) {
+    return { version: 1, location: "/demo", entries: [{ name: "readme.md", is_dir: false }] };
+  }
+  return invoke<SelectionFile>("load_selection", { path });
+}
+
 /** Copies files source→target (pairs of absolute paths). */
 export async function syncCopy(
   items: [string, string][],
@@ -742,6 +784,30 @@ function demoFileDiff(left: string, _right: string): FileDiff {
     ],
     hex: [],
   };
+}
+
+/** Demo mirror of the backend classification (browser-only preview). */
+function demoCompareLevels(left: LevelEntry[], right: LevelEntry[]): LevelDiff[] {
+  const index = (v: LevelEntry[]) => new Map(v.map((e) => [e.name, e]));
+  const l = index(left);
+  const r = index(right);
+  const names = [...new Set([...l.keys(), ...r.keys()])].sort();
+  return names.map((name) => {
+    const a = l.get(name);
+    const b = r.get(name);
+    let status = "unknown";
+    if (a && !b) status = "left_only";
+    else if (b && !a) status = "right_only";
+    else if (a && b) {
+      const bad = (e: LevelEntry) => e.is_symlink || e.modified === 0;
+      if (a.is_dir !== b.is_dir || bad(a) || bad(b)) status = "unknown";
+      else if (a.size === b.size && a.modified === b.modified) status = "same";
+      else if (a.modified === b.modified) status = "different";
+      else if (a.is_dir && b.is_dir) status = "different";
+      else status = a.modified > b.modified ? "newer_left" : "newer_right";
+    }
+    return { name, left: !!a, right: !!b, status };
+  });
 }
 
 function demoCompare(recursive: boolean): DiffEntry[] {

@@ -31,6 +31,16 @@ const PC_MOD: Record<Modifier, string> = {
   Shift: "Shift",
 };
 
+/** Numeric-keypad keys, spelled out so they cannot be confused with
+ *  the keys of the main block (TICKET-059). Every command carrying one
+ *  is also reachable from the menu, for keyboards without a keypad. */
+const NUM_KEY: Record<string, string> = {
+  "Num+": "Num +",
+  "Num-": "Num −",
+  "Num*": "Num *",
+  "Num/": "Num /",
+};
+
 /** Keys whose macOS glyph differs from their name. */
 const MAC_KEY: Record<string, string> = {
   Enter: "⏎",
@@ -61,7 +71,9 @@ export function formatShortcut(s: Shortcut): string {
       .filter((m) => mods.includes(m))
       .map((m) => MAC_MOD[m])
       .join("");
-    return glyphs + (MAC_KEY[s.key] ?? s.key);
+    return glyphs + (NUM_KEY[s.key] ?? MAC_KEY[s.key] ?? s.key);
   }
-  return [...mods.map((m) => PC_MOD[m]), PC_KEY[s.key] ?? s.key].join("+");
+  return [...mods.map((m) => PC_MOD[m]), NUM_KEY[s.key] ?? PC_KEY[s.key] ?? s.key].join(
+    "+",
+  );
 }

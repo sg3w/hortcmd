@@ -7,6 +7,7 @@
 //   preview – file preview (F3) + open with default program (F4)
 //   archive – ZIP: browse, extract, pack
 //   walk    – reusable local directory traversal (search, sizes)
+//   selection – save/load a marked-entry list (TICKET-059)
 // ============================================================
 
 pub mod archive;
@@ -20,6 +21,7 @@ pub mod git;
 pub mod preview;
 pub mod props;
 pub mod search;
+pub mod selection;
 pub mod size;
 pub mod tags;
 pub mod volume;

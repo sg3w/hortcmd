@@ -42,6 +42,7 @@ import { AboutDialog } from "@/components/ui/AboutDialog";
 import { OperationDialogs } from "@/components/ui/OperationDialogs";
 import { FileBrowserDialog } from "@/components/ui/FileBrowserDialog";
 import { ExportDialog } from "@/components/ui/ExportDialog";
+import { SelectionFileDialog } from "@/components/ui/SelectionFileDialog";
 import { RenameDialog } from "@/components/ui/RenameDialog";
 import { CompareDialog } from "@/components/ui/CompareDialog";
 import { FileCompareDialog } from "@/components/ui/FileCompareDialog";
@@ -315,6 +316,7 @@ export default function App() {
       <RenameDialog />
       <CompareDialog />
       <ExportDialog />
+      <SelectionFileDialog />
       <FileCompareDialog />
       <PreviewDialog />
       <PropertiesDialog />

@@ -7,7 +7,7 @@
 // ============================================================
 
 use super::file::OpResult;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -236,5 +236,227 @@ pub async fn sync_copy(items: Vec<(String, String)>) -> OpResult {
             ok: 0,
             errors: vec![e.to_string()],
         },
+    }
+}
+
+// ============================================================
+// Single-level comparison for the "Mark" menu (TICKET-059).
+//
+// The pane comparison works on the two listings the panes already
+// hold, which is what makes it provider-neutral: the very same
+// classification serves local folders, every remote provider and the
+// inside of an archive, without a second directory scan and without
+// `std::fs` — a remote pane has no local path to walk in the first
+// place. Only the classification lives here, so the rules below are
+// unit-testable and cannot drift from `status_of` above.
+// ============================================================
+
+/// One entry of a directory level as the pane already knows it.
+#[derive(Clone, Debug, Deserialize, TS)]
+#[ts(export, export_to = "../../src/ipc/bindings/")]
+pub struct LevelEntry {
+    pub name: String,
+    pub is_dir: bool,
+    pub is_symlink: bool,
+    #[ts(type = "number")]
+    pub size: u64,
+    /// Unix seconds; 0 means the provider reported no timestamp.
+    #[ts(type = "number")]
+    pub modified: u64,
+}
+
+/// Classification of one name across both levels.
+#[derive(Clone, Debug, Serialize, TS)]
+#[ts(export, export_to = "../../src/ipc/bindings/")]
+pub struct LevelDiff {
+    pub name: String,
+    pub left: bool,
+    pub right: bool,
+    /// "same" | "left_only" | "right_only" | "newer_left" |
+    /// "newer_right" | "different" | "unknown"
+    pub status: String,
+}
+
+/// True when an entry cannot take part in a metadata comparison:
+/// a symlink (whose metadata describes the link, not the target) or
+/// a missing timestamp. Such entries are never called "same".
+fn uncomparable(e: &LevelEntry) -> bool {
+    e.is_symlink || e.modified == 0
+}
+
+/// Classifies one name. Equality here is *metadata* equality (name,
+/// size and timestamp) — it is explicitly not a content comparison,
+/// which is what the file comparison under "Commands" is for.
+fn classify_pair(l: Option<&LevelEntry>, r: Option<&LevelEntry>) -> &'static str {
+    match (l, r) {
+        (Some(_), None) => "left_only",
+        (None, Some(_)) => "right_only",
+        (None, None) => "unknown",
+        (Some(a), Some(b)) => {
+            // A name that is a folder on one side and a file on the
+            // other is a type conflict, not a difference in content.
+            if a.is_dir != b.is_dir || uncomparable(a) || uncomparable(b) {
+                return "unknown";
+            }
+            if a.size == b.size && a.modified == b.modified {
+                "same"
+            } else if a.modified > b.modified {
+                "newer_left"
+            } else if b.modified > a.modified {
+                "newer_right"
+            } else {
+                // Same timestamp, different size: a real difference,
+                // but neither side is the newer one.
+                "different"
+            }
+        }
+    }
+}
+
+/// Compares two directory levels by name. Folders are classified as
+/// well (so a type conflict is visible) but carry no "newer" verdict,
+/// because a folder timestamp says nothing about its contents.
+pub fn compare_levels_impl(left: Vec<LevelEntry>, right: Vec<LevelEntry>) -> Vec<LevelDiff> {
+    let index = |v: &Vec<LevelEntry>| -> BTreeMap<String, LevelEntry> {
+        v.iter().map(|e| (e.name.clone(), e.clone())).collect()
+    };
+    let l = index(&left);
+    let r = index(&right);
+    let mut names: BTreeSet<&String> = BTreeSet::new();
+    names.extend(l.keys());
+    names.extend(r.keys());
+
+    names
+        .into_iter()
+        .map(|name| {
+            let le = l.get(name);
+            let re = r.get(name);
+            let mut status = classify_pair(le, re);
+            if status == "newer_left" || status == "newer_right" {
+                if let (Some(a), Some(b)) = (le, re) {
+                    if a.is_dir && b.is_dir {
+                        status = "different";
+                    }
+                }
+            }
+            LevelDiff {
+                name: name.clone(),
+                left: le.is_some(),
+                right: re.is_some(),
+                status: status.to_string(),
+            }
+        })
+        .collect()
+}
+
+/// Compares the two visible directory levels the panes hand over.
+/// Async so a very large pair of listings cannot block the UI thread
+/// and so the caller can drop a result that arrived too late.
+#[tauri::command]
+pub async fn compare_levels(left: Vec<LevelEntry>, right: Vec<LevelEntry>) -> Vec<LevelDiff> {
+    tauri::async_runtime::spawn_blocking(move || compare_levels_impl(left, right))
+        .await
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod level_tests {
+    use super::*;
+
+    fn f(name: &str, size: u64, modified: u64) -> LevelEntry {
+        LevelEntry {
+            name: name.into(),
+            is_dir: false,
+            is_symlink: false,
+            size,
+            modified,
+        }
+    }
+
+    fn status(diffs: &[LevelDiff], name: &str) -> String {
+        diffs
+            .iter()
+            .find(|d| d.name == name)
+            .map(|d| d.status.clone())
+            .unwrap_or_else(|| panic!("{} fehlt im Ergebnis", name))
+    }
+
+    #[test]
+    fn only_one_side_missing_and_identical() {
+        let diffs = compare_levels_impl(
+            vec![f("nur_links.txt", 1, 100), f("beide.txt", 10, 500)],
+            vec![f("nur_rechts.txt", 1, 100), f("beide.txt", 10, 500)],
+        );
+        assert_eq!(status(&diffs, "nur_links.txt"), "left_only");
+        assert_eq!(status(&diffs, "nur_rechts.txt"), "right_only");
+        assert_eq!(status(&diffs, "beide.txt"), "same");
+    }
+
+    #[test]
+    fn newer_side_wins_over_size() {
+        let diffs = compare_levels_impl(vec![f("a", 10, 900)], vec![f("a", 99, 100)]);
+        assert_eq!(status(&diffs, "a"), "newer_left");
+        let diffs = compare_levels_impl(vec![f("a", 10, 100)], vec![f("a", 99, 900)]);
+        assert_eq!(status(&diffs, "a"), "newer_right");
+    }
+
+    #[test]
+    fn same_time_other_size_is_a_difference_not_newer() {
+        let diffs = compare_levels_impl(vec![f("a", 10, 500)], vec![f("a", 20, 500)]);
+        assert_eq!(status(&diffs, "a"), "different");
+    }
+
+    #[test]
+    fn missing_timestamps_are_never_same() {
+        // Identical size, no timestamp on either side: not safely
+        // comparable, so it must not be hidden as "same".
+        let diffs = compare_levels_impl(vec![f("a", 10, 0)], vec![f("a", 10, 0)]);
+        assert_eq!(status(&diffs, "a"), "unknown");
+        let diffs = compare_levels_impl(vec![f("a", 10, 500)], vec![f("a", 10, 0)]);
+        assert_eq!(status(&diffs, "a"), "unknown");
+    }
+
+    #[test]
+    fn symlinks_are_not_comparable() {
+        let mut link = f("a", 10, 500);
+        link.is_symlink = true;
+        let diffs = compare_levels_impl(vec![link], vec![f("a", 10, 500)]);
+        assert_eq!(status(&diffs, "a"), "unknown");
+    }
+
+    #[test]
+    fn type_conflict_is_unknown() {
+        let mut dir = f("a", 0, 500);
+        dir.is_dir = true;
+        let diffs = compare_levels_impl(vec![dir], vec![f("a", 0, 500)]);
+        assert_eq!(status(&diffs, "a"), "unknown");
+    }
+
+    #[test]
+    fn folders_are_compared_but_never_called_newer() {
+        let mut l = f("ordner", 0, 900);
+        l.is_dir = true;
+        let mut r = f("ordner", 0, 100);
+        r.is_dir = true;
+        let diffs = compare_levels_impl(vec![l.clone()], vec![r]);
+        assert_eq!(status(&diffs, "ordner"), "different");
+        // Identical folder metadata still counts as equal.
+        let diffs = compare_levels_impl(vec![l.clone()], vec![l]);
+        assert_eq!(status(&diffs, "ordner"), "same");
+    }
+
+    #[test]
+    fn empty_levels_produce_no_result() {
+        assert!(compare_levels_impl(vec![], vec![]).is_empty());
+        let diffs = compare_levels_impl(vec![f("a", 1, 1)], vec![]);
+        assert_eq!(diffs.len(), 1);
+        assert!(diffs[0].left && !diffs[0].right);
+    }
+
+    #[test]
+    fn names_differing_only_in_case_stay_separate() {
+        let diffs = compare_levels_impl(vec![f("Datei", 1, 1)], vec![f("datei", 1, 1)]);
+        assert_eq!(status(&diffs, "Datei"), "left_only");
+        assert_eq!(status(&diffs, "datei"), "right_only");
     }
 }

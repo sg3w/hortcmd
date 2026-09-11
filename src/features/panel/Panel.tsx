@@ -12,6 +12,7 @@ import { TabBar } from "./TabBar";
 import { DriveSelect } from "./DriveSelect";
 import { PathBar } from "./PathBar";
 import { FilterBar } from "./FilterBar";
+import { PaneNotice } from "./PaneNotice";
 import { StatusBar } from "./StatusBar";
 import { FileTable } from "./FileTable";
 import { DirTree } from "./DirTree";
@@ -84,6 +85,7 @@ export function Panel({ side, drives }: Props) {
         table
       )}
       <FilterBar side={side} />
+      <PaneNotice side={side} />
       <StatusBar side={side} />
     </section>
   );

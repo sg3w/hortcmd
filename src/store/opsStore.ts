@@ -29,7 +29,10 @@ export interface PromptRequest {
   selectRange?: [number, number];
   /** Mask the input (password field). */
   password?: boolean;
-  onSubmit: (value: string) => void;
+  /** Optional extra switch below the field (e.g. "include folders",
+   *  TICKET-059). Its state is handed to `onSubmit` as `checked`. */
+  checkbox?: { label: string; initial: boolean };
+  onSubmit: (value: string, checked: boolean) => void;
 }
 
 interface OpsStore {

@@ -96,12 +96,17 @@ store/
 ├── opsStore.ts              confirm/input dialogs, collision queue, preview, busy
 ├── uiStore.ts               open state of the app-level dialogs reachable from
 │                            several places (settings, shortcuts, about; TICKET-040)
-└── transfersStore.ts        running Copy/Move/Extract/Pack operations (two bars)
+├── transfersStore.ts        running Copy/Move/Extract/Pack operations (two bars)
+├── noticeStore.ts           transient per-pane result messages (TICKET-059)
+└── selectionFileStore.ts    open state of the save/load selection dialog (059)
 i18n/dictionaries.ts         de/en + t() mechanism
 features/panel/              Panel · TabBar · DriveSelect · PathBar · StatusBar
                              · FileTable (Table+Virtual) · columns
+                             · FilterBar · PaneNotice (comparison filter indicator
+                               + transient result message, TICKET-059)
 features/commander/          useKeyboard · navigate · actions · fileOps · preview
-                             · selection · FunctionBar · CommandBar
+                             · selection · markClipboard · compareLevel
+                               (Mark menu, TICKET-059) · FunctionBar · CommandBar
                              · commands.ts (shared command definition + menu tree,
                                TICKET-040) · MenuBar · nativeMenu (macOS bridge)
 features/net/                remote connections (021): netStore · ConnectionsDialog
@@ -110,6 +115,7 @@ features/net/                remote connections (021): netStore · ConnectionsDi
 components/ui/               FileContextMenu · SettingsDialog · OperationDialogs
                              · PreviewDialog · TransferView
                              · ShortcutsDialog · AboutDialog (Help menu, TICKET-040)
+                             · SelectionFileDialog (save/load selection, 059)
 lib/                         format · fileIcon · cn · path · glob · keys · shortcut
 ```
 
@@ -156,6 +162,10 @@ commands/fs/
 ├── preview.rs               read_preview (F3) · open_path (F4)
 ├── archive.rs               archives (ZIP/tar/tar.gz/tar.xz/7z, password): list_archive ·
 │                            extract_entries · create_archive (packing → ZIP)
+├── compare.rs               compare_dirs/sync_copy (recursive, local) + compare_levels
+│                            (one visible level of two panes, provider-neutral; 059)
+├── selection.rs             save_selection/load_selection: versioned JSON selection
+│                            files incl. format validation and limits (TICKET-059)
 └── watch.rs                 set_watched (directory watching, notify)
 ```
 
@@ -178,6 +188,9 @@ interface TabState {
   anchor: number;                // anchor row for Shift range selection
   shiftBase: Set<string> | null; // selection snapshot during a Shift session
   sort: { key: SortKey; asc: boolean };
+  // TICKET-059 — both temporary, both per tab:
+  snapshot: { location: string; names: string[] } | null;  // "remember selection"
+  compareHidden: Set<string> | null;                       // comparison filter
 }
 interface SideState { tabs: TabState[]; activeTab: number }
 interface PanesStore { active: Side; left: SideState; right: SideState; /* …actions */ }
@@ -185,7 +198,11 @@ interface PanesStore { active: Side; left: SideState; right: SideState; /* …ac
 
 **Rules:** components subscribe only to their partial state (`panelOf(s, side).cursor`);
 cursor movement changes only `cursor`; folders always before files; the "system files"
-filter and the `..` row are applied on rebuild.
+filter and the `..` row are applied on rebuild. Anything that narrows the visible
+rows also prunes `selected` to them (TICKET-059) — a hidden entry must never stay
+an operation target — while `snapshot` is deliberately left alone, so a filter
+does not eat a remembered selection. `snapshot` is keyed by `locationOf(tab)`
+(provider identity + folder + archive inner path), never by row index.
 
 ---
 
@@ -200,7 +217,12 @@ filter and the `..` row are applied on rebuild.
 | `Insert` | Select + cursor down (`Space` outside macOS as well) |
 | `Space` | macOS: Quick Look · otherwise: select |
 | `Shift+↑/↓` | Range selection · `Cmd/Ctrl+Click` single toggle · `Shift+Click` range |
-| `+` / `-` / `*` | Select / deselect / invert by pattern |
+| `+` / `-` / `*` | Select / deselect by pattern · invert (files only) |
+| `Num +` / `Num −` / `Num *` | Same as above from the keypad |
+| `⌘/Ctrl+Num +` / `⌘/Ctrl+Num −` | Select all files / clear the selection |
+| `⌥/Alt+Num +` | Select all files with the cursor file's extension |
+| `Num /` | Restore the remembered selection |
+| `⇧F2` | Compare the two panes and mark the differences |
 | Typing (letter/digit) | Quick filter of the active list · `Esc` clears |
 | `F3`…`F8` | View · Edit · Copy · Move · New Folder · Delete |
 | `Alt+F5` | Pack · `Cmd+C/X/V` clipboard · `Cmd+T/W` open/close tab |
@@ -214,7 +236,7 @@ The shortcuts shown in the menu come from the same command definition as the
 Help → keyboard overview (`features/commander/commands.ts`), rendered per
 platform by `lib/shortcut.ts` (⌘C on macOS, Ctrl+C elsewhere).
 
-### Application menu (TICKET-040, completed by TICKET-058)
+### Application menu (TICKET-040, completed by TICKET-058/059)
 
 The complete menu lives **in the window**, above the toolbar, on macOS, Windows
 and Linux alike (`features/commander/MenuBar.tsx`, Radix Menubar). Categories in
@@ -234,7 +256,7 @@ connection cannot act on a stale context.
 | Menu | Commands |
 |---|---|
 | Dateien | open · view (F3) · edit (F4) · open with ▸ (configured programs, **other program…**, manage) ‖ copy (F5) · move (F6) · rename (F2) · new folder (F7) · delete (F8) · delete permanently (⇧F8) ‖ clipboard copy/cut/paste (⌘C/X/V) ‖ pack (⌥F5) · extract · batch rename · compare files by content ‖ properties (⌥⏎) ‖ quit (Windows/Linux only) |
-| Markieren | select/unselect group (+/−) · invert (*) ‖ select all visible entries · select none ‖ copy file names · copy full paths · export file list — the full Mark menu belongs to TICKET-059 |
+| Markieren | **(TICKET-059, complete)** select/unselect group by pattern (+/−, with "include folders") · select all files (⌘Num +) · select no files (⌘Num −) · invert (*) · same extension (⌥Num +) ‖ remember selection · restore (Num /) · save selection to file · load selection from file ‖ copy names · names with path · names with all details · path with details · export file list ‖ compare directories (⇧F2) · mark newer, hide identical · clear comparison filter |
 | Befehle | search (⌥F7) · **special search ▸ (duplicates, empty folders, large files)** · compare/synchronize directories ‖ navigation ▸ (back ⌥←, forward ⌥→, parent) · favorites ▸ · recent folders ▸ ‖ terminal in the current folder · open in the system file manager ‖ transfers ▸ (running/queued, opens the existing transfer dialog) |
 | Netz | manage connections · **connect to ▸ (saved, not yet connected profiles)** · active connections ▸ ‖ disconnect current connection · open SSH terminal |
 | Ansicht | layout ▸ (radio) · sort by ▸ (key + ascending/descending, radio) ‖ hidden files · **folders first** · extension column · permissions column · Git status (checkboxes) ‖ reset quick filter ‖ new tab (⌘T) · close tab (⌘W) · open folder under cursor in a new tab ‖ refresh pane · Quick Look (macOS) |
@@ -252,6 +274,32 @@ list stayed as it was (found and fixed in TICKET-058). The full command ↔ menu
 mapping, including what stays inside a dialog on purpose and what has no
 implementation yet, lives in
 [`docs/menu-command-inventory.md`](docs/menu-command-inventory.md).
+
+**Selection model (TICKET-059).** A command whose label says *files* leaves
+folders untouched; only "Keine Dateien markieren" clears a tab wholesale. `..` is
+never selectable, and every command works on the *visible* rows — an entry hidden
+by the quick filter or the comparison filter is pruned from the selection, so it
+can never remain the target of a later copy or delete. A **snapshot** ("Auswahl
+merken") is bound to the canonical location (`panesStore.locationOf`: provider
+identity, folder, archive inner path), never to row indices, so sorting, a
+refresh or a rename cannot move a remembered mark onto a neighbour; it is per
+tab, survives a filter, and is dropped on navigation. Across restarts the
+**selection file** takes over: versioned UTF-8 JSON, read, written and validated
+in Rust (`commands/fs/selection.rs`, 10 MiB / 100 000 entries, direct child names
+only). Loading shows a preview and never navigates or connects; a file taken
+elsewhere needs an explicit opt-in before it may replace a selection.
+
+**Pane comparison (TICKET-059)** compares only the two *visible* directory levels
+and only ever changes marks and visibility — the recursive synchronisation dialog
+under Befehle is untouched. It runs on the listings the panes already hold, so
+local folders, every remote provider and archives share one path with no second
+scan, and classifies them in Rust (`compare_levels`, beside the recursive
+`compare_dirs`). "Equal" means metadata equality — name, size, timestamp — not a
+content comparison. Symlinks, missing timestamps and type conflicts come back as
+`unknown` and stay visible; same timestamp with a different size is a difference,
+not "newer". The comparison filter is temporary, shown by `PaneNotice` with a
+clear action, hides only equal files, and is dropped by navigation, a tab switch,
+a refresh or a disconnect — a late result is discarded instead of applied.
 
 **macOS system menu** is reduced to **hortcmd · Bearbeiten · Fenster**
 (`src-tauri/src/menu.rs`). The Edit items are what gives the WebView's text
@@ -284,6 +332,9 @@ the running-transfer guard from TICKET-004 still applies.
 | `extract_entries` | `id, archive, base, names[], destDir` | – (events) | ✅ |
 | `create_archive` | `id, sources[], destZip` | – (events) | ✅ |
 | `set_watched` | `paths[]` | – (events) | ✅ |
+| `compare_levels` | `left[], right[]` (`LevelEntry`) | `LevelDiff[]` (TICKET-059) | ✅ |
+| `save_selection` | `path, location, entries[], overwrite` | `boolean` (false = exists) | ✅ |
+| `load_selection` | `path` | `SelectionFile` (validated) | ✅ |
 | `set_menu_language` | `lang` | – (rebuilds the native macOS menu) | ✅ |
 
 **Events:** `fs-progress` (`OpProgress` – per-file + overall progress), `fs-done`
@@ -588,7 +639,7 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
       states (enabled + reason, checkbox, radio) are re-checked before execution.
       macOS keeps only a reduced native menu (app · edit · window) without the
       ⌘W "Close Window" item. Full structure and command mapping: §6
-      "Application menu". Follow-up: [059](tickets/059-mark-menu-and-selection-functions.md)
+      "Application menu". Follow-up: [059](tickets/059-mark-menu-and-selection-functions.md) ✅
       owns the full Mark menu.
 - [x] **Menu items completed against the implemented feature set** (TICKET-058):
       every executable user action was inventoried against the code — toolbar,
@@ -611,6 +662,28 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
       (both languages, dark theme, narrow window with the overflow menu, each new
       entry executed); Windows/Linux not run — the menu is one platform-agnostic
       React component.
+- [x] **"Markieren" menu complete with its selection functions** (TICKET-059):
+      all sixteen functions of the model implemented, in four separator-delimited
+      groups. New: select all/no files, same extension (last extension,
+      case-insensitive: `a.tar.gz` → `gz`, `.env`/`README` → none), remember and
+      restore a selection, save/load a selection file, the two detail clipboard
+      variants (TSV with header, via the existing export formatter), and the two
+      pane comparisons. File semantics throughout: folders keep their marks
+      unless a pattern dialog's "include folders" says otherwise; hidden entries
+      are pruned from the selection so they can never be a later operation
+      target. Selection files are versioned UTF-8 JSON — read, written and
+      validated in Rust (`commands/fs/selection.rs`; 10 MiB / 100 000 entries,
+      direct child names only, no traversal or provider address) — deliberately
+      not TC's line-based format, which cannot carry tabs or line breaks in a
+      name. The comparison classifies the two already-loaded listings in Rust
+      (`compare_levels`), works for local, remote and archives alike, calls only
+      name+size+time equality "equal", and treats symlinks, missing timestamps
+      and type conflicts as not comparable. Its filter is temporary and visible
+      (`PaneNotice`), clears losslessly, and is invalidated by navigation, a tab
+      switch, a refresh or a disconnect. Keypad shortcuts (Num +/−/*//, ⌘Num ±,
+      ⌥Num +) were added next to the existing +/−/* and every one of them is
+      also reachable from the menu. 23 new Rust tests; the frontend test runner
+      remains TICKET-033's scope.
 - [x] **Breadcrumb navigation** in the path bar (clickable segments jump into the
       respective folder; also works inside archives)
 - [x] **Make the archive visible**: amber badge "📦 archive.zip ›" in the path bar (fixed

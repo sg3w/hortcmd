@@ -171,11 +171,13 @@ function PromptDialog() {
   const closeDialogs = useOps((s) => s.closeDialogs);
   const t = useT();
   const [value, setValue] = useState("");
+  const [checked, setChecked] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (prompt) {
       setValue(prompt.initial);
+      setChecked(prompt.checkbox?.initial ?? false);
       // focus after opening and preselect the given range if provided.
       requestAnimationFrame(() => {
         const el = inputRef.current;
@@ -193,7 +195,7 @@ function PromptDialog() {
     // dialog (e.g. an error message) without being overwritten immediately.
     const fn = prompt?.onSubmit;
     closeDialogs();
-    fn?.(value);
+    fn?.(value, checked);
   };
 
   const Icon = prompt?.icon ?? FolderPlus;
@@ -235,6 +237,17 @@ function PromptDialog() {
               autoComplete="off"
               className="w-full rounded border border-edge bg-panel-inactive px-2 py-1 font-mono text-[13px] text-text outline-none focus:border-accent"
             />
+            {prompt?.checkbox && (
+              <label className="mt-2.5 flex cursor-pointer items-center gap-2 text-[12px] text-text">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(e) => setChecked(e.target.checked)}
+                  className="accent-accent"
+                />
+                {prompt.checkbox.label}
+              </label>
+            )}
           </div>
           <div className="flex justify-end gap-2 border-t border-edge px-4 py-2.5">
             <button

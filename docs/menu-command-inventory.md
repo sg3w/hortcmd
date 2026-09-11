@@ -12,7 +12,7 @@ Legend for **Status**:
 | `040` | Already wired by TICKET-040; re-checked here, unchanged |
 | `058` | Wired (or corrected) by this ticket |
 | `dialog` | Deliberately reachable only inside a dialog, not as a menu entry |
-| `059` | Belongs to the Mark menu, owned by TICKET-059 |
+| `059` | Wired (or corrected) by TICKET-059 (Mark menu) |
 | `open` | Implemented nowhere yet — no menu entry, by design |
 
 Availability column: `state()` of the command in `features/commander/commands.ts`.
@@ -49,19 +49,79 @@ Availability column: `state()` of the command in `features/commander/commands.ts
 
 ## Markieren / Select
 
-TICKET-059 owns this menu in full and implements its missing functions. Wired
-today (all from 040, re-checked, untouched here):
+Owned and completed by TICKET-059: the menu now carries all sixteen functions of
+the Total Commander model in four separator-delimited groups, and the previously
+missing ones are implemented rather than merely listed.
+
+**Selection semantics.** A command whose label says *files* leaves folders as
+they are — a folder the user marked by hand keeps its mark; only "Keine Dateien
+markieren" clears the tab's selection wholesale, folders included. The two
+pattern dialogs offer "Ordner einbeziehen" as an explicit checkbox. `..` is never
+selectable. Every command works on the *visible* rows: an entry hidden by the
+quick filter or the comparison filter can never stay a target for a later copy or
+delete (`panesStore.pruneSelection`).
 
 | Function | Implementation | Command id | Shortcut | Status |
 |---|---|---|---|---|
-| Select group by pattern | `selection.ts:promptSelect(true)` | `mark.selectGroup` | `+` | 040 |
-| Unselect group by pattern | `selection.ts:promptSelect(false)` | `mark.unselectGroup` | `-` | 040 |
-| Invert selection | `selection.ts:invertSelection` | `mark.invert` | `*` | 040 |
-| Select all visible / none | `panesStore.selectPattern("*", …)` | `mark.all` / `mark.none` | — | 040 |
-| Copy file names / full paths | `fileOps.targetPaths` + `lib/clipboard` | `mark.copyNames` / `mark.copyPaths` | — | 040 |
+| Select group by pattern | `selection.ts:promptSelect(true)` | `mark.selectGroup` | `+`, Num + | 040 / **059** (folder option) |
+| Unselect group by pattern | `selection.ts:promptSelect(false)` | `mark.unselectGroup` | `-`, Num − | 040 / **059** (folder option) |
+| Select all files | `panesStore.selectAllFiles` | `mark.allFiles` | ⌘/Ctrl+Num + | **059** |
+| Select no files | `panesStore.clearSelection` | `mark.noFiles` | ⌘/Ctrl+Num − | **059** |
+| Invert selection (files only) | `panesStore.invertSelection` | `mark.invert` | `*`, Num * | 040 / **059** (file semantics) |
+| Select same extension | `panesStore.selectSameExt` | `mark.sameExt` | ⌥/Alt+Num + | **059** |
+| Remember selection | `panesStore.rememberSelection` | `mark.remember` | — | **059** |
+| Restore selection | `panesStore.restoreSelection` | `mark.restore` | Num / | **059** |
+| Save selection to file | `SelectionFileDialog`, `save_selection` (Rust) | `mark.saveFile` | — | **059** |
+| Load selection from file | `SelectionFileDialog`, `load_selection` (Rust) | `mark.loadFile` | — | **059** |
+| Copy names | `markClipboard.copyNames` | `mark.copyNames` | — | 040 / **059** |
+| Copy names with path | `markClipboard.copyPaths` | `mark.copyPaths` | — | 040 / **059** |
+| Copy names with details | `markClipboard.copyNameDetails` | `mark.copyDetails` | — | **059** |
+| Copy path with details | `markClipboard.copyPathDetails` | `mark.copyPathDetails` | — | **059** |
 | Export file list | `exportStore.openExport`, `exportList.ts` | `mark.export` | — | 040 |
-| Mark entry under the cursor | `panesStore.toggleMark` | — | Insert / Space | 059 |
-| Same extension · remember/restore · save/load selection · detailed clipboard variants · compare-and-mark | — | — | — | 059 |
+| Compare directories | `compareLevel.runCompare("differences")` | `mark.compare` | ⇧F2 | **059** |
+| Mark newer, hide identical | `compareLevel.runCompare("newerHideSame")` | `mark.compareHideSame` | — | **059** |
+| Clear comparison filter | `panesStore.clearCompareFilter` | `mark.clearCompare` | — | **059** |
+| Mark entry under the cursor | `panesStore.toggleMark` | — | Insert / Space | 040 |
+
+**Deliberate deviations from Total Commander**, and why:
+
+* **Extension grouping** uses the *last* extension, case-insensitively:
+  `a.tar.gz` groups by `gz`, while `.env` and `README` group by "no extension".
+  The command is disabled when the cursor is on a folder or on `..`.
+* **Selection files are versioned UTF-8 JSON** (`version`, `location`, `entries`
+  with name + kind), not the line-based `.lst` of an unspecified foreign format.
+  Plain lines cannot carry a name containing a tab or a line break without an
+  escaping scheme of their own, and those are legal POSIX names. No compatibility
+  with TC's format is claimed. Reading, writing and validation live in Rust
+  (`commands/fs/selection.rs`): entry names must be direct child names — no
+  separators, no traversal, no embedded provider address — and the limits are
+  10 MiB and 100 000 entries. A rejected file changes no selection at all.
+* **Loading never navigates or connects.** When the file's `location` differs
+  from the pane's, the dialog says so and the apply button stays disabled until
+  the user explicitly ticks "Namen auf den aktuellen Ordner anwenden".
+* **Snapshots are bound to the canonical location** (`panesStore.locationOf`:
+  provider identity, folder, archive inner path), never to row indices — so
+  sorting, a refresh or a rename cannot move a remembered mark onto a neighbour.
+  They are per tab, survive a filter, are discarded on navigation, and are not
+  persisted across restarts; the file export exists for that.
+* **The detail clipboard variants are TSV with a header**, produced by the
+  existing export formatter, so a column in the clipboard is formatted exactly
+  like the same column in an exported file list. Metadata a provider did not
+  deliver stays empty instead of being invented as `0 B` or as a permission
+  string nobody checked. No recursive folder size is triggered.
+* **Comparison is metadata equality** — name, size and timestamp — explicitly not
+  a content comparison; the content comparison lives under Befehle. It reads the
+  two listings the panes already hold (so it serves local folders, every remote
+  provider and archives from one path, with no second scan) and classifies them
+  in Rust (`compare_levels`, next to the recursive `compare_dirs`). Symlinks,
+  missing timestamps and a name that is a folder on one side come back as
+  `unknown`: visible, never hidden as equal. Same timestamp with a different size
+  is a *difference*, not "newer". Folders are compared but never called newer.
+* **The comparison filter is temporary and visible** (`PaneNotice`), with a clear
+  action both on the indicator and in the menu. It hides only equal files; `..`
+  and folders always stay reachable. A new comparison clears the previous one
+  first, and navigation, a tab switch, a refresh or a disconnect drop it —
+  a result that arrives after any of those is discarded rather than applied.
 
 ## Befehle / Commands
 
