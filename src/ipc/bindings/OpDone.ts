@@ -3,4 +3,12 @@
 /**
  * Completion of a transfer – event "fs-done".
  */
-export type OpDone = { id: string, op: string, ok: number, errors: Array<string>, cancelled: boolean, };
+export type OpDone = { id: string, op: string, ok: number, errors: Array<string>, cancelled: boolean, 
+/**
+ * Which transfer safety policy actually ran: `"safe"` (staged and
+ * committed) or `"direct"` (written straight to the final name).
+ * Empty for archive operations, which have no such choice. Recorded
+ * so a failure can be read against the mode that produced it
+ * (ticket 029).
+ */
+mode: string, };

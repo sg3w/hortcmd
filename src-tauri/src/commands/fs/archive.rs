@@ -531,6 +531,8 @@ fn run_extract(
             ok,
             errors,
             cancelled,
+            // Archives have no staging choice of their own.
+            mode: String::new(),
         },
     );
 }
@@ -626,6 +628,8 @@ fn run_pack(
             ok,
             errors,
             cancelled,
+            // Archives have no staging choice of their own.
+            mode: String::new(),
         },
     );
 }

@@ -131,6 +131,67 @@ fn exercise(p: &dyn Provider, base: &str) {
     println!("  OK: mkdir/write/stat/read/read_dir/rename/delete");
 }
 
+/// Exercises the staging/commit contract a failure-safe transfer relies
+/// on (ticket 029): a staged entry is published with one rename, and a
+/// replacement keeps the old destination readable until the new one is
+/// in place. Run against every remote provider, because each has its
+/// own rename semantics.
+fn exercise_staging(p: &dyn Provider, base: &str) {
+    use crate::commands::fs::staging_test_support::commit;
+
+    assert!(
+        p.supports_staging(),
+        "a provider used for safe transfers must declare staging support"
+    );
+
+    let dir = format!("{}/hortcmd-stage", base.trim_end_matches('/'));
+    let _ = p.remove_dir_all(Path::new(&dir));
+    p.create_dir_all(Path::new(&dir)).expect("create dir");
+
+    let target = format!("{}/report.txt", dir);
+    let stage_new = format!("{}/.hortcmd-stage-live-1", dir);
+    let stage_replace = format!("{}/.hortcmd-stage-live-2", dir);
+
+    let write = |path: &str, data: &[u8]| {
+        let mut w = p.create_write(Path::new(path)).expect("create_write");
+        w.write_all(data).expect("write_all");
+        w.flush().expect("flush");
+    };
+    let read = |path: &str| {
+        let mut got = Vec::new();
+        p.open_read(Path::new(path))
+            .expect("open_read")
+            .read_to_end(&mut got)
+            .expect("read_to_end");
+        got
+    };
+
+    // --- commit of a new destination ---
+    write(&stage_new, b"first");
+    commit(p, Path::new(&stage_new), Path::new(&target), false).expect("commit new");
+    assert_eq!(read(&target), b"first", "commit must publish the staged bytes");
+    assert!(!p.exists(Path::new(&stage_new)), "staging entry must be gone");
+
+    // --- commit over an existing destination ---
+    write(&stage_replace, b"second");
+    commit(p, Path::new(&stage_replace), Path::new(&target), true).expect("commit replace");
+    assert_eq!(read(&target), b"second", "replacement must win");
+    assert!(!p.exists(Path::new(&stage_replace)));
+
+    // --- no working entries are left behind ---
+    let left: Vec<String> = p
+        .read_dir(Path::new(&dir))
+        .expect("read_dir")
+        .iter()
+        .filter_map(|c| c.file_name()?.to_str().map(str::to_string))
+        .filter(|n| n.starts_with(".hortcmd-"))
+        .collect();
+    assert!(left.is_empty(), "leftover working entries: {:?}", left);
+
+    let _ = p.remove_dir_all(Path::new(&dir));
+    println!("  OK: staging commit (new + replace), nothing left behind");
+}
+
 /// SFTP. Server:
 /// `docker run -d --name sftp -p 22:22 emberstack/sftp demo:demo123:::upload`
 #[test]
@@ -140,6 +201,7 @@ fn live_sftp() {
     let p = sftp_connect(&prof, "demo123");
     println!("SFTP store_id={}", p.store_id());
     exercise(&*p, "/upload");
+    exercise_staging(&*p, "/upload");
 }
 
 /// Host-key verification (ticket 028) against a server with a fixed
@@ -279,6 +341,7 @@ fn live_ftp() {
     let p = super::ftp::connect(&prof, Some("1234")).expect("ftp connect");
     println!("FTP store_id={}", p.store_id());
     exercise(&*p, "/ftp/one");
+    exercise_staging(&*p, "/ftp/one");
 }
 
 /// SMB. Server:
@@ -304,6 +367,7 @@ fn live_smb() {
     }
 
     exercise(&*p, "/Data");
+    exercise_staging(&*p, "/Data");
 }
 
 /// WebDAV. Server:
@@ -319,4 +383,5 @@ fn live_webdav() {
     let p = super::webdav::connect(&prof, Some("davpass")).expect("webdav connect");
     println!("WebDAV store_id={}", p.store_id());
     exercise(&*p, "/");
+    exercise_staging(&*p, "/");
 }

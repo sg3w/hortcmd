@@ -150,6 +150,23 @@ impl Provider for LocalProvider {
     fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
         fs::remove_dir_all(path)
     }
+
+    // ----- Failure-safe transfers (ticket 029) -----
+
+    fn supports_staging(&self) -> bool {
+        true
+    }
+
+    /// `std::fs::rename` replaces an existing file atomically on both
+    /// Unix and Windows — the documented primitive the ticket asks for.
+    fn rename_replaces(&self) -> bool {
+        true
+    }
+
+    /// Reported by the same mount lookup the volume bar uses.
+    fn free_space(&self, path: &Path) -> Option<u64> {
+        crate::commands::fs::volume::free_space_of(path)
+    }
 }
 
 #[cfg(test)]

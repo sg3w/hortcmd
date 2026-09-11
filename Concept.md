@@ -166,7 +166,9 @@ commands/fs/
 ├── dir.rs                   list_dir (→ vfs) · list_drives · home_dir (+ DirEntry/DirListing/Drive)
 ├── file.rs                  copy/move/delete/mkdir/rename + transfer infra (Prog, spawn_op,
 │                            collision, cancel) — all fs ops routed through the vfs registry;
-│                            pub(crate), also used by archive
+│                            pub(crate), also used by archive. Ausfallsichere Übertragung
+│                            (TICKET-029): Plan/staging + commit, Rollback über
+│                            Backup-Rename, Reste-Meldung (`fs-leftovers`)
 ├── preview.rs               read_preview (F3) · open_path (F4)
 ├── archive.rs               archives (ZIP/tar/tar.gz/tar.xz/7z, password): list_archive ·
 │                            extract_entries · create_archive (packing → ZIP)
@@ -422,6 +424,8 @@ is organized into the following categories. Legend: **✅ present · ⏳ planned
 - Checksums after copy ✅ *(SHA-256 source↔target, optional via setting)* ·
   speed limit ✅ · pause/resume ✅ · copy queue ✅ ·
   parallel copies / threads / buffer size ⏳ *(buffer currently fixed at 256 KB)*
+- Failure-safe transfers ✅ *(opt-in, off by default; staging + commit so a
+  failed overwrite cannot destroy the previous destination — TICKET-029)*
 
 ### Tabs
 - New tabs next to current ⏳ · save on exit ⏳ *(= session)*
@@ -839,6 +843,29 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
       Transfer window: pause/resume button, "Paused"/"Waiting" status.
       **Undo deliberately deferred** (data safety: only provably reversible
       operations; its own careful step).
+      **Failure-safe transfers** (TICKET-029) close the engine's remaining
+      data-safety hole: a resolved overwrite used to delete the destination
+      *before* copying, so any failure in between lost it. With the opt-in
+      setting (`settings.safeTransfers`, **off by default** — it costs
+      temporary space at the destination), each top-level source is copied
+      into a hidden staging entry on the destination store and published
+      with one rename. The final name appears only when the copy is
+      complete and verified; an existing destination survives until the
+      replacement is in place (the provider's atomic replace where it has
+      one — `Provider::rename_replaces`, local only — otherwise a backup
+      rename rolled back on failure); a copy-based move deletes its source
+      last, and a source that will not delete is reported as "both copies
+      remain" rather than repaired by removing the new one. Cancellation
+      and every error path touch only the staging entry. The policy is
+      snapshotted at enqueue time and passed through the IPC contract, so a
+      queued transfer keeps the mode it was started with. `Provider` gained
+      the capability explicitly (`supports_staging`, `rename_replaces`,
+      `free_space`) instead of the engine guessing from the scheme; a
+      destination that cannot commit a staged entry **fails with an
+      actionable message** rather than silently writing directly. Remains
+      of an interrupted run (`.hortcmd-stage-*` / `.hortcmd-backup-*`) are
+      reported via `fs-leftovers` and deleted only after the user confirms
+      — such an entry can hold the only copy of a file.
 - [x] **More archive formats**: browse & extract for tar, tar.gz, tar.xz, and 7z
       (format detected by extension, `lib/archive.ts` ↔ `archive_kind`); password-protected
       ZIP (AES/ZipCrypto) and 7z archives: password sentinels (`PASSWORD_REQUIRED`/

@@ -325,6 +325,19 @@ impl Provider for WebdavProvider {
             .block_on(self.client.delete(&p(path)))
             .map_err(to_io)
     }
+
+    // ----- Failure-safe transfers (ticket 029) -----
+
+    /// Commit is one `rename` inside the same connection.
+    fn supports_staging(&self) -> bool {
+        true
+    }
+
+    /// `rename` deliberately sends `Overwrite: F`, so a
+    /// replacement goes through the backup rename.
+    fn rename_replaces(&self) -> bool {
+        false
+    }
 }
 
 // ---------- Transfer streams ----------

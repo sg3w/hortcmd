@@ -33,6 +33,7 @@ import {
   LayoutList,
   FolderTree,
   FileType,
+  FileCheck2,
   Lock,
   Ruler,
   Calendar,
@@ -43,6 +44,7 @@ import {
   Files as FilesIcon,
   EyeOff,
   HardDriveDownload,
+  ShieldAlert,
   ShieldCheck,
   Gauge,
   ListOrdered,
@@ -683,6 +685,8 @@ function OperationsForm() {
   const setBufferSizeKb = useSettings((s) => s.setBufferSizeKb);
   const copyThreads = useSettings((s) => s.copyThreads);
   const setCopyThreads = useSettings((s) => s.setCopyThreads);
+  const safeTransfers = useSettings((s) => s.safeTransfers);
+  const setSafeTransfers = useSettings((s) => s.setSafeTransfers);
 
   return (
     <div className="flex flex-col gap-4">
@@ -707,6 +711,23 @@ function OperationsForm() {
         label={t("settings.verify")}
         hint={t("settings.verify.hint")}
       />
+      {/* Failure-safe transfers (TICKET-029). Opt-in, so the risk of the
+          default state is spelled out rather than left implicit. */}
+      <div className="flex flex-col gap-2">
+        <Toggle
+          checked={safeTransfers}
+          onChange={setSafeTransfers}
+          icon={FileCheck2}
+          label={t("settings.safeTransfers")}
+          hint={t("settings.safeTransfers.hint")}
+        />
+        {!safeTransfers && (
+          <div className="ml-[27px] flex items-start gap-2 rounded border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-400">
+            <ShieldAlert size={14} className="mt-px shrink-0" />
+            <span>{t("settings.safeTransfers.warning")}</span>
+          </div>
+        )}
+      </div>
       {/* Speed limit (0 = unlimited). */}
       <label className="flex items-start gap-3">
         <Gauge size={15} className="mt-0.5 shrink-0 text-dim" />

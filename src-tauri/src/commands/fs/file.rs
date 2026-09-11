@@ -50,6 +50,25 @@ pub struct OpDone {
     pub ok: u32,
     pub errors: Vec<String>,
     pub cancelled: bool,
+    /// Which transfer safety policy actually ran: `"safe"` (staged and
+    /// committed) or `"direct"` (written straight to the final name).
+    /// Empty for archive operations, which have no such choice. Recorded
+    /// so a failure can be read against the mode that produced it
+    /// (ticket 029).
+    pub mode: String,
+}
+
+/// Recognizable remains of an interrupted failure-safe transfer –
+/// event "fs-leftovers". The engine only *reports* them: staging and
+/// backup entries may hold the only copy of the user's data, so nothing
+/// is deleted without an explicit answer (ticket 029).
+#[derive(Serialize, Clone, TS)]
+#[ts(export, export_to = "../../src/ipc/bindings/")]
+pub struct Leftovers {
+    /// The destination folder as an address, for the message.
+    pub dir: String,
+    /// Full addresses of the leftover entries.
+    pub paths: Vec<String>,
 }
 
 /// Name-conflict request – event "fs-collision".
@@ -355,6 +374,165 @@ fn hash_file_sha256(provider: &dyn Provider, path: &Path) -> std::io::Result<Vec
     Ok(h.finalize().to_vec())
 }
 
+// ============================================================
+// Failure-safe staging and commit (ticket 029).
+//
+// Safe mode never writes under the final name and never destroys an
+// existing destination before the replacement is complete: each
+// top-level source is copied into a hidden staging entry *on the
+// destination store* and published with a single rename. Direct mode
+// keeps the original behaviour — the destination is removed up front
+// and the bytes go straight to the final name.
+// ============================================================
+
+/// Prefix of the entry a safe transfer writes into.
+const STAGE_PREFIX: &str = ".hortcmd-stage-";
+/// Prefix of the old destination while a replacement is committed.
+const BACKUP_PREFIX: &str = ".hortcmd-backup-";
+
+/// Whether a name is one of hortcmd's transfer working entries. They are
+/// hidden and prefixed so they are never produced as normal output and
+/// never collide with a user-created name.
+fn is_working_entry(name: &str) -> bool {
+    name.starts_with(STAGE_PREFIX) || name.starts_with(BACKUP_PREFIX)
+}
+
+/// A free working name inside `dir`. Process id and a global counter
+/// keep parallel workers — and separate app instances — apart; the
+/// existence check closes the remaining gap.
+fn working_name(provider: &dyn Provider, dir: &Path, prefix: &str) -> PathBuf {
+    let pid = std::process::id();
+    loop {
+        let n = REQ_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let cand = dir.join(format!("{}{}-{}", prefix, pid, n));
+        if !provider.exists(&cand) {
+            return cand;
+        }
+    }
+}
+
+/// How one top-level source reaches its final name.
+struct Plan {
+    /// Where the bytes are written: the staging entry in safe mode, the
+    /// final name in direct mode.
+    write_to: PathBuf,
+    /// The name the user asked for.
+    target: PathBuf,
+    /// The final name still exists and has to be replaced on commit.
+    /// Only ever true in safe mode — direct mode deletes it up front.
+    replace: bool,
+}
+
+impl Plan {
+    /// Direct mode: the bytes already go to their final name.
+    fn direct(target: PathBuf) -> Self {
+        Plan {
+            write_to: target.clone(),
+            target,
+            replace: false,
+        }
+    }
+
+    /// Safe mode: a hidden sibling of the target receives the bytes.
+    fn staged(provider: &dyn Provider, target: PathBuf, replace: bool) -> Self {
+        let dir = target.parent().unwrap_or(Path::new("/")).to_path_buf();
+        Plan {
+            write_to: working_name(provider, &dir, STAGE_PREFIX),
+            target,
+            replace,
+        }
+    }
+
+    fn is_staged(&self) -> bool {
+        self.write_to != self.target
+    }
+}
+
+/// Publishes `from` under `to`. The old destination survives until the
+/// replacement is in place: either through a documented atomic replace,
+/// or through a backup rename that is undone when the commit fails.
+pub(crate) fn commit(
+    dstp: &dyn Provider,
+    from: &Path,
+    to: &Path,
+    replace: bool,
+) -> std::io::Result<()> {
+    if !replace {
+        return dstp.rename(from, to);
+    }
+    // A rename that replaces atomically leaves no moment without a
+    // destination. `rename` onto a populated directory is not portable,
+    // so a directory target always takes the backup route.
+    if dstp.rename_replaces() && !dstp.is_dir(to) {
+        return dstp.rename(from, to);
+    }
+    let dir = to.parent().unwrap_or(Path::new("/")).to_path_buf();
+    let backup = working_name(dstp, &dir, BACKUP_PREFIX);
+    dstp.rename(to, &backup)?;
+    match dstp.rename(from, to) {
+        Ok(()) => {
+            // Only now is the old destination redundant. A failure to
+            // clear it leaves a visible leftover, never a lost file.
+            let _ = dstp.remove(&backup);
+            Ok(())
+        }
+        Err(e) => {
+            let _ = dstp.rename(&backup, to);
+            Err(e)
+        }
+    }
+}
+
+/// Picks how one source reaches its final name. Direct mode writes
+/// there straight away (its collision was already resolved by deleting);
+/// safe mode writes beside it and commits.
+fn plan_for(dstp: &dyn Provider, target: PathBuf, replace: bool, safe: bool) -> Plan {
+    if safe {
+        Plan::staged(dstp, target, replace)
+    } else {
+        Plan::direct(target)
+    }
+}
+
+/// Publishes a finished plan. A no-op in direct mode.
+fn publish(dstp: &dyn Provider, plan: &Plan) -> std::io::Result<()> {
+    if !plan.is_staged() {
+        return Ok(());
+    }
+    commit(dstp, &plan.write_to, &plan.target, plan.replace)
+}
+
+/// Removes the staging entry after a failed or cancelled transfer. Only
+/// the staging entry — the destination is either untouched or already
+/// committed. Cleanup problems are reported on their own so they are not
+/// mistaken for the failure that caused them.
+fn discard_staging(dstp: &dyn Provider, plan: &Plan, errors: &mut Vec<String>) {
+    if !plan.is_staged() || !dstp.exists(&plan.write_to) {
+        return;
+    }
+    if let Err(e) = dstp.remove(&plan.write_to) {
+        errors.push(format!(
+            "Aufräumen von {} fehlgeschlagen: {}",
+            plan.write_to.display(),
+            e
+        ));
+    }
+}
+
+/// Working entries left in `dir` by an earlier, interrupted run. They
+/// are only reported — such an entry can hold the only copy of a file,
+/// so nothing here deletes anything.
+fn stale_working_entries(provider: &dyn Provider, dir: &Path) -> Vec<String> {
+    let Ok(children) = provider.read_dir(dir) else {
+        return Vec::new();
+    };
+    children
+        .iter()
+        .filter_map(|c| c.file_name()?.to_str().map(str::to_string))
+        .filter(|name| is_working_entry(name))
+        .collect()
+}
+
 /// Copies recursively (file or directory tree) from `srcp` to `dstp`.
 #[allow(clippy::too_many_arguments)]
 fn copy_tree(
@@ -380,6 +558,75 @@ fn copy_tree(
         copy_file_prog(srcp, dstp, src, dst, prog, limit, verify, buf_size)?;
     }
     Ok(())
+}
+
+/// The order that makes safe mode safe: write the bytes, *then* commit,
+/// and only then remove a move's source. `copy` produces the bytes in
+/// `plan.write_to`; it is a parameter so this ordering can be tested
+/// with a failure injected at each step.
+fn transfer_one_with<F>(
+    srcp: &dyn Provider,
+    dstp: &dyn Provider,
+    src: &Path,
+    plan: &Plan,
+    remove_source: bool,
+    errors: &mut Vec<String>,
+    copy: F,
+) -> std::io::Result<()>
+where
+    F: FnOnce() -> std::io::Result<()>,
+{
+    // Until this returns, the old destination has not been touched.
+    if let Err(e) = copy() {
+        discard_staging(dstp, plan, errors);
+        return Err(e);
+    }
+    if let Err(e) = publish(dstp, plan) {
+        discard_staging(dstp, plan, errors);
+        return Err(e);
+    }
+    // The destination is committed. A source that cannot be removed
+    // leaves two copies — which is reported, never "repaired" by
+    // deleting the copy that just succeeded.
+    if remove_source {
+        if let Err(e) = srcp.remove(src) {
+            errors.push(format!(
+                "{}: Quelle konnte nach der Übertragung nicht entfernt werden ({}) — \
+                 beide Kopien bleiben bestehen",
+                src.display(),
+                e
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Copies one top-level source and publishes it under its final name.
+#[allow(clippy::too_many_arguments)]
+fn transfer_one(
+    srcp: &dyn Provider,
+    dstp: &dyn Provider,
+    src: &Path,
+    plan: &Plan,
+    prog: &mut Prog,
+    limit: u64,
+    verify: bool,
+    buf_size: usize,
+    remove_source: bool,
+    errors: &mut Vec<String>,
+) -> std::io::Result<()> {
+    transfer_one_with(srcp, dstp, src, plan, remove_source, errors, || {
+        copy_tree(
+            srcp,
+            dstp,
+            src,
+            &plan.write_to,
+            prog,
+            limit,
+            verify,
+            buf_size,
+        )
+    })
 }
 
 /// Resolves a buffer size in KB into a safe byte count
@@ -598,7 +845,7 @@ fn run_parallel_copy(
     app: AppHandle,
     id: String,
     op: String,
-    jobs: Vec<(PathBuf, PathBuf)>,
+    jobs: Vec<(PathBuf, Plan)>,
     cancel: Arc<AtomicBool>,
     pause: Arc<AtomicBool>,
     limit: u64,
@@ -608,10 +855,13 @@ fn run_parallel_copy(
     files_total: u32,
     bytes_total: u64,
 ) -> (u32, Vec<String>) {
-    // Flatten all source trees into file tasks (target folders are created).
+    // Flatten all source trees into file tasks (target folders are
+    // created). In safe mode every job writes into its own staging
+    // entry, so one worker's failure can never publish a half-copied
+    // tree or disturb a pre-existing destination.
     let mut tasks = Vec::new();
-    for (i, (src, target)) in jobs.iter().enumerate() {
-        flatten_tree(&*srcp, &*dstp, src, target, i, &mut tasks);
+    for (i, (src, plan)) in jobs.iter().enumerate() {
+        flatten_tree(&*srcp, &*dstp, src, &plan.write_to, i, &mut tasks);
     }
 
     let sp = Arc::new(SharedProg {
@@ -672,13 +922,47 @@ fn run_parallel_copy(
         let _ = h.join();
     }
 
-    let ok = (0..jobs.len())
-        .filter(|i| !failed[*i].load(Ordering::Relaxed))
-        .count() as u32;
-    let errors = Arc::try_unwrap(errors)
+    let mut errors = Arc::try_unwrap(errors)
         .map(|m| m.into_inner().unwrap())
         .unwrap_or_default();
+
+    // Commit phase. Only now — with every worker joined — is a job's
+    // staging entry known to be complete, so publishing here is what
+    // keeps a failed worker from replacing anything.
+    let plans: Vec<&Plan> = jobs.iter().map(|(_, plan)| plan).collect();
+    let done: Vec<bool> = (0..jobs.len())
+        .map(|i| !failed[i].load(Ordering::Relaxed))
+        .collect();
+    let ok = commit_finished_jobs(&*sp.dstp, &plans, &done, sp.cancelled(), &mut errors);
     (ok, errors)
+}
+
+/// Publishes the jobs whose every file copied cleanly, and discards the
+/// staging entries of the rest. A worker that failed — or a cancelled
+/// run — therefore never replaces a destination that was already there.
+/// Returns the number of published jobs.
+fn commit_finished_jobs(
+    dstp: &dyn Provider,
+    plans: &[&Plan],
+    done: &[bool],
+    cancelled: bool,
+    errors: &mut Vec<String>,
+) -> u32 {
+    let mut ok = 0u32;
+    for (i, plan) in plans.iter().enumerate() {
+        if cancelled || !done.get(i).copied().unwrap_or(false) {
+            discard_staging(dstp, plan, errors);
+            continue;
+        }
+        match publish(dstp, plan) {
+            Ok(()) => ok += 1,
+            Err(e) => {
+                errors.push(format!("{}: {}", plan.target.display(), e));
+                discard_staging(dstp, plan, errors);
+            }
+        }
+    }
+    ok
 }
 
 /// Runs a copy/move operation (runs in its own thread).
@@ -696,8 +980,10 @@ fn run_transfer(
     verify: bool,
     buf_kb: u64,
     threads: u32,
+    safe: bool,
 ) {
     let buf_size = resolve_buf(buf_kb);
+    let mode = if safe { "safe" } else { "direct" };
     let fail = |id: String, op: String, err: String| {
         let _ = app.emit(
             "fs-done",
@@ -707,6 +993,7 @@ fn run_transfer(
                 ok: 0,
                 errors: vec![err],
                 cancelled: false,
+                mode: mode.to_string(),
             },
         );
     };
@@ -719,6 +1006,21 @@ fn run_transfer(
         Err(e) => return fail(id, op, e),
     };
     let dest = PathBuf::from(&dest_path);
+    // Safe mode never degrades to direct writes behind the user's back:
+    // a destination that cannot publish a staged entry stops the
+    // transfer with something the user can act on.
+    if safe && !dstp.supports_staging() {
+        return fail(
+            id,
+            op,
+            format!(
+                "Ausfallsichere Übertragung wird von {} nicht unterstützt — \
+                 in den Einstellungen unter Dateioperationen abschalten, \
+                 um hierher zu übertragen",
+                dest_dir
+            ),
+        );
+    }
     // All sources of one operation come from the same location; resolve
     // the source provider from the first and require the rest to match.
     let srcp = match sources.first() {
@@ -756,7 +1058,40 @@ fn run_transfer(
         })
         .collect();
     let files_total = measured.iter().map(|m| m.1).sum();
-    let bytes_total = measured.iter().map(|m| m.2).sum();
+    let bytes_total: u64 = measured.iter().map(|m| m.2).sum();
+
+    // Staging needs room for the copy *next to* the destination. Only a
+    // definite shortage stops the transfer — an unknown capacity lets
+    // the write itself decide, and either way the old destination is
+    // still untouched at this point.
+    if safe {
+        if let Some(free) = dstp.free_space(&dest) {
+            if free < bytes_total {
+                return fail(
+                    id,
+                    op,
+                    format!(
+                        "Zu wenig Platz für die ausfallsichere Zwischenablage: \
+                         {} Bytes nötig, {} Bytes frei",
+                        bytes_total, free
+                    ),
+                );
+            }
+        }
+        // Remains of an earlier, interrupted run. Reported, never
+        // deleted — such an entry can hold the only copy of a file.
+        let stale = stale_working_entries(&*dstp, &dest);
+        if !stale.is_empty() {
+            let base = dest_dir.trim_end_matches('/');
+            let _ = app.emit(
+                "fs-leftovers",
+                Leftovers {
+                    dir: dest_dir.clone(),
+                    paths: stale.iter().map(|n| format!("{}/{}", base, n)).collect(),
+                },
+            );
+        }
+    }
 
     let mut prog = Prog {
         app: app.clone(),
@@ -776,7 +1111,7 @@ fn run_transfer(
     let mut default_res: Option<Resolution> = None; // „Für alle übernehmen"
     // In parallel mode the resolved pairs are collected and afterwards
     // copied in parallel (collisions are resolved here sequentially/interactively).
-    let mut copy_jobs: Vec<(PathBuf, PathBuf)> = Vec::new();
+    let mut copy_jobs: Vec<(PathBuf, Plan)> = Vec::new();
 
     'outer: for (s, files, bytes) in &measured {
         if prog.cancelled() {
@@ -793,6 +1128,10 @@ fn run_transfer(
         }
 
         // Name conflict: ask the frontend (or apply the remembered choice).
+        // `replace` records an accepted overwrite: in safe mode the old
+        // destination stays put until the commit, in direct mode it is
+        // removed here as before.
+        let mut replace = false;
         if dstp.exists(&target) {
             let res = match default_res {
                 Some(r) => r,
@@ -807,6 +1146,7 @@ fn run_transfer(
             match res {
                 Resolution::Skip => continue,
                 Resolution::Rename => target = free_name(&*dstp, &target),
+                Resolution::Overwrite if safe => replace = true,
                 Resolution::Overwrite => {
                     if let Err(e) = dstp.remove(&target) {
                         errors.push(format!("{}: {}", s, e));
@@ -816,27 +1156,39 @@ fn run_transfer(
             }
         }
 
-        // Parallel mode (copy only): remember the pair, actual copying happens later.
+        let plan = plan_for(&*dstp, target, replace, safe);
+
+        // Parallel mode (copy only): remember the plan, actual copying happens later.
         if parallel {
-            copy_jobs.push((src.to_path_buf(), target));
+            copy_jobs.push((src.to_path_buf(), plan));
             continue;
         }
 
-        let result = if remove_source {
-            // Move: within one store try an immediate rename; across
-            // stores (or if rename fails) copy then delete the source.
-            let renamed = same_store && dstp.rename(src, &target).is_ok();
-            if renamed {
-                prog.files_done += files;
-                prog.bytes_done += bytes;
-                prog.emit(&src.to_string_lossy(), *bytes, *bytes, true);
-                Ok(())
-            } else {
-                copy_tree(&*srcp, &*dstp, src, &target, &mut prog, limit, verify, buf_size)
-                    .and_then(|_| srcp.remove(src))
-            }
+        let result = if remove_source
+            && same_store
+            && commit(&*dstp, src, &plan.target, plan.replace).is_ok()
+        {
+            // Move inside one store: the rename *is* the commit, so the
+            // fast path needs no staging. A replacement still goes
+            // through the same backup dance, so the old destination
+            // survives a failed rename.
+            prog.files_done += files;
+            prog.bytes_done += bytes;
+            prog.emit(&src.to_string_lossy(), *bytes, *bytes, true);
+            Ok(())
         } else {
-            copy_tree(&*srcp, &*dstp, src, &target, &mut prog, limit, verify, buf_size)
+            transfer_one(
+                &*srcp,
+                &*dstp,
+                src,
+                &plan,
+                &mut prog,
+                limit,
+                verify,
+                buf_size,
+                remove_source,
+                &mut errors,
+            )
         };
 
         match result {
@@ -877,6 +1229,7 @@ fn run_transfer(
             ok,
             errors,
             cancelled,
+            mode: mode.to_string(),
         },
     );
 }
@@ -1039,7 +1392,10 @@ pub fn rename_batch(dir: String, renames: Vec<(String, String)>) -> OpResult {
 }
 
 /// Starts a copy operation in the background (returns immediately).
-/// `limit` = bytes/s (0 = unlimited), `verify` = checksums after copying.
+/// `limit` = bytes/s (0 = unlimited), `verify` = checksums after copying,
+/// `safe` = stage and commit instead of writing to the final name
+/// (ticket 029). `safe` is the value captured when the transfer was
+/// queued, so a later settings change cannot alter a waiting operation.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn copy_entries(
@@ -1051,18 +1407,20 @@ pub fn copy_entries(
     verify: bool,
     buf_kb: u64,
     threads: u32,
+    safe: bool,
 ) {
     let id2 = id.clone();
     spawn_op(id, move |cancel, pause| {
         run_transfer(
             app, id2, "copy".into(), sources, dest_dir, false, cancel, pause, limit, verify,
-            buf_kb, threads,
+            buf_kb, threads, safe,
         )
     });
 }
 
 /// Starts a move operation in the background (returns immediately).
-/// `threads` is deliberately ignored (move stays sequential).
+/// `threads` is deliberately ignored (move stays sequential); `safe`
+/// works as for `copy_entries` (ticket 029).
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn move_entries(
@@ -1074,12 +1432,13 @@ pub fn move_entries(
     verify: bool,
     buf_kb: u64,
     threads: u32,
+    safe: bool,
 ) {
     let id2 = id.clone();
     spawn_op(id, move |cancel, pause| {
         run_transfer(
             app, id2, "move".into(), sources, dest_dir, true, cancel, pause, limit, verify,
-            buf_kb, threads,
+            buf_kb, threads, safe,
         )
     });
 }
@@ -1325,5 +1684,651 @@ mod tests {
         // With overwrite: written anew.
         assert_eq!(write_text_file(p.clone(), "second".into(), true), Ok(true));
         assert_eq!(read(&d, "list.txt"), "second");
+    }
+}
+
+// ============================================================
+// Failure-safe transfers (ticket 029).
+//
+// The guarantee under test is an ordering one: bytes reach a staging
+// entry first, the final name appears only on commit, and a move's
+// source goes last. So the copy step is injected — every test drives a
+// different failure through it and then asserts what survived.
+// ============================================================
+#[cfg(test)]
+mod safe_tests {
+    use super::*;
+    use std::collections::{HashMap, HashSet};
+    use std::io;
+    use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
+    use std::sync::{Arc, Mutex};
+
+    // ---------- An in-memory provider with injectable failures ----------
+
+    #[derive(Default)]
+    struct FakeFs {
+        files: HashMap<PathBuf, Vec<u8>>,
+        dirs: HashSet<PathBuf>,
+    }
+
+    struct Fake {
+        fs: Arc<Mutex<FakeFs>>,
+        /// `rename` fails when the source is in here.
+        fail_rename: Mutex<HashSet<PathBuf>>,
+        /// `remove`/`remove_file` fails when the path is in here.
+        fail_remove: Mutex<HashSet<PathBuf>>,
+        replaces: bool,
+    }
+
+    impl Fake {
+        fn new(replaces: bool) -> Arc<Fake> {
+            Arc::new(Fake {
+                fs: Arc::new(Mutex::new(FakeFs::default())),
+                fail_rename: Mutex::new(HashSet::new()),
+                fail_remove: Mutex::new(HashSet::new()),
+                replaces,
+            })
+        }
+        fn put(&self, path: &str, data: &str) {
+            self.fs
+                .lock()
+                .unwrap()
+                .files
+                .insert(PathBuf::from(path), data.as_bytes().to_vec());
+        }
+        fn get(&self, path: &str) -> Option<String> {
+            self.fs
+                .lock()
+                .unwrap()
+                .files
+                .get(Path::new(path))
+                .map(|b| String::from_utf8_lossy(b).into_owned())
+        }
+        fn names_in(&self, dir: &str) -> Vec<String> {
+            let fs = self.fs.lock().unwrap();
+            fs.files
+                .keys()
+                .chain(fs.dirs.iter())
+                .filter(|p| p.parent() == Some(Path::new(dir)))
+                .filter_map(|p| p.file_name()?.to_str().map(str::to_string))
+                .collect()
+        }
+    }
+
+    struct FakeWriter {
+        fs: Arc<Mutex<FakeFs>>,
+        path: PathBuf,
+        buf: Vec<u8>,
+    }
+
+    impl Write for FakeWriter {
+        fn write(&mut self, data: &[u8]) -> io::Result<usize> {
+            self.buf.extend_from_slice(data);
+            Ok(data.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            self.fs
+                .lock()
+                .unwrap()
+                .files
+                .insert(self.path.clone(), self.buf.clone());
+            Ok(())
+        }
+    }
+
+    impl Drop for FakeWriter {
+        fn drop(&mut self) {
+            let _ = self.flush();
+        }
+    }
+
+    impl Provider for Fake {
+        fn store_id(&self) -> String {
+            "fake".into()
+        }
+        fn list(&self, _path: &str) -> Result<crate::commands::fs::dir::DirListing, String> {
+            Err("nicht unterstützt".into())
+        }
+        fn stat(&self, path: &Path) -> io::Result<crate::vfs::Stat> {
+            let fs = self.fs.lock().unwrap();
+            if fs.dirs.contains(path) {
+                return Ok(crate::vfs::Stat {
+                    is_dir: true,
+                    len: 0,
+                });
+            }
+            fs.files
+                .get(path)
+                .map(|b| crate::vfs::Stat {
+                    is_dir: false,
+                    len: b.len() as u64,
+                })
+                .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "nicht gefunden"))
+        }
+        fn exists(&self, path: &Path) -> bool {
+            let fs = self.fs.lock().unwrap();
+            fs.files.contains_key(path) || fs.dirs.contains(path)
+        }
+        fn is_dir(&self, path: &Path) -> bool {
+            self.fs.lock().unwrap().dirs.contains(path)
+        }
+        fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
+            let fs = self.fs.lock().unwrap();
+            Ok(fs
+                .files
+                .keys()
+                .chain(fs.dirs.iter())
+                .filter(|p| p.parent() == Some(path))
+                .cloned()
+                .collect())
+        }
+        fn open_read(&self, path: &Path) -> io::Result<Box<dyn Read + Send>> {
+            let fs = self.fs.lock().unwrap();
+            let data = fs
+                .files
+                .get(path)
+                .cloned()
+                .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "nicht gefunden"))?;
+            Ok(Box::new(std::io::Cursor::new(data)))
+        }
+        fn create_write(&self, path: &Path) -> io::Result<Box<dyn Write + Send>> {
+            Ok(Box::new(FakeWriter {
+                fs: Arc::clone(&self.fs),
+                path: path.to_path_buf(),
+                buf: Vec::new(),
+            }))
+        }
+        fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
+            self.fs
+                .lock()
+                .unwrap()
+                .files
+                .insert(path.to_path_buf(), data.to_vec());
+            Ok(())
+        }
+        fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+            self.fs.lock().unwrap().dirs.insert(path.to_path_buf());
+            Ok(())
+        }
+        fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+            if self.fail_rename.lock().unwrap().contains(from) {
+                return Err(io::Error::other("rename abgelehnt (Test)"));
+            }
+            let mut fs = self.fs.lock().unwrap();
+            if let Some(data) = fs.files.remove(from) {
+                fs.files.insert(to.to_path_buf(), data);
+                return Ok(());
+            }
+            if fs.dirs.remove(from) {
+                fs.dirs.insert(to.to_path_buf());
+                return Ok(());
+            }
+            Err(io::Error::new(ErrorKind::NotFound, "nicht gefunden"))
+        }
+        fn remove_file(&self, path: &Path) -> io::Result<()> {
+            if self.fail_remove.lock().unwrap().contains(path) {
+                return Err(io::Error::other("remove abgelehnt (Test)"));
+            }
+            self.fs.lock().unwrap().files.remove(path);
+            Ok(())
+        }
+        fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
+            if self.fail_remove.lock().unwrap().contains(path) {
+                return Err(io::Error::other("remove abgelehnt (Test)"));
+            }
+            self.fs.lock().unwrap().dirs.remove(path);
+            Ok(())
+        }
+        fn supports_staging(&self) -> bool {
+            true
+        }
+        fn rename_replaces(&self) -> bool {
+            self.replaces
+        }
+    }
+
+    // ---------- Helpers ----------
+
+    static N: AtomicU64 = AtomicU64::new(0);
+
+    fn fresh_dir() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "rc-safe-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, AtomicOrdering::Relaxed)
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn fail() -> io::Error {
+        io::Error::other("Kopieren fehlgeschlagen (Test)")
+    }
+
+    // ---------- Plan / naming ----------
+
+    #[test]
+    fn direct_mode_writes_straight_to_the_target() {
+        let plan = Plan::direct(PathBuf::from("/dst/report.txt"));
+        assert!(!plan.is_staged());
+        assert_eq!(plan.write_to, plan.target);
+        assert!(!plan.replace);
+    }
+
+    #[test]
+    fn staged_mode_writes_next_to_the_target() {
+        let fake = Fake::new(false);
+        let plan = Plan::staged(&*fake, PathBuf::from("/dst/report.txt"), true);
+        assert!(plan.is_staged());
+        assert_eq!(plan.write_to.parent(), plan.target.parent());
+        let name = plan.write_to.file_name().unwrap().to_str().unwrap();
+        assert!(is_working_entry(name), "not recognizable: {}", name);
+        assert!(name.starts_with('.'), "staging entries must be hidden");
+    }
+
+    #[test]
+    fn working_names_are_unique_and_avoid_existing_entries() {
+        let fake = Fake::new(false);
+        let a = working_name(&*fake, Path::new("/dst"), STAGE_PREFIX);
+        fake.put(a.to_str().unwrap(), "taken");
+        let b = working_name(&*fake, Path::new("/dst"), STAGE_PREFIX);
+        assert_ne!(a, b);
+        assert!(!fake.exists(&b));
+    }
+
+    #[test]
+    fn only_our_own_prefixes_count_as_working_entries() {
+        assert!(is_working_entry(".hortcmd-stage-1-2"));
+        assert!(is_working_entry(".hortcmd-backup-1-2"));
+        assert!(!is_working_entry("report.txt"));
+        assert!(!is_working_entry(".hidden"));
+        assert!(!is_working_entry(".hortcmd-notes"));
+    }
+
+    #[test]
+    fn leftovers_are_reported_but_never_touched() {
+        let fake = Fake::new(false);
+        fake.put("/dst/.hortcmd-stage-9-1", "half a copy");
+        fake.put("/dst/keep.txt", "user data");
+        let stale = stale_working_entries(&*fake, Path::new("/dst"));
+        assert_eq!(stale, vec![".hortcmd-stage-9-1".to_string()]);
+        // Reporting is all it does.
+        assert_eq!(fake.get("/dst/.hortcmd-stage-9-1").as_deref(), Some("half a copy"));
+    }
+
+    // ---------- Commit ----------
+
+    #[test]
+    fn a_new_destination_is_committed_with_one_rename() {
+        let fake = Fake::new(false);
+        fake.put("/dst/.stage", "new");
+        commit(&*fake, Path::new("/dst/.stage"), Path::new("/dst/f.txt"), false).unwrap();
+        assert_eq!(fake.get("/dst/f.txt").as_deref(), Some("new"));
+        assert!(fake.get("/dst/.stage").is_none());
+    }
+
+    #[test]
+    fn an_atomic_replace_is_used_where_the_provider_has_one() {
+        let fake = Fake::new(true);
+        fake.put("/dst/f.txt", "old");
+        fake.put("/dst/.stage", "new");
+        commit(&*fake, Path::new("/dst/.stage"), Path::new("/dst/f.txt"), true).unwrap();
+        assert_eq!(fake.get("/dst/f.txt").as_deref(), Some("new"));
+        // No backup was needed, so none is left behind.
+        assert!(fake.names_in("/dst").iter().all(|n| !n.starts_with(BACKUP_PREFIX)));
+    }
+
+    #[test]
+    fn without_an_atomic_replace_the_old_destination_is_kept_until_the_end() {
+        let fake = Fake::new(false);
+        fake.put("/dst/f.txt", "old");
+        fake.put("/dst/.stage", "new");
+        commit(&*fake, Path::new("/dst/.stage"), Path::new("/dst/f.txt"), true).unwrap();
+        assert_eq!(fake.get("/dst/f.txt").as_deref(), Some("new"));
+        // The backup is cleared only after the new name is in place.
+        assert_eq!(fake.names_in("/dst"), vec!["f.txt".to_string()]);
+    }
+
+    #[test]
+    fn a_failed_commit_puts_the_old_destination_back() {
+        let fake = Fake::new(false);
+        fake.put("/dst/f.txt", "old");
+        fake.put("/dst/.stage", "new");
+        fake.fail_rename
+            .lock()
+            .unwrap()
+            .insert(PathBuf::from("/dst/.stage"));
+
+        let err = commit(&*fake, Path::new("/dst/.stage"), Path::new("/dst/f.txt"), true)
+            .unwrap_err();
+        assert!(err.to_string().contains("abgelehnt"));
+        // Byte-for-byte the same file as before, under its own name.
+        assert_eq!(fake.get("/dst/f.txt").as_deref(), Some("old"));
+        assert_eq!(fake.get("/dst/.stage").as_deref(), Some("new"));
+        assert_eq!(
+            fake.names_in("/dst").len(),
+            2,
+            "the rollback must leave no backup behind: {:?}",
+            fake.names_in("/dst")
+        );
+    }
+
+    // ---------- Ordering: copy, commit, source removal ----------
+
+    #[test]
+    fn a_failed_copy_leaves_the_old_destination_untouched() {
+        let fake = Fake::new(false);
+        fake.put("/dst/f.txt", "old");
+        let plan = Plan::staged(&*fake, PathBuf::from("/dst/f.txt"), true);
+        fake.put(plan.write_to.to_str().unwrap(), "half");
+
+        let mut errors = Vec::new();
+        let err = transfer_one_with(
+            &*fake,
+            &*fake,
+            Path::new("/src/f.txt"),
+            &plan,
+            false,
+            &mut errors,
+            || Err(fail()),
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("Test"));
+        assert_eq!(fake.get("/dst/f.txt").as_deref(), Some("old"));
+        assert!(!fake.exists(&plan.write_to), "staging entry must be gone");
+        assert!(errors.is_empty(), "clean cleanup reports nothing");
+    }
+
+    #[test]
+    fn a_cancelled_new_copy_leaves_no_file_under_the_final_name() {
+        let fake = Fake::new(false);
+        let plan = Plan::staged(&*fake, PathBuf::from("/dst/new.txt"), false);
+        fake.put(plan.write_to.to_str().unwrap(), "partial");
+
+        let mut errors = Vec::new();
+        let _ = transfer_one_with(
+            &*fake,
+            &*fake,
+            Path::new("/src/new.txt"),
+            &plan,
+            false,
+            &mut errors,
+            || Err(io::Error::new(ErrorKind::Interrupted, "abgebrochen")),
+        );
+        assert!(!fake.exists(Path::new("/dst/new.txt")));
+        assert!(fake.names_in("/dst").is_empty(), "{:?}", fake.names_in("/dst"));
+    }
+
+    #[test]
+    fn the_final_name_appears_only_after_the_copy_is_complete() {
+        let fake = Fake::new(false);
+        let plan = Plan::staged(&*fake, PathBuf::from("/dst/new.txt"), false);
+
+        let mut errors = Vec::new();
+        transfer_one_with(&*fake, &*fake, Path::new("/src/new.txt"), &plan, false, &mut errors, || {
+            // Mid-copy: the bytes exist, the final name does not.
+            fake.put(plan.write_to.to_str().unwrap(), "all of it");
+            assert!(!fake.exists(Path::new("/dst/new.txt")));
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(fake.get("/dst/new.txt").as_deref(), Some("all of it"));
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn a_failed_commit_reports_and_keeps_the_old_destination() {
+        let fake = Fake::new(false);
+        fake.put("/dst/f.txt", "old");
+        let plan = Plan::staged(&*fake, PathBuf::from("/dst/f.txt"), true);
+        fake.fail_rename.lock().unwrap().insert(plan.write_to.clone());
+
+        let mut errors = Vec::new();
+        let err = transfer_one_with(&*fake, &*fake, Path::new("/src/f.txt"), &plan, false, &mut errors, || {
+            fake.put(plan.write_to.to_str().unwrap(), "new");
+            Ok(())
+        })
+        .unwrap_err();
+
+        assert!(err.to_string().contains("abgelehnt"));
+        assert_eq!(fake.get("/dst/f.txt").as_deref(), Some("old"));
+        assert!(!fake.exists(&plan.write_to));
+    }
+
+    #[test]
+    fn a_move_removes_its_source_only_after_the_commit() {
+        let fake = Fake::new(false);
+        fake.put("/src/f.txt", "payload");
+        let plan = Plan::staged(&*fake, PathBuf::from("/dst/f.txt"), false);
+
+        let mut errors = Vec::new();
+        transfer_one_with(&*fake, &*fake, Path::new("/src/f.txt"), &plan, true, &mut errors, || {
+            fake.put(plan.write_to.to_str().unwrap(), "payload");
+            // Still the only committed copy at this point.
+            assert!(fake.exists(Path::new("/src/f.txt")));
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(fake.get("/dst/f.txt").as_deref(), Some("payload"));
+        assert!(!fake.exists(Path::new("/src/f.txt")));
+    }
+
+    #[test]
+    fn a_failed_move_keeps_its_source() {
+        let fake = Fake::new(false);
+        fake.put("/src/f.txt", "payload");
+        let plan = Plan::staged(&*fake, PathBuf::from("/dst/f.txt"), false);
+
+        let mut errors = Vec::new();
+        let _ = transfer_one_with(
+            &*fake,
+            &*fake,
+            Path::new("/src/f.txt"),
+            &plan,
+            true,
+            &mut errors,
+            || Err(fail()),
+        );
+        assert_eq!(fake.get("/src/f.txt").as_deref(), Some("payload"));
+    }
+
+    #[test]
+    fn an_undeletable_move_source_is_reported_and_both_copies_stay() {
+        let fake = Fake::new(false);
+        fake.put("/src/f.txt", "payload");
+        fake.fail_remove
+            .lock()
+            .unwrap()
+            .insert(PathBuf::from("/src/f.txt"));
+        let plan = Plan::staged(&*fake, PathBuf::from("/dst/f.txt"), false);
+
+        let mut errors = Vec::new();
+        transfer_one_with(&*fake, &*fake, Path::new("/src/f.txt"), &plan, true, &mut errors, || {
+            fake.put(plan.write_to.to_str().unwrap(), "payload");
+            Ok(())
+        })
+        .unwrap();
+
+        // The committed destination is never rolled back to "repair" this.
+        assert_eq!(fake.get("/dst/f.txt").as_deref(), Some("payload"));
+        assert_eq!(fake.get("/src/f.txt").as_deref(), Some("payload"));
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].contains("beide Kopien"), "{}", errors[0]);
+    }
+
+    #[test]
+    fn a_failed_cleanup_is_reported_on_its_own() {
+        let fake = Fake::new(false);
+        let plan = Plan::staged(&*fake, PathBuf::from("/dst/f.txt"), false);
+        fake.put(plan.write_to.to_str().unwrap(), "half");
+        fake.fail_remove.lock().unwrap().insert(plan.write_to.clone());
+
+        let mut errors = Vec::new();
+        let err = transfer_one_with(
+            &*fake,
+            &*fake,
+            Path::new("/src/f.txt"),
+            &plan,
+            false,
+            &mut errors,
+            || Err(fail()),
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("Kopieren"), "{}", err);
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].contains("Aufräumen"), "{}", errors[0]);
+    }
+
+    #[test]
+    fn direct_mode_keeps_writing_to_the_final_name() {
+        let fake = Fake::new(false);
+        let plan = Plan::direct(PathBuf::from("/dst/f.txt"));
+
+        let mut errors = Vec::new();
+        transfer_one_with(&*fake, &*fake, Path::new("/src/f.txt"), &plan, false, &mut errors, || {
+            fake.put("/dst/f.txt", "written directly");
+            Ok(())
+        })
+        .unwrap();
+
+        // No staging entry is created and none has to be cleaned up.
+        assert_eq!(fake.names_in("/dst"), vec!["f.txt".to_string()]);
+        assert_eq!(fake.get("/dst/f.txt").as_deref(), Some("written directly"));
+    }
+
+    // ---------- Plan selection ----------
+
+    #[test]
+    fn safe_mode_stages_an_overwrite_instead_of_deleting_first() {
+        let fake = Fake::new(false);
+        fake.put("/dst/f.txt", "old");
+        let plan = plan_for(&*fake, PathBuf::from("/dst/f.txt"), true, true);
+        assert!(plan.is_staged());
+        assert!(plan.replace);
+        // Choosing the plan must not have touched anything yet.
+        assert_eq!(fake.get("/dst/f.txt").as_deref(), Some("old"));
+    }
+
+    #[test]
+    fn direct_mode_never_stages() {
+        let fake = Fake::new(false);
+        let plan = plan_for(&*fake, PathBuf::from("/dst/f.txt"), false, false);
+        assert!(!plan.is_staged());
+        assert!(!plan.replace);
+    }
+
+    // ---------- Parallel commit phase ----------
+
+    /// Builds `n` staged jobs whose bytes are already in place, as the
+    /// worker pool would leave them.
+    fn staged_jobs(fake: &Fake, names: &[&str]) -> Vec<Plan> {
+        names
+            .iter()
+            .map(|name| {
+                let plan = Plan::staged(
+                    fake,
+                    PathBuf::from(format!("/dst/{}", name)),
+                    fake.exists(Path::new(&format!("/dst/{}", name))),
+                );
+                fake.put(plan.write_to.to_str().unwrap(), &format!("new {}", name));
+                plan
+            })
+            .collect()
+    }
+
+    #[test]
+    fn one_failed_worker_does_not_stop_the_others_from_committing() {
+        let fake = Fake::new(false);
+        fake.put("/dst/b.txt", "old b");
+        let plans = staged_jobs(&fake, &["a.txt", "b.txt", "c.txt"]);
+        let refs: Vec<&Plan> = plans.iter().collect();
+
+        let mut errors = Vec::new();
+        // The middle worker failed.
+        let ok = commit_finished_jobs(&*fake, &refs, &[true, false, true], false, &mut errors);
+
+        assert_eq!(ok, 2);
+        assert_eq!(fake.get("/dst/a.txt").as_deref(), Some("new a.txt"));
+        assert_eq!(fake.get("/dst/c.txt").as_deref(), Some("new c.txt"));
+        // The failed job neither published nor disturbed what was there.
+        assert_eq!(fake.get("/dst/b.txt").as_deref(), Some("old b"));
+        assert!(!fake.exists(&plans[1].write_to));
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn a_cancelled_parallel_run_commits_nothing() {
+        let fake = Fake::new(false);
+        fake.put("/dst/a.txt", "old a");
+        let plans = staged_jobs(&fake, &["a.txt", "b.txt"]);
+        let refs: Vec<&Plan> = plans.iter().collect();
+
+        let mut errors = Vec::new();
+        let ok = commit_finished_jobs(&*fake, &refs, &[true, true], true, &mut errors);
+
+        assert_eq!(ok, 0);
+        assert_eq!(fake.get("/dst/a.txt").as_deref(), Some("old a"));
+        assert!(!fake.exists(Path::new("/dst/b.txt")));
+        assert_eq!(fake.names_in("/dst"), vec!["a.txt".to_string()]);
+    }
+
+    #[test]
+    fn every_parallel_job_gets_its_own_staging_entry() {
+        let fake = Fake::new(false);
+        let plans = staged_jobs(&fake, &["a.txt", "b.txt", "c.txt"]);
+        let mut names: Vec<_> = plans.iter().map(|p| p.write_to.clone()).collect();
+        names.sort();
+        names.dedup();
+        assert_eq!(names.len(), 3, "workers must not share a staging name");
+    }
+
+    // ---------- The local provider's own commit behaviour ----------
+
+    #[test]
+    fn the_local_provider_commits_and_replaces() {
+        let dir = fresh_dir();
+        let local = crate::vfs::local::LocalProvider;
+        assert!(local.supports_staging());
+
+        let target = dir.join("report.txt");
+        std::fs::write(&target, "old").unwrap();
+        let stage = dir.join(".hortcmd-stage-test");
+        std::fs::write(&stage, "new").unwrap();
+
+        commit(&local, &stage, &target, true).unwrap();
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "new");
+        assert!(!stage.exists());
+        let left: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(left, vec!["report.txt".to_string()]);
+    }
+
+    #[test]
+    fn the_local_provider_commits_a_directory_over_an_existing_one() {
+        let dir = fresh_dir();
+        let local = crate::vfs::local::LocalProvider;
+
+        let target = dir.join("tree");
+        std::fs::create_dir_all(target.join("sub")).unwrap();
+        std::fs::write(target.join("sub/old.txt"), "old").unwrap();
+
+        let stage = dir.join(".hortcmd-stage-dir");
+        std::fs::create_dir_all(&stage).unwrap();
+        std::fs::write(stage.join("new.txt"), "new").unwrap();
+
+        // A populated directory target cannot use a plain rename — the
+        // backup route has to carry it.
+        commit(&local, &stage, &target, true).unwrap();
+        assert!(target.join("new.txt").exists());
+        assert!(!target.join("sub").exists());
+        assert!(!stage.exists());
     }
 }

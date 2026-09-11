@@ -72,6 +72,15 @@ interface SettingsStore {
   bufferSizeKb: number;
   /** Number of parallel copy threads (1 = sequential). */
   copyThreads: number;
+  /**
+   * Failure-safe transfers (TICKET-029): copy into a hidden staging
+   * entry on the destination store and publish it with one rename, so
+   * a failure never leaves a partial file under the final name and
+   * never destroys the previous destination. Opt-in — it needs room
+   * for the copy next to the target, and not every destination can
+   * commit that way.
+   */
+  safeTransfers: boolean;
 
   // ----- File view -----
   /** Always sort folders before files. */
@@ -121,6 +130,7 @@ interface SettingsStore {
   setQueueTransfers: (v: boolean) => void;
   setBufferSizeKb: (v: number) => void;
   setCopyThreads: (v: number) => void;
+  setSafeTransfers: (v: boolean) => void;
   setFoldersFirst: (v: boolean) => void;
   setShowExtColumn: (v: boolean) => void;
   setShowPermissions: (v: boolean) => void;
@@ -172,6 +182,7 @@ export const useSettings = create<SettingsStore>()(
       queueTransfers: true,
       bufferSizeKb: 256,
       copyThreads: 1,
+      safeTransfers: false,
 
       foldersFirst: true,
       showExtColumn: true,
@@ -211,6 +222,7 @@ export const useSettings = create<SettingsStore>()(
         set({ bufferSizeKb: Math.min(16384, Math.max(0, Math.floor(bufferSizeKb))) }),
       setCopyThreads: (copyThreads) =>
         set({ copyThreads: Math.min(16, Math.max(1, Math.floor(copyThreads))) }),
+      setSafeTransfers: (safeTransfers) => set({ safeTransfers }),
       setFoldersFirst: (foldersFirst) => set({ foldersFirst }),
       setShowExtColumn: (showExtColumn) => set({ showExtColumn }),
       setShowPermissions: (showPermissions) => set({ showPermissions }),

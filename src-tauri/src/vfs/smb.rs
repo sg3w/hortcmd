@@ -455,6 +455,20 @@ impl Provider for SmbProvider {
             .with_directory_file(true);
         close_resource(self.open(&p(path), &args).map_err(to_io)?)
     }
+
+    // ----- Failure-safe transfers (ticket 029) -----
+
+    /// Commit is one `rename` inside the same connection.
+    fn supports_staging(&self) -> bool {
+        true
+    }
+
+    /// The rename here opens the source for delete and issues
+    /// SET_INFO; replacing an existing name is not requested, so a
+    /// replacement goes through the backup rename.
+    fn rename_replaces(&self) -> bool {
+        false
+    }
 }
 
 /// Closes a resource regardless of its kind (the close triggers the

@@ -264,6 +264,36 @@ pub trait Provider: Send + Sync {
         None
     }
 
+    // ----- Failure-safe transfers (ticket 029) -----
+
+    /// Whether a staged entry can be published under its final name with
+    /// [`rename`](Provider::rename) inside this store. Safe transfers
+    /// write next to the target and commit with one rename, so a
+    /// provider without dependable rename semantics declares `false`
+    /// here — the transfer then refuses instead of quietly writing
+    /// straight to the final name.
+    fn supports_staging(&self) -> bool {
+        false
+    }
+
+    /// Whether [`rename`](Provider::rename) replaces an existing **file**
+    /// target atomically. Where it does, a replacement never leaves a
+    /// moment without a destination; where it does not, the transfer
+    /// engine renames the old destination aside first and puts it back
+    /// if the commit fails. Directory targets always take the backup
+    /// route — `rename` onto a populated directory is not portable.
+    fn rename_replaces(&self) -> bool {
+        false
+    }
+
+    /// Free bytes on the store carrying `path`, when the provider can
+    /// state it definitively. `None` means unknown: staging proceeds and
+    /// a genuine write failure surfaces normally, rather than blocking a
+    /// transfer on a guess.
+    fn free_space(&self, _path: &Path) -> Option<u64> {
+        None
+    }
+
     /// Removes an entry regardless of kind (file or directory).
     fn remove(&self, path: &Path) -> io::Result<()> {
         if self.is_dir(path) {

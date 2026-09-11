@@ -8,7 +8,7 @@ import { panelOf, usePanes, type Side } from "@/store/panesStore";
 import { useOps } from "@/store/opsStore";
 import { useTransfers } from "@/store/transfersStore";
 import { useClipboard } from "@/store/clipboardStore";
-import { PenLine, Trash2 } from "lucide-react";
+import { PenLine, ShieldAlert, Trash2 } from "lucide-react";
 import {
   deleteEntries,
   makeDir,
@@ -30,7 +30,7 @@ import {
   promptArchivePassword,
   PW_WRONG,
 } from "@/features/commander/archivePw";
-import type { OpDone } from "@/ipc/bindings";
+import type { Leftovers, OpDone } from "@/ipc/bindings";
 import { openFileBrowser } from "@/store/fileBrowserStore";
 import {
   programForExtension,
@@ -99,6 +99,8 @@ interface QueuedParams {
   verify: boolean;
   bufKb: number;
   threads: number;
+  /** Safety policy captured at enqueue time (TICKET-029). */
+  safe: boolean;
 }
 /** Parameters of waiting (not yet started) transfers per id. */
 const queuedParams = new Map<string, QueuedParams>();
@@ -123,15 +125,18 @@ function beginTransfer(op: "copy" | "move", sources: string[], dest: string): vo
   const verify = st.verifyCopies;
   const bufKb = st.bufferSizeKb;
   const threads = st.copyThreads;
+  // Snapshot: a transfer keeps the safety policy it was started with,
+  // even if the setting changes while it waits in the queue.
+  const safe = st.safeTransfers;
   const id = newId();
   useTransfers.getState().start(op, id);
 
   // Queue active and an operation already underway → enqueue.
   if (st.queueTransfers && hasActiveTransfer(id)) {
-    queuedParams.set(id, { op, sources, dest, limit, verify, bufKb, threads });
+    queuedParams.set(id, { op, sources, dest, limit, verify, bufKb, threads, safe });
     useTransfers.getState().setQueued(id, true);
   } else {
-    startTransfer(op, id, sources, dest, limit, verify, bufKb, threads);
+    startTransfer(op, id, sources, dest, limit, verify, bufKb, threads, safe);
   }
 }
 
@@ -153,6 +158,7 @@ export function startNextQueued(): void {
     params.verify,
     params.bufKb,
     params.threads,
+    params.safe,
   );
 }
 
@@ -160,6 +166,34 @@ export function startNextQueued(): void {
 export function dequeueTransfer(id: string): void {
   queuedParams.delete(id);
   useTransfers.getState().remove(id);
+}
+
+/**
+ * Remains of an interrupted failure-safe transfer (TICKET-029) found in
+ * a destination folder. A staging or backup entry can hold the only
+ * copy of a file, so nothing is removed on a guess: the user is told
+ * what was found and where, and deletes it only on request.
+ */
+export function confirmLeftovers(l: Leftovers): void {
+  if (!l.paths.length) return;
+  useOps.getState().requestConfirm({
+    title: translate("op.leftovers.title"),
+    message:
+      translate("op.leftovers.message")
+        .replace("{n}", String(l.paths.length))
+        .replace("{dir}", l.dir) +
+      "\n\n" +
+      l.paths.join("\n"),
+    icon: ShieldAlert,
+    confirmLabel: translate("op.leftovers.button"),
+    danger: true,
+    onConfirm: () =>
+      void withBusy(async () => {
+        const res = await deleteEntries(l.paths);
+        await reloadBoth();
+        reportErrors(res.errors);
+      }),
+  });
 }
 
 /** Pending extract operations (for a password retry after fs-done). */

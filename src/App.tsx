@@ -11,6 +11,7 @@ import {
   homeDir,
   listDrives,
   onFsChanged,
+  onLeftovers,
   onFsCollision,
   onFsDone,
   onFsProgress,
@@ -28,6 +29,7 @@ import { useFileColorVars, type ThemeMode } from "@/lib/fileColors";
 import { useKeyboard } from "@/features/commander/useKeyboard";
 import { useNativeMenu } from "@/features/commander/nativeMenu";
 import {
+  confirmLeftovers,
   handleExtractDone,
   reloadBoth,
   startNextQueued,
@@ -123,10 +125,14 @@ export default function App() {
         setTimeout(() => useTransfers.getState().remove(d.id), 900);
       }
     });
+    // Remains of an interrupted failure-safe transfer (TICKET-029).
+    // They may hold the only copy of a file, so the user decides.
+    const offLeftovers = onLeftovers((l) => confirmLeftovers(l));
     return () => {
       offProgress();
       offCollision();
       offDone();
+      offLeftovers();
     };
   }, []);
 

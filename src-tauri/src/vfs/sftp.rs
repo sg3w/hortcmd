@@ -266,6 +266,19 @@ impl Provider for SftpProvider {
     fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
         runtime().block_on(remove_dir_all_async(self.sftp(), p(path)))
     }
+
+    // ----- Failure-safe transfers (ticket 029) -----
+
+    /// Commit is one `rename` inside the same connection.
+    fn supports_staging(&self) -> bool {
+        true
+    }
+
+    /// SFTP `rename` (v3) refuses an existing target, so a
+    /// replacement goes through the backup rename.
+    fn rename_replaces(&self) -> bool {
+        false
+    }
 }
 
 /// Recursively removes a remote directory (SFTP `rmdir` requires the

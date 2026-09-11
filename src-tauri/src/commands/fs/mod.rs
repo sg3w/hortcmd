@@ -27,3 +27,11 @@ pub mod tags;
 pub mod volume;
 pub mod walk;
 pub mod watch;
+
+/// Narrow window onto the transfer engine's commit primitive so the
+/// live provider tests can check each protocol's staging contract
+/// (ticket 029) without making the engine's internals public.
+#[cfg(test)]
+pub mod staging_test_support {
+    pub(crate) use super::file::commit;
+}

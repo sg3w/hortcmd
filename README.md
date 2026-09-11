@@ -66,6 +66,25 @@ rewritten) and a hortcmd-managed store at `<config>/hortcmd/known_hosts`:
 A conflict in *either* source blocks the connection; a match in one never
 overrides it.
 
+**Failure-safe transfers** (TICKET-029, Settings → File operations, **off by
+default**). Normally a copy writes straight to the final name and an accepted
+overwrite deletes the old destination first, so a failed or cancelled overwrite
+can lose it. With the setting on, each top-level source is copied into a hidden
+staging entry *on the destination store* and published with a single rename:
+
+- The final name appears only once the copy is complete and verified.
+- An existing destination survives until the replacement is in place — via the
+  provider's atomic replace where it has one, otherwise a backup rename that is
+  undone if the commit fails.
+- A copy-based move deletes its source only after the destination is committed.
+- Cancellations and failures remove only the staging entry.
+
+The tradeoff is space: staging needs room for the copy next to the target. Safe
+mode never silently degrades — a destination that cannot commit a staged entry
+fails the transfer and says so. Remains of an interrupted run
+(`.hortcmd-stage-*`, `.hortcmd-backup-*`) are reported, never deleted without
+asking: such an entry can hold the only copy of a file.
+
 ## Requirements
 
 - **Rust** (stable): https://rustup.rs → `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`

@@ -6,6 +6,7 @@ export type { DirSizeStats } from "./DirSizeStats";
 export type { VolumeInfo } from "./VolumeInfo";
 export type { OpProgress } from "./OpProgress";
 export type { OpDone } from "./OpDone";
+export type { Leftovers } from "./Leftovers";
 export type { OpResult } from "./OpResult";
 export type { CollisionReq } from "./CollisionReq";
 export type { Preview } from "./Preview";

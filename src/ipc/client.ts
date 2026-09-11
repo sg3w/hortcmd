@@ -22,6 +22,7 @@ import type {
   ForgetResult,
   GitStatus,
   GitStatusEvent,
+  Leftovers,
   LevelDiff,
   LevelEntry,
   OpDone,
@@ -408,6 +409,7 @@ const progressSubs = new Set<(p: OpProgress) => void>();
 const doneSubs = new Set<(d: OpDone) => void>();
 const collisionSubs = new Set<(c: CollisionReq) => void>();
 const changedSubs = new Set<(dir: string) => void>();
+const leftoverSubs = new Set<(l: Leftovers) => void>();
 const gitReadySubs = new Set<(path: string, status: GitStatus) => void>();
 const termDataSubs = new Set<(d: TermData) => void>();
 const termClosedSubs = new Set<(c: TermClosed) => void>();
@@ -428,6 +430,9 @@ async function ensureTauriEvents(): Promise<void> {
   listen<string>("fs-changed", (e) =>
     changedSubs.forEach((f) => f(e.payload)),
   );
+  listen<Leftovers>("fs-leftovers", (e) =>
+    leftoverSubs.forEach((f) => f(e.payload)),
+  );
   listen<GitStatusEvent>("git-support-ready", (e) =>
     gitReadySubs.forEach((f) => f(e.payload.path, e.payload.status)),
   );
@@ -447,6 +452,15 @@ async function ensureTauriEvents(): Promise<void> {
 export function setMenuLanguage(lang: string): void {
   if (!hasTauri) return;
   void invoke<void>("set_menu_language", { lang });
+}
+
+/** Subscribes to the remains of interrupted failure-safe transfers found
+ *  in a destination folder (TICKET-029). They are only reported — the
+ *  frontend asks before anything is deleted. */
+export function onLeftovers(cb: (l: Leftovers) => void): () => void {
+  leftoverSubs.add(cb);
+  void ensureTauriEvents();
+  return () => leftoverSubs.delete(cb);
 }
 
 /** Subscribes to clicks in the reduced native macOS menu (TICKET-040). */
@@ -504,7 +518,10 @@ export function setWatched(paths: string[]): void {
 export type TransferOp = "copy" | "move" | "extract" | "pack";
 
 /** Starts a copy/move transfer (fire-and-forget).
- *  `limit` = bytes/s (0 = unlimited), `verify` = checksums after copying. */
+ *  `limit` = bytes/s (0 = unlimited), `verify` = checksums after copying,
+ *  `safe` = stage and commit instead of writing to the final name
+ *  (TICKET-029). The caller passes the value captured when the transfer
+ *  was queued, so a waiting operation keeps the policy it was started with. */
 export function startTransfer(
   op: "copy" | "move",
   id: string,
@@ -514,13 +531,23 @@ export function startTransfer(
   verify = false,
   bufKb = 256,
   threads = 1,
+  safe = false,
 ): void {
   if (!hasTauri) {
     demoTransfer(op, id, sources, destDir, true);
     return;
   }
   const cmd = op === "copy" ? "copy_entries" : "move_entries";
-  void invoke<void>(cmd, { id, sources, destDir, limit, verify, bufKb, threads });
+  void invoke<void>(cmd, {
+    id,
+    sources,
+    destDir,
+    limit,
+    verify,
+    bufKb,
+    threads,
+    safe,
+  });
 }
 
 /** Pauses or resumes a running transfer. */
@@ -1126,7 +1153,9 @@ function demoTransfer(
     if (demoCancelled.has(id)) {
       clearInterval(timer);
       demoCancelled.delete(id);
-      doneSubs.forEach((f) => f({ id, op, ok: 0, errors: [], cancelled: true }));
+      doneSubs.forEach((f) =>
+        f({ id, op, ok: 0, errors: [], cancelled: true, mode: "" }),
+      );
       return;
     }
     if (paused) return;
@@ -1187,7 +1216,7 @@ function demoTransfer(
     if (step >= steps) {
       clearInterval(timer);
       doneSubs.forEach((f) =>
-        f({ id, op, ok: filesTotal, errors: [], cancelled: false }),
+        f({ id, op, ok: filesTotal, errors: [], cancelled: false, mode: "" }),
       );
     }
   }, 130);

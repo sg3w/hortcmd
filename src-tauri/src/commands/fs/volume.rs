@@ -82,6 +82,15 @@ fn find(path: &Path) -> Option<VolumeInfo> {
         .map(|(_, disk)| info_of(disk))
 }
 
+/// Free bytes on the volume carrying `path`, or `None` when no mount
+/// point matches. Used by failure-safe transfers (ticket 029) to refuse
+/// staging that definitely cannot fit; an unknown volume stays `None`
+/// so the transfer proceeds and a real write failure decides.
+pub fn free_space_of(path: &Path) -> Option<u64> {
+    let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    find(&target).map(|v| v.free)
+}
+
 /// Storage information about the volume `path` lies on; None if no
 /// mount point matches. Runs in the background – reading the disk list
 /// can be slow (network shares, spun-down drives).

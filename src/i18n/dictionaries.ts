@@ -199,6 +199,11 @@ export const DICT = {
     "settings.threads": "Parallele Kopien",
     "settings.threads.hint":
       "Threads beim Kopieren (1 = sequenziell). Auf HDDs kann >1 langsamer sein.",
+    "settings.safeTransfers": "Ausfallsichere Übertragung",
+    "settings.safeTransfers.hint":
+      "Kopiert zuerst in einen versteckten Zwischeneintrag am Ziel und veröffentlicht ihn erst am Ende unter dem endgültigen Namen. Braucht vorübergehend Platz am Ziel, verhindert aber, dass ein fehlgeschlagenes Überschreiben die bisherige Zieldatei zerstört.",
+    "settings.safeTransfers.warning":
+      "Ausgeschaltet: Ein fehlgeschlagenes Überschreiben kann die bisherige Zieldatei verlieren oder unvollständige Daten unter dem endgültigen Namen hinterlassen.",
     "settings.favorites.hint":
       "Favoriten erscheinen in der Speicherort-Auswahl über den Laufwerken.",
     "settings.favorites.name": "Bezeichnung",
@@ -286,6 +291,10 @@ export const DICT = {
     "op.trash.confirm": "{n} Objekt(e) in den Papierkorb verschieben?",
     "op.trash.hint": "Tipp: Mit ⇧ Shift endgültig löschen.",
     "op.trash.button": "In den Papierkorb",
+    "op.leftovers.title": "Reste einer unterbrochenen Übertragung",
+    "op.leftovers.message":
+      "In {dir} liegen {n} Eintrag/Einträge aus einer abgebrochenen ausfallsicheren Übertragung. Sie können die einzige Kopie einer Datei enthalten — vor dem Löschen prüfen.",
+    "op.leftovers.button": "Reste löschen",
     "op.mkdir.title": "Neuer Ordner",
     "op.mkdir.label": "Ordnername",
     "op.rename.title": "Umbenennen",
@@ -921,6 +930,11 @@ export const DICT = {
     "settings.threads": "Parallel copies",
     "settings.threads.hint":
       "Threads when copying (1 = sequential). On HDDs, >1 can be slower.",
+    "settings.safeTransfers": "Failure-safe transfers",
+    "settings.safeTransfers.hint":
+      "Copies into a hidden staging entry at the destination first and publishes it under the final name only at the end. Needs temporary room at the destination, but keeps a failed overwrite from destroying the previous destination file.",
+    "settings.safeTransfers.warning":
+      "Off: a failed overwrite can lose the previous destination file or leave incomplete data under the final name.",
     "settings.favorites.hint":
       "Favorites appear in the location picker above the drives.",
     "settings.favorites.name": "Label",
@@ -1008,6 +1022,10 @@ export const DICT = {
     "op.trash.confirm": "Move {n} item(s) to the trash?",
     "op.trash.hint": "Tip: hold ⇧ Shift to delete permanently.",
     "op.trash.button": "Move to trash",
+    "op.leftovers.title": "Remains of an interrupted transfer",
+    "op.leftovers.message":
+      "{dir} holds {n} entry/entries from a cancelled failure-safe transfer. They may contain the only copy of a file — check before deleting.",
+    "op.leftovers.button": "Delete remains",
     "op.mkdir.title": "New folder",
     "op.mkdir.label": "Folder name",
     "op.rename.title": "Rename",

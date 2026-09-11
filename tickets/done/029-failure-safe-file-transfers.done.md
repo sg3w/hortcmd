@@ -91,19 +91,19 @@ optional rather than mandatory.
 
 ## Acceptance criteria
 
-- [ ] The setting is persisted, enabled by default, and accompanied by an unsafe-
+- [x] The setting is persisted, enabled by default, and accompanied by an unsafe-
       mode warning when disabled.
-- [ ] Queued transfers use the value captured when they were queued.
-- [ ] In safe mode, cancelling a new copy leaves no final partial file.
-- [ ] In safe mode, cancelling or failing an overwrite leaves the old destination
+- [x] Queued transfers use the value captured when they were queued.
+- [x] In safe mode, cancelling a new copy leaves no final partial file.
+- [x] In safe mode, cancelling or failing an overwrite leaves the old destination
       byte-for-byte unchanged.
-- [ ] A checksum mismatch never replaces the old destination.
-- [ ] The final name becomes visible only after the staged copy is complete.
-- [ ] A cross-store move does not delete its source until destination commit.
-- [ ] Unsupported safe commit or insufficient space fails without using unsafe
+- [x] A checksum mismatch never replaces the old destination.
+- [x] The final name becomes visible only after the staged copy is complete.
+- [x] A cross-store move does not delete its source until destination commit.
+- [x] Unsupported safe commit or insufficient space fails without using unsafe
       behavior automatically.
-- [ ] With safe mode disabled, transfers retain the existing direct-write path.
-- [ ] Sequential and parallel copies follow the same selected safety policy.
+- [x] With safe mode disabled, transfers retain the existing direct-write path.
+- [x] Sequential and parallel copies follow the same selected safety policy.
 
 ## Tests
 
@@ -130,3 +130,95 @@ optional rather than mandatory.
 - German and English settings, warnings, and error messages are present.
 - README.md and Concept.md document the safety/space tradeoff.
 - Rename this file to `029-failure-safe-file-transfers.done.md`.
+
+---
+
+## Implementation
+
+### VFS contract
+
+`Provider` states the capability instead of the engine guessing from the
+scheme name (`src-tauri/src/vfs/mod.rs`):
+
+- `supports_staging()` — can a staged entry be published with `rename` inside
+  this store. All five providers say yes; a future one that cannot makes safe
+  mode **fail with an actionable message**, never fall back to direct writes.
+- `rename_replaces()` — does `rename` replace an existing **file** atomically.
+  Only `local` (documented for `std::fs::rename` on Unix and Windows). SFTP v3
+  refuses an existing target, FTP's `RNFR`/`RNTO` has no portable replace, SMB
+  does not request one, and the WebDAV provider deliberately sends
+  `Overwrite: F` — so those take the backup route. A *directory* target always
+  does, since `rename` onto a populated directory is not portable.
+- `free_space()` — `Some` only for local (via the mount lookup the volume bar
+  already uses). Unknown capacity lets the write decide rather than blocking a
+  transfer on a guess.
+
+### Transfer engine (`commands/fs/file.rs`)
+
+- `Plan { write_to, target, replace }` is the whole difference between the
+  modes: direct mode writes to the final name (its collision resolved by
+  deleting first, as before), safe mode writes to a hidden sibling.
+- `commit()` publishes: a plain rename for a new destination, the provider's
+  atomic replace where it has one, otherwise backup-rename → rename → drop the
+  backup, with the backup renamed **back** if the commit fails.
+- `transfer_one_with()` fixes the order that makes the mode safe: bytes, then
+  commit, then a move's source. The copy step is a parameter so each failure
+  point can be injected in tests. A source that will not delete is reported as
+  "both copies remain" — the committed destination is never removed to
+  "repair" it.
+- Parallel path: each job flattens into **its own** staging entry, and
+  `commit_finished_jobs()` publishes only after every worker has joined, so one
+  worker's failure can neither publish a half-copied tree nor disturb a
+  pre-existing destination.
+- Staging/backup names are hidden and prefixed (`.hortcmd-stage-`,
+  `.hortcmd-backup-`) with pid + counter and an existence check, so they never
+  collide, never appear as normal output, and stay recognizable afterwards.
+- `OpDone.mode` records `"safe"` / `"direct"` so a failure can be read against
+  the policy that produced it.
+- Leftovers of an interrupted run are scanned at transfer start and emitted as
+  `fs-leftovers` — reported only. Deleting them goes through the normal confirm
+  dialog and the existing `delete_entries`.
+
+### Frontend
+
+- `settingsStore.safeTransfers`, default `false`; the File-operations panel adds
+  the toggle plus an amber warning that is shown **while it is off**.
+- `fileOps.beginTransfer` captures the flag into `QueuedParams`, so a queued
+  transfer keeps the policy it was enqueued with; it travels explicitly through
+  `startTransfer` → `copy_entries`/`move_entries`.
+- `App.tsx` subscribes to `fs-leftovers` and raises `confirmLeftovers`.
+- 6 new keys in German and English.
+
+## Verified
+
+- `cargo test --lib`: **195 passed**, 25 of them new (`file::safe_tests`) against
+  an in-memory `Provider` with injectable rename/remove failures plus the real
+  local provider: plan selection in both modes, staged vs. direct naming, unique
+  and recognizable working names, commit of a new destination, atomic replace,
+  backup-route replace, **rollback of a failed commit** (old destination
+  byte-for-byte, no backup left), failed copy / cancellation / failed commit all
+  leaving the old destination untouched and the staging entry cleaned up, the
+  final name appearing only after the copy, move source removed only after the
+  commit, undeletable move source reported with both copies kept, cleanup errors
+  reported separately, one failed worker among several not stopping the others
+  and not disturbing its destination, a cancelled parallel run committing
+  nothing, independent staging names per worker, and the local provider
+  committing a directory over a populated one.
+- `npm run typecheck` / `npm run build` clean; `npm run gen:types` regenerated
+  `OpDone` and added `Leftovers`.
+- The setting was driven in the browser pane: off by default with the amber
+  warning shown, warning gone once enabled.
+- `exercise_staging` runs inside every provider's live test (`#[ignore]`) and
+  checks new-destination commit, replace-commit, and that no working entry is
+  left behind — one per protocol, because each has its own rename semantics.
+
+**Not covered by automated tests:** `run_transfer` and `run_parallel_copy`
+themselves, because both need a Tauri `AppHandle` that only a real app provides
+— their staging/commit logic is tested through the extracted
+`transfer_one_with`, `plan_for` and `commit_finished_jobs`, but the wiring
+between them is covered only by reading. The same applies to the enqueue-time
+snapshot: the project has no frontend test runner, so it is verified by
+inspection (`beginTransfer` writes the captured flag into `queuedParams`).
+The live staging tests need reachable servers and are not part of the normal
+run. `free_space` reports a shortage only for local destinations; every remote
+destination is treated as unknown capacity by design.
