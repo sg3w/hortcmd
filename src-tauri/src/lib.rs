@@ -7,12 +7,60 @@ mod menu;
 mod net;
 mod vfs;
 
+/// Origins the main window may hold (TICKET-030). In a packaged build
+/// that is only the app document itself; a dev build additionally serves
+/// it from the Vite origin named in `tauri.conf.json`.
+///
+/// Everything else — `http(s)` pages, `file:`, `javascript:`, `data:`,
+/// foreign custom protocols, malformed URLs — is refused, so no rendered
+/// content can replace the trusted document that holds the IPC surface.
+/// Links out of a preview take `open_external` to the system browser
+/// instead.
+fn is_trusted_origin(url: &tauri::Url) -> bool {
+    let host = url.host_str().unwrap_or_default();
+    match url.scheme() {
+        // The packaged app document (macOS/iOS serve it as `tauri:`,
+        // Windows/Linux as `http://tauri.localhost`).
+        "tauri" => true,
+        "http" | "https" if host == "tauri.localhost" => true,
+        // The Vite dev server, development builds only.
+        "http" if cfg!(debug_assertions) && matches!(host, "localhost" | "127.0.0.1") => {
+            url.port() == Some(1420)
+        }
+        _ => false,
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         // The window carries the full Commander menu; macOS additionally
         // gets a reduced native menu (TICKET-040).
         .setup(|app| {
+            // The main window is declared in `tauri.conf.json` with
+            // `"create": false` and built here instead, because the
+            // navigation policy (TICKET-030) can only be attached while
+            // the WebView is being created.
+            let config = app
+                .config()
+                .app
+                .windows
+                .first()
+                .cloned()
+                .ok_or("Kein Fenster in tauri.conf.json konfiguriert")?;
+            tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
+                // Navigation boundary of the WebView. Only the app
+                // document loads here; a blocked attempt is noted in
+                // development with the URL alone — never with page or
+                // file contents.
+                .on_navigation(|url| {
+                    let allowed = is_trusted_origin(url);
+                    if !allowed && cfg!(debug_assertions) {
+                        eprintln!("[hortcmd] Navigation blockiert: {}", url);
+                    }
+                    allowed
+                })
+                .build()?;
             menu::install(app.handle())?;
             Ok(())
         })
@@ -36,6 +84,7 @@ pub fn run() {
             commands::fs::file::trash_entries,
             commands::fs::preview::read_preview,
             commands::fs::preview::open_path,
+            commands::fs::preview::open_external,
             commands::fs::preview::quick_look,
             commands::fs::preview::open_with,
             commands::fs::preview::open_terminal,

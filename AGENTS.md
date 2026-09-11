@@ -63,6 +63,7 @@ Check after changes:
 ```bash
 cargo check
 npm run typecheck
+npm run test
 npm run build
 ```
 

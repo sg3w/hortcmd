@@ -333,10 +333,15 @@ function demoPreview(path: string): Preview {
   };
 
   if (["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico"].includes(ext)) {
+    // The placeholder embeds a file name, so it is escaped like any
+    // other markup (TICKET-030). An SVG behind `<img src>` is a passive
+    // context that cannot run scripts, but malformed markup from an odd
+    // name would still break the preview.
+    const label = name.replace(/[<>&'"]/g, (c) => `&#${c.charCodeAt(0)};`);
     const dot =
       "data:image/svg+xml;base64," +
       btoa(
-        `<svg xmlns='http://www.w3.org/2000/svg' width='320' height='200'><rect width='100%' height='100%' fill='#2b2d31'/><text x='50%' y='50%' fill='#9aa0a6' font-family='sans-serif' font-size='14' text-anchor='middle'>${name}</text></svg>`,
+        `<svg xmlns='http://www.w3.org/2000/svg' width='320' height='200'><rect width='100%' height='100%' fill='#2b2d31'/><text x='50%' y='50%' fill='#9aa0a6' font-family='sans-serif' font-size='14' text-anchor='middle'>${label}</text></svg>`,
       );
     return {
       ...base,
@@ -602,6 +607,17 @@ export async function openPath(path: string): Promise<void> {
     return;
   }
   return invoke<void>("open_path", { path });
+}
+
+/** Opens an `http(s)` link from rendered content in the system browser
+ *  (TICKET-030). The backend validates the scheme again and refuses
+ *  anything else, so this is never a general launcher. */
+export async function openExternal(url: string): Promise<void> {
+  if (!hasTauri) {
+    console.log("[demo] open_external", url);
+    return;
+  }
+  return invoke<void>("open_external", { url });
 }
 
 /** Native macOS Quick Look preview (Space). */

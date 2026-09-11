@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { resolve } from "path";
 import { readFileSync } from "fs";
@@ -32,5 +32,11 @@ export default defineConfig({
     target: ["es2021", "chrome100", "safari13"],
     minify: process.env.TAURI_DEBUG ? false : "esbuild",
     sourcemap: !!process.env.TAURI_DEBUG,
+  },
+  // Sicherheitstests der Vorschau-Sanitisierung (TICKET-030) brauchen ein
+  // echtes DOM — DOMPurify arbeitet auf Knoten, nicht auf Strings.
+  test: {
+    environment: "jsdom",
+    include: ["src/**/*.test.ts"],
   },
 });

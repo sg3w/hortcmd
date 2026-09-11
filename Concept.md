@@ -169,7 +169,9 @@ commands/fs/
 │                            pub(crate), also used by archive. Ausfallsichere Übertragung
 │                            (TICKET-029): Plan/staging + commit, Rollback über
 │                            Backup-Rename, Reste-Meldung (`fs-leftovers`)
-├── preview.rs               read_preview (F3) · open_path (F4)
+├── preview.rs               read_preview (F3) · open_path (F4) · open_external
+│                            (validierte http(s)-Links in den Systembrowser,
+│                            TICKET-030)
 ├── archive.rs               archives (ZIP/tar/tar.gz/tar.xz/7z, password): list_archive ·
 │                            extract_entries · create_archive (packing → ZIP)
 ├── compare.rs               compare_dirs/sync_copy (recursive, local) + compare_levels
@@ -178,6 +180,50 @@ commands/fs/
 │                            files incl. format validation and limits (TICKET-059)
 └── watch.rs                 set_watched (directory watching, notify)
 ```
+
+---
+
+### WebView trust boundary (TICKET-030)
+
+The window that renders previews is the same window that can invoke every Rust
+command, so untrusted *file content* is kept away from it in four independent
+layers — each one holds on its own if another is bypassed:
+
+1. **CSP** (`tauri.conf.json`). Production: `default-src 'self'`;
+   `script-src 'self'` (Tauri adds its own nonce for the IPC bootstrap);
+   `style-src 'self' 'unsafe-inline'` — required by React/Radix inline styles
+   and the dynamic dialog sizing, deliberately *not* widened to scripts;
+   `img-src 'self' data:` — `data:` only for the base64 image previews the
+   backend returns; `connect-src 'self' ipc: http://ipc.localhost` for the IPC
+   transport; `object-/frame-/child-/worker-/manifest-src 'none'`,
+   `base-uri 'self'`, `form-action 'none'`, `frame-ancestors 'none'`. No
+   `http:`, `https:`, `*` or `unsafe-eval` anywhere. `devCsp` is a **separate**
+   key covering only the Vite origin, its WebSocket and React Refresh's inline
+   scripts, so production inherits none of it.
+2. **Navigation policy** (`lib.rs`, `is_trusted_origin`). The main window is
+   declared with `"create": false` and built in `setup`, because the policy can
+   only be attached while the WebView is created. It accepts the app document
+   only (`tauri:` / `http://tauri.localhost`, plus `http://localhost:1420` in
+   development builds); `http(s)`, `file:`, `javascript:`, `data:`, foreign
+   custom protocols and malformed URLs are refused. Blocked attempts are logged
+   in development with the URL alone — never with page or file contents.
+3. **Link handling.** A click inside rendered Markdown is always swallowed;
+   only a validated `http(s)` URL reaches the system browser via
+   `open_external`, which validates the scheme again in the backend. `open_path`
+   remains the *file* entry point (F4) and is never reused as a URL escape
+   hatch.
+4. **Sanitization** (`lib/preview.ts`). DOMPurify runs with an explicit
+   element/attribute allowlist instead of its defaults, and a URL rule that
+   accepts only absolute `http(s)` and in-document fragments — a *relative*
+   href is stripped too, because it is same-origin and would otherwise replace
+   the running app. Anchors lose `target` and gain
+   `rel="noopener noreferrer"`. Highlighted source is escaped by highlight.js
+   or by hand; every `dangerouslySetInnerHTML` carries the contract it relies
+   on as a comment.
+
+Capabilities (`capabilities/default.json`) are pruned to what is actually
+called; each entry names its caller. Live HTML preview stays deliberately
+unimplemented.
 
 ---
 

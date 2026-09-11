@@ -85,6 +85,29 @@ fails the transfer and says so. Remains of an interrupted run
 (`.hortcmd-stage-*`, `.hortcmd-backup-*`) are reported, never deleted without
 asking: such an entry can hold the only copy of a file.
 
+**WebView trust boundary** (TICKET-030). The window that renders previews is the
+same window that can invoke every Rust command, so untrusted file content is
+kept away from it in layers:
+
+- **Content Security Policy** in `tauri.conf.json` — production starts from
+  `default-src 'self'` with no `http:`, `https:`, `*` or `unsafe-eval`. `data:`
+  is allowed for `img-src` only (generated image previews); `'unsafe-inline'` is
+  confined to `style-src` (React/Radix inline styles, dynamic dialog sizing).
+  `devCsp` is separate and covers only the Vite origin and HMR, so production
+  inherits nothing from it.
+- **Navigation policy** — the main WebView accepts only the app document
+  (`tauri:` / `http://tauri.localhost`, plus `http://localhost:1420` in dev).
+  Everything else is refused; blocked attempts are logged in development with
+  the URL alone.
+- **Links** in rendered Markdown never navigate the WebView: the click is
+  swallowed and a validated `http(s)` URL goes to the system browser through
+  `open_external`, which re-checks the scheme. `open_path` stays the file entry
+  point and is never used as a URL escape hatch.
+- **Sanitization** — Markdown is rendered through DOMPurify with an explicit
+  element/attribute allowlist and an `http(s)`-or-fragment URL rule (relative
+  hrefs are stripped too: they are same-origin and would otherwise replace the
+  running app). Highlighted source is escaped by highlight.js or by hand.
+
 ## Requirements
 
 - **Rust** (stable): https://rustup.rs → `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
@@ -103,6 +126,7 @@ npm run tauri dev      # native app: Vite + Rust backend
 
 ```bash
 npm run typecheck      # tsc --noEmit
+npm run test           # vitest: preview sanitization security tests
 npm run build          # frontend production build
 npm run gen:types      # ts-rs: Rust structs → src/ipc/bindings/*.ts
 npm run tauri build    # build native app

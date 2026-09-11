@@ -101,13 +101,81 @@ export function viewModesFor(
   return { modes: ["raw"], def: "raw" };
 }
 
-/** Markdown → sanitized HTML. */
+// ============================================================
+// Markdown sanitization (TICKET-030).
+//
+// A previewed file is untrusted input that ends up as real DOM inside
+// the window holding the IPC surface, so the sanitizer is configured
+// explicitly rather than left on its defaults: only the elements
+// Markdown actually produces survive, only `http(s)` and in-document
+// fragments are accepted as URLs, and every anchor is neutralised for
+// navigation. The CSP is the second line — this is the first.
+// ============================================================
+
+/** Exactly what Markdown renders — no `style`, `form`, `iframe`, `svg`. */
+const ALLOWED_TAGS = [
+  "p", "br", "hr", "div", "span",
+  "h1", "h2", "h3", "h4", "h5", "h6",
+  "strong", "b", "em", "i", "s", "del", "ins", "sub", "sup", "mark", "small",
+  "blockquote", "pre", "code", "kbd", "samp", "var",
+  "ul", "ol", "li",
+  "table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption",
+  "a", "img",
+  "dl", "dt", "dd",
+];
+
+/** No `style`, no `on*`, no `target`, no `srcset`. */
+const ALLOWED_ATTR = [
+  "href", "title", "alt", "src", "width", "height",
+  "colspan", "rowspan", "start", "type", "class", "id", "align",
+];
+
+/**
+ * Absolute `http(s)` links and in-document fragments only.
+ *
+ * A *relative* href is deliberately excluded too: it would resolve
+ * against the app document and — being same-origin — pass the
+ * navigation policy, replacing the running app. Stripping it here means
+ * the click interception below is a convenience, not the only guard.
+ */
+const ALLOWED_URI_REGEXP = /^(?:https?:\/\/|#)/i;
+
+/** Anchors stay visible but carry nothing a click could exploit. */
+DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+  if (node.nodeName !== "A") return;
+  node.removeAttribute("target");
+  node.setAttribute("rel", "noopener noreferrer");
+});
+
+/** Markdown → sanitized HTML for `dangerouslySetInnerHTML`. */
 export function renderMarkdown(md: string): string {
   const html = marked.parse(md) as string;
-  return DOMPurify.sanitize(html);
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS,
+    ALLOWED_ATTR,
+    ALLOWED_URI_REGEXP,
+    // Keep the text of a dropped element, drop the element itself.
+    KEEP_CONTENT: true,
+    // No `<template>`/shadow-DOM escape hatches, no full document.
+    WHOLE_DOCUMENT: false,
+    FORBID_CONTENTS: ["script", "style", "iframe", "object", "embed"],
+  });
 }
 
-/** Source code → highlighted HTML (falls back to plain text). */
+/**
+ * Is this a link a preview may hand to the system browser? Mirrors the
+ * backend's own check (`is_safe_external_url`) so an unsupported scheme
+ * produces no IPC call at all; the backend still validates, because the
+ * command must not trust its caller either.
+ */
+export function isExternalLink(href: string): boolean {
+  return /^https?:\/\/[^\s/?#]+/i.test(href);
+}
+
+/** Source code → highlighted HTML (falls back to plain text).
+ *  `hljs.highlight` escapes the source it wraps in token spans, and the
+ *  fallback escapes by hand — nothing from the file reaches the DOM as
+ *  markup either way. */
 export function highlightCode(text: string, ext: string): string {
   const lang = languageForExt(ext);
   if (lang && hljs.getLanguage(lang)) {
@@ -120,7 +188,9 @@ function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 /** Extension of a name (public, for language/mode detection). */

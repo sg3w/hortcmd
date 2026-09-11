@@ -167,9 +167,63 @@ pub fn read_preview(path: String, max_bytes: u32) -> Result<Preview, String> {
 }
 
 /// Opens a file/URL with the default program registered in the system.
+///
+/// This is the *file* entry point (F4 / double-click) and takes whatever
+/// path the pane shows. It is deliberately **not** used for links out of
+/// rendered content — see `open_external`, which validates the scheme so
+/// a preview can never turn this into a general launcher (TICKET-030).
 #[tauri::command]
 pub fn open_path(path: String) -> Result<(), String> {
     opener::open(&path).map_err(|e| e.to_string())
+}
+
+/// Whether a link from rendered content may be handed to the system
+/// browser. Only absolute `http`/`https` URLs with a host qualify —
+/// everything else (`file:`, `javascript:`, `data:`, custom schemes,
+/// scheme-relative or malformed input, embedded control characters) is
+/// refused, so markup in a previewed file cannot reach the launcher.
+///
+/// The check is deliberately a whole-string one rather than a prefix
+/// test: a leading space, a newline or a NUL would otherwise let
+/// `\njavascript:…` pass a naive `starts_with`.
+pub fn is_safe_external_url(url: &str) -> bool {
+    // Control characters (and whitespace) are never part of a URL a
+    // browser should be handed — they are how scheme checks get fooled.
+    if url.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return false;
+    }
+    let Some((scheme, rest)) = url.split_once("://") else {
+        return false;
+    };
+    if !scheme.eq_ignore_ascii_case("http") && !scheme.eq_ignore_ascii_case("https") {
+        return false;
+    }
+    // Everything up to the first `/`, `?` or `#` is the authority.
+    let authority = rest
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or_default();
+    // Credentials in the URL are a phishing aid, not something a file
+    // preview needs — and the host after `@` is easy to misread.
+    if authority.is_empty() || authority.contains('@') {
+        return false;
+    }
+    // A bare port or an authority that is only punctuation is not a host.
+    authority
+        .split(':')
+        .next()
+        .is_some_and(|host| !host.is_empty())
+}
+
+/// Opens a validated `http(s)` URL in the system browser. The single
+/// way out of the WebView for links in rendered content (TICKET-030):
+/// the main window itself never navigates away from the app document.
+#[tauri::command]
+pub fn open_external(url: String) -> Result<(), String> {
+    if !is_safe_external_url(&url) {
+        return Err(format!("Nicht unterstützte Adresse: {}", url));
+    }
+    opener::open(&url).map_err(|e| e.to_string())
 }
 
 /// Opens the native macOS Quick Look preview (Space). macOS only.
@@ -598,5 +652,86 @@ mod system_properties_tests {
             file_uri(Path::new("/tmp/Grüße \"q\" & 'a'.txt")),
             "file:///tmp/Gr%C3%BC%C3%9Fe%20%22q%22%20%26%20%27a%27.txt"
         );
+    }
+}
+
+// ============================================================
+// External links from rendered preview content (TICKET-030).
+// The WebView never navigates away from the app document, so a link
+// only ever reaches the system browser — and only after this check.
+// ============================================================
+#[cfg(test)]
+mod external_link_tests {
+    use super::{is_safe_external_url, open_external};
+
+    // ----- External links (TICKET-030) -----
+
+    #[test]
+    fn plain_http_and_https_urls_are_allowed() {
+        assert!(is_safe_external_url("https://example.com"));
+        assert!(is_safe_external_url("http://example.com/"));
+        assert!(is_safe_external_url("https://example.com/a/b?q=1#frag"));
+        assert!(is_safe_external_url("https://example.com:8443/docs"));
+        assert!(is_safe_external_url("HTTPS://Example.COM"));
+        assert!(is_safe_external_url("http://192.168.0.1:8080/x"));
+    }
+
+    #[test]
+    fn other_schemes_never_reach_the_launcher() {
+        for url in [
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "JavaScript:alert(1)",
+            "data:text/html,<script>alert(1)</script>",
+            "vbscript:msgbox(1)",
+            "sftp://host/path",
+            "hortcmd://internal",
+            "mailto:someone@example.com",
+        ] {
+            assert!(!is_safe_external_url(url), "must be refused: {}", url);
+        }
+    }
+
+    #[test]
+    fn malformed_input_is_refused() {
+        for url in [
+            "",
+            "example.com",
+            "//example.com",
+            "https://",
+            "https:///path",
+            "https://:8080/",
+            "http:/example.com",
+        ] {
+            assert!(!is_safe_external_url(url), "must be refused: {:?}", url);
+        }
+    }
+
+    #[test]
+    fn whitespace_and_control_characters_defeat_no_check() {
+        // A naive `starts_with` would let these through.
+        for url in [
+            " javascript:alert(1)",
+            "\njavascript:alert(1)",
+            "https://example.com\u{0}.evil.test",
+            "https://exa mple.com",
+            "\thttps://example.com",
+            "https://example.com/a\rb",
+        ] {
+            assert!(!is_safe_external_url(url), "must be refused: {:?}", url);
+        }
+    }
+
+    #[test]
+    fn credentials_in_the_url_are_refused() {
+        assert!(!is_safe_external_url("https://user:pass@evil.test/"));
+        assert!(!is_safe_external_url("https://example.com@evil.test/"));
+    }
+
+    #[test]
+    fn the_command_refuses_before_it_launches_anything() {
+        assert!(open_external("javascript:alert(1)".into()).is_err());
+        assert!(open_external("file:///etc/passwd".into()).is_err());
+        assert!(open_external("".into()).is_err());
     }
 }

@@ -14,11 +14,13 @@ import { formatSize } from "@/lib/format";
 import {
   extNameOf,
   highlightCode,
+  isExternalLink,
   parseCsv,
   renderMarkdown,
   viewModesFor,
   type PreviewMode,
 } from "@/lib/preview";
+import { openExternal } from "@/ipc/client";
 import { cn } from "@/lib/cn";
 import { markDialogKey } from "@/lib/keys";
 
@@ -156,6 +158,20 @@ export function PreviewDialog() {
   );
 }
 
+/**
+ * A link inside rendered Markdown must never navigate the WebView away
+ * from the app document (TICKET-030): the click is always swallowed,
+ * and only a validated `http(s)` URL is handed to the system browser.
+ * Anything else does nothing at all — no IPC call is made.
+ */
+function openLinkExternally(e: React.MouseEvent<HTMLElement>): void {
+  const anchor = (e.target as HTMLElement | null)?.closest?.("a");
+  if (!anchor) return;
+  e.preventDefault();
+  const href = anchor.getAttribute("href") ?? "";
+  if (isExternalLink(href)) void openExternal(href);
+}
+
 function PreviewBody({
   mode,
   text,
@@ -173,6 +189,12 @@ function PreviewBody({
     return (
       <div
         className="md-body px-4 py-3"
+        onClick={openLinkExternally}
+        onAuxClick={openLinkExternally}
+        // Safe by contract: `renderMarkdown` runs the rendered Markdown
+        // through DOMPurify with an explicit element/attribute allowlist
+        // and an `http(s)`-only URL rule (TICKET-030). Never pass raw
+        // file content here.
         dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }}
       />
     );
@@ -181,6 +203,9 @@ function PreviewBody({
     return (
       <pre className="m-0 p-3 font-mono text-[12px] leading-[1.5]">
         <code
+          // Safe by contract: `highlightCode` returns highlight.js token
+          // markup around *escaped* source, or hand-escaped text when no
+          // language matches (TICKET-030).
           dangerouslySetInnerHTML={{ __html: highlightCode(text, ext) }}
         />
       </pre>
