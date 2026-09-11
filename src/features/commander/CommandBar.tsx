@@ -22,6 +22,7 @@ import {
   RefreshCw,
   Replace,
   Rows3,
+  Server,
   Settings,
   Trash2,
   Eye,
@@ -34,6 +35,7 @@ import { openCompare } from "@/store/compareStore";
 import { openFileCompare } from "@/store/fileCompareStore";
 import { openSearch } from "@/store/searchStore";
 import { useHistory } from "@/store/historyStore";
+import { useNet } from "@/features/net/netStore";
 import { useOps } from "@/store/opsStore";
 import { translate, useT } from "@/store/settingsStore";
 import type { TransKey } from "@/i18n/dictionaries";
@@ -105,6 +107,15 @@ export function CommandBar({ onOpenSettings }: Props) {
         onClick={() => refresh(active)}
       />
       <RecentMenu />
+
+      <Divider />
+
+      {/* Remote connections – global, not per pane (ticket 016). */}
+      <ToolButton
+        title={t("net.manage")}
+        Icon={Server}
+        onClick={() => useNet.getState().openManager()}
+      />
 
       <Divider />
 

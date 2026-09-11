@@ -18,6 +18,7 @@ import { formatSize } from "@/lib/format";
 import { RowIcon } from "@/lib/fileIcon";
 import { isRoot, joinPath, parentPath } from "@/lib/path";
 import { cn } from "@/lib/cn";
+import { consumeDialogKey, markDialogKey } from "@/lib/keys";
 
 /** macOS app bundle (…​.app) – treated like a selectable file. */
 function isAppBundle(entry: DirEntry): boolean {
@@ -125,6 +126,7 @@ export function FileBrowserDialog() {
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[70] bg-black/50" />
         <Dialog.Content
+          onKeyDownCapture={markDialogKey}
           className="fixed left-1/2 top-1/2 z-[71] flex h-[460px] w-[560px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-edge bg-panel shadow-2xl"
           aria-describedby={undefined}
         >
@@ -169,7 +171,10 @@ export function FileBrowserDialog() {
               value={pathInput}
               onChange={(e) => setPathInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") navigate(pathInput);
+                if (e.key === "Enter") {
+                  consumeDialogKey(e);
+                  navigate(pathInput);
+                }
               }}
               spellCheck={false}
               autoComplete="off"

@@ -84,6 +84,15 @@ fn p(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
 
+/// Child path inside a remote directory, as a POSIX path string.
+fn join(dir: &str, name: &str) -> String {
+    if dir.ends_with('/') {
+        format!("{}{}", dir, name)
+    } else {
+        format!("{}/{}", dir, name)
+    }
+}
+
 fn to_io<E: std::fmt::Display>(e: E) -> io::Error {
     io::Error::other(e.to_string())
 }
@@ -110,16 +119,40 @@ impl Provider for SftpProvider {
             }
             let attrs = item.metadata();
             let mode = attrs.permissions.unwrap_or(0);
-            let is_dir = attrs.is_dir();
+            let is_symlink = attrs.is_symlink();
+            // SFTP `READDIR` attributes are link-level, exactly like a local
+            // `lstat`: a symlink to a directory would arrive with `is_dir =
+            // false` and the target string's length as its size (TICKET-018).
+            // `SSH_FXP_STAT` follows links, so resolve — one extra round trip
+            // per symlink, none for plain entries, which keeps the common case
+            // (directories without links) at a single `READDIR` as before.
+            let target = if is_symlink {
+                runtime()
+                    .block_on(self.sftp().metadata(join(path, &name)))
+                    .ok()
+            } else {
+                None
+            };
+            // A broken link has no target: fall back to the link's own
+            // attributes so it stays listed as a 0-byte file.
+            let is_dir = target.as_ref().is_some_and(|t| t.is_dir());
+            let size = match &target {
+                _ if is_dir => 0,
+                Some(t) => t.size.unwrap_or(0),
+                None if is_symlink => 0,
+                None => attrs.size.unwrap_or(0),
+            };
             entries.push(DirEntry {
                 hidden: name.starts_with('.'),
                 readonly: mode != 0 && mode & 0o200 == 0,
                 executable: !is_dir && mode & 0o111 != 0,
                 name,
                 is_dir,
-                is_symlink: attrs.is_symlink(),
-                size: if is_dir { 0 } else { attrs.size.unwrap_or(0) },
+                is_symlink,
+                size,
                 modified: attrs.mtime.unwrap_or(0) as u64,
+                // Link-level, so the frontend still renders `l` and the
+                // symlink colour rule.
                 mode: attrs.permissions,
             });
         }

@@ -97,17 +97,17 @@ That is loop-safe and matches how the rest of the app resolves paths.
   push symlinks into either traversal.
 
 ## Acceptance criteria
-- [ ] A symlink to a directory sorts with the folders under "folders first".
-- [ ] `Enter` on it navigates into the target instead of launching an app.
-- [ ] Its size column shows no byte count.
-- [ ] It is still visibly a link (colour rule, `l` in the permissions column).
-- [ ] A symlink to a file keeps `is_dir = false` and shows the **target's** size.
-- [ ] A broken symlink is still listed, shows as a file, size 0, and produces a
+- [x] A symlink to a directory sorts with the folders under "folders first".
+- [x] `Enter` on it navigates into the target instead of launching an app.
+- [x] Its size column shows no byte count.
+- [x] It is still visibly a link (colour rule, `l` in the permissions column).
+- [x] A symlink to a file keeps `is_dir = false` and shows the **target's** size.
+- [x] A broken symlink is still listed, shows as a file, size 0, and produces a
       readable error when opened — it never vanishes from the list.
-- [ ] A symlink cycle does not hang the app or the folder-size calculation.
-- [ ] Listing a large directory (10k+ entries, no symlinks) is no slower than
+- [x] A symlink cycle does not hang the app or the folder-size calculation.
+- [x] Listing a large directory (10k+ entries, no symlinks) is no slower than
       before.
-- [ ] SFTP: a symlinked remote directory behaves like the local case, or the
+- [x] SFTP: a symlinked remote directory behaves like the local case, or the
       limitation is documented.
 
 ## Tests
@@ -129,3 +129,85 @@ That is loop-safe and matches how the rest of the app resolves paths.
 - Existing functionality unchanged
 - `Concept.md` updated (roadmap entry ticked, category tree noted)
 - Rename the ticket to `018-symlinks-to-directories.done.md`
+
+---
+
+## Implementation
+
+**Backend — local (`src-tauri/src/vfs/local.rs`)**
+`DirEntry::metadata()` is an `lstat`, so the fix is to resolve the target once
+per symlink and read the *behavioural* facts from it:
+
+```rust
+let is_symlink = meta.file_type().is_symlink();
+let target = if is_symlink { fs::metadata(item.path()).ok() } else { None };
+let effective = target.as_ref().unwrap_or(&meta);
+```
+
+- `is_dir`, `size`, `modified`, `readonly`, `executable` come from `effective`.
+- `is_symlink`, `hidden` and `mode` stay link-level, so the entry keeps rendering
+  as a link (`l` in the permissions column via `formatMode`, `symlink` colour
+  rule at priority 80).
+- `size` is `0` for a symlinked folder **and** for a broken link; the link-target
+  string length is never reported.
+- The `fs::metadata` call is behind `if is_symlink`, so non-symlink entries cost
+  no additional syscall.
+- Broken links fall back to `meta` (`target == None`) and stay listed.
+
+**Navigation semantics — decided: keep canonicalisation.** `list` continues to
+`fs::canonicalize` the directory, so entering a symlinked folder shows the
+resolved path and `..` leads to the target's real parent. This is now stated in a
+doc comment on `list`. It is what makes a cycle (`a/link → a`) harmless: every
+hop lands on the same canonical path, so there is nothing to recurse into.
+
+**Backend — SFTP (`vfs/sftp.rs`)** `READDIR` attributes are link-level exactly
+like `lstat`. Resolved via `SSH_FXP_STAT` (`SftpSession::metadata`, which follows
+links) through a new `join(dir, name)` helper — one extra round trip per symlink,
+none for plain entries, so a directory without links still costs a single
+`READDIR`. Same broken-link fallback.
+
+**Backend — FTP/SMB/WebDAV** unchanged, each with a comment saying why: FTP has
+no `stat` (resolving would need a `CWD` probe per link on a protocol that already
+pays per round trip); SMB signals links as reparse points the client does not
+surface and the server resolves them server-side anyway, so `is_dir` already
+describes the target; WebDAV has no symlink concept.
+
+**Frontend** — no file-system logic added, as required. `sortEntries`
+(`panesStore.ts`), `openEntry` (`navigate.ts`) and the size column
+(`columns.tsx`, `<DIR>` marker) all key off `is_dir` and were correct once
+`is_dir` was. One genuine gap did surface while checking the "readable error"
+criterion: `openPath` was `void invoke(...)`, which swallowed the rejection, so a
+broken link (or any unopenable file) did nothing at all. `openPath` now returns
+the promise and `openEntry` reports the failure through the existing
+`useOps.requestConfirm` error dialog, with a new `open.error` key in both
+dictionaries.
+
+**Related traversals confirmed unaffected.** `size.rs:113`, `compare.rs:58` and
+`walk.rs:184` all test `file_type().is_symlink()` and skip/prune *before* looking
+at `is_dir`, so the changed classification cannot push a symlink into either
+traversal. Folder size and directory comparison behave exactly as before.
+
+## Verified
+
+- `cargo check`, `cargo clippy` (no new warnings in the touched files; the
+  `new_ret_no_self` on `sftp.rs:73` is pre-existing), `npm run typecheck`,
+  `npm run build` — all clean. `cargo fmt` shows no drift from these changes
+  (the crate has pre-existing drift in ~15 other files from an older rustfmt).
+- `cargo test --lib`: **113 passed, 0 failed**, including the new
+  `vfs::local::tests::symlinks_are_classified_by_their_target`, which builds a
+  fixture with a link to a folder, a link to a file, a dangling link, a cycle
+  (`link → its own parent`) and plain entries, then asserts: folder-link is
+  `is_dir` + `is_symlink` + size 0 + not executable; file-link is not `is_dir`
+  and reports the **target's** size (3, not the 8-byte target string); broken
+  link still listed, size 0; cycle listed as a directory without hanging; plain
+  entries untouched.
+- **Performance measured** with a throwaway `--release` test (since removed):
+  10 000 plain entries list in **22.7 ms** — the `if is_symlink` guard means that
+  path is byte-for-byte the old one. A pathological directory of 10 000 symlinks
+  costs 65.9 ms, i.e. the extra `stat` is only ever paid per actual link.
+- `gen:types` not run — `DirEntry`'s shape is unchanged, only the values in it.
+- Not exercised: SFTP against a live server (needs a real host; the code path
+  mirrors the local one), and Windows directory symlinks vs. junctions. On
+  Windows `file_type().is_symlink()` reports name-surrogate reparse points, which
+  covers both directory symlinks and junctions, so both resolve through the same
+  branch — but that is reasoned, not run.

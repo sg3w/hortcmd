@@ -443,7 +443,9 @@ export function runRename(side: Side): void {
       void withBusy(async () => {
         try {
           await renameEntry(joinPath(base, oldName), joinPath(base, name));
-          await usePanes.getState().refresh(side, { reveal: true });
+          await usePanes
+            .getState()
+            .refresh(side, { reveal: true, names: [name] });
         } catch (e) {
           reportErrors([String(e)]);
         }
@@ -463,7 +465,11 @@ export function runMkdir(side: Side): void {
       const base = panelOf(usePanes.getState(), side).path;
       void withBusy(async () => {
         await makeDir(joinPath(base, trimmed));
-        await usePanes.getState().refresh(side, { reveal: true });
+        // Reveal by name, not by diff: the folder stays under the cursor even
+        // if the watcher refreshed the listing in between (TICKET-014).
+        await usePanes
+          .getState()
+          .refresh(side, { reveal: true, names: [trimmed] });
       });
     },
   });

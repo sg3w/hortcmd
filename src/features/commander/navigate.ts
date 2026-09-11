@@ -7,6 +7,8 @@ import { panelOf, usePanes, type Side } from "@/store/panesStore";
 import { openPath } from "@/ipc/client";
 import { joinPath, parentPath } from "@/lib/path";
 import { isArchive } from "@/lib/archive";
+import { useOps } from "@/store/opsStore";
+import { translate } from "@/store/settingsStore";
 
 /** Opens the entry at `index` in the active tab of `side`. */
 export function openEntry(side: Side, index: number): void {
@@ -39,6 +41,15 @@ export function openEntry(side: Side, index: number): void {
   } else if (isArchive(entry.name)) {
     store.loadArchive(side, joinPath(p.path, entry.name), "");
   } else {
-    openPath(joinPath(p.path, entry.name));
+    // A broken symlink lands here (it is not a directory), and so does any
+    // other unopenable file: report the reason rather than doing nothing.
+    void openPath(joinPath(p.path, entry.name)).catch((e) => {
+      useOps.getState().requestConfirm({
+        title: translate("open.error"),
+        message: String(e),
+        danger: true,
+        onConfirm: () => {},
+      });
+    });
   }
 }

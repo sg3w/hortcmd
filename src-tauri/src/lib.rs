@@ -32,6 +32,7 @@ pub fn run() {
             commands::fs::preview::quick_look,
             commands::fs::preview::open_with,
             commands::fs::preview::open_terminal,
+            commands::fs::preview::open_system_properties,
             commands::fs::archive::list_archive,
             commands::fs::archive::extract_entries,
             commands::fs::archive::create_archive,

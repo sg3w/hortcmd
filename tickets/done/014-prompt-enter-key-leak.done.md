@@ -68,17 +68,17 @@ the same failure mode: `SearchDialog.tsx:178,195`, `FileBrowserDialog.tsx:172`,
   no dialog is open.
 
 ## Acceptance criteria
-- [ ] `F7` → name → `Enter` creates the folder, the panel stays in the same
+- [x] `F7` → name → `Enter` creates the folder, the panel stays in the same
       directory, and the new folder is selected.
-- [ ] Reproduces neither with the cursor on `..` nor on any other row (no entry
+- [x] Reproduces neither with the cursor on `..` nor on any other row (no entry
       is opened by the confirming keystroke).
-- [ ] `F2` rename confirmed with `Enter` does not navigate or open anything.
-- [ ] Pattern select (`+`/`-`) and the archive password prompt confirmed with
+- [x] `F2` rename confirmed with `Enter` does not navigate or open anything.
+- [x] Pattern select (`+`/`-`) and the archive password prompt confirmed with
       `Enter` do not leak either.
-- [ ] `Escape` in a prompt dialog closes only the dialog and does not clear the
+- [x] `Escape` in a prompt dialog closes only the dialog and does not clear the
       pane's quick filter.
-- [ ] Confirming via the **Create** button still works unchanged.
-- [ ] `Enter` in the file pane with no dialog open still opens the cursor entry.
+- [x] Confirming via the **Create** button still works unchanged.
+- [x] `Enter` in the file pane with no dialog open still opens the cursor entry.
 
 ## Tests
 - Manual walkthrough of every acceptance criterion above, in both panels, once
@@ -93,3 +93,68 @@ the same failure mode: `SearchDialog.tsx:178,195`, `FileBrowserDialog.tsx:172`,
 - Existing functionality unchanged
 - `Concept.md` updated (roadmap entry ticked)
 - Rename the ticket to `014-prompt-enter-key-leak.done.md`
+
+## Implementation
+
+**Root cause, both ends.** `PromptDialog` (`OperationDialogs.tsx`) now consumes
+`Enter` and `Escape` via the new `consumeDialogKey` (`src/lib/keys.ts`):
+`preventDefault()` + `stopPropagation()` — React forwards the latter to the
+native event, so the keystroke never reaches the `window` listener. That alone
+would only fix the symptom, so the global handler was made independent of state
+that the unmount destroys:
+
+* `lib/keys.ts` keeps a `WeakSet` of keydown events a dialog has claimed.
+  `markDialogKey` is wired as `onKeyDownCapture` on **every** `Dialog.Content`
+  (Operation dialogs, `AppDialog`, FileBrowser, Preview, Properties, Search), so
+  the mark is set before any handler inside the dialog can close it. The event
+  object outlives the unmount, unlike `document.activeElement` or the DOM
+  position of the target.
+* `useKeyboard.ts` bails out on a marked event first, then reads `e.target`
+  instead of `document.activeElement` for its input/`[role="dialog"]` guards,
+  and finally ignores every keystroke while any `[role="dialog"]` is in the
+  document — that last guard also covers the frame between opening a dialog and
+  its input taking focus (`PromptDialog` focuses in a `requestAnimationFrame`).
+
+Because there is a single prompt component, this covers all `requestPrompt`
+consumers at once: New Folder, Rename, pattern selection (`+`/`-`) and the
+archive password prompt.
+
+**Other `Enter`-submitting inputs** were reviewed: Search (name + content),
+FileBrowser (path), Properties (tag editor) and Settings (editor extensions)
+do not unmount on the keystroke, but they now consume it the same way instead of
+letting it bubble to `window`. `ConfirmDialog` does not submit on `Enter` at all
+(the keystroke is swallowed by the dialog content) — unchanged, and its content
+carries the capture mark.
+
+**Reveal after mkdir/rename.** `panesStore.refresh` accepts `names` in addition
+to `reveal`; `runMkdir`/`runRename` pass the new name. The reveal no longer
+depends on diffing against the previous listing, where a watcher refresh landing
+in between would make the entry look "not new" and leave the cursor where it was.
+
+### Verified
+
+`npm run typecheck`, `npm run build` and `cargo check` all pass (no Rust changes).
+
+UI verified in the Browser pane (vite demo mode), in `/Users/demo/Documents`:
+
+* `F7` → name → `Enter`: folder created, panel stays in the directory (breadcrumb
+  unchanged), dialog closed — with the cursor on `..` and, separately, on a file
+  row (no `open_path` in the console, i.e. no entry was opened).
+* A `keydown` probe on `window` shows the confirming `Enter` never arrives there;
+  only the `F7` that opened the dialog does.
+* `F2` → `Enter`: `rename_entry` runs, no navigation, nothing opened.
+* Pattern selection (`+`) → `*.md` → `Enter`: `readme.md` marked ("1 von 11"),
+  no navigation.
+* `Escape` in the prompt with an active quick filter (`d`): dialog closes, the
+  filter stays — pressing `Escape` again in the pane clears it as before.
+* The **Create** button path is unchanged (mouse confirm closes the dialog, no
+  console errors).
+* `Enter` in the pane with no dialog open still opens the cursor entry.
+* Search: `Enter` in the name field still starts the search ("3 Treffer") and is
+  consumed.
+
+Not reachable in demo mode and therefore unproven: the archive password prompt
+(needs an encrypted archive) and mkdir on a remote VFS location — both go through
+the same `PromptDialog`, which is the only place the keystroke is handled. The
+reveal itself is likewise not observable in demo mode, because the demo listing
+is static and never contains the created folder.

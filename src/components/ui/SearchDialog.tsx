@@ -32,6 +32,7 @@ import { parentPath } from "@/lib/path";
 import type { TransKey } from "@/i18n/dictionaries";
 import { Check } from "@/components/ui/dialogControls";
 import { cn } from "@/lib/cn";
+import { consumeDialogKey, markDialogKey } from "@/lib/keys";
 
 const ROW_H = 40;
 
@@ -173,6 +174,7 @@ export function SearchDialog() {
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/50" />
         <Dialog.Content
+          onKeyDownCapture={markDialogKey}
           aria-describedby={undefined}
           className="fixed left-1/2 top-1/2 z-50 flex h-[86vh] w-[92vw] max-w-[1000px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-edge bg-panel shadow-2xl"
         >
@@ -222,7 +224,11 @@ export function SearchDialog() {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder={t("search.name.ph")}
-                    onKeyDown={(e) => e.key === "Enter" && runSearch()}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+                      consumeDialogKey(e);
+                      void runSearch();
+                    }}
                     className="min-w-0 flex-1 rounded border border-edge bg-panel px-2 py-1 text-[12px] text-text outline-none focus:border-accent"
                   />
                   <Check
@@ -239,7 +245,11 @@ export function SearchDialog() {
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
                     placeholder={t("search.content.ph")}
-                    onKeyDown={(e) => e.key === "Enter" && runSearch()}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+                      consumeDialogKey(e);
+                      void runSearch();
+                    }}
                     className="min-w-0 flex-1 rounded border border-edge bg-panel px-2 py-1 text-[12px] text-text outline-none focus:border-accent"
                   />
                   <Check

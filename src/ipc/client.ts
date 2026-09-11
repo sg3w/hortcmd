@@ -490,13 +490,17 @@ export function startPack(id: string, sources: string[], destZip: string): void 
   void invoke<void>("create_archive", { id, sources, destZip });
 }
 
-/** Opens a file with the default program (F4). */
-export function openPath(path: string): void {
+/**
+ * Opens a file with the default program (F4). Rejects when the path cannot be
+ * opened — a dangling symlink, for instance — so the caller can report it
+ * instead of failing silently (TICKET-018).
+ */
+export async function openPath(path: string): Promise<void> {
   if (!hasTauri) {
     console.log("[demo] open_path", path);
     return;
   }
-  void invoke<void>("open_path", { path });
+  return invoke<void>("open_path", { path });
 }
 
 /** Native macOS Quick Look preview (Space). */
@@ -506,6 +510,20 @@ export function quickLook(path: string): void {
     return;
   }
   void invoke<void>("quick_look", { path });
+}
+
+/**
+ * Opens the operating system's own information/properties window for a
+ * local entry (Finder "Get Info", the Explorer properties sheet, the
+ * desktop file manager's properties dialog). Resolves once the window
+ * has been handed to the system; it outlives hortcmd's own dialog.
+ */
+export async function openSystemProperties(path: string): Promise<void> {
+  if (!hasTauri) {
+    console.log("[demo] open_system_properties", path);
+    return;
+  }
+  return invoke<void>("open_system_properties", { path });
 }
 
 /** Opens a file with a specific program (empty = system default). */

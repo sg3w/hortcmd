@@ -14,6 +14,7 @@ import { openEntry } from "./navigate";
 import { openProps } from "@/store/propsStore";
 import { openSearch } from "@/store/searchStore";
 import { joinPath } from "@/lib/path";
+import { isDialogKey } from "@/lib/keys";
 
 const PAGE = 20; // Zeilen pro Seiten-Sprung
 
@@ -42,15 +43,32 @@ function goUp(): void {
 export function useKeyboard(): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // Don't intercept anything in text fields (command line).
-      const el = document.activeElement;
+      // A dialog already handled this keystroke (TICKET-014). Checked first
+      // and on the event itself, because a dialog that closes on `Enter`/
+      // `Escape` unmounts while this very event is still being dispatched —
+      // afterwards neither `document.activeElement` nor the DOM tell us where
+      // the keystroke came from.
+      if (isDialogKey(e)) return;
+
+      // Don't intercept anything in text fields (command line). Read the
+      // event target rather than `document.activeElement` for the same reason:
+      // focus has moved on once the field is gone.
+      const el = e.target instanceof Element ? e.target : document.activeElement;
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+        return;
+      }
+      if (el instanceof HTMLElement && el.isContentEditable) {
         return;
       }
       // With a modal dialog open (TICKET-012), don't pass shortcuts through to
       // the file panes — dialogs now run in the same window
       // and would otherwise share the same global listener.
       if (el instanceof Element && el.closest('[role="dialog"]')) {
+        return;
+      }
+      // Same guard for keystrokes that never reached the dialog itself: it may
+      // be open but not focused yet (the prompt input focuses one frame later).
+      if (document.querySelector('[role="dialog"]')) {
         return;
       }
 

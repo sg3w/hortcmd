@@ -285,7 +285,8 @@ is organized into the following categories. Legend: **✅ present · ⏳ planned
 - Folders first ✅ *(toggleable as an option)* · show/hide extension column ✅
 - Size format (Automatic ↔ Bytes) ✅ · Date format ✅ *(DD.MM.YYYY / DD.MM.YY / ISO)*
 - Permissions column ✅ *(Unix `rwxr-xr-x` via `mode`; owner column ⏳)* ·
-  mark symlinks ⏳ *(data available via `is_symlink`)*
+  mark symlinks ✅ *(`l` in the permissions column + the `symlink` colour rule;
+  a symlink to a folder is classified as a folder, TICKET-018)*
 - Adjust column widths by dragging ✅ *(persisted in localStorage)*
 - Show milliseconds 💭 *(niche)*
 
@@ -470,6 +471,33 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
   (git-ignored beats executable), custom rule beats built-ins, live update of
   list/dialog/preview, dark↔light independent, persistence across reload,
   restore defaults, and invalid configuration falling back to the defaults.
+- Keystrokes confirming a dialog no longer leak into the file pane (TICKET-014):
+  `Enter` in the "New folder" prompt created the folder *and* opened the cursor
+  entry behind it — with the cursor on `..` the panel jumped one directory up.
+  Cause: `PromptDialog` handled `Enter`/`Escape` without
+  `preventDefault()`/`stopPropagation()`, and `submit()` unmounts the dialog
+  synchronously while the native event is still propagating; the global handler
+  on `window` (`useKeyboard.ts`) then judged the event by `document.activeElement`,
+  which had already fallen back to `<body>`. Fixed on both ends: the prompt input
+  consumes both keys, and the global handler no longer relies on state that the
+  unmount destroys — new `lib/keys.ts` marks a keystroke as belonging to a dialog
+  (`markDialogKey` as `onKeyDownCapture` on every `Dialog.Content`,
+  `consumeDialogKey` where a dialog acts on the key), `useKeyboard` skips marked
+  events, reads `e.target` instead of `document.activeElement`, and additionally
+  ignores everything while any `[role="dialog"]` is open (covers the frame in which
+  a freshly opened dialog has not taken focus yet). This covers all `requestPrompt`
+  consumers at once (New Folder, Rename, pattern selection, archive password); the
+  other `Enter`-submitting dialog inputs (Search, file browser, tag editor,
+  editor extensions) consume the key the same way. `panesStore.refresh` gained
+  `names` so New Folder/Rename reveal the entry by name instead of by diffing
+  against the previous listing (a watcher refresh in between would otherwise
+  swallow the reveal). Verified in browser demo mode: F7 + `Enter` keeps the
+  panel in its directory (cursor on `..` as well as on a file, no `open_path`),
+  F2 + `Enter` renames without navigating, pattern selection marks via `Enter`,
+  `Escape` in the prompt leaves an active quick filter untouched, the **Create**
+  button is unchanged, search still runs on `Enter`, and `Enter` in the pane
+  without a dialog still opens the cursor entry. A `keydown` probe on `window`
+  confirms the confirming keystroke never reaches the global handler.
 
 ### P1 — Complete the core
 - [x] **Rename (F2)** of individual entries (also in the context menu; the dialog preselects
@@ -507,6 +535,29 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
       are saved to localStorage and restored on startup (`sessionStore` +
       `panesStore.restoreSession`); window position/size via `lib/windowState.ts`
       (`@tauri-apps/api/window`). Folders that no longer exist fall back to home.
+- [x] **Symlinks to folders behave like folders** (TICKET-018): `read_dir` hands
+      back `lstat` metadata, so every symlink used to arrive as a file — sorted
+      among the files under "folders first", opened with the default application
+      instead of entered, and showing the byte length of its target string as its
+      size. `LocalProvider::list` now resolves the target once per symlink
+      (`fs::metadata`, *only* for entries whose `file_type().is_symlink()` — plain
+      entries cost no extra syscall: 10k of them list in the same ~23 ms as
+      before) and reports `is_dir`, `size`, `modified`, `readonly` and
+      `executable` from it, while `is_symlink`, the hidden flag and the mode bits
+      stay link-level so the entry is still recognisable as a link. A **broken
+      link keeps its place in the list** — with no target to stat it falls back to
+      the link's own metadata as a 0-byte file — and opening one now reports the
+      reason instead of failing silently (`open_path` propagates its error,
+      `openEntry` shows it). Navigation deliberately keeps the **canonicalised**
+      path, so entering a symlinked folder shows the resolved target and `..`
+      leads to its real parent; that also makes a symlink cycle (`a/link → a`)
+      unwalkable. The frontend needed no change: `sortEntries`, `openEntry` and
+      the size column all key off `is_dir`. **SFTP** does the same via
+      `SSH_FXP_STAT` (one extra round trip per symlink, none for plain entries);
+      FTP has no `stat` to resolve with, and SMB/WebDAV never report symlinks —
+      each noted in the code. Folder size (TICKET-010) and directory comparison
+      skip symlinks by `is_symlink` *before* looking at `is_dir`, so both still
+      terminate unchanged.
 
 ### P2 — Developers & convenience (early-desired) + macOS
 - [~] **Git integration**: base implemented — detects Git repos (branch badge in the
@@ -662,6 +713,24 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
       component-wise ("/Volumes/Data" does not match "/Volumes/Dat"). The
       drive bar of a pane (`DriveSelect`) uses the same wording and shows
       "268 G frei von 926 G" instead of only the free space.
+- [x] **Hand-off to the system's own information window** (TICKET-015): the
+      properties dialog has a footer button **"Systeminformationen"** that opens
+      what the OS itself shows about the entry — Spotlight comment, "Open with"
+      association, Windows security and shell-extension tabs — instead of
+      hortcmd reimplementing any of it. Backend `open_system_properties`
+      (`commands/fs/preview.rs`, same `#[cfg]` pattern as `open_path`/`quick_look`):
+      **macOS** drives Finder over `osascript`, addressing the entry as
+      "item <name> of folder <parent>" so a symlink opens its own info window
+      rather than its target's (and a broken link still works); every path goes
+      in as an argv entry, never as script text. **Windows** calls
+      `ShellExecuteExW` with the `properties` verb
+      (`SEE_MASK_INVOKEIDLIST | SEE_MASK_NOASYNC`) on a dedicated COM-initialised
+      thread, so the command returns at once and the app stays responsive.
+      **Linux** calls `org.freedesktop.FileManager1.ShowItemProperties` over
+      `dbus-send`/`gdbus` and falls back to `ShowItems`, else a readable error.
+      Only local paths: a remote VFS address is refused by the backend *and*
+      disables the button with a tooltip; archive members never reach the dialog
+      at all. The native window outlives both the call and hortcmd's own dialog.
 - [x] **Parallel copies / thread count / buffer size** (settings + backend):
       three new settings (`settings.buffer`, `settings.threads`; buffer size
       default 256 KB, thread count default **1 = sequential/unchanged**).
@@ -683,6 +752,15 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
       026 SSH terminal ✅**; 027 optional KeePass backend.
       "Identical UI" via provider trait + schema registry; secrets via
       `CredentialStore` in the OS keychain (KeePass optional))*
+      The **connection manager has its own toolbar button** (`CommandBar`, `Server`
+      icon in its own section between navigation and file actions; TICKET-016) and
+      opens globally via `useNet.getState().openManager()` — the toolbar is always
+      rendered, so the manager stays reachable with zero configured connections.
+      The location picker (`DriveSelect`) is therefore pure navigation again: the
+      `__manage__` sentinel item is gone, and the network group — heading and
+      separator included — is only rendered when at least one connection is
+      actually `connected`. The in-window **Netz** menu offers the same action
+      (TICKET-040).
 - [ ] **Plugin system**: **define the API early**, then Rust/JS plugins,
       context-menu/preview/column/archive extensions, scripting (JS)
       *(broken down in ticket series `tickets/100`–`107`: 100 API/manifest contract →

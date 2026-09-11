@@ -184,6 +184,8 @@ impl Provider for WebdavProvider {
                 executable: false,
                 name,
                 is_dir,
+                // WebDAV has no symlink concept — a collection is a
+                // collection — so there is nothing to resolve (TICKET-018).
                 is_symlink: false,
                 size,
                 modified,

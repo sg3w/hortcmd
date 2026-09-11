@@ -162,6 +162,12 @@ impl FtpProvider {
                     executable: false,
                     name: f.name().to_string(),
                     is_dir,
+                    // No target resolution here (TICKET-018): FTP has no
+                    // `stat`, so the only way to learn whether a link
+                    // points at a directory is to probe it with `CWD` —
+                    // one extra round trip per link on a protocol that
+                    // already pays for every one. The LIST line's own
+                    // type character is what we report.
                     is_symlink: f.is_symlink(),
                     size: if is_dir { 0 } else { f.size() as u64 },
                     modified,

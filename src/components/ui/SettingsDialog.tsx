@@ -77,6 +77,7 @@ import {
   type ThemeMode,
 } from "@/lib/fileColors";
 import { cn } from "@/lib/cn";
+import { consumeDialogKey } from "@/lib/keys";
 import { AppDialog } from "@/components/ui/AppDialog";
 
 type Category =
@@ -1124,7 +1125,7 @@ function ExtensionTags({
         onChange={(e) => setVal(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
-            e.preventDefault();
+            consumeDialogKey(e);
             add();
           }
         }}

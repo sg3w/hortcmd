@@ -79,19 +79,22 @@ TICKET-012 and needs to be decided before implementation.
 - No change to `netStore` semantics, the profile format, or the backend.
 
 ## Acceptance criteria
-- [ ] The toolbar shows a connection button that opens the connection manager.
-- [ ] The location picker no longer contains a "Manage connections…" row in
+- [x] The toolbar shows a connection button that opens the connection manager.
+- [x] The location picker no longer contains a "Manage connections…" row in
       either panel.
-- [ ] With no connected connection, the picker shows no network group at all —
+- [x] With no connected connection, the picker shows no network group at all —
       no heading, no separator, no empty space.
-- [ ] With one or more connected connections, they appear in the picker and
+- [~] With one or more connected connections, they appear in the picker and
       navigate correctly when chosen.
-- [ ] Disconnecting a connection in the manager removes it from both pickers.
-- [ ] Connecting from the manager navigates the active panel as before.
-- [ ] The manager is reachable with zero configured connections.
+- [~] Disconnecting a connection in the manager removes it from both pickers.
+- [~] Connecting from the manager navigates the active panel as before.
+- [x] The manager is reachable with zero configured connections.
 - [ ] Integration with TICKET-040 provides the same manager through the in-window
       Netz menu; this remains reachable independently of toolbar visibility.
-- [ ] Favorites and drives in the picker are unchanged.
+- [x] Favorites and drives in the picker are unchanged.
+
+`[~]` = code path unchanged and reviewed, but not exercised — needs a live
+server. The TICKET-040 item stays open by design; it is that ticket's scope.
 
 ## Tests
 - Manual: zero connections, one connected, one configured-but-disconnected, and
@@ -107,3 +110,46 @@ TICKET-012 and needs to be decided before implementation.
 - Existing functionality unchanged
 - `Concept.md` updated (roadmap entry ticked, category tree noted)
 - Rename the ticket to `016-connections-toolbar-entry.done.md`
+
+## Implementation
+
+- `src/features/commander/CommandBar.tsx`: new `ToolButton` with the lucide
+  `Server` icon — the same icon `ConnectionsDialog` and the picker's connection
+  rows already use — placed in its own section between the navigation group
+  (back/forward/up/refresh/recent) and the file-action group, with a `Divider`
+  on each side. `onClick` calls `useNet.getState().openManager()` (imperative,
+  so the toolbar does not re-render on every connection-status change).
+- Tooltip/`aria-label` reuse the existing `net.manage` key
+  ("Verbindungen verwalten…" / "Manage connections…"). No `tb.net` key was
+  added: the ticket asked for one only if no fitting key existed, and
+  `net.manage` is exactly that string — a duplicate would have to be kept in
+  sync with the TICKET-040 menu entry that will use the same wording.
+- `src/features/panel/DriveSelect.tsx`: the `__manage__` `Select.Item`, the
+  sentinel branch in `onValueChange`, the now-unused `openManager` binding and
+  the `Settings` icon import are removed. The network `Select.Group` is wrapped
+  in `liveConns.length > 0 &&`, so heading, items and separator disappear
+  together when nothing is connected. Favorites, drives and their separators are
+  untouched.
+
+### Discoverability check
+`CommandBar` is rendered unconditionally at `src/App.tsx:280`; no setting in
+`settingsStore` hides it (only `showExtColumn` / `showPermissions` exist as
+visibility flags). The toolbar entry is therefore always available, and no
+second entry point is required by this ticket — the Netz menu entry stays with
+TICKET-040.
+
+## Verified
+
+`npm run typecheck`, `npm run build` and `cargo check` all pass.
+
+Checked in the Browser pane (vite demo mode, zero connections): the location
+picker now lists only `/` and `/Users/demo` — no network heading, no manage row,
+no dangling separator — and the new toolbar button opens the connection manager,
+which shows "Noch keine Verbindungen." plus "Neue Verbindung". That covers the
+zero-connection and zero-configured-connection criteria in both panels (both
+pickers render the same component).
+
+Not verified here: the connected / mixed states, disconnect-removes-from-picker,
+connect-navigates-active-panel and the SSH-terminal regression — demo mode has no
+backend, so no connection can be established. The rendering of connected entries
+itself is unchanged code, only wrapped in the new conditional.

@@ -294,3 +294,309 @@ pub fn open_terminal(path: String, program: Option<String>) -> Result<(), String
         Err("Kein Terminal gefunden".into())
     }
 }
+
+// ------------------------------------------------------------
+// Native system properties (TICKET-015)
+//
+// Hand-off to the operating system's own information window —
+// Finder "Get Info", the Explorer properties sheet, the desktop
+// file manager's properties dialog. hortcmd's own dialog stays
+// as it is; this only opens the OS view next to it.
+// ------------------------------------------------------------
+
+/// How long we wait for a helper process (osascript, dbus-send) before
+/// we consider the window "opened" and detach. Long enough to catch an
+/// immediate failure, short enough never to block the dialog.
+#[cfg(not(target_os = "windows"))]
+const HELPER_WAIT: std::time::Duration = std::time::Duration::from_millis(4000);
+
+/// Waits briefly for a spawned helper and maps a non-zero exit to an
+/// error. A process still running when the budget is used up counts as
+/// success (the native window is up, its lifetime is not ours).
+#[cfg(not(target_os = "windows"))]
+fn wait_briefly(mut child: std::process::Child) -> Result<(), String> {
+    use std::time::Instant;
+    let deadline = Instant::now() + HELPER_WAIT;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) if status.success() => return Ok(()),
+            Ok(Some(_)) => {
+                let mut msg = String::new();
+                if let Some(mut err) = child.stderr.take() {
+                    let _ = err.read_to_string(&mut msg);
+                }
+                let msg = msg.trim();
+                return Err(if msg.is_empty() {
+                    "Systeminformationen konnten nicht geöffnet werden".into()
+                } else {
+                    msg.to_string()
+                });
+            }
+            // Still running: the window is open, we do not wait for it.
+            Ok(None) if Instant::now() >= deadline => return Ok(()),
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(25)),
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+}
+
+/// Percent-encodes a local path into a `file://` URI (freedesktop
+/// interfaces take URIs, not paths). Everything outside the unreserved
+/// set is escaped byte-wise, so non-ASCII names survive unchanged.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn file_uri(path: &Path) -> String {
+    use std::os::unix::ffi::OsStrExt;
+    let mut uri = String::from("file://");
+    for &b in path.as_os_str().as_bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' => {
+                uri.push(b as char)
+            }
+            _ => uri.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    uri
+}
+
+/// Opens the operating system's own properties/information window for
+/// `path`. Local file-system paths only — remote VFS locations and
+/// entries inside an archive have no OS-level counterpart.
+///
+/// Returns as soon as the window has been handed to the system; its
+/// lifetime is independent of this call and of hortcmd's own dialog.
+#[tauri::command]
+pub fn open_system_properties(path: String) -> Result<(), String> {
+    // Remote addresses (sftp://, smb://, …) are rejected here as well,
+    // not only hidden in the UI.
+    let addr = vfs::parse_address(&path)?;
+    if addr.scheme != vfs::Scheme::Local {
+        return Err("Systeminformationen gibt es nur für lokale Dateien".into());
+    }
+
+    // `symlink_metadata`, so a symlink (even a broken one) is its own
+    // entry — the info window is about the link, not its target.
+    let target = Path::new(&addr.path);
+    if target.symlink_metadata().is_err() {
+        return Err("Eintrag existiert nicht".into());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::{Command, Stdio};
+        // Every path travels as an argv entry into the `run` handler, never
+        // as text inside the script — quotes, ampersands, newlines and
+        // umlauts in a name can therefore not change what the script does.
+        //
+        // The entry is addressed as "item <name> of folder <parent>", not
+        // via `POSIX file <path> as alias`: the alias coercion follows a
+        // symlink, so a link would open the info window of its target and
+        // a broken link would fail outright. Addressing it inside its
+        // container gives Finder the link itself.
+        let mut cmd = Command::new("osascript");
+        match (target.parent(), target.file_name()) {
+            (Some(parent), Some(name)) => {
+                cmd.args([
+                    "-e",
+                    "on run argv",
+                    "-e",
+                    "set parent_ to POSIX file (item 1 of argv) as alias",
+                    "-e",
+                    "tell application \"Finder\"",
+                    "-e",
+                    "activate",
+                    "-e",
+                    "open information window of (item (item 2 of argv) of folder parent_)",
+                    "-e",
+                    "end tell",
+                    "-e",
+                    "end run",
+                    "--",
+                ])
+                .arg(parent)
+                .arg(name);
+            }
+            // A volume root has no container of its own.
+            _ => {
+                cmd.args([
+                    "-e",
+                    "on run argv",
+                    "-e",
+                    "set item_ to POSIX file (item 1 of argv) as alias",
+                    "-e",
+                    "tell application \"Finder\"",
+                    "-e",
+                    "activate",
+                    "-e",
+                    "open information window of item_",
+                    "-e",
+                    "end tell",
+                    "-e",
+                    "end run",
+                    "--",
+                ])
+                .arg(target);
+            }
+        }
+        let child = cmd
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        wait_briefly(child)
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // `ShellExecuteEx` with the "properties" verb needs an
+        // initialised apartment and a thread that stays alive until the
+        // sheet is up (SEE_MASK_NOASYNC guarantees the latter). Both
+        // happen on a dedicated thread, so the command itself returns
+        // immediately and hortcmd stays responsive.
+        use std::os::windows::ffi::OsStrExt;
+        use windows::core::PCWSTR;
+        use windows::Win32::System::Com::{
+            CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED,
+        };
+        use windows::Win32::UI::Shell::{
+            ShellExecuteExW, SEE_MASK_INVOKEIDLIST, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW,
+        };
+        use windows::Win32::UI::WindowsAndMessaging::SW_SHOW;
+
+        let wide: Vec<u16> = target
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        let verb: Vec<u16> = "properties\0".encode_utf16().collect();
+
+        std::thread::spawn(move || unsafe {
+            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+            let mut info = SHELLEXECUTEINFOW {
+                cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
+                fMask: SEE_MASK_INVOKEIDLIST | SEE_MASK_NOASYNC,
+                lpVerb: PCWSTR(verb.as_ptr()),
+                lpFile: PCWSTR(wide.as_ptr()),
+                nShow: SW_SHOW.0,
+                ..Default::default()
+            };
+            let _ = ShellExecuteExW(&mut info);
+            CoUninitialize();
+        });
+        Ok(())
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        use std::process::{Command, Stdio};
+
+        let uri = file_uri(target);
+
+        // `ShowItemProperties` is the exact counterpart; where a desktop
+        // does not implement it, `ShowItems` at least reveals the entry
+        // in its file manager. Both go over the session bus; `dbus-send`
+        // and `gdbus` take every argument as its own argv entry, so the
+        // URI needs no further quoting.
+        let attempts: [(&str, Vec<String>); 4] = [
+            (
+                "dbus-send",
+                dbus_send_args("ShowItemProperties", &uri),
+            ),
+            ("gdbus", gdbus_args("ShowItemProperties", &uri)),
+            ("dbus-send", dbus_send_args("ShowItems", &uri)),
+            ("gdbus", gdbus_args("ShowItems", &uri)),
+        ];
+
+        let mut last: Option<String> = None;
+        for (bin, args) in attempts {
+            match Command::new(bin)
+                .args(&args)
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped())
+                .spawn()
+            {
+                Ok(child) => match wait_briefly(child) {
+                    Ok(()) => return Ok(()),
+                    Err(e) => last = Some(e),
+                },
+                Err(e) => last = Some(e.to_string()),
+            }
+        }
+        Err(match last {
+            Some(e) => format!(
+                "Kein Dateimanager mit org.freedesktop.FileManager1 gefunden: {}",
+                e
+            ),
+            None => "Kein Dateimanager mit org.freedesktop.FileManager1 gefunden".into(),
+        })
+    }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn dbus_send_args(method: &str, uri: &str) -> Vec<String> {
+    vec![
+        "--session".into(),
+        "--dest=org.freedesktop.FileManager1".into(),
+        "--type=method_call".into(),
+        "/org/freedesktop/FileManager1".into(),
+        format!("org.freedesktop.FileManager1.{}", method),
+        format!("array:string:{}", uri),
+        "string:".into(),
+    ]
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn gdbus_args(method: &str, uri: &str) -> Vec<String> {
+    vec![
+        "call".into(),
+        "--session".into(),
+        "--dest".into(),
+        "org.freedesktop.FileManager1".into(),
+        "--object-path".into(),
+        "/org/freedesktop/FileManager1".into(),
+        "--method".into(),
+        format!("org.freedesktop.FileManager1.{}", method),
+        // GVariant literal. `file_uri` percent-encodes everything outside
+        // the unreserved set, so the URI cannot contain a quote that would
+        // close the literal early.
+        format!("['{}']", uri),
+        "".into(),
+    ]
+}
+
+#[cfg(test)]
+mod system_properties_tests {
+    use super::*;
+
+    #[test]
+    fn rejects_remote_addresses() {
+        for addr in [
+            "sftp://user@host/tmp/a.txt",
+            "smb://host/share/a.txt",
+            "ftp://host/a.txt",
+            "webdav://host/a.txt",
+        ] {
+            let err = open_system_properties(addr.to_string()).unwrap_err();
+            assert!(
+                err.contains("lokale"),
+                "unerwartete Meldung für {addr}: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_missing_entries() {
+        let missing = std::env::temp_dir().join("hortcmd-does-not-exist-015");
+        let err = open_system_properties(missing.to_string_lossy().into_owned()).unwrap_err();
+        assert!(err.contains("existiert nicht"), "{err}");
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    #[test]
+    fn file_uri_escapes_everything_outside_the_unreserved_set() {
+        assert_eq!(file_uri(Path::new("/tmp/a.txt")), "file:///tmp/a.txt");
+        assert_eq!(
+            file_uri(Path::new("/tmp/Grüße \"q\" & 'a'.txt")),
+            "file:///tmp/Gr%C3%BC%C3%9Fe%20%22q%22%20%26%20%27a%27.txt"
+        );
+    }
+}

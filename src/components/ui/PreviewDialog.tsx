@@ -20,6 +20,7 @@ import {
   type PreviewMode,
 } from "@/lib/preview";
 import { cn } from "@/lib/cn";
+import { markDialogKey } from "@/lib/keys";
 
 export function PreviewDialog() {
   const preview = useOps((s) => s.preview);
@@ -55,7 +56,10 @@ export function PreviewDialog() {
       {preview && (
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[64] bg-black/60" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-[65] flex h-[80vh] w-[72vw] max-w-[1000px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-edge bg-panel shadow-2xl">
+        <Dialog.Content
+          onKeyDownCapture={markDialogKey}
+          className="fixed left-1/2 top-1/2 z-[65] flex h-[80vh] w-[72vw] max-w-[1000px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-edge bg-panel shadow-2xl"
+        >
           <Dialog.Title className="flex items-center gap-2 border-b border-edge bg-header px-4 py-2 text-text">
             <KindIcon size={15} className="shrink-0 text-accent" />
             <span className="truncate font-mono text-[13px]">{preview.name}</span>

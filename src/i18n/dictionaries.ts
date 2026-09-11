@@ -291,6 +291,7 @@ export const DICT = {
     "archive.title": "Archiv erstellen",
     "archive.label": "Archivname (.zip)",
     "archive.error": "Archiv konnte nicht geöffnet werden",
+    "open.error": "Datei konnte nicht geöffnet werden",
     "archive.password.title": "Passwort erforderlich",
     "archive.password.label": "Passwort für das verschlüsselte Archiv",
     "archive.password.retry": "Falsches Passwort – bitte erneut eingeben",
@@ -431,6 +432,9 @@ export const DICT = {
     "props.files": "Dateien",
     "props.folders": "Ordner",
     "props.skipped": "nicht lesbar (übersprungen)",
+    "props.system": "Systeminformationen",
+    "props.system.hint": "Öffnet das Informationsfenster des Betriebssystems",
+    "props.system.remote": "Nur für lokale Dateien verfügbar",
 
     // Speicherinformationen des Volumes (TICKET-010)
     "vol.title": "Volume",
@@ -804,6 +808,7 @@ export const DICT = {
     "archive.title": "Create archive",
     "archive.label": "Archive name (.zip)",
     "archive.error": "Could not open archive",
+    "open.error": "Could not open file",
     "archive.password.title": "Password required",
     "archive.password.label": "Password for the encrypted archive",
     "archive.password.retry": "Wrong password – please try again",
@@ -944,6 +949,9 @@ export const DICT = {
     "props.files": "files",
     "props.folders": "folders",
     "props.skipped": "unreadable (skipped)",
+    "props.system": "System information",
+    "props.system.hint": "Opens the operating system's own information window",
+    "props.system.remote": "Only available for local files",
 
     // Volume storage information (TICKET-010)
     "vol.title": "Volume",

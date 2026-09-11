@@ -85,8 +85,15 @@ interface PanesStore {
    *  With `reveal: true` (after our own file operations), newly
    *  added entries are selected instead and the cursor is set to the
    *  first of them (scrolls only if it is not already visible
-   *  — see `FileTable`'s `scrollToIndex(…, {align:"auto"})`). */
-  refresh: (side: Side, opts?: { reveal?: boolean }) => Promise<void>;
+   *  — see `FileTable`'s `scrollToIndex(…, {align:"auto"})`).
+   *  `names` names the entries to reveal explicitly (new folder, rename), so
+   *  the reveal does not depend on diffing against the previous listing — a
+   *  watcher refresh in between would otherwise make the entry look "not new"
+   *  and leave the cursor where it was. */
+  refresh: (
+    side: Side,
+    opts?: { reveal?: boolean; names?: string[] },
+  ) => Promise<void>;
   /** Request the Git status of the active tab (or clear it when disabled).
    *  Runs asynchronously in the backend; the result comes back via applyGitStatus. */
   loadGit: (side: Side) => void;
@@ -380,8 +387,12 @@ export const usePanes = create<PanesStore>((set, get) => ({
         // (target of a copy/move/paste operation), instead of simply
         // preserving cursor/selection as with the watcher refresh.
         if (opts?.reveal) {
+          const wanted = opts.names && new Set(opts.names);
           const oldNames = new Set(t.raw.map((e) => e.name));
-          const added = entries.filter((e) => !e.parent && !oldNames.has(e.name));
+          const added = entries.filter((e) => {
+            if (e.parent) return false;
+            return wanted ? wanted.has(e.name) : !oldNames.has(e.name);
+          });
           if (added.length > 0) {
             return {
               ...t,

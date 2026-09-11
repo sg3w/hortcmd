@@ -19,6 +19,7 @@ import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useDialogSizeStore, type DialogSize } from "@/store/dialogSizeStore";
+import { markDialogKey } from "@/lib/keys";
 
 interface Props {
   /** Stable identifier of the dialog type — key for size persistence. */
@@ -145,6 +146,7 @@ export function AppDialog({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/50" />
         <Dialog.Content
+          onKeyDownCapture={markDialogKey}
           onEscapeKeyDown={keepEscape ? (e) => e.preventDefault() : undefined}
           style={{ width: size.w, height: size.h }}
           className="fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] max-w-[90vw] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-edge bg-panel shadow-2xl"

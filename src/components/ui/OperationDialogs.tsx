@@ -12,6 +12,7 @@ import { useTransfers } from "@/store/transfersStore";
 import { cancelTransfer, resolveCollision } from "@/ipc/client";
 import { useT } from "@/store/settingsStore";
 import { cn } from "@/lib/cn";
+import { consumeDialogKey, markDialogKey } from "@/lib/keys";
 
 export function OperationDialogs() {
   return (
@@ -50,7 +51,10 @@ function CollisionDialog() {
     <Dialog.Root open={!!head} onOpenChange={() => {}}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[62] bg-black/50" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-[63] w-[440px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-panel shadow-2xl">
+        <Dialog.Content
+          onKeyDownCapture={markDialogKey}
+          className="fixed left-1/2 top-1/2 z-[63] w-[440px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-panel shadow-2xl"
+        >
           <Dialog.Title className="flex items-center gap-2 border-b border-edge px-4 py-2.5 text-text">
             <FileWarning size={16} className="text-amber-400" />
             {t("op.collision.title")}
@@ -115,7 +119,10 @@ function ConfirmDialog() {
     >
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[60] bg-black/50" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-[61] w-[420px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-panel shadow-2xl">
+        <Dialog.Content
+          onKeyDownCapture={markDialogKey}
+          className="fixed left-1/2 top-1/2 z-[61] w-[420px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-panel shadow-2xl"
+        >
           <Dialog.Title className="flex items-center gap-2 border-b border-edge px-4 py-2.5 text-text">
             {Icon && (
               <Icon
@@ -195,7 +202,10 @@ function PromptDialog() {
     <Dialog.Root open={!!prompt} onOpenChange={(o) => !o && closeDialogs()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[60] bg-black/50" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-[61] w-[420px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-panel shadow-2xl">
+        <Dialog.Content
+          onKeyDownCapture={markDialogKey}
+          className="fixed left-1/2 top-1/2 z-[61] w-[420px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-panel shadow-2xl"
+        >
           <Dialog.Title className="flex items-center gap-2 border-b border-edge px-4 py-2.5 text-text">
             <Icon size={16} className="text-accent" />
             {prompt?.title}
@@ -210,8 +220,16 @@ function PromptDialog() {
               value={value}
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") submit();
-                if (e.key === "Escape") closeDialogs();
+                // Consume both keys here (TICKET-014): `submit()`/`closeDialogs()`
+                // unmount this input synchronously, so without stopping the
+                // event the global pane handler would act on it afterwards.
+                if (e.key === "Enter") {
+                  consumeDialogKey(e);
+                  submit();
+                } else if (e.key === "Escape") {
+                  consumeDialogKey(e);
+                  closeDialogs();
+                }
               }}
               spellCheck={false}
               autoComplete="off"
@@ -288,7 +306,10 @@ function ForceCloseDialog() {
     <Dialog.Root open={open} onOpenChange={(o) => !o && setForceClose(false)}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[80] bg-black/50" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-[81] w-[420px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-panel shadow-2xl">
+        <Dialog.Content
+          onKeyDownCapture={markDialogKey}
+          className="fixed left-1/2 top-1/2 z-[81] w-[420px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-panel shadow-2xl"
+        >
           <Dialog.Title className="flex items-center gap-2 border-b border-edge px-4 py-2.5 text-text">
             <AlertTriangle size={16} className="text-amber-400" />
             {t("op.forceClose.title")}

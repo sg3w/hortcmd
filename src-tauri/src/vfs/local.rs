@@ -23,8 +23,14 @@ impl Provider for LocalProvider {
         "local".to_string()
     }
 
-    /// Reads the contents of a directory. Mirrors the former
-    /// `list_dir` command verbatim (canonicalize + per-entry attrs).
+    /// Reads the contents of a directory (canonicalize + per-entry attrs).
+    ///
+    /// The path is canonicalised, so entering a symlinked folder shows the
+    /// **resolved** target path and `..` leads to the target's real parent
+    /// rather than back through the link (TICKET-018). This is the deliberate
+    /// choice: it matches how the rest of the app resolves paths and makes a
+    /// symlink cycle (`a/link -> a`) impossible to walk into indefinitely,
+    /// because every hop lands on the same canonical path.
     fn list(&self, path: &str) -> Result<DirListing, String> {
         let p = PathBuf::from(path);
         let canonical = fs::canonicalize(&p).unwrap_or(p);
@@ -39,6 +45,25 @@ impl Provider for LocalProvider {
                 Err(_) => continue,
             };
             let name = item.file_name().to_string_lossy().into_owned();
+            // `DirEntry::metadata()` is an `lstat`: for a symlink it describes
+            // the link itself, so `is_dir` would be false even for a link to a
+            // folder and `len` would be the byte length of the target string
+            // (TICKET-018). Resolve the target once — and only for symlinks, so
+            // plain entries cost no additional syscall.
+            let is_symlink = meta.file_type().is_symlink();
+            let target = if is_symlink {
+                fs::metadata(item.path()).ok()
+            } else {
+                None
+            };
+            // What the entry *behaves* like comes from the target; a broken
+            // link has none, so it falls back to the link's own metadata and
+            // stays listed as a plain 0-byte file instead of vanishing.
+            let effective = target.as_ref().unwrap_or(&meta);
+            let is_dir = effective.is_dir();
+            // Identity stays link-level: `is_symlink`, the hidden flag and the
+            // mode bits describe the link, so the list keeps showing it as one
+            // (`l` in the permissions column, symlink colour rule).
             #[cfg(unix)]
             let mode = {
                 use std::os::unix::fs::MetadataExt;
@@ -48,13 +73,19 @@ impl Provider for LocalProvider {
             let mode = None;
             entries.push(DirEntry {
                 hidden: attrs::is_hidden(&meta, &name),
-                readonly: attrs::is_readonly(&meta),
-                executable: attrs::is_executable(&meta, &name),
+                // Writing to or running a symlink hits the target, so these
+                // two are read from the effective metadata.
+                readonly: attrs::is_readonly(effective),
+                executable: attrs::is_executable(effective, &name),
                 name,
-                is_dir: meta.is_dir(),
-                is_symlink: meta.file_type().is_symlink(),
-                size: if meta.is_dir() { 0 } else { meta.len() },
-                modified: meta
+                is_dir,
+                is_symlink,
+                size: if is_dir || (is_symlink && target.is_none()) {
+                    0
+                } else {
+                    effective.len()
+                },
+                modified: effective
                     .modified()
                     .ok()
                     .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
@@ -198,5 +229,63 @@ mod tests {
             .unwrap();
         assert_eq!(file.size, 3);
         assert!(!file.is_dir);
+    }
+
+    /// TICKET-018: a symlink must be classified by its target, while still
+    /// being reported as a link.
+    #[cfg(unix)]
+    #[test]
+    fn symlinks_are_classified_by_their_target() {
+        use std::os::unix::fs::symlink;
+
+        let p = LocalProvider;
+        let d = tmp_dir();
+        p.create_dir_all(&d.join("real")).unwrap();
+        p.write(&d.join("file.txt"), b"abc").unwrap();
+        // Target names are deliberately shorter/longer than the real sizes,
+        // so a leaked `lstat` length would not accidentally match.
+        symlink("real", d.join("link_to_dir")).unwrap();
+        symlink("file.txt", d.join("link_to_file")).unwrap();
+        symlink("nowhere", d.join("broken_link")).unwrap();
+        // A cycle: the link points back at the directory containing it.
+        symlink(&d, d.join("cycle")).unwrap();
+
+        let listing = p.list(&d.to_string_lossy()).unwrap();
+        let get = |n: &str| {
+            listing
+                .entries
+                .iter()
+                .find(|e| e.name == n)
+                .unwrap_or_else(|| panic!("{} missing from the listing", n))
+        };
+
+        let to_dir = get("link_to_dir");
+        assert!(to_dir.is_dir, "a link to a folder behaves like a folder");
+        assert!(to_dir.is_symlink, "and must still be visible as a link");
+        assert_eq!(to_dir.size, 0, "never the target string's length");
+        assert!(!to_dir.executable);
+
+        let to_file = get("link_to_file");
+        assert!(!to_file.is_dir);
+        assert!(to_file.is_symlink);
+        assert_eq!(to_file.size, 3, "the target's size, not the link's");
+
+        // Dangling links stay listed rather than vanishing or erroring.
+        let broken = get("broken_link");
+        assert!(!broken.is_dir);
+        assert!(broken.is_symlink);
+        assert_eq!(broken.size, 0);
+
+        // A cycle resolves to the directory itself — listed, not hung.
+        let cycle = get("cycle");
+        assert!(cycle.is_dir);
+        assert!(cycle.is_symlink);
+        assert_eq!(cycle.size, 0);
+
+        // Plain entries are untouched by the resolution path.
+        assert!(!get("file.txt").is_symlink);
+        assert_eq!(get("file.txt").size, 3);
+        assert!(get("real").is_dir);
+        assert!(!get("real").is_symlink);
     }
 }

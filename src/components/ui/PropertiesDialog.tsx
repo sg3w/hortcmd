@@ -9,7 +9,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Copy, HardDrive, Loader2, ShieldCheck, X } from "lucide-react";
+import { Copy, HardDrive, Info, Loader2, ShieldCheck, X } from "lucide-react";
 import { usePropsDialog } from "@/store/propsStore";
 import { useT } from "@/store/settingsStore";
 import {
@@ -18,6 +18,7 @@ import {
   fileChecksums,
   fileProps,
   getTags,
+  openSystemProperties,
   setOwner,
   setPermissions,
   setTags,
@@ -27,6 +28,7 @@ import { reloadBoth } from "@/features/commander/fileOps";
 import { formatDate, formatMode, formatPercent, formatSize } from "@/lib/format";
 import { writeClipboard } from "@/lib/clipboard";
 import { isMacOS } from "@/lib/platform";
+import { schemeOf } from "@/lib/path";
 import type {
   Checksums,
   DirSizeStats,
@@ -43,6 +45,7 @@ import {
   useFileColorRules,
 } from "@/lib/fileColors";
 import { cn } from "@/lib/cn";
+import { consumeDialogKey, markDialogKey } from "@/lib/keys";
 
 // Permission bits of the three classes (owner/group/other) and the special bits.
 const CLASSES = [
@@ -152,6 +155,7 @@ export function PropertiesDialog() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [tags, setTagList] = useState<Tag[]>([]);
+  const [sysBusy, setSysBusy] = useState(false);
 
   // Both derive from the loaded properties, not from `path`: only then is
   // it certain whether the entry is a folder, and both restart cleanly
@@ -167,6 +171,7 @@ export function PropertiesDialog() {
     setChecks(null);
     setError(null);
     setTagList([]);
+    setSysBusy(false);
     if (!path) return;
     let alive = true;
     void fileProps(path)
@@ -262,6 +267,32 @@ export function PropertiesDialog() {
     [colorRules, data, gitStatus],
   );
 
+  // Hand-off to the OS information window. Only a local file-system path
+  // has one, so for a remote VFS address the button stays disabled and
+  // says why. Archive members never get here at all — both entry points
+  // (Alt+Enter in `useKeyboard`, the context menu item) already refuse to
+  // open this dialog while a pane is inside an archive.
+  const sysReason = !path
+    ? null
+    : schemeOf(path)
+      ? t("props.system.remote")
+      : null;
+
+  const openSystem = async () => {
+    if (!path || sysReason) return;
+    setSysBusy(true);
+    setError(null);
+    try {
+      await openSystemProperties(path);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      // The native window outlives this call; the button is free again
+      // either way, also after a failure.
+      setSysBusy(false);
+    }
+  };
+
   const typeLabel = (p: FileProps) =>
     p.is_symlink
       ? t("props.type.symlink")
@@ -274,6 +305,7 @@ export function PropertiesDialog() {
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/50" />
         <Dialog.Content
+          onKeyDownCapture={markDialogKey}
           aria-describedby={undefined}
           className="fixed left-1/2 top-1/2 z-50 flex max-h-[92vh] w-[560px] max-w-[96vw] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-edge bg-panel shadow-2xl"
         >
@@ -560,6 +592,22 @@ export function PropertiesDialog() {
               </>
             )}
           </div>
+
+          <div className="flex items-center justify-end gap-2 border-t border-edge bg-header px-4 py-2">
+            <button
+              onClick={() => void openSystem()}
+              disabled={!data || !!sysReason || sysBusy}
+              title={sysReason ?? t("props.system.hint")}
+              className="flex items-center gap-1.5 rounded border border-edge bg-panel px-3 py-1 text-[12px] text-text hover:border-accent disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {sysBusy ? (
+                <Loader2 size={13} className="animate-spin" aria-hidden />
+              ) : (
+                <Info size={13} aria-hidden />
+              )}
+              {t("props.system")}
+            </button>
+          </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
@@ -772,7 +820,11 @@ function TagEditor({
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && add()}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            consumeDialogKey(e);
+            add();
+          }}
           placeholder={addLabel}
           className="w-40 rounded border border-edge bg-panel px-2 py-1 text-[12px] text-text outline-none focus:border-accent"
         />

@@ -55,6 +55,18 @@ smb = { version = "0.11.1", default-features = false, features = ["multi_threade
 tokio-util = { version = "0.7.19", features = ["io"] }
 reqwest = { version = "0.13", features = ["stream"] }
 
+# Windows-spezifisch: die Shell-Eigenschaftenseite (TICKET-015) wird über
+# `ShellExecuteEx` mit dem Verb "properties" geöffnet; dafür werden COM und
+# die Shell-Bindings gebraucht.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+  "Win32_Foundation",
+  "Win32_System_Com",
+  "Win32_System_Registry", # SHELLEXECUTEINFOW hängt daran
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
 # Unix-spezifische Rechte-Funktionen (Besitzer, Extended Attributes, ACL).
 # Auf Windows nicht verfügbar → dort liefert das Backend leere/None-Werte.
 [target.'cfg(unix)'.dependencies]

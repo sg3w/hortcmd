@@ -2430,6 +2430,7 @@ dependencies = [
  "ts-rs",
  "uzers",
  "walkdir",
+ "windows 0.58.0",
  "xattr",
  "xz2",
  "zip",

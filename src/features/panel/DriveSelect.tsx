@@ -11,7 +11,6 @@ import {
   HardDrive,
   House,
   Server,
-  Settings,
   Star,
 } from "lucide-react";
 import type { Drive } from "@/ipc/bindings";
@@ -32,7 +31,6 @@ export function DriveSelect({ side, drives }: Props) {
   const setActive = usePanes((s) => s.setActive);
   const favorites = useSettings((s) => s.favorites);
   const connections = useNet((s) => s.connections);
-  const openManager = useNet((s) => s.openManager);
   const t = useT();
 
   // Keep the connection list fresh (status may change elsewhere).
@@ -54,11 +52,6 @@ export function DriveSelect({ side, drives }: Props) {
       <Select.Root
         value={current?.mount ?? ""}
         onValueChange={(value) => {
-          // Sentinel: open the connection manager instead of navigating.
-          if (value === "__manage__") {
-            openManager();
-            return;
-          }
           setActive(side);
           // Favorites/connections carry a prefix so they don't collide
           // with drive mounts.
@@ -113,40 +106,33 @@ export function DriveSelect({ side, drives }: Props) {
                   <Select.Separator className="my-1 h-px bg-edge" />
                 </Select.Group>
               )}
-              <Select.Group>
-                <Select.Label className="px-2 py-1 text-[10px] uppercase tracking-wide text-dim">
-                  {t("net.group")}
-                </Select.Label>
-                {liveConns.map((c) => (
-                  <Select.Item
-                    key={`conn:${c.address}`}
-                    value={`conn:${c.address}`}
-                    className={cn(
-                      "flex cursor-default select-none items-center gap-2 rounded px-2 py-1 text-[12px] text-text outline-none",
-                      "data-[highlighted]:bg-accent-dim",
-                    )}
-                  >
-                    <Server size={14} className="shrink-0 text-emerald-400" />
-                    <div className="flex min-w-0 flex-col leading-tight">
-                      <Select.ItemText>{c.name}</Select.ItemText>
-                      <span className="truncate font-mono text-[10px] text-dim">
-                        {c.key}
-                      </span>
-                    </div>
-                  </Select.Item>
-                ))}
-                <Select.Item
-                  value="__manage__"
-                  className={cn(
-                    "flex cursor-default select-none items-center gap-2 rounded px-2 py-1 text-[12px] text-dim outline-none",
-                    "data-[highlighted]:bg-accent-dim data-[highlighted]:text-text",
-                  )}
-                >
-                  <Settings size={14} className="shrink-0" />
-                  <Select.ItemText>{t("net.manage")}</Select.ItemText>
-                </Select.Item>
-                <Select.Separator className="my-1 h-px bg-edge" />
-              </Select.Group>
+              {/* Only connected remotes – the manager lives in the toolbar. */}
+              {liveConns.length > 0 && (
+                <Select.Group>
+                  <Select.Label className="px-2 py-1 text-[10px] uppercase tracking-wide text-dim">
+                    {t("net.group")}
+                  </Select.Label>
+                  {liveConns.map((c) => (
+                    <Select.Item
+                      key={`conn:${c.address}`}
+                      value={`conn:${c.address}`}
+                      className={cn(
+                        "flex cursor-default select-none items-center gap-2 rounded px-2 py-1 text-[12px] text-text outline-none",
+                        "data-[highlighted]:bg-accent-dim",
+                      )}
+                    >
+                      <Server size={14} className="shrink-0 text-emerald-400" />
+                      <div className="flex min-w-0 flex-col leading-tight">
+                        <Select.ItemText>{c.name}</Select.ItemText>
+                        <span className="truncate font-mono text-[10px] text-dim">
+                          {c.key}
+                        </span>
+                      </div>
+                    </Select.Item>
+                  ))}
+                  <Select.Separator className="my-1 h-px bg-edge" />
+                </Select.Group>
+              )}
               {drives.map((d) => {
                 const isHome = d.name === "~" || d.name === "Home";
                 return (
