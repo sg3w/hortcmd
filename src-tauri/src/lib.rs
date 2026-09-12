@@ -5,6 +5,7 @@
 mod commands;
 mod config;
 pub mod errors;
+mod mcp;
 mod menu;
 mod net;
 mod vfs;
@@ -68,6 +69,12 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             vfs::caps::location_capabilities,
+            mcp::commands::mcp_status,
+            mcp::commands::mcp_set_config,
+            mcp::commands::mcp_token,
+            mcp::commands::mcp_regenerate_token,
+            mcp::commands::mcp_audit,
+            mcp::commands::mcp_clear_audit,
             commands::fs::dir::list_dir,
             commands::fs::dir::list_drives,
             commands::fs::dir::home_dir,

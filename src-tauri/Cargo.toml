@@ -19,6 +19,9 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Randomness for the MCP bearer token (TICKET-041) — already in the
+# tree via the TLS stack, named here because this is a security use.
+getrandom = "0.3"
 sysinfo = "0.31"     # Laufwerke / Mountpunkte
 dirs = "5"           # Home-Verzeichnis
 ts-rs = "10"         # generiert TS-Typen aus den Rust-Structs
