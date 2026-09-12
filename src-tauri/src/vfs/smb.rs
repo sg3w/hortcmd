@@ -29,9 +29,19 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+/// The port SMB is served on unless a profile says otherwise.
+const DEFAULT_PORT: u16 = 445;
+
 /// Opens an SMB connection and returns the ready provider.
 pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Provider>> {
-    let client = Client::new(ClientConfig::default());
+    // The port belongs in the connection config — `UncPath` carries only
+    // the server name, so a profile pointing at a non-standard port used
+    // to be silently connected to 445 instead (ticket 038).
+    let mut config = ClientConfig::default();
+    if profile.port != 0 && profile.port != DEFAULT_PORT {
+        config.connection.port = Some(profile.port);
+    }
+    let client = Client::new(config);
 
     // Domain/workgroup accounts are written `DOMAIN\user` (or `user@domain`),
     // which the SMB layer understands directly.

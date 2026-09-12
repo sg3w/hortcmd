@@ -145,9 +145,12 @@ vfs/                         VFS abstraction (identical UI) — tickets 020/022�
 │                            MKCOL/DELETE/MOVE), Basic + Digest, TLS validiert
 ├── smb.rs                   SmbProvider über den reinen Rust-Client `smb` (SMB2/3,
 │                            synchron); erstes Pfadsegment = Share, Wurzel listet Shares
-└── live_tests.rs            Integrationstests gegen echte Server (SFTP/FTP/WebDAV/SMB
-                             + SSH-Shell), `#[ignore]`; Docker-Startbefehle stehen an
-                             jedem Test: `cargo test --lib live_ -- --ignored --nocapture`
+└── harness/                 Integrationssuite gegen echte Server (TICKET-038):
+    ├── mod.rs               Lauf-Konfiguration aus run.json, Verbindungsaufbau
+    ├── conformance.rs       ein Vertrag, sieben Server
+    ├── transfers.rs         lokal↔remote, remote↔remote, protokollübergreifend
+    └── failure.rs           Serverausfall, Zertifikat, Host-Key
+                             `#[ignore]`; gestartet von `npm run test:harness`
 net/                         Remote connection base (identical UI) — tickets 021/026/027/028
 ├── credentials.rs           CredentialStore trait + KeychainStore (keyring; OS keychain,
 │                            no plaintext fallback) · KeepassStore (portable .kdbx,
@@ -267,8 +270,8 @@ KeePass `LOCKED` marker).
 
 Two rules keep the matrix honest: a capability is advertised only where its
 command is really routed through the VFS **and** covered by the live provider
-tests (`vfs/live_tests.rs` asserts the matrix right after exercising the real
-server), and remote capabilities are reported for a **live** session only — a
+tests (`vfs/harness/conformance.rs` asserts the matrix right after exercising
+the real server), and remote capabilities are reported for a **live** session only — a
 disconnected location supports nothing, which is what the UI must show the
 moment a connection drops.
 
@@ -1310,12 +1313,75 @@ npm run check   # fmt → clippy → cargo test → bindings → error codes →
   Look, Finder tags, Unix rights, trash, terminals) compiling and its portable
   tests passing; a separate job holds the declared MSRV **1.85** with
   `--locked`.
-- **Live tests stay out.** Protocol and keychain tests are `#[ignore]`d, need
-  real servers and credentials, and never run in pull-request CI.
-  `live-tests.yml` is the documented manual path and stops with setup
-  instructions when the servers are not there. Workflow permissions are
-  `contents: read`; no job receives secrets, so a fork's pull request cannot
-  reach them.
+- **Protocol tests stay out of pull requests.** They are `#[ignore]`d, take
+  minutes, and start containers — more trust than a fork's pull request should
+  get. `protocol-harness.yml` runs them weekly and on demand instead; the
+  keychain tests stay local-only. Workflow permissions are `contents: read`; no
+  job receives secrets, so a fork's pull request cannot reach them.
+
+### Cross-cutting — the protocol harness (TICKET-038)
+
+Six providers had one thing in common: the part of them that could go wrong was
+the part no test touched. Wire behaviour is not something a mock can stand in
+for — a fake provider agrees with whatever the code believes — so the suite that
+mattered most was the one that needed servers nobody had.
+
+**The servers come with the tests.** `harness/` builds SFTP with a shell, plain
+FTP, explicit and implicit FTPS, SMB with signing required, and WebDAV over HTTP
+and HTTPS from base images pinned by digest, generates the run's password, its
+private CA and its SSH host key, seeds every server with the same deterministic
+tree, runs the suite and deletes all of it — after a failure and after Ctrl+C
+too. Ports are allocated free per run and published only on `127.0.0.1`, and the
+run id reaches the compose project name, so two runs can sit side by side on one
+machine. One command, no account, no credential, no public network:
+
+```bash
+npm run test:harness
+```
+
+**One contract, seven servers.** `conformance.rs` runs the same suite against
+each: the listing matches the manifest the seeder read back *from disk*, `stat`
+agrees with it, a 3 MiB file round-trips byte for byte in one read and in 7919-
+byte chunks, create/rename/delete behave, the staging commit publishes with one
+rename, failures come back as failures, and the capability matrix is asserted
+immediately after the behaviour it describes. `transfers.rs` covers all four
+directions, including between two *different* protocols. `failure.rs` covers the
+guarantees that only exist when something breaks.
+
+**Where a protocol genuinely differs, the difference is named.** The seed
+manifest is read back from the filesystem rather than derived from the wish
+list, because a case-insensitive host collapses `Case.txt` and `case.txt` and no
+provider did that. Names SMB cannot hold are marked in the seed rather than
+excused in the assertions. And `confined` says whether the *server* keeps the
+account inside the tree — every service here does except SSH, where a chroot
+would take the shell with it, so the traversal check asserts something different
+there and says so out loud.
+
+**What it found on its first run** is the argument for having written it. Four
+provider bugs, none of which any unit test could have seen:
+
+- **FTP transferred in ASCII mode.** The default transfer type is ASCII (RFC
+  959), so a server that honours it rewrote every `0x0A` in passing: a 3 MiB
+  binary arrived 12 KiB longer. Every archive, image and executable copied over
+  FTP was silently corrupted. Now `TYPE I`, always.
+- **SFTP reported every directory as a file.** The symlink resolution added in
+  TICKET-018 read `is_dir` from the resolved target, and a plain entry has no
+  target — so `target.is_some_and(...)` was `false` for every ordinary
+  directory.
+- **Implicit FTPS never protected its data connections.** `AUTH TLS` ends with
+  `PBSZ 0` + `PROT P` inside suppaftp; the implicit path sends neither, so the
+  control channel was encrypted and every transfer was negotiated in the clear.
+  A server that insists answers "522"; one that does not would have carried the
+  file unprotected.
+- **WebDAV could list files it could not touch.** Paths went into the request
+  URI unescaped, so `100%-done.txt` was an invalid escape sequence (HTTP 400),
+  `a#b.txt` was cut at the fragment, and `a?b.txt` became a query.
+
+It also found two things about the product rather than the code: FTP listings
+hid dotfiles, because `LIST` is `ls` and not `ls -a`; and implicit FTPS could
+only be selected by using port 990, so an implicit server on any other port was
+silently spoken to in the clear. Both are fixed, the second by making
+`ftps-implicit` its own protocol choice.
 
 ### Cross-cutting — documentation (TICKET-037)
 

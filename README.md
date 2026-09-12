@@ -215,7 +215,8 @@ addressed store — but a compromised WebView still has the user's own file
 access. That is why sanitization and the navigation policy above matter.
 
 **Stored credentials.** Connection profiles are plain JSON in the app config
-directory and never contain a secret. Passwords, passphrases and the KeePass
+directory (`HORTCMD_CONFIG_DIR` moves the whole directory, for a portable
+install) and never contain a secret. Passwords, passphrases and the KeePass
 master password live in the credential store, keyed by connection id:
 
 - **OS keychain** (default) — macOS Keychain, Windows Credential Manager, Linux
@@ -235,6 +236,20 @@ there is no "continue anyway": an invalid or expired certificate fails the
 connection. There is also no certificate pinning and no trust-on-first-use for
 TLS — unlike SSH host keys, a certificate that a system-trusted CA vouches for
 is accepted without asking.
+
+A self-hosted server whose certificate comes from the operator's own CA is the
+one case the platform store cannot cover, and the answer is an *additional*
+anchor rather than a weakened check — the same shape as `CURL_CA_BUNDLE` or
+`NODE_EXTRA_CA_CERTS`:
+
+```bash
+HORTCMD_EXTRA_CA=/path/to/ca.pem
+```
+
+Every certificate in that file joins the roots for FTPS and WebDAV. Hostname,
+expiry and chain are still checked, an unknown issuer still fails, and a bundle
+that is named but unreadable is an error rather than a silent fallback to fewer
+anchors than you asked for.
 
 - **SFTP** — encrypted, with the host-key verification described above.
 - **FTPS** — explicit (`AUTH TLS`) or implicit; plain **FTP** sends credentials
@@ -439,19 +454,37 @@ const tauri = useTauri({ commands: { … } }); // mocked runtime + event pushes
 which is what lets it run in CI. An unmocked command fails loudly rather than
 returning `undefined`.
 
-**Live tests.** The protocol tests (SFTP, FTP/FTPS, SMB, WebDAV, the SSH
-terminal, the connection timeout) and the OS-keychain tests are `#[ignore]`d:
-they need real servers and real credentials, so they never run in pull-request
-CI. The Docker command for each server is in the doc comment above its test.
+**The protocol harness.** The remote providers are tested against real
+servers — SFTP, plain FTP, explicit and implicit FTPS, SMB with signing, and
+WebDAV over HTTP and HTTPS. The servers are not anyone's infrastructure: the
+harness builds them from pinned base images, generates a password, a private CA
+and an SSH host key for the run, seeds every one of them with the same tree,
+runs the suite, and deletes all of it again — including after a failure, and
+after Ctrl+C.
 
 ```bash
-cargo test --manifest-path src-tauri/Cargo.toml --lib live_ \
-  -- --ignored --nocapture --test-threads=1
+npm run test:harness
 ```
 
-`.github/workflows/live-tests.yml` is the manual counterpart; dispatched
-without those servers it stops with the setup instructions rather than
-pretending to pass.
+That is the whole prerequisite list: Docker, and nothing published beyond
+`127.0.0.1`. Runs are isolated by a run id, so two can go at once.
+
+The suite answers three questions: whether every provider implements the same
+contract (listing, stat, streaming, create/rename/delete, staging, traversal,
+error mapping), whether the engine moves bytes correctly in all four directions
+(local↔remote, within one server, and between two *different* protocols), and
+what happens when the server dies mid-copy, the certificate does not verify, or
+the host key changes. `harness/` holds the whole thing;
+`.github/workflows/protocol-harness.yml` runs it weekly and on demand, and
+uploads the redacted service logs when it fails.
+
+The tests are `#[ignore]`d and **skip** rather than fail without the harness, so
+`cargo test -- --ignored` by hand says what to run instead of producing a wall
+of connection errors.
+
+**Keychain tests.** The OS-keychain and KeePass interop tests (`*_live` in
+`net/credentials.rs`) stay local-only: they need a desktop keyring and an
+interactive session, which is exactly what CI does not have.
 
 **Architecture boundaries.** `scripts/check-boundaries.mjs` walks the import
 graph and fails on an import cycle or on a violation of the documented layer

@@ -1,0 +1,19 @@
+Port 22
+ListenAddress 0.0.0.0
+HostKey /etc/ssh/ssh_host_ed25519_key
+PermitRootLogin no
+PasswordAuthentication yes
+PubkeyAuthentication yes
+AuthorizedKeysFile /home/%u/.ssh/authorized_keys
+KbdInteractiveAuthentication no
+UsePAM no
+Subsystem sftp /usr/lib/ssh/sftp-server
+PrintMotd no
+# The health check opens a TCP connection every second and says nothing,
+# which OpenSSH 9.8+ treats as abuse and answers by refusing the source
+# for a while — including the connection the *tests* are trying to make.
+# Correct behaviour for a server on the internet, wrong for one that
+# exists to be probed.
+PerSourcePenalties no
+AcceptEnv LANG LC_*
+LogLevel VERBOSE

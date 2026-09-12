@@ -1,0 +1,18 @@
+{
+  "_comment": [
+    "Every base image the harness builds on, pinned by digest (TICKET-038).",
+    "A tag moves; a digest does not, and a test suite that quietly changes",
+    "its server between two runs cannot tell you what regressed.",
+    "",
+    "To refresh one: docker pull <tag> && docker image inspect <tag>",
+    "  --format '{{index .RepoDigests 0}}'"
+  ],
+  "alpine": "alpine@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce",
+  "_debian_why": [
+    "The FTP services do not use Alpine: vsftpd 3.0.5 on musl segfaults as",
+    "soon as a TLS session is established, taking the whole server down.",
+    "Reproduced on Alpine arm64 with nothing but a login. Debian's build",
+    "serves the same three TLS modes without dying."
+  ],
+  "debian": "debian@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171"
+}

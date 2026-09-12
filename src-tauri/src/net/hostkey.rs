@@ -195,10 +195,7 @@ fn key_type(key: &PublicKey) -> String {
 
 /// The hortcmd-managed store — keys accepted in the connection manager.
 fn app_store_path() -> AppResult<PathBuf> {
-    let dir = dirs::config_dir()
-        .ok_or_else(|| "Kein Konfigurationsverzeichnis gefunden".to_string())?
-        .join("hortcmd");
-    Ok(dir.join("known_hosts"))
+    crate::config::path("known_hosts")
 }
 
 /// The user's own OpenSSH files. Read only — never rewritten.
@@ -388,14 +385,6 @@ pub fn trust(token: &str) -> AppResult<HostId> {
     })?;
     append(&app_store_path()?, &pending.id, &pending.key)?;
     Ok(pending.id)
-}
-
-/// Records a key for `id` in the managed store — how the live host-key
-/// test stages a rotated key. The production path goes through `trust`,
-/// which can only confirm a key hortcmd actually displayed.
-#[cfg(test)]
-pub(crate) fn record(id: &HostId, key: &PublicKey) -> AppResult<()> {
-    append(&app_store_path()?, id, key)
 }
 
 /// Appends one OpenSSH-formatted entry to the managed store.

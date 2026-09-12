@@ -39,6 +39,7 @@ export const ERROR_CODES = [
   "net.noProfile",
   "net.unsupportedProtocol",
   "net.noShell",
+  "net.tls",
   "cred.locked",
   "cred.wrongPassword",
   "cred.store",

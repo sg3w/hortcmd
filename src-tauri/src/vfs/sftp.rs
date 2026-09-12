@@ -147,9 +147,17 @@ impl Provider for SftpProvider {
             } else {
                 None
             };
-            // A broken link has no target: fall back to the link's own
-            // attributes so it stays listed as a 0-byte file.
-            let is_dir = target.as_ref().is_some_and(|t| t.is_dir());
+            // Three cases, and only the first two were handled: a
+            // resolved symlink answers from its target, a broken link
+            // falls back to the link's own attributes and stays a 0-byte
+            // file — and a plain entry, which has no target at all,
+            // answers from its own attributes. Reading `target` alone
+            // made *every* ordinary directory arrive as a file (found by
+            // the protocol harness, ticket 038).
+            let is_dir = match &target {
+                Some(t) => t.is_dir(),
+                None => !is_symlink && attrs.is_dir(),
+            };
             let size = match &target {
                 _ if is_dir => 0,
                 Some(t) => t.size.unwrap_or(0),

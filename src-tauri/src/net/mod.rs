@@ -12,6 +12,8 @@
 //                 (connect/disconnect/reconnect), protocol-independent
 //   ssh         – authenticated SSH connection (SFTP + terminal ride on it)
 //   terminal    – interactive SSH shell sessions (ticket 026)
+//   tls         – the user-chosen extra trust anchor for FTPS/WebDAV
+//                 (HORTCMD_EXTRA_CA, ticket 038)
 // ============================================================
 
 pub mod credentials;
@@ -20,6 +22,7 @@ pub mod lifecycle;
 pub mod session;
 pub mod ssh;
 pub mod terminal;
+pub mod tls;
 
 /// Small unique id (no extra dependency): time plus a process-wide
 /// counter. Used for terminal sessions and host-key prompt tokens.

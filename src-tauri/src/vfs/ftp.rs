@@ -19,7 +19,7 @@
 
 use super::{Provider, Stat};
 use crate::commands::fs::dir::{DirEntry, DirListing};
-use crate::errors::{AppError, AppResult};
+use crate::errors::{code, AppError, AppResult};
 use crate::net::session::Profile;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -28,7 +28,8 @@ use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
 use suppaftp::list::File as FtpFile;
 use suppaftp::native_tls::TlsConnector;
-use suppaftp::{NativeTlsConnector, NativeTlsFtpStream};
+use suppaftp::types::FileType;
+use suppaftp::{NativeTlsConnector, NativeTlsFtpStream, Status};
 
 /// How TLS is applied to a connection.
 #[derive(Clone, Copy, PartialEq)]
@@ -55,17 +56,48 @@ impl Params {
     fn open(&self) -> AppResult<NativeTlsFtpStream> {
         let addr = format!("{}:{}", self.host, self.port);
         let connector = || -> AppResult<NativeTlsConnector> {
-            TlsConnector::new()
+            let mut builder = TlsConnector::builder();
+            // Validation is unchanged; the user's own CA is only *added*
+            // to the roots (ticket 038, `net::tls`).
+            for pem in crate::net::tls::extra_ca_pems()? {
+                let cert = suppaftp::native_tls::Certificate::from_pem(&pem).map_err(|e| {
+                    AppError::new(code::NET_TLS)
+                        .op("extra-ca")
+                        .detail(format!("{}", e))
+                })?;
+                builder.add_root_certificate(cert);
+            }
+            builder
+                .build()
                 .map(NativeTlsConnector::from)
                 .map_err(|e| AppError::from(format!("TLS-Initialisierung fehlgeschlagen: {}", e)))
         };
 
         let mut ftp = match self.tls {
             Tls::Implicit => {
-                NativeTlsFtpStream::connect_secure_implicit(&addr, connector()?, &self.host)
-                    .map_err(|e| {
-                        AppError::from(format!("Verbindung zu {} fehlgeschlagen: {}", addr, e))
-                    })?
+                let mut s =
+                    NativeTlsFtpStream::connect_secure_implicit(&addr, connector()?, &self.host)
+                        .map_err(|e| {
+                            AppError::from(format!("Verbindung zu {} fehlgeschlagen: {}", addr, e))
+                        })?;
+                // `AUTH TLS` (explicit) ends with PBSZ 0 + PROT P inside
+                // suppaftp; the implicit path does not send them at all,
+                // so the control channel is encrypted and every data
+                // channel is negotiated in the clear. A server that
+                // insists on encrypted data answers "522 Data
+                // connections must be encrypted" and nothing transfers;
+                // one that does not insist would have carried the file
+                // unprotected, which is worse (found by the protocol
+                // harness, ticket 038).
+                for (command, what) in [("PBSZ 0", "PBSZ"), ("PROT P", "PROT")] {
+                    s.custom_command(command, &[Status::CommandOk])
+                        .map_err(|e| {
+                            AppError::new(code::NET_TLS)
+                                .op("ftps-implicit")
+                                .detail(format!("{} abgelehnt: {}", what, e))
+                        })?;
+                }
+                s
             }
             _ => {
                 let s = NativeTlsFtpStream::connect(&addr).map_err(|e| {
@@ -83,6 +115,16 @@ impl Params {
 
         ftp.login(&self.user, &self.password)
             .map_err(|e| AppError::from(format!("Anmeldung fehlgeschlagen: {}", e)))?;
+
+        // Binary, always. FTP's default transfer type is ASCII (RFC 959),
+        // and a server that honours it rewrites every 0x0A on the way
+        // past: a 3 MiB file arrives 12 KiB longer and every archive,
+        // image and executable is quietly corrupted. vsftpd ignores
+        // ASCII mode by default and ProFTPD does not, which is the whole
+        // reason this went unnoticed until the protocol harness ran
+        // against both (ticket 038).
+        ftp.transfer_type(FileType::Binary)
+            .map_err(|e| AppError::from(format!("TYPE I abgelehnt: {}", e)))?;
         Ok(ftp)
     }
 }
@@ -97,7 +139,13 @@ pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Pro
     };
 
     let tls = match profile.protocol.as_str() {
-        // Port 990 is the classic implicit-FTPS port.
+        "ftps-implicit" => Tls::Implicit,
+        // Port 990 is the classic implicit-FTPS port, and profiles saved
+        // before `ftps-implicit` existed say implicit only by using it.
+        // Keeping the heuristic keeps those profiles working; it is no
+        // longer the *only* way to ask, which is what let an implicit
+        // server on any other port be silently spoken to in the clear
+        // (ticket 038).
         "ftps" if profile.port == 990 => Tls::Implicit,
         "ftps" => Tls::Explicit,
         _ => Tls::None,
@@ -144,10 +192,29 @@ fn to_io<E: std::fmt::Display>(e: E) -> io::Error {
 impl FtpProvider {
     /// Parses a directory listing into VFS entries.
     fn entries_of(&self, path: &str) -> AppResult<Vec<DirEntry>> {
+        // Plain `LIST` hides dotfiles — the server runs the equivalent of
+        // `ls`, not `ls -a`, so `.config` and friends are simply absent
+        // from a remote pane while being right there on the server
+        // (found by the protocol harness, ticket 038).
+        //
+        // `LIST -a` is the conventional way to ask for them and every
+        // server the harness runs understands it, but it is an argument
+        // smuggled through a path, so it is never the only attempt: a
+        // server that errors, or that answers with nothing where the
+        // plain form has entries, gets the plain form instead. Hiding
+        // files would be a worse failure than not showing the hidden
+        // ones.
         let lines = {
             let mut ctrl = self.ctrl.lock().unwrap();
-            ctrl.list(Some(path))
-                .map_err(|e| AppError::from(format!("{}: {}", path, e)))?
+            match ctrl.list(Some(&format!("-a {}", path))) {
+                Ok(lines) if !lines.is_empty() => lines,
+                // An empty answer costs one extra round trip on a
+                // genuinely empty directory. That is the cheap half of
+                // the trade.
+                _ => ctrl
+                    .list(Some(path))
+                    .map_err(|e| AppError::from(format!("{}: {}", path, e)))?,
+            }
         };
 
         Ok(lines

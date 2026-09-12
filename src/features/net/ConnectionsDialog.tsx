@@ -41,13 +41,14 @@ import { AppDialog } from "@/components/ui/AppDialog";
 import { cn } from "@/lib/cn";
 
 /** Supported protocols with their default port. */
-const PROTOCOLS = ["sftp", "ftp", "ftps", "webdav", "smb"] as const;
+const PROTOCOLS = ["sftp", "ftp", "ftps", "ftps-implicit", "webdav", "smb"] as const;
 type ProtocolId = (typeof PROTOCOLS)[number];
 
 const DEFAULT_PORT: Record<ProtocolId, number> = {
   sftp: 22,
   ftp: 21,
   ftps: 21,
+  "ftps-implicit": 990,
   webdav: 443,
   smb: 445,
 };
@@ -62,6 +63,7 @@ const AUTH_FOR: Record<ProtocolId, readonly AuthId[]> = {
   sftp: ["password", "agent", "key", "anonymous"],
   ftp: ["password", "anonymous"],
   ftps: ["password", "anonymous"],
+  "ftps-implicit": ["password", "anonymous"],
   webdav: ["password", "digest", "anonymous"],
   smb: ["password", "anonymous"],
 };

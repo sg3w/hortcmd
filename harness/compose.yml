@@ -1,0 +1,165 @@
+# Disposable protocol servers for the integration harness (TICKET-038).
+#
+# Everything here is per-run: the project name carries a run id, the ports
+# are allocated free at provisioning time, and the credentials and
+# certificates are generated into the run directory. Two harness runs can
+# therefore sit side by side on one machine without meeting.
+#
+# Nothing is published beyond 127.0.0.1. These servers accept a password
+# that is written to a file on disk; putting them on a reachable interface
+# would be an invitation.
+#
+# Driven by `node harness/harness.mjs` — it writes the .env this file
+# expects. Running `docker compose` here by hand will not work.
+
+services:
+  ssh:
+    build:
+      context: ./services/ssh
+      args: { BASE: "${HARNESS_BASE_ALPINE}" }
+    environment:
+      HARNESS_USER: "${HARNESS_USER}"
+      HARNESS_PASSWORD: "${HARNESS_PASSWORD}"
+    ports: ["127.0.0.1:${PORT_SSH}:22"]
+    volumes:
+      - "${RUN_DIR}/data/sftp:/data"
+      - "${RUN_DIR}/secrets/ssh_host_ed25519_key:/run/secrets/ssh_host_ed25519_key:ro"
+    healthcheck:
+      test: ["CMD", "sh", "-c", "nc -z 127.0.0.1 22"]
+      interval: 1s
+      timeout: 2s
+      retries: 60
+
+  ftp:
+    build:
+      context: ./services/ftp
+      args: { BASE: "${HARNESS_BASE_DEBIAN}" }
+    environment:
+      HARNESS_USER: "${HARNESS_USER}"
+      HARNESS_PASSWORD: "${HARNESS_PASSWORD}"
+      HARNESS_FTP_MODE: plain
+      HARNESS_PASV_MIN: "${PASV_MIN_FTP}"
+      HARNESS_PASV_MAX: "${PASV_MAX_FTP}"
+    # Passive mode hands the client a port number, so the published range
+    # must match the range inside the container one for one.
+    ports:
+      - "127.0.0.1:${PORT_FTP}:21"
+      - "127.0.0.1:${PASV_MIN_FTP}-${PASV_MAX_FTP}:${PASV_MIN_FTP}-${PASV_MAX_FTP}"
+    volumes:
+      - "${RUN_DIR}/data/ftp:/data"
+    # A process check rather than a socket probe: the Debian base has no
+    # netcat, and an FTP server should not have to survive being knocked
+    # on once a second by something that never says a word.
+    healthcheck:
+      test: ["CMD", "sh", "-c", "pidof proftpd >/dev/null"]
+      interval: 1s
+      timeout: 2s
+      retries: 60
+
+  ftps:
+    build:
+      context: ./services/ftp
+      args: { BASE: "${HARNESS_BASE_DEBIAN}" }
+    environment:
+      HARNESS_USER: "${HARNESS_USER}"
+      HARNESS_PASSWORD: "${HARNESS_PASSWORD}"
+      HARNESS_FTP_MODE: explicit
+      HARNESS_PASV_MIN: "${PASV_MIN_FTPS}"
+      HARNESS_PASV_MAX: "${PASV_MAX_FTPS}"
+    ports:
+      - "127.0.0.1:${PORT_FTPS}:21"
+      - "127.0.0.1:${PASV_MIN_FTPS}-${PASV_MAX_FTPS}:${PASV_MIN_FTPS}-${PASV_MAX_FTPS}"
+    volumes:
+      - "${RUN_DIR}/data/ftps:/data"
+      - "${RUN_DIR}/secrets/server.crt:/run/secrets/server.crt:ro"
+      - "${RUN_DIR}/secrets/server.key:/run/secrets/server.key:ro"
+    # A process check rather than a socket probe: the Debian base has no
+    # netcat, and an FTP server should not have to survive being knocked
+    # on once a second by something that never says a word.
+    healthcheck:
+      test: ["CMD", "sh", "-c", "pidof proftpd >/dev/null"]
+      interval: 1s
+      timeout: 2s
+      retries: 60
+
+  ftpsi:
+    build:
+      context: ./services/ftp
+      args: { BASE: "${HARNESS_BASE_DEBIAN}" }
+    environment:
+      HARNESS_USER: "${HARNESS_USER}"
+      HARNESS_PASSWORD: "${HARNESS_PASSWORD}"
+      HARNESS_FTP_MODE: implicit
+      HARNESS_PASV_MIN: "${PASV_MIN_FTPSI}"
+      HARNESS_PASV_MAX: "${PASV_MAX_FTPSI}"
+    ports:
+      - "127.0.0.1:${PORT_FTPSI}:21"
+      - "127.0.0.1:${PASV_MIN_FTPSI}-${PASV_MAX_FTPSI}:${PASV_MIN_FTPSI}-${PASV_MAX_FTPSI}"
+    volumes:
+      - "${RUN_DIR}/data/ftpsi:/data"
+      - "${RUN_DIR}/secrets/server.crt:/run/secrets/server.crt:ro"
+      - "${RUN_DIR}/secrets/server.key:/run/secrets/server.key:ro"
+    # A process check rather than a socket probe: the Debian base has no
+    # netcat, and an FTP server should not have to survive being knocked
+    # on once a second by something that never says a word.
+    healthcheck:
+      test: ["CMD", "sh", "-c", "pidof proftpd >/dev/null"]
+      interval: 1s
+      timeout: 2s
+      retries: 60
+
+  smb:
+    build:
+      context: ./services/smb
+      args: { BASE: "${HARNESS_BASE_ALPINE}" }
+    environment:
+      HARNESS_USER: "${HARNESS_USER}"
+      HARNESS_PASSWORD: "${HARNESS_PASSWORD}"
+      HARNESS_SHARE: "${HARNESS_SHARE}"
+    ports: ["127.0.0.1:${PORT_SMB}:445"]
+    volumes:
+      - "${RUN_DIR}/data/smb:/data"
+    healthcheck:
+      test: ["CMD", "sh", "-c", "nc -z 127.0.0.1 445"]
+      interval: 1s
+      timeout: 2s
+      retries: 60
+
+  webdav:
+    build:
+      context: ./services/webdav
+      args: { BASE: "${HARNESS_BASE_DEBIAN}" }
+    environment:
+      HARNESS_USER: "${HARNESS_USER}"
+      HARNESS_PASSWORD: "${HARNESS_PASSWORD}"
+      HARNESS_TLS: "0"
+    ports: ["127.0.0.1:${PORT_WEBDAV}:80"]
+    volumes:
+      - "${RUN_DIR}/data/webdav:/data"
+    # The Debian base has no netcat, and adding one just to knock on a
+    # port is a dependency for nothing: apache binds its listener before
+    # it forks, so the process being there means the port is too.
+    healthcheck:
+      test: ["CMD", "sh", "-c", "pidof apache2 >/dev/null"]
+      interval: 1s
+      timeout: 2s
+      retries: 60
+
+  webdavs:
+    build:
+      context: ./services/webdav
+      args: { BASE: "${HARNESS_BASE_DEBIAN}" }
+    environment:
+      HARNESS_USER: "${HARNESS_USER}"
+      HARNESS_PASSWORD: "${HARNESS_PASSWORD}"
+      HARNESS_TLS: "1"
+    ports: ["127.0.0.1:${PORT_WEBDAVS}:443"]
+    volumes:
+      - "${RUN_DIR}/data/webdavs:/data"
+      - "${RUN_DIR}/secrets/server.crt:/run/secrets/server.crt:ro"
+      - "${RUN_DIR}/secrets/server.key:/run/secrets/server.key:ro"
+    healthcheck:
+      test: ["CMD", "sh", "-c", "pidof apache2 >/dev/null"]
+      interval: 1s
+      timeout: 2s
+      retries: 60

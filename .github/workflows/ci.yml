@@ -14,9 +14,11 @@
 #             keeps compiling and its portable tests keep passing
 #   msrv    – the declared minimum Rust, with locked dependencies
 #
-# Live network and OS-keychain tests are `#[ignore]`d and never run
-# here: they need real servers and real credentials. `live-tests.yml`
-# is the documented manual path for them.
+# The remote-protocol and OS-keychain tests are `#[ignore]`d and never
+# run here. The protocol suite brings its own servers but takes minutes
+# and starts containers, so it lives in `protocol-harness.yml` (weekly
+# and on demand); the keychain tests need a desktop keyring and stay
+# local-only.
 # ============================================================
 
 name: CI

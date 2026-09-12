@@ -126,10 +126,7 @@ pub struct CredStatus {
 }
 
 fn config_path() -> AppResult<PathBuf> {
-    let dir = dirs::config_dir()
-        .ok_or_else(|| "Kein Konfigurationsverzeichnis gefunden".to_string())?
-        .join("hortcmd");
-    Ok(dir.join("credentials.json"))
+    crate::config::path("credentials.json")
 }
 
 fn load_config() -> CredConfig {

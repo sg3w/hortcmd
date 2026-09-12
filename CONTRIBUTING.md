@@ -52,9 +52,24 @@ Formatting and lint are not negotiable and not silenced:
 - Tests live beside the module they cover. `src/test/` holds only shared
   machinery.
 
+**Touching a remote provider?** Run the protocol harness before and after:
+
+```bash
+npm run test:harness
+```
+
+It builds its own SFTP, FTP, explicit and implicit FTPS, SMB and WebDAV
+servers, runs the suite against all of them, and deletes everything again.
+Docker is the only prerequisite. A provider change that is not exercised there
+is a provider change nothing checks — the harness exists because four
+data-corrupting bugs lived happily under a green unit-test suite (see
+[Concept.md § The protocol harness](Concept.md)). If a protocol genuinely
+cannot keep the shared contract, record the difference by name in
+`src-tauri/src/vfs/harness/` rather than excusing it in an assertion.
+
 ## What must be updated with the code
 
-These four have documentation that is part of the contract, and a change to one
+These have documentation that is part of the contract, and a change to one
 is not finished until its documentation matches. `npm run check:docs` enforces
 what it can; the rest is on the author.
 
@@ -65,6 +80,7 @@ what it can; the rest is on the author.
 | An error code (`src-tauri/src/errors/`) | `src/i18n/namespaces/errors.ts` in **both** languages, and `npm run gen:errorcodes` — checked automatically |
 | A persisted schema (settings, session, selection files, connection profiles) | The description in Concept.md, and a migration path if the old shape is still out there |
 | A security policy (CSP, navigation, host keys, credential storage) | [README § Security](README.md#security) — and say what is *not* protected |
+| A remote provider (`src-tauri/src/vfs/`) | Run `npm run test:harness`, and extend `src-tauri/src/vfs/harness/` if the change is one the suite would not have caught |
 
 ## Security-sensitive changes
 
@@ -79,9 +95,10 @@ verification, the capability contract, or error redaction:
   user-visible string. Errors carry a code and safe parameters; technical detail
   is redacted and not displayed (see
   [Concept.md § The error boundary](Concept.md)).
-- Live protocol and keychain tests are `#[ignore]`d and never run in
-  pull-request CI. Do not add a test that needs real credentials to the default
-  suite.
+- Protocol and keychain tests are `#[ignore]`d and never run in pull-request
+  CI. Do not add a test that needs real credentials to the default suite. The
+  protocol harness needs none — it generates its own, per run, and deletes them
+  with the run; keep it that way.
 
 ## Documentation
 

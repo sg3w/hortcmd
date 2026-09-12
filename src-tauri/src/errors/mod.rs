@@ -245,6 +245,9 @@ pub mod code {
     pub const NET_NO_PROFILE: &str = "net.noProfile";
     pub const NET_UNSUPPORTED_PROTOCOL: &str = "net.unsupportedProtocol";
     pub const NET_NO_SHELL: &str = "net.noShell";
+    /// The TLS handshake itself failed — an untrusted or expired
+    /// certificate, or an unreadable extra CA bundle (TICKET-038).
+    pub const NET_TLS: &str = "net.tls";
 
     // --- credentials ---
     pub const CRED_LOCKED: &str = "cred.locked";

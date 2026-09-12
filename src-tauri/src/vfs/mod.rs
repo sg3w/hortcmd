@@ -22,7 +22,7 @@ pub mod webdav;
 
 // Live protocol tests against real servers (ignored by default).
 #[cfg(test)]
-mod live_tests;
+mod harness;
 
 use crate::commands::fs::dir::DirListing;
 use crate::errors::{AppError, AppResult};

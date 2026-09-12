@@ -59,11 +59,11 @@ impl Profile {
         format!("{}@{}:{}", self.user, host, self.port)
     }
 
-    /// VFS address scheme for this profile. FTPS is not a separate
-    /// scheme — it is the `ftp` provider with TLS enabled.
+    /// VFS address scheme for this profile. Neither FTPS variant is a
+    /// separate scheme — both are the `ftp` provider with TLS enabled.
     pub fn scheme(&self) -> &str {
         match self.protocol.as_str() {
-            "ftps" => "ftp",
+            "ftps" | "ftps-implicit" => "ftp",
             other => other,
         }
     }
@@ -132,10 +132,7 @@ pub enum ConnectOutcome {
 // ---------- Persistence ----------
 
 fn config_path() -> AppResult<PathBuf> {
-    let dir = dirs::config_dir()
-        .ok_or_else(|| "Kein Konfigurationsverzeichnis gefunden".to_string())?
-        .join("hortcmd");
-    Ok(dir.join("connections.json"))
+    crate::config::path("connections.json")
 }
 
 fn load_profiles() -> Vec<Profile> {
@@ -412,7 +409,7 @@ fn run_attempt(attempt: &Attempt, profile: &Profile) -> Result<Opened, ConnFailu
     //    own readiness probe — all inside the client's `connect`.
     let opened: Result<Arc<dyn Provider>, ConnectError> = match profile.protocol.as_str() {
         "sftp" => crate::vfs::sftp::connect(profile, secret.as_deref()),
-        "ftp" | "ftps" => {
+        "ftp" | "ftps" | "ftps-implicit" => {
             crate::vfs::ftp::connect(profile, secret.as_deref()).map_err(ConnectError::from)
         }
         "webdav" => {

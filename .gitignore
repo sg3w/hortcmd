@@ -16,3 +16,8 @@ Thumbs.db
 .vscode/
 .idea/
 .aider*
+
+# One harness run's servers, secrets and seeded data (TICKET-038).
+# Created by `npm run test:harness` and deleted with the run; the
+# `-logs` siblings are redacted failure artifacts, also disposable.
+harness/.run/

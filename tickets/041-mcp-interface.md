@@ -148,8 +148,8 @@ Three tiers, each separately switchable, `read` is the only default:
 - Integration against the running server with a test client: handshake, tool listing,
   `list_dir`/`read_file`/`stat`, an error path per typed error, cancellation of a
   long-running call.
-- Remote: against the existing SFTP/WebDAV/FTP/SMB test servers used by
-  `vfs::live_tests` (ignored by default) — `list_dir` and `read_file` on an active
+- Remote: against the protocol harness's SFTP/WebDAV/FTP/SMB servers
+  (`npm run test:harness`, TICKET-038) — `list_dir` and `read_file` on an active
   connection, and the correct refusal when that connection is closed.
 - Bridge: `hortcmd-mcp` with the app running (data flows both ways) and with the app
   not running (clear error, exits, does not hang).

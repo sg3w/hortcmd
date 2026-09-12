@@ -57,6 +57,7 @@ export const errors = ns(
     "error.net.noProfile": "Verbindungsprofil nicht gefunden",
     "error.net.unsupportedProtocol": "Protokoll „{protocol}“ wird nicht unterstützt",
     "error.net.noShell": "Dieses Protokoll bietet keine Shell",
+    "error.net.tls": "TLS-Verbindung abgelehnt (Zertifikat nicht vertrauenswürdig)",
 
     // --- credentials ---
     "error.cred.locked": "Die KeePass-Datei ist gesperrt",
@@ -146,6 +147,7 @@ export const errors = ns(
     "error.net.noProfile": "Connection profile not found",
     "error.net.unsupportedProtocol": "Protocol “{protocol}” is not supported",
     "error.net.noShell": "This protocol offers no shell",
+    "error.net.tls": "TLS connection refused (certificate not trusted)",
 
     // --- credentials ---
     "error.cred.locked": "The KeePass file is locked",

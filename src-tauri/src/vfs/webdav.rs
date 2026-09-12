@@ -18,7 +18,7 @@
 
 use super::{Provider, Stat};
 use crate::commands::fs::dir::{DirEntry, DirListing};
-use crate::errors::{AppError, AppResult};
+use crate::errors::{code, AppError, AppResult};
 use crate::net::session::{runtime, Profile};
 use reqwest_dav::list_cmd::ListEntity;
 use reqwest_dav::{Auth, Client, ClientBuilder, Depth};
@@ -27,6 +27,30 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// Opens a WebDAV connection and returns the ready provider.
+/// A reqwest client carrying the extra trust anchors, or `None` when
+/// none are configured and `reqwest_dav`'s own default client will do.
+fn http_agent() -> AppResult<Option<reqwest_dav::re_exports::reqwest::Client>> {
+    use reqwest_dav::re_exports::reqwest::{Certificate, Client};
+
+    let pems = crate::net::tls::extra_ca_pems()?;
+    if pems.is_empty() {
+        return Ok(None);
+    }
+    let mut builder = Client::builder();
+    for pem in pems {
+        let cert = Certificate::from_pem(&pem).map_err(|e| {
+            AppError::new(code::NET_TLS)
+                .op("extra-ca")
+                .detail(format!("{}", e))
+        })?;
+        builder = builder.add_root_certificate(cert);
+    }
+    builder
+        .build()
+        .map(Some)
+        .map_err(|e| AppError::new(code::NET_TLS).op("extra-ca").detail(e))
+}
+
 /// The credentials are verified with a PROPFIND on the start path, so
 /// a wrong password or an unreachable host fails here, not later.
 pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Provider>> {
@@ -54,13 +78,15 @@ pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Pro
         profile.port
     );
 
-    let client = ClientBuilder::new()
-        .set_host(host.clone())
-        .set_auth(auth)
-        .build()
-        .map_err(|e| {
-            AppError::from(format!("WebDAV-Client konnte nicht erstellt werden: {}", e))
-        })?;
+    let mut builder = ClientBuilder::new().set_host(host.clone()).set_auth(auth);
+    // An operator's own CA, if one is configured — added to the roots,
+    // never replacing the validation (ticket 038, `net::tls`).
+    if let Some(agent) = http_agent()? {
+        builder = builder.set_agent(agent);
+    }
+    let client = builder.build().map_err(|e| {
+        AppError::from(format!("WebDAV-Client konnte nicht erstellt werden: {}", e))
+    })?;
 
     let provider = WebdavProvider {
         key: profile.connection_key(),
@@ -104,6 +130,39 @@ fn to_io<E: std::fmt::Display>(e: E) -> io::Error {
     io::Error::other(e.to_string())
 }
 
+/// Percent-encodes a path for a request URI, keeping `/` as the
+/// separator.
+///
+/// Everything outbound goes through this. A WebDAV path is part of a
+/// URL, and a name is not: `100%-done.txt` is an invalid escape
+/// sequence that Apache answers with "400 Bad Request", `a#b.txt` cuts
+/// the request short at the fragment, and `a?b.txt` turns the rest into
+/// a query. The file listing shows all three — they arrive as hrefs and
+/// are decoded by [`percent_decode`] — so before this every such file
+/// was visible and untouchable (found by the protocol harness,
+/// ticket 038).
+///
+/// Unreserved characters (RFC 3986 §2.3) are left alone; everything
+/// else, including every byte of a non-ASCII name, is escaped.
+fn encode_path(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    for byte in path.as_bytes() {
+        match byte {
+            b'/' => out.push('/'),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                out.push(*byte as char)
+            }
+            other => out.push_str(&format!("%{:02X}", other)),
+        }
+    }
+    out
+}
+
+/// The encoded form of a path, for a request.
+fn e(path: &Path) -> String {
+    encode_path(&p(path))
+}
+
 /// Decodes the `%XX` escapes of an href segment.
 fn percent_decode(s: &str) -> String {
     let bytes = s.as_bytes();
@@ -145,7 +204,7 @@ impl WebdavProvider {
     /// PROPFIND with depth 0 — metadata of the entry itself.
     fn stat_entity(&self, path: &str) -> AppResult<ListEntity> {
         let items = runtime()
-            .block_on(self.client.list(path, Depth::Number(0)))
+            .block_on(self.client.list(&encode_path(path), Depth::Number(0)))
             .map_err(|e| AppError::from(format!("{}: {}", path, e)))?;
         items
             .into_iter()
@@ -161,7 +220,7 @@ impl Provider for WebdavProvider {
 
     fn list(&self, path: &str) -> AppResult<DirListing> {
         let items = runtime()
-            .block_on(self.client.list(path, Depth::Number(1)))
+            .block_on(self.client.list(&encode_path(path), Depth::Number(1)))
             .map_err(|e| AppError::from(format!("{}: {}", path, e)))?;
 
         let self_key = norm(path);
@@ -245,7 +304,7 @@ impl Provider for WebdavProvider {
 
     fn open_read(&self, path: &Path) -> io::Result<Box<dyn Read + Send>> {
         let response = runtime()
-            .block_on(self.client.get(&p(path)))
+            .block_on(self.client.get(&e(path)))
             .map_err(to_io)?;
         Ok(Box::new(WebdavReader {
             response: Some(response),
@@ -255,12 +314,12 @@ impl Provider for WebdavProvider {
     }
 
     fn create_write(&self, path: &Path) -> io::Result<Box<dyn Write + Send>> {
-        Ok(Box::new(WebdavWriter::new(self.client.clone(), p(path))?))
+        Ok(Box::new(WebdavWriter::new(self.client.clone(), e(path))?))
     }
 
     fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
         runtime()
-            .block_on(self.client.put(&p(path), data.to_vec()))
+            .block_on(self.client.put(&e(path), data.to_vec()))
             .map_err(to_io)
     }
 
@@ -278,7 +337,7 @@ impl Provider for WebdavProvider {
                 continue;
             }
             // Ignore "already exists"; the final check reports real failures.
-            let _ = runtime().block_on(self.client.mkcol(&acc));
+            let _ = runtime().block_on(self.client.mkcol(&encode_path(&acc)));
         }
         if self.is_dir(path) {
             Ok(())
@@ -297,12 +356,12 @@ impl Provider for WebdavProvider {
     fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
         use reqwest_dav::re_exports::reqwest::Method;
 
-        let destination = format!("{}{}", self.base, p(to));
+        let destination = format!("{}{}", self.base, e(to));
         runtime().block_on(async {
             let method = Method::from_bytes(b"MOVE").map_err(to_io)?;
             let response = self
                 .client
-                .start_request(method, &p(from))
+                .start_request(method, &e(from))
                 .await
                 .map_err(to_io)?
                 .header("Destination", destination)
@@ -326,14 +385,14 @@ impl Provider for WebdavProvider {
 
     fn remove_file(&self, path: &Path) -> io::Result<()> {
         runtime()
-            .block_on(self.client.delete(&p(path)))
+            .block_on(self.client.delete(&e(path)))
             .map_err(to_io)
     }
 
     fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
         // DELETE on a collection removes it recursively.
         runtime()
-            .block_on(self.client.delete(&p(path)))
+            .block_on(self.client.delete(&e(path)))
             .map_err(to_io)
     }
 
@@ -481,6 +540,44 @@ mod tests {
         assert_eq!(name_of("/dav/files/Mein%20Ordner/"), "Mein Ordner");
         assert_eq!(name_of("/dav/a/b/report.pdf"), "report.pdf");
         assert_eq!(name_of("/dav/files/%C3%A4%C3%B6.txt"), "äö.txt");
+    }
+
+    /// Everything that is not an unreserved character is escaped, and
+    /// the separators survive. The `%` case is the one that used to make
+    /// a listed file unreachable: `100%-done.txt` is not a valid escape
+    /// sequence, and Apache answers the request with 400 (ticket 038).
+    #[test]
+    fn request_paths_are_percent_encoded() {
+        assert_eq!(encode_path("/a/b/report.pdf"), "/a/b/report.pdf");
+        assert_eq!(encode_path("/tree/100%-done.txt"), "/tree/100%25-done.txt");
+        assert_eq!(
+            encode_path("/tree/name with spaces.txt"),
+            "/tree/name%20with%20spaces.txt"
+        );
+        assert_eq!(encode_path("/tree/hash#tag.txt"), "/tree/hash%23tag.txt");
+        assert_eq!(encode_path("/tree/what?.txt"), "/tree/what%3F.txt");
+        assert_eq!(encode_path("/tree/äö.txt"), "/tree/%C3%A4%C3%B6.txt");
+        // Unreserved characters stay readable — an escaped path nobody
+        // can read in a log is a worse debugging experience for nothing.
+        assert_eq!(encode_path("/a-b_c.d~e"), "/a-b_c.d~e");
+    }
+
+    /// Encoding and decoding are the two halves of one contract: a name
+    /// that came back from a listing has to address the same entry.
+    #[test]
+    fn encoding_round_trips_through_the_decoder() {
+        for name in [
+            "100%-done.txt",
+            "name with spaces.txt",
+            "hash#tag.txt",
+            "semi;colon.txt",
+            "quote'single.txt",
+            "Ümlaut-Grüße.txt",
+            "日本語.txt",
+        ] {
+            let encoded = encode_path(&format!("/tree/{}", name));
+            assert_eq!(name_of(&encoded), name, "round trip of {}", name);
+        }
     }
 
     #[test]
