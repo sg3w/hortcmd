@@ -4,6 +4,7 @@
 // ============================================================
 
 import { panelOf, usePanes, type Side } from "@/store/panesStore";
+import { describeErrorFull } from "@/store/errorText";
 import { openPath } from "@/ipc/client";
 import { guard } from "./guard";
 import { joinPath, parentPath } from "@/lib/path";
@@ -50,7 +51,7 @@ export function openEntry(side: Side, index: number): void {
     void openPath(joinPath(p.path, entry.name)).catch((e) => {
       useOps.getState().requestConfirm({
         title: translate("open.error"),
-        message: String(e),
+        message: describeErrorFull(e),
         danger: true,
         onConfirm: () => {},
       });

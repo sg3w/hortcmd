@@ -10,6 +10,7 @@
 use super::{Provider, Stat};
 use crate::commands::fs::attrs;
 use crate::commands::fs::dir::{DirEntry, DirListing};
+use crate::errors::{AppError, AppResult};
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -31,12 +32,12 @@ impl Provider for LocalProvider {
     /// choice: it matches how the rest of the app resolves paths and makes a
     /// symlink cycle (`a/link -> a`) impossible to walk into indefinitely,
     /// because every hop lands on the same canonical path.
-    fn list(&self, path: &str) -> Result<DirListing, String> {
+    fn list(&self, path: &str) -> AppResult<DirListing> {
         let p = PathBuf::from(path);
         let canonical = fs::canonicalize(&p).unwrap_or(p);
 
-        let read =
-            fs::read_dir(&canonical).map_err(|e| format!("{}: {}", canonical.display(), e))?;
+        let read = fs::read_dir(&canonical)
+            .map_err(|e| AppError::from(format!("{}: {}", canonical.display(), e)))?;
 
         let mut entries = Vec::new();
         for item in read.flatten() {

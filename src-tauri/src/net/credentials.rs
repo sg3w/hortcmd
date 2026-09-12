@@ -25,6 +25,7 @@
 // the keychain it replaces.
 // ============================================================
 
+use crate::errors::{code, AppError, AppResult, ErrorAction};
 use keepass::db::{fields, Entry as KpEntry, Group, Times};
 use keepass::{Database, DatabaseKey};
 use keyring::Entry;
@@ -44,7 +45,16 @@ const KP_GROUP: &str = "hortcmd";
 
 /// Marker every "KeePass file still locked" error carries. The frontend
 /// keys its unlock prompt off it, so the token must stay stable.
-pub const LOCKED: &str = "KEEPASS_LOCKED";
+#[allow(unused_imports)] // the name other modules and tests use
+pub use crate::errors::code::CRED_LOCKED as LOCKED;
+
+/// "The KeePass file is locked" — not a failure but a question. The
+/// frontend parks the action behind the unlock prompt and replays it;
+/// since ticket 036 it recognizes this by code rather than by a marker
+/// inside a sentence.
+pub fn locked() -> AppError {
+    AppError::new(code::CRED_LOCKED).action(ErrorAction::ProvidePassword)
+}
 
 /// Keychain id for the KeePass master password — only ever written when
 /// the user explicitly opts in (`CredConfig::master_in_keychain`).
@@ -54,13 +64,13 @@ const MASTER_ID: &str = "__keepass_master__";
 pub trait CredentialStore: Send + Sync {
     /// Returns the stored secret, or `None` if none is stored.
     /// A backend/access failure is an `Err`, never a silent `None`.
-    fn get(&self, id: &str) -> Result<Option<String>, String>;
+    fn get(&self, id: &str) -> AppResult<Option<String>>;
 
     /// Stores (or replaces) the secret for a connection id.
-    fn set(&self, id: &str, secret: &str) -> Result<(), String>;
+    fn set(&self, id: &str, secret: &str) -> AppResult<()>;
 
     /// Removes the secret; removing a missing entry is not an error.
-    fn delete(&self, id: &str) -> Result<(), String>;
+    fn delete(&self, id: &str) -> AppResult<()>;
 }
 
 // ---------- Backend selection ----------
@@ -115,7 +125,7 @@ pub struct CredStatus {
     pub needs_unlock: bool,
 }
 
-fn config_path() -> Result<PathBuf, String> {
+fn config_path() -> AppResult<PathBuf> {
     let dir = dirs::config_dir()
         .ok_or_else(|| "Kein Konfigurationsverzeichnis gefunden".to_string())?
         .join("hortcmd");
@@ -132,13 +142,13 @@ fn load_config() -> CredConfig {
     }
 }
 
-fn store_config(cfg: &CredConfig) -> Result<(), String> {
+fn store_config(cfg: &CredConfig) -> AppResult<()> {
     let path = config_path()?;
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(parent).map_err(AppError::from)?;
     }
-    let json = serde_json::to_vec_pretty(cfg).map_err(|e| e.to_string())?;
-    std::fs::write(&path, json).map_err(|e| e.to_string())
+    let json = serde_json::to_vec_pretty(cfg).map_err(AppError::from)?;
+    std::fs::write(&path, json).map_err(AppError::from)
 }
 
 // ---------- Router ----------
@@ -178,14 +188,17 @@ impl Store {
 
     /// Switches the backend. Locks any open `.kdbx` and drops a stored
     /// master password whenever it is no longer wanted.
-    pub fn set_config(&self, mut cfg: CredConfig) -> Result<CredStatus, String> {
+    pub fn set_config(&self, mut cfg: CredConfig) -> AppResult<CredStatus> {
         if cfg.backend != "keychain" && cfg.backend != "keepass" {
-            return Err(format!("Unbekannter Speicher '{}'", cfg.backend));
+            return Err(AppError::from(format!(
+                "Unbekannter Speicher '{}'",
+                cfg.backend
+            )));
         }
         cfg.kdbx_path = cfg.kdbx_path.trim().to_string();
         cfg.key_file = cfg.key_file.trim().to_string();
         if cfg.is_keepass() && cfg.kdbx_path.is_empty() {
-            return Err("Bitte eine .kdbx-Datei angeben".to_string());
+            return Err(AppError::from("Bitte eine .kdbx-Datei angeben"));
         }
         self.keepass.lock();
         if !cfg.is_keepass() || !cfg.master_in_keychain {
@@ -199,15 +212,10 @@ impl Store {
     /// Opens the `.kdbx`. `remember` keeps it open for the session,
     /// otherwise it re-locks after the next credential access.
     /// `create` allows starting a fresh database at the configured path.
-    pub fn unlock(
-        &self,
-        password: &str,
-        remember: bool,
-        create: bool,
-    ) -> Result<CredStatus, String> {
+    pub fn unlock(&self, password: &str, remember: bool, create: bool) -> AppResult<CredStatus> {
         let cfg = self.config();
         if !cfg.is_keepass() {
-            return Err("Der KeePass-Speicher ist nicht aktiv".to_string());
+            return Err(AppError::from("Der KeePass-Speicher ist nicht aktiv"));
         }
         // A remembered master password in the keychain outlives the
         // session, so it only ever makes sense together with `remember`.
@@ -227,7 +235,7 @@ impl Store {
 
     /// Unlocks silently from the keychain when the user opted into that.
     /// Any other locked state stays an error the UI turns into a prompt.
-    fn ensure_unlocked(&self, cfg: &CredConfig) -> Result<(), String> {
+    fn ensure_unlocked(&self, cfg: &CredConfig) -> AppResult<()> {
         if self.keepass.is_unlocked() || !cfg.master_in_keychain {
             return Ok(());
         }
@@ -238,7 +246,7 @@ impl Store {
     }
 
     /// The backend in charge right now, unlocked if it can be.
-    fn backend(&self) -> Result<&dyn CredentialStore, String> {
+    fn backend(&self) -> AppResult<&dyn CredentialStore> {
         let cfg = self.config();
         if !cfg.is_keepass() {
             return Ok(&self.keychain);
@@ -249,13 +257,13 @@ impl Store {
 }
 
 impl CredentialStore for Store {
-    fn get(&self, id: &str) -> Result<Option<String>, String> {
+    fn get(&self, id: &str) -> AppResult<Option<String>> {
         self.backend()?.get(id)
     }
-    fn set(&self, id: &str, secret: &str) -> Result<(), String> {
+    fn set(&self, id: &str, secret: &str) -> AppResult<()> {
         self.backend()?.set(id, secret)
     }
-    fn delete(&self, id: &str) -> Result<(), String> {
+    fn delete(&self, id: &str) -> AppResult<()> {
         self.backend()?.delete(id)
     }
 }
@@ -274,7 +282,7 @@ impl KeychainStore {
         }
     }
 
-    fn entry(&self, id: &str) -> Result<Entry, String> {
+    fn entry(&self, id: &str) -> AppResult<Entry> {
         Entry::new(&self.service, id).map_err(explain)
     }
 }
@@ -286,7 +294,7 @@ impl Default for KeychainStore {
 }
 
 impl CredentialStore for KeychainStore {
-    fn get(&self, id: &str) -> Result<Option<String>, String> {
+    fn get(&self, id: &str) -> AppResult<Option<String>> {
         match self.entry(id)?.get_password() {
             Ok(secret) => Ok(Some(secret)),
             Err(keyring::Error::NoEntry) => Ok(None),
@@ -294,11 +302,11 @@ impl CredentialStore for KeychainStore {
         }
     }
 
-    fn set(&self, id: &str, secret: &str) -> Result<(), String> {
+    fn set(&self, id: &str, secret: &str) -> AppResult<()> {
         self.entry(id)?.set_password(secret).map_err(explain)
     }
 
-    fn delete(&self, id: &str) -> Result<(), String> {
+    fn delete(&self, id: &str) -> AppResult<()> {
         match self.entry(id)?.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(e) => Err(explain(e)),
@@ -309,11 +317,21 @@ impl CredentialStore for KeychainStore {
 /// Turns a keyring error into a user-facing message. On Linux a
 /// missing/locked Secret Service is the common failure, so the remedy
 /// is spelled out instead of leaking a raw platform error.
-fn explain(e: keyring::Error) -> String {
+/// The OS-keychain boundary (ticket 036). "No keychain service at all"
+/// is worth its own code: on Linux it is a setup problem the user can
+/// fix, and it must not read like a wrong password.
+fn explain(e: keyring::Error) -> AppError {
     match e {
-        keyring::Error::NoStorageAccess(inner) => no_service_hint(&inner.to_string()),
-        keyring::Error::PlatformFailure(inner) => no_service_hint(&inner.to_string()),
-        other => format!("Schlüsselbund-Fehler: {}", other),
+        keyring::Error::NoEntry => AppError::new(code::CRED_NOT_FOUND),
+        keyring::Error::NoStorageAccess(inner) => AppError::new(code::CRED_STORE)
+            .action(ErrorAction::Report)
+            .detail(no_service_hint(&inner.to_string())),
+        keyring::Error::PlatformFailure(inner) => AppError::new(code::CRED_STORE)
+            .action(ErrorAction::Report)
+            .detail(no_service_hint(&inner.to_string())),
+        other => AppError::new(code::CRED_STORE)
+            .action(ErrorAction::Report)
+            .detail(other),
     }
 }
 
@@ -347,7 +365,7 @@ struct Session {
 }
 
 impl Session {
-    fn key(&self) -> Result<DatabaseKey, String> {
+    fn key(&self) -> AppResult<DatabaseKey> {
         database_key(&self.password, self.key_file.as_deref())
     }
 }
@@ -376,29 +394,35 @@ impl KeepassStore {
         password: &str,
         remember: bool,
         create: bool,
-    ) -> Result<(), String> {
+    ) -> AppResult<()> {
         let path = PathBuf::from(cfg.kdbx_path.trim());
         if path.as_os_str().is_empty() {
-            return Err("Bitte eine .kdbx-Datei angeben".to_string());
+            return Err(AppError::from("Bitte eine .kdbx-Datei angeben"));
         }
         let key_file = cfg.key_file_path();
         if let Some(kf) = &key_file {
             if !kf.exists() {
-                return Err(format!("Schlüsseldatei nicht gefunden: {}", kf.display()));
+                return Err(AppError::from(format!(
+                    "Schlüsseldatei nicht gefunden: {}",
+                    kf.display()
+                )));
             }
         }
         let key = database_key(password, key_file.as_deref())?;
 
         let db = if path.exists() {
-            let mut file = std::fs::File::open(&path)
-                .map_err(|e| format!("{} lässt sich nicht öffnen: {}", path.display(), e))?;
+            let mut file = std::fs::File::open(&path).map_err(|e| {
+                AppError::from(format!("{} lässt sich nicht öffnen: {}", path.display(), e))
+            })?;
             Database::open(&mut file, key).map_err(open_error)?
         } else if create {
             let db = new_database();
             write_atomic(&path, &db, key)?;
             db
         } else {
-            return Err(format!("Datei nicht gefunden: {}", path.display()));
+            return Err(AppError::new(code::CRED_NOT_FOUND)
+                .with("path", path.display())
+                .action(ErrorAction::Report));
         };
 
         *self.open.lock().unwrap() = Some(Session {
@@ -413,14 +437,9 @@ impl KeepassStore {
 
     /// Runs `f` against the open database. A one-shot session is dropped
     /// afterwards, so the next access asks for the master password again.
-    fn with_session<T>(
-        &self,
-        f: impl FnOnce(&mut Session) -> Result<T, String>,
-    ) -> Result<T, String> {
+    fn with_session<T>(&self, f: impl FnOnce(&mut Session) -> AppResult<T>) -> AppResult<T> {
         let mut guard = self.open.lock().unwrap();
-        let session = guard
-            .as_mut()
-            .ok_or_else(|| format!("{}: KeePass-Datei ist gesperrt — bitte entsperren", LOCKED))?;
+        let session = guard.as_mut().ok_or_else(locked)?;
         let result = f(session);
         if guard.as_ref().is_some_and(|s| s.one_shot) {
             *guard = None;
@@ -430,13 +449,13 @@ impl KeepassStore {
 }
 
 impl CredentialStore for KeepassStore {
-    fn get(&self, id: &str) -> Result<Option<String>, String> {
+    fn get(&self, id: &str) -> AppResult<Option<String>> {
         self.with_session(|s| {
             Ok(find_entry(&s.db.root, id).and_then(|e| e.get_password().map(str::to_string)))
         })
     }
 
-    fn set(&self, id: &str, secret: &str) -> Result<(), String> {
+    fn set(&self, id: &str, secret: &str) -> AppResult<()> {
         self.with_session(|s| {
             match find_entry_mut(&mut s.db.root, id) {
                 Some(entry) => {
@@ -456,7 +475,7 @@ impl CredentialStore for KeepassStore {
         })
     }
 
-    fn delete(&self, id: &str) -> Result<(), String> {
+    fn delete(&self, id: &str) -> AppResult<()> {
         self.with_session(|s| {
             // Removing a missing entry is not an error — and it must not
             // rewrite the file either.
@@ -516,32 +535,44 @@ fn decorate_group(group: &mut Group) {
 }
 
 /// Builds the KeePass key from master password and/or key file.
-fn database_key(password: &str, key_file: Option<&Path>) -> Result<DatabaseKey, String> {
+fn database_key(password: &str, key_file: Option<&Path>) -> AppResult<DatabaseKey> {
     let mut key = DatabaseKey::new();
     if !password.is_empty() {
         key = key.with_password(password);
     }
     if let Some(path) = key_file {
-        let mut file = std::fs::File::open(path)
-            .map_err(|e| format!("Schlüsseldatei {} nicht lesbar: {}", path.display(), e))?;
-        key = key
-            .with_keyfile(&mut file)
-            .map_err(|e| format!("Schlüsseldatei {} nicht lesbar: {}", path.display(), e))?;
+        let mut file = std::fs::File::open(path).map_err(|e| {
+            AppError::from(format!(
+                "Schlüsseldatei {} nicht lesbar: {}",
+                path.display(),
+                e
+            ))
+        })?;
+        key = key.with_keyfile(&mut file).map_err(|e| {
+            AppError::from(format!(
+                "Schlüsseldatei {} nicht lesbar: {}",
+                path.display(),
+                e
+            ))
+        })?;
     }
     if key.is_empty() {
-        return Err("Masterpasswort oder Schlüsseldatei erforderlich".to_string());
+        return Err(AppError::new(code::CRED_WRONG_PASSWORD).action(ErrorAction::ProvidePassword));
     }
     Ok(key)
 }
 
-/// Turns an open failure into a message — a wrong master password is by
-/// far the common case and must not read like a corrupt file.
-fn open_error(e: keepass::error::DatabaseOpenError) -> String {
+/// The KeePass boundary. A wrong master password is by far the common
+/// case and gets its own code — it must not read like a corrupt file,
+/// and the frontend re-prompts on it rather than giving up.
+fn open_error(e: keepass::error::DatabaseOpenError) -> AppError {
     match e {
         keepass::error::DatabaseOpenError::Key(_) => {
-            "Falsches Masterpasswort oder falsche Schlüsseldatei".to_string()
+            AppError::new(code::CRED_WRONG_PASSWORD).action(ErrorAction::ProvidePassword)
         }
-        other => format!("KeePass-Datei nicht lesbar: {}", other),
+        other => AppError::new(code::CRED_STORE)
+            .action(ErrorAction::Report)
+            .detail(other),
     }
 }
 
@@ -551,16 +582,17 @@ fn open_error(e: keepass::error::DatabaseOpenError) -> String {
 /// KDBX 3 files are readable but not writable — that format predates
 /// Argon2 and only KDBX 4 is written, so the message names the remedy
 /// instead of leaking a raw "unsupported version".
-fn write_atomic(path: &Path, db: &Database, key: DatabaseKey) -> Result<(), String> {
+fn write_atomic(path: &Path, db: &Database, key: DatabaseKey) -> AppResult<()> {
     let mut buffer = Vec::new();
     db.save(&mut buffer, key).map_err(|e| match e {
+        // Its own code: the remedy is specific (upgrade the database in
+        // KeePassXC) and must not read like a generic write failure.
         keepass::error::DatabaseSaveError::UnsupportedVersion => {
-            "Die Datenbank liegt im alten Format KDBX 3 vor und kann nur gelesen werden. \
-             Bitte in KeePassXC auf KDBX 4 aktualisieren (Datenbank \u{2192} \
-             Datenbankeinstellungen \u{2192} Verschl\u{fc}sselung)."
-                .to_string()
+            AppError::new(code::CRED_READ_ONLY_FORMAT).action(ErrorAction::Report)
         }
-        other => format!("KeePass-Datei nicht schreibbar: {}", other),
+        other => AppError::new(code::CRED_STORE)
+            .action(ErrorAction::Report)
+            .detail(other),
     })?;
 
     let tmp = path.with_extension("kdbx.hortcmd-tmp");
@@ -571,11 +603,16 @@ fn write_atomic(path: &Path, db: &Database, key: DatabaseKey) -> Result<(), Stri
     };
     if let Err(e) = write(&tmp) {
         let _ = std::fs::remove_file(&tmp);
-        return Err(format!("KeePass-Datei nicht schreibbar: {}", e));
+        return Err(AppError::from(format!(
+            "KeePass-Datei nicht schreibbar: {}",
+            e
+        )));
     }
     std::fs::rename(&tmp, path).map_err(|e| {
         let _ = std::fs::remove_file(&tmp);
-        format!("KeePass-Datei nicht ersetzbar: {}", e)
+        AppError::new(code::CRED_STORE)
+            .action(ErrorAction::Report)
+            .detail(e)
     })
 }
 
@@ -629,17 +666,13 @@ pub fn net_cred_status() -> CredStatus {
 
 /// Switches the credential backend (and its KeePass file).
 #[tauri::command]
-pub fn net_cred_set_backend(config: CredConfig) -> Result<CredStatus, String> {
+pub fn net_cred_set_backend(config: CredConfig) -> AppResult<CredStatus> {
     store().set_config(config)
 }
 
 /// Unlocks the configured `.kdbx` with the master password.
 #[tauri::command]
-pub fn net_cred_unlock(
-    password: String,
-    remember: bool,
-    create: bool,
-) -> Result<CredStatus, String> {
+pub fn net_cred_unlock(password: String, remember: bool, create: bool) -> AppResult<CredStatus> {
     store().unlock(&password, remember, create)
 }
 
@@ -661,17 +694,17 @@ pub(crate) mod tests {
     }
 
     impl CredentialStore for MemoryStore {
-        fn get(&self, id: &str) -> Result<Option<String>, String> {
+        fn get(&self, id: &str) -> AppResult<Option<String>> {
             Ok(self.map.lock().unwrap().get(id).cloned())
         }
-        fn set(&self, id: &str, secret: &str) -> Result<(), String> {
+        fn set(&self, id: &str, secret: &str) -> AppResult<()> {
             self.map
                 .lock()
                 .unwrap()
                 .insert(id.to_string(), secret.to_string());
             Ok(())
         }
-        fn delete(&self, id: &str) -> Result<(), String> {
+        fn delete(&self, id: &str) -> AppResult<()> {
             self.map.lock().unwrap().remove(id);
             Ok(())
         }
@@ -757,7 +790,7 @@ pub(crate) mod tests {
         s.lock();
 
         let err = s.unlock(&cfg, "nope", true, false).unwrap_err();
-        assert!(err.contains("Masterpasswort"), "unexpected: {}", err);
+        assert!(err.is(code::CRED_WRONG_PASSWORD), "unexpected: {:?}", err);
         assert!(!s.is_unlocked());
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
@@ -766,9 +799,9 @@ pub(crate) mod tests {
     fn keepass_locked_access_carries_the_marker() {
         let s = KeepassStore::default();
         let err = s.get("c1").unwrap_err();
-        assert!(err.starts_with(LOCKED), "unexpected: {}", err);
-        assert!(s.set("c1", "x").unwrap_err().starts_with(LOCKED));
-        assert!(s.delete("c1").unwrap_err().starts_with(LOCKED));
+        assert!(err.is(LOCKED), "unexpected: {:?}", err);
+        assert!(s.set("c1", "x").unwrap_err().is(LOCKED));
+        assert!(s.delete("c1").unwrap_err().is(LOCKED));
     }
 
     #[test]
@@ -776,7 +809,7 @@ pub(crate) mod tests {
         let (path, cfg) = kdbx_config("missing");
         let s = KeepassStore::default();
         let err = s.unlock(&cfg, "master", true, false).unwrap_err();
-        assert!(err.contains("Datei nicht gefunden"), "unexpected: {}", err);
+        assert!(err.is(code::CRED_NOT_FOUND), "unexpected: {:?}", err);
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
@@ -792,7 +825,7 @@ pub(crate) mod tests {
         s.unlock(&cfg, "master", false, false).unwrap();
         assert_eq!(s.get("c1").unwrap().as_deref(), Some("hunter2"));
         assert!(!s.is_unlocked());
-        assert!(s.get("c1").unwrap_err().starts_with(LOCKED));
+        assert!(s.get("c1").unwrap_err().is(LOCKED));
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
@@ -854,7 +887,7 @@ pub(crate) mod tests {
         let (path, cfg) = kdbx_config("emptykey");
         let s = KeepassStore::default();
         let err = s.unlock(&cfg, "", true, true).unwrap_err();
-        assert!(err.contains("erforderlich"), "unexpected: {}", err);
+        assert!(err.is(code::CRED_WRONG_PASSWORD), "unexpected: {:?}", err);
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
@@ -989,7 +1022,7 @@ pub(crate) mod tests {
         s.unlock(&cfg, "master", true, false).unwrap();
         assert_eq!(s.get("alt").unwrap().as_deref(), Some("altes-geheimnis"));
         let err = s.set("neu", "x").unwrap_err();
-        assert!(err.contains("KDBX 3"), "unexpected: {}", err);
+        assert!(err.is(code::CRED_READ_ONLY_FORMAT), "unexpected: {:?}", err);
 
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }

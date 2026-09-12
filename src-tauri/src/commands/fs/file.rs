@@ -11,8 +11,9 @@
 // ============================================================
 
 use super::transfer::engine::run_transfer;
-use super::transfer::events::OpResult;
+use super::transfer::events::{ItemError, OpResult};
 use super::transfer::registry::spawn_op;
+use crate::errors::{code, AppError, AppResult};
 use crate::vfs::caps::{self, Capability};
 use crate::vfs::{self, Provider};
 use std::collections::{HashMap, HashSet};
@@ -22,12 +23,12 @@ use tauri::AppHandle;
 
 /// Creates a directory (recursively).
 #[tauri::command]
-pub fn make_dir(path: String) -> Result<String, String> {
+pub fn make_dir(path: String) -> AppResult<String> {
     caps::require(&path, Capability::Create)?;
     let (provider, resolved) = vfs::resolve(&path)?;
     provider
         .create_dir_all(Path::new(&resolved))
-        .map_err(|e| e.to_string())?;
+        .map_err(AppError::from)?;
     Ok(path)
 }
 
@@ -36,7 +37,7 @@ pub fn make_dir(path: String) -> Result<String, String> {
 /// returning `Ok(false)` signals the name conflict to the frontend.
 /// `Ok(true)` = written, `Err` = a real I/O error.
 #[tauri::command]
-pub fn write_text_file(path: String, contents: String, overwrite: bool) -> Result<bool, String> {
+pub fn write_text_file(path: String, contents: String, overwrite: bool) -> AppResult<bool> {
     caps::require(&path, Capability::Create)?;
     let (provider, resolved) = vfs::resolve(&path)?;
     let p = Path::new(&resolved);
@@ -45,26 +46,26 @@ pub fn write_text_file(path: String, contents: String, overwrite: bool) -> Resul
     }
     provider
         .write(p, contents.as_bytes())
-        .map_err(|e| e.to_string())?;
+        .map_err(AppError::from)?;
     Ok(true)
 }
 
 /// Renames an entry (file or folder) within the same folder.
 /// Refuses to overwrite an already existing target name.
 #[tauri::command]
-pub fn rename_entry(from: String, to: String) -> Result<(), String> {
+pub fn rename_entry(from: String, to: String) -> AppResult<()> {
     caps::require_pair(&from, Capability::Move, &to, Capability::CopyTo)?;
     let (provider, from_r) = vfs::resolve(&from)?;
     let (_, to_r) = vfs::resolve(&to)?;
     let from_p = Path::new(&from_r);
     let to_p = Path::new(&to_r);
     if !provider.exists(from_p) {
-        return Err("Quelle existiert nicht".into());
+        return Err(AppError::from("Quelle existiert nicht"));
     }
     if provider.exists(to_p) {
-        return Err("Zielname existiert bereits".into());
+        return Err(AppError::from("Zielname existiert bereits"));
     }
-    provider.rename(from_p, to_p).map_err(|e| e.to_string())
+    provider.rename(from_p, to_p).map_err(AppError::from)
 }
 
 /// Distinguishes the temporary names a batch rename uses within one
@@ -94,7 +95,7 @@ pub fn rename_batch(dir: String, renames: Vec<(String, String)>) -> OpResult {
     if let Err(e) = caps::require(&dir, Capability::Move) {
         return OpResult {
             ok: 0,
-            errors: vec![e],
+            errors: vec![ItemError::new(&dir, e)],
         };
     }
     let (provider, base_str) = match vfs::resolve(&dir) {
@@ -102,12 +103,12 @@ pub fn rename_batch(dir: String, renames: Vec<(String, String)>) -> OpResult {
         Err(e) => {
             return OpResult {
                 ok: 0,
-                errors: vec![e],
+                errors: vec![ItemError::new(&dir, e)],
             }
         }
     };
     let base = Path::new(&base_str);
-    let mut errors: Vec<String> = Vec::new();
+    let mut errors: Vec<ItemError> = Vec::new();
 
     // Source names (for the check "the target is itself being renamed").
     let sources: HashSet<&str> = renames.iter().map(|(f, _)| f.as_str()).collect();
@@ -124,20 +125,29 @@ pub fn rename_batch(dir: String, renames: Vec<(String, String)>) -> OpResult {
             continue; // nichts zu tun
         }
         if to.is_empty() || to.contains('/') || to.contains('\\') {
-            errors.push(format!("{}: ungültiger Zielname", from));
+            errors.push(ItemError::new(
+                from,
+                AppError::new(code::FS_INVALID_NAME).with("name", to),
+            ));
             continue;
         }
         if target_count.get(to.as_str()).copied().unwrap_or(0) > 1 {
-            errors.push(format!("{} → {}: Zielname mehrfach vergeben", from, to));
+            errors.push(ItemError::new(
+                from,
+                AppError::new(code::VALIDATION_BAD_INPUT).with("name", to),
+            ));
             continue;
         }
         if !provider.exists(&base.join(from)) {
-            errors.push(format!("{}: Quelle nicht gefunden", from));
+            errors.push(ItemError::new(from, AppError::new(code::FS_NOT_FOUND)));
             continue;
         }
         // Foreign collision: the target exists and is not itself being renamed.
         if provider.exists(&base.join(to)) && !sources.contains(to.as_str()) {
-            errors.push(format!("{} → {}: Ziel existiert bereits", from, to));
+            errors.push(ItemError::new(
+                from,
+                AppError::new(code::FS_EXISTS).with("name", to),
+            ));
             continue;
         }
         valid.push((from.as_str(), to.as_str()));
@@ -149,7 +159,7 @@ pub fn rename_batch(dir: String, renames: Vec<(String, String)>) -> OpResult {
         let tmp = unique_temp(&*provider, base);
         match provider.rename(&base.join(from), &tmp) {
             Ok(_) => staged.push((tmp, to, from)),
-            Err(e) => errors.push(format!("{}: {}", from, e)),
+            Err(e) => errors.push(ItemError::new(*from, e.into())),
         }
     }
 
@@ -161,7 +171,7 @@ pub fn rename_batch(dir: String, renames: Vec<(String, String)>) -> OpResult {
             Err(e) => {
                 // Rename back so no temporary name is left behind.
                 let _ = provider.rename(&tmp, &base.join(from));
-                errors.push(format!("{} → {}: {}", from, to, e));
+                errors.push(ItemError::new(from, AppError::from(e).with("name", to)));
             }
         }
     }
@@ -254,12 +264,12 @@ pub fn trash_entries(paths: Vec<String>) -> OpResult {
         // never reach `trash::delete`, which would read it as a
         // relative path in the working directory (TICKET-031).
         if let Err(e) = caps::require(p, Capability::Trash) {
-            errors.push(format!("{}: {}", p, e));
+            errors.push(ItemError::new(p, e));
             continue;
         }
         match trash::delete(p) {
             Ok(_) => ok += 1,
-            Err(e) => errors.push(format!("{}: {}", p, e)),
+            Err(e) => errors.push(ItemError::new(p, e.into())),
         }
     }
     OpResult { ok, errors }
@@ -277,11 +287,11 @@ pub fn delete_entries(paths: Vec<String>) -> OpResult {
             .and_then(|(provider, resolved)| {
                 provider
                     .remove(Path::new(&resolved))
-                    .map_err(|e| e.to_string())
+                    .map_err(AppError::from)
             });
         match res {
             Ok(_) => ok += 1,
-            Err(e) => errors.push(format!("{}: {}", p, e)),
+            Err(e) => errors.push(ItemError::new(p, e)),
         }
     }
     OpResult { ok, errors }

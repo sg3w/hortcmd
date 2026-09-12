@@ -10,6 +10,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
+  AppError,
   ConnectionStatus,
   ConnectOutcome,
   FailureKind,
@@ -50,6 +51,21 @@ vi.mock("@/ipc/client", () => ({
 }));
 
 let listed: ConnectionStatus[] = [];
+
+/** A backend error with this code, for the fixtures below. */
+function appError(code: string, detail = ""): AppError {
+  return {
+    version: 1,
+    code,
+    params: {},
+    op: null,
+    provider: null,
+    retryable: false,
+    action: null,
+    detail: detail || null,
+    id: "e-test",
+  };
+}
 
 function status(
   over: Partial<ConnectionStatus> & { phase: Phase },
@@ -116,7 +132,7 @@ describe("what a row offers per phase", () => {
     const r = rowControls(
       status({
         phase: "failed",
-        error: { kind: "timeout", message: "keine Antwort" },
+        error: { kind: "timeout", error: appError("net.timeout", "keine Antwort") },
       }),
     );
     expect(r.action).toBe("connect");
@@ -147,6 +163,17 @@ describe("what a row offers per phase", () => {
 });
 
 describe("typed failures", () => {
+  /** The code the backend attaches for each lifecycle kind. */
+  const KIND_CODE: Record<FailureKind, string> = {
+    timeout: "net.timeout",
+    cancelled: "cancelled",
+    auth: "net.auth",
+    hostKey: "security.hostKeyUnknown",
+    unreachable: "net.unreachable",
+    protocol: "net.protocol",
+    keychain: "cred.store",
+  };
+
   const kinds: FailureKind[] = [
     "timeout",
     "cancelled",
@@ -160,7 +187,9 @@ describe("typed failures", () => {
   it("reads every kind in German and English", () => {
     for (const lang of ["de", "en"] as const) {
       useSettings.setState({ language: lang });
-      const texts = kinds.map((kind) => describeFailure({ kind, message: "" }));
+      const texts = kinds.map((kind) =>
+        describeFailure({ kind, error: appError(KIND_CODE[kind]) }),
+      );
       for (const [i, text] of texts.entries()) {
         expect(text, `${lang}/${kinds[i]}`).toBeTruthy();
         // A missing translation would surface as the bare key.
@@ -172,26 +201,45 @@ describe("typed failures", () => {
     }
     // …and the two languages really differ.
     useSettings.setState({ language: "de" });
-    const de = describeFailure({ kind: "timeout", message: "" });
+    const de = describeFailure({ kind: "timeout", error: appError("net.timeout", "") });
     useSettings.setState({ language: "en" });
-    expect(describeFailure({ kind: "timeout", message: "" })).not.toBe(de);
+    expect(describeFailure({ kind: "timeout", error: appError("net.timeout", "") })).not.toBe(de);
   });
 
-  it("keeps the server's own words as a detail", () => {
-    const text = describeFailure({ kind: "auth", message: "530 Login incorrect" });
+  it("does not put the server's own words in front of the user", () => {
+    // TICKET-036: `detail` is diagnostics. Showing it would leak a
+    // server's wording — and its language — into a localized dialog.
+    const text = describeFailure({
+      kind: "auth",
+      error: appError("net.auth", "530 Login incorrect"),
+    });
     expect(text).toContain(translate("net.fail.auth"));
-    expect(text).toContain("530 Login incorrect");
+    expect(text).not.toContain("530 Login incorrect");
   });
 
-  it("recognizes the marker on a thrown error", () => {
-    expect(failureKindOf("CONN_TIMEOUT: zu langsam")).toBe("timeout");
-    expect(failureKindOf("CONN_UNREACHABLE: weg")).toBe("unreachable");
-    expect(describeConnError("CONN_AUTH: 530")).toContain(
+  it("reads the kind from the error's code", () => {
+    // TICKET-036: the markers this used to search for in message text
+    // are gone — the code says what happened.
+    expect(failureKindOf(appError("net.timeout"))).toBe("timeout");
+    expect(failureKindOf(appError("net.unreachable"))).toBe("unreachable");
+    expect(failureKindOf(appError("security.hostKeyMismatch"))).toBe("hostKey");
+    expect(describeConnError(appError("net.auth"))).toContain(
       translate("net.fail.auth"),
     );
   });
 
-  it("passes an untagged error through unchanged", () => {
+  it("renders a code this build does not know, with its reference", () => {
+    // A newer backend must degrade rather than show nothing.
+    const newer = { ...appError("net.somethingAddedLater"), id: "e-newer" };
+    expect(failureKindOf(newer)).toBeNull();
+    const text = describeConnError(newer);
+    expect(text).toContain("net.somethingAddedLater");
+    expect(text).toContain("e-newer");
+  });
+
+  it("passes a non-backend error through unchanged", () => {
+    // A transport failure is not an `AppError` and must not be dressed
+    // up as one.
     expect(failureKindOf("Profil p1 nicht gefunden")).toBeNull();
     expect(describeConnError("Profil p1 nicht gefunden")).toBe(
       "Profil p1 nicht gefunden",
@@ -219,10 +267,21 @@ describe("the store's connect path", () => {
   });
 
   it("reports a typed failure in the user's language", async () => {
-    connectOutcome = () =>
-      Promise.reject(new Error("CONN_UNREACHABLE: host weg"));
+    connectOutcome = () => Promise.reject(appError("net.unreachable"));
     expect(await useNet.getState().connect("p1")).toBeNull();
     expect(useNet.getState().error).toContain(translate("net.fail.unreachable"));
+  });
+
+  it("re-renders a reported failure after a language switch", async () => {
+    // Nothing display-ready was stored, so the same error reads
+    // differently once the setting changes.
+    connectOutcome = () => Promise.reject(appError("net.unreachable"));
+    useSettings.setState({ language: "de" });
+    await useNet.getState().connect("p1");
+    const de = useNet.getState().error;
+    useSettings.setState({ language: "en" });
+    await useNet.getState().connect("p1");
+    expect(useNet.getState().error).not.toBe(de);
   });
 
   it("cancels the attempt the backend reported, and only that one", async () => {
@@ -247,7 +306,7 @@ describe("the store's connect path", () => {
     useNet.getState().applyStates([
       status({
         phase: "failed",
-        error: { kind: "protocol", message: "Verbindung zum Server verloren" },
+        error: { kind: "protocol", error: appError("net.protocol", "Verbindung zum Server verloren") },
       }),
     ]);
     const [now] = useNet.getState().connections;

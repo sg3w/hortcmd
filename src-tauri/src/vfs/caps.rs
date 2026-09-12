@@ -25,13 +25,15 @@
 // ============================================================
 
 use super::{parse_address, Address, Scheme};
+use crate::errors::{code, AppError, AppResult, ErrorAction};
 use serde::Serialize;
 use ts_rs::TS;
 
-/// Marker every "this location cannot do that" error carries, so the
-/// frontend recognizes the refusal without parsing prose (same pattern
-/// as the KeePass `LOCKED` marker in `net::credentials`).
-pub const UNSUPPORTED: &str = "UNSUPPORTED_LOCATION";
+/// The code a refusal carries. Since ticket 036 this is a real error
+/// code rather than a marker embedded in a sentence, so the frontend
+/// branches on it and renders the wording itself.
+#[allow(unused_imports)] // the name other modules and tests use
+pub use crate::errors::code::CAPABILITY_UNSUPPORTED as UNSUPPORTED;
 
 /// A single operation a location may or may not support. The
 /// identifiers are stable, UI-independent, and deliberately finer than
@@ -275,7 +277,7 @@ fn remote_core_caps() -> Vec<Capability> {
 /// whether it carries an SSH connection — so "SFTP offers a shell,
 /// FTP/SMB/WebDAV do not" is read off the provider rather than matched
 /// against a scheme name.
-pub fn for_parsed(addr: &Address) -> Result<LocationCapabilities, String> {
+pub fn for_parsed(addr: &Address) -> AppResult<LocationCapabilities> {
     if addr.scheme == Scheme::Local {
         return Ok(LocationCapabilities {
             scheme: Scheme::Local.as_str().to_string(),
@@ -286,9 +288,11 @@ pub fn for_parsed(addr: &Address) -> Result<LocationCapabilities, String> {
     }
 
     let scheme = addr.scheme.as_str().to_string();
-    let key = addr
-        .connection_key()
-        .ok_or_else(|| format!("{}-Adresse ohne Host", scheme.to_uppercase()))?;
+    let key = addr.connection_key().ok_or_else(|| {
+        AppError::new(code::VALIDATION_BAD_ADDRESS)
+            .with("scheme", scheme.to_uppercase())
+            .action(ErrorAction::Report)
+    })?;
     let store_id = format!("{}:{}", scheme, key);
 
     let Ok(provider) = crate::net::session::remote_provider(&scheme, &key) else {
@@ -317,13 +321,13 @@ pub fn for_parsed(addr: &Address) -> Result<LocationCapabilities, String> {
 /// Capabilities of a raw address string. Resolves through the same
 /// parser and session registry as every file-system command, so the
 /// answer describes the location the commands would actually act on.
-pub fn for_address(raw: &str) -> Result<LocationCapabilities, String> {
+pub fn for_address(raw: &str) -> AppResult<LocationCapabilities> {
     for_parsed(&parse_address(raw)?)
 }
 
 /// Typed capability query for the frontend.
 #[tauri::command]
-pub fn location_capabilities(address: String) -> Result<LocationCapabilities, String> {
+pub fn location_capabilities(address: String) -> AppResult<LocationCapabilities> {
     for_address(&address)
 }
 
@@ -335,7 +339,7 @@ pub fn location_capabilities(address: String) -> Result<LocationCapabilities, St
 /// offers a disabled action, or a direct IPC call, is stopped here and
 /// never reaches an API that would read `sftp://host/x` as a relative
 /// local path.
-pub fn require(raw: &str, cap: Capability) -> Result<(), String> {
+pub fn require(raw: &str, cap: Capability) -> AppResult<()> {
     let caps = for_address(raw)?;
     if caps.has(cap) {
         return Ok(());
@@ -351,26 +355,28 @@ pub fn require_pair(
     from_cap: Capability,
     to: &str,
     to_cap: Capability,
-) -> Result<(), String> {
+) -> AppResult<()> {
     require(from, from_cap)?;
     require(to, to_cap)
 }
 
-fn unsupported(raw: &str, cap: Capability, caps: &LocationCapabilities) -> String {
+/// The typed refusal. Which of the two codes applies is a real
+/// distinction: a location that supports nothing has lost its
+/// connection and can be reconnected; one that supports other things
+/// simply does not implement this operation.
+fn unsupported(raw: &str, cap: Capability, caps: &LocationCapabilities) -> AppError {
     if !caps.connected {
-        return format!(
-            "{}: {} — keine aktive Verbindung für {}",
-            UNSUPPORTED,
-            cap.id(),
-            raw
-        );
+        return AppError::new(code::CAPABILITY_OFFLINE)
+            .with("address", raw)
+            .with("capability", cap.id())
+            .provider(&caps.scheme)
+            .action(ErrorAction::Reconnect);
     }
-    format!(
-        "{}: {} — {} unterstützt diese Aktion nicht",
-        UNSUPPORTED,
-        cap.id(),
-        caps.scheme.to_uppercase()
-    )
+    AppError::new(code::CAPABILITY_UNSUPPORTED)
+        .with("capability", cap.id())
+        .with("scheme", caps.scheme.to_uppercase())
+        .provider(&caps.scheme)
+        .action(ErrorAction::Unsupported)
 }
 
 #[cfg(test)]
@@ -518,8 +524,14 @@ mod tests {
     #[test]
     fn require_refuses_a_remote_local_only_action() {
         let err = require("sftp://u@host/srv", Capability::Trash).unwrap_err();
-        assert!(err.starts_with(UNSUPPORTED), "marker missing in {}", err);
-        assert!(err.contains("trash"), "capability id missing in {}", err);
+        // Nothing is connected in the unit-test process, so the refusal
+        // is the *offline* one — the distinction matters: it can be
+        // reconnected, an unsupported capability cannot.
+        assert!(err.is(code::CAPABILITY_OFFLINE), "{:?}", err);
+        assert_eq!(
+            err.params.get("capability").map(String::as_str),
+            Some("trash")
+        );
     }
 
     #[test]
@@ -532,7 +544,7 @@ mod tests {
             Capability::ArchivePackTo,
         )
         .unwrap_err();
-        assert!(err.starts_with(UNSUPPORTED));
+        assert!(err.is(code::CAPABILITY_OFFLINE), "{:?}", err);
         // Destination fine, source remote → refused as well.
         let err = require_pair(
             "sftp://u@host/src",
@@ -541,7 +553,7 @@ mod tests {
             Capability::ArchivePackTo,
         )
         .unwrap_err();
-        assert!(err.starts_with(UNSUPPORTED));
+        assert!(err.is(code::CAPABILITY_OFFLINE), "{:?}", err);
         // Both local → allowed.
         assert!(require_pair(
             "/tmp/src",

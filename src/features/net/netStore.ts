@@ -22,6 +22,8 @@ import type {
   Profile,
 } from "@/ipc/bindings";
 import { describeConnError } from "./connFailure";
+import { isError } from "@/lib/appError";
+import { describeErrorFull } from "@/store/errorText";
 import { useCaps } from "@/store/capsStore";
 import { usePanes } from "@/store/panesStore";
 import {
@@ -40,8 +42,13 @@ import {
   netTrustHostKey,
 } from "@/ipc/client";
 
-/** Marker the backend puts on every "KeePass file is locked" error. */
-const LOCKED = "KEEPASS_LOCKED";
+/**
+ * "The KeePass file is locked" — a question, not a failure: the action
+ * is parked behind the unlock prompt and replayed once the master
+ * password arrives. Recognized by its code since TICKET-036; it used to
+ * be a marker searched for inside a sentence.
+ */
+const LOCKED = "cred.locked";
 
 /** Swaps one profile's status into the list (or appends it). */
 function replaceStatus(
@@ -65,7 +72,7 @@ function liveSignature(connections: ConnectionStatus[]): string {
 }
 
 function isLocked(e: unknown): boolean {
-  return String(e).includes(LOCKED);
+  return isError(e, LOCKED);
 }
 
 /** Which panel the manager shows; the edit form rides on `editing`. */
@@ -159,7 +166,7 @@ export const useNet = create<NetState>((set, get) => ({
       }
       set({ profiles, connections, error: null });
     } catch (e) {
-      set({ error: String(e) });
+      set({ error: describeErrorFull(e) });
     }
   },
 
@@ -262,7 +269,7 @@ export const useNet = create<NetState>((set, get) => ({
     } catch (e) {
       // Cancelling is idempotent in the backend, so a failure here means
       // the IPC itself broke — worth showing, never worth blocking on.
-      set({ error: String(e) });
+      set({ error: describeErrorFull(e) });
     }
   },
 
@@ -282,7 +289,7 @@ export const useNet = create<NetState>((set, get) => ({
       // rather than stay hidden behind a dead session (TICKET-059).
       usePanes.getState().clearCompareFilter();
     } catch (e) {
-      set({ error: String(e) });
+      set({ error: describeErrorFull(e) });
     }
   },
 
@@ -294,7 +301,7 @@ export const useNet = create<NetState>((set, get) => ({
     try {
       set({ cred: await netCredStatus() });
     } catch (e) {
-      set({ error: String(e) });
+      set({ error: describeErrorFull(e) });
     }
   },
 
@@ -303,7 +310,7 @@ export const useNet = create<NetState>((set, get) => ({
       set({ cred: await netCredSetBackend(config), error: null });
       return true;
     } catch (e) {
-      set({ error: String(e) });
+      set({ error: describeErrorFull(e) });
       return false;
     }
   },
@@ -313,7 +320,7 @@ export const useNet = create<NetState>((set, get) => ({
     try {
       cred = await netCredUnlock(password, remember, create);
     } catch (e) {
-      set({ error: String(e) });
+      set({ error: describeErrorFull(e) });
       return;
     }
     // Replay what the lock interrupted. It may park itself again — a
@@ -327,7 +334,7 @@ export const useNet = create<NetState>((set, get) => ({
     try {
       set({ cred: await netCredLock(), error: null });
     } catch (e) {
-      set({ error: String(e) });
+      set({ error: describeErrorFull(e) });
     }
   },
 
@@ -347,7 +354,7 @@ export const useNet = create<NetState>((set, get) => ({
       await get().refresh();
       return outcome.data.address;
     } catch (e) {
-      set({ error: String(e), hostKey: null, hostKeyProfile: null, panel: "list" });
+      set({ error: describeErrorFull(e), hostKey: null, hostKeyProfile: null, panel: "list" });
       return null;
     }
   },
@@ -364,7 +371,7 @@ export const useNet = create<NetState>((set, get) => ({
     try {
       set({ forgot: await netForgetHostKey(profile.id), error: null });
     } catch (e) {
-      set({ error: String(e), forgetting: null, panel: "list" });
+      set({ error: describeErrorFull(e), forgetting: null, panel: "list" });
     }
   },
 }));
@@ -383,7 +390,7 @@ async function park(
     await run();
   } catch (e) {
     if (!isLocked(e)) {
-      set({ error: String(e) });
+      set({ error: describeErrorFull(e) });
       return;
     }
     set({ managerOpen: true, panel: "unlock", pending: run, error: null });

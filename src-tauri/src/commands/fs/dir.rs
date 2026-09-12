@@ -2,6 +2,7 @@
 // Read directories, drives/mount points, home directory.
 // ============================================================
 
+use crate::errors::AppResult;
 use crate::vfs;
 use serde::Serialize;
 use std::path::Path;
@@ -54,7 +55,7 @@ pub struct Drive {
 /// the VFS registry, so the command works schema-agnostically; the
 /// `local` provider handles ordinary file-system paths unchanged.
 #[tauri::command]
-pub fn list_dir(path: String) -> Result<DirListing, String> {
+pub fn list_dir(path: String) -> AppResult<DirListing> {
     let (provider, resolved) = vfs::resolve(&path)?;
     provider.list(&resolved)
 }

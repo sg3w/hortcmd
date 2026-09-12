@@ -19,6 +19,7 @@
 // ============================================================
 
 import type { LevelDiff, LevelEntry } from "@/ipc/bindings";
+import { describeError } from "@/store/errorText";
 import { compareLevels } from "@/ipc/client";
 import {
   locationOf,
@@ -109,7 +110,7 @@ export async function runCompare(mode: Mode): Promise<void> {
   try {
     diffs = await compareLevels(levelOf("left"), levelOf("right"));
   } catch (e) {
-    notify(usePanes.getState().active, "cmp.error", { err: String(e) }, "error");
+    notify(usePanes.getState().active, "cmp.error", { err: describeError(e) }, "error");
     return;
   } finally {
     running = false;

@@ -5,7 +5,7 @@
 // ============================================================
 
 import { create } from "zustand";
-import type { OpDone, OpProgress } from "@/ipc/bindings";
+import type { ItemError, OpDone, OpProgress } from "@/ipc/bindings";
 
 export type TransferOp = "copy" | "move" | "extract" | "pack";
 
@@ -26,7 +26,8 @@ export interface Transfer {
   paused: boolean;
   /** Waiting in the copy queue to start (not running yet). */
   queued: boolean;
-  errors: string[];
+  /** Per-item failures, typed (TICKET-036). */
+  errors: ItemError[];
 }
 
 interface TransfersStore {

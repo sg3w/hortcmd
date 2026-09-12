@@ -16,6 +16,7 @@
 
 import { chrome } from "./namespaces/chrome";
 import { compare } from "./namespaces/compare";
+import { errors } from "./namespaces/errors";
 import { exporting } from "./namespaces/exporting";
 import { net } from "./namespaces/net";
 import { operations } from "./namespaces/operations";
@@ -30,6 +31,7 @@ export type Lang = "de" | "en";
 /** Every namespace, in the order they are merged. */
 const NAMESPACES = [
   chrome,
+  errors,
   operations,
   net,
   search,
@@ -44,6 +46,7 @@ const NAMESPACES = [
 export const DICT = {
   de: {
     ...chrome.de,
+    ...errors.de,
     ...operations.de,
     ...net.de,
     ...search.de,
@@ -56,6 +59,7 @@ export const DICT = {
   },
   en: {
     ...chrome.en,
+    ...errors.en,
     ...operations.en,
     ...net.en,
     ...search.en,

@@ -11,6 +11,7 @@
 // ============================================================
 
 use super::cancel;
+use crate::errors::{AppError, AppResult};
 use crate::vfs::caps::{self, Capability};
 use serde::Serialize;
 use std::fs;
@@ -143,7 +144,7 @@ pub async fn dir_size(
     path: String,
     token: String,
     on_progress: Channel<DirSizeStats>,
-) -> Result<DirSize, String> {
+) -> AppResult<DirSize> {
     // Same local traversal as the search (TICKET-031).
     caps::require(&path, Capability::RecursiveSize)?;
     let root = PathBuf::from(&path);
@@ -152,9 +153,9 @@ pub async fn dir_size(
     let result = if root.is_dir() {
         tauri::async_runtime::spawn_blocking(move || walk_size(root, &flag, &on_progress))
             .await
-            .map_err(|e| e.to_string())
+            .map_err(AppError::from)
     } else {
-        Err(format!("{}: kein Verzeichnis", path))
+        Err(AppError::from(format!("{}: kein Verzeichnis", path)))
     };
     cancel::unregister(KIND, &token);
     result

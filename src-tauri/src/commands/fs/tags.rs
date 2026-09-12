@@ -8,6 +8,7 @@
 // clear error.
 // ============================================================
 
+use crate::errors::AppResult;
 use crate::vfs::caps::{self, Capability};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -26,7 +27,7 @@ const TAGS_ATTR: &str = "com.apple.metadata:_kMDItemUserTags";
 
 /// Reads the Finder tags of an entry.
 #[tauri::command]
-pub fn get_tags(path: String) -> Result<Vec<Tag>, String> {
+pub fn get_tags(path: String) -> AppResult<Vec<Tag>> {
     // Finder tags are a macOS extended attribute of a local file
     // (TICKET-031) — the capability already carries the platform gate.
     caps::require(&path, Capability::FinderTags)?;
@@ -43,7 +44,7 @@ pub fn get_tags(path: String) -> Result<Vec<Tag>, String> {
 
 /// Writes the Finder tags of an entry (an empty list removes the attribute).
 #[tauri::command]
-pub fn set_tags(path: String, tags: Vec<Tag>) -> Result<(), String> {
+pub fn set_tags(path: String, tags: Vec<Tag>) -> AppResult<()> {
     caps::require(&path, Capability::FinderTags)?;
     #[cfg(target_os = "macos")]
     {
@@ -52,13 +53,14 @@ pub fn set_tags(path: String, tags: Vec<Tag>) -> Result<(), String> {
     #[cfg(not(target_os = "macos"))]
     {
         let _ = (path, tags);
-        Err("Finder-Tags gibt es nur unter macOS".into())
+        Err(AppError::from("Finder-Tags gibt es nur unter macOS"))
     }
 }
 
 #[cfg(target_os = "macos")]
 mod macos {
     use super::{Tag, TAGS_ATTR};
+    use crate::errors::{AppError, AppResult};
     use plist::Value;
     use std::io::Cursor;
 
@@ -83,12 +85,12 @@ mod macos {
         }
     }
 
-    pub fn read_tags(path: &str) -> Result<Vec<Tag>, String> {
-        let raw = match xattr::get(path, TAGS_ATTR).map_err(|e| e.to_string())? {
+    pub fn read_tags(path: &str) -> AppResult<Vec<Tag>> {
+        let raw = match xattr::get(path, TAGS_ATTR).map_err(AppError::from)? {
             Some(bytes) if !bytes.is_empty() => bytes,
             _ => return Ok(Vec::new()),
         };
-        let value = Value::from_reader(Cursor::new(raw)).map_err(|e| e.to_string())?;
+        let value = Value::from_reader(Cursor::new(raw)).map_err(AppError::from)?;
         let arr = value.as_array().ok_or("Tag-Attribut ist kein Array")?;
         Ok(arr
             .iter()
@@ -98,21 +100,21 @@ mod macos {
             .collect())
     }
 
-    pub fn write_tags(path: &str, tags: &[Tag]) -> Result<(), String> {
+    pub fn write_tags(path: &str, tags: &[Tag]) -> AppResult<()> {
         if tags.is_empty() {
             // Remove the attribute; "not present" is not an error.
             return match xattr::remove(path, TAGS_ATTR) {
                 Ok(_) => Ok(()),
                 Err(e) if e.raw_os_error() == Some(libc_enoattr()) => Ok(()),
-                Err(e) => Err(e.to_string()),
+                Err(e) => Err(AppError::from(e.to_string())),
             };
         }
         let arr: Vec<Value> = tags.iter().map(|t| Value::String(encode_tag(t))).collect();
         let mut buf = Vec::new();
         Value::Array(arr)
             .to_writer_binary(&mut buf)
-            .map_err(|e| e.to_string())?;
-        xattr::set(path, TAGS_ATTR, &buf).map_err(|e| e.to_string())
+            .map_err(AppError::from)?;
+        xattr::set(path, TAGS_ATTR, &buf).map_err(AppError::from)
     }
 
     /// ENOATTR is 93 on macOS (no direct std constant access without libc).

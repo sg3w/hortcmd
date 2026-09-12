@@ -13,6 +13,7 @@
 
 use super::{Provider, Stat};
 use crate::commands::fs::dir::{DirEntry, DirListing};
+use crate::errors::{AppError, AppResult};
 use crate::net::hostkey::ConnectError;
 use crate::net::session::runtime;
 use crate::net::ssh::SshSession;
@@ -54,10 +55,10 @@ async fn connect_async(
     channel
         .request_subsystem(true, "sftp")
         .await
-        .map_err(|e| format!("SFTP-Subsystem fehlgeschlagen: {}", e))?;
+        .map_err(|e| AppError::from(format!("SFTP-Subsystem fehlgeschlagen: {}", e)))?;
     let sftp = SftpSession::new(channel.into_stream())
         .await
-        .map_err(|e| format!("SFTP-Sitzung fehlgeschlagen: {}", e))?;
+        .map_err(|e| AppError::from(format!("SFTP-Sitzung fehlgeschlagen: {}", e)))?;
 
     Ok(SftpConnection {
         sftp,
@@ -119,10 +120,10 @@ impl Provider for SftpProvider {
         !self.conn.ssh.is_closed()
     }
 
-    fn list(&self, path: &str) -> Result<DirListing, String> {
+    fn list(&self, path: &str) -> AppResult<DirListing> {
         let dir = runtime()
             .block_on(self.sftp().read_dir(path))
-            .map_err(|e| format!("{}: {}", path, e))?;
+            .map_err(|e| AppError::from(format!("{}: {}", path, e)))?;
 
         let mut entries = Vec::new();
         for item in dir {

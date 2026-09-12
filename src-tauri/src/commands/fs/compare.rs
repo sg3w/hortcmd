@@ -6,7 +6,9 @@
 // by the backend (target folders are created as needed).
 // ============================================================
 
+use super::transfer::events::ItemError;
 use super::transfer::OpResult;
+use crate::errors::{AppError, AppResult};
 use crate::vfs::caps::{self, Capability};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -189,7 +191,7 @@ pub async fn compare_dirs(
     right: String,
     recursive: bool,
     on_batch: Channel<Vec<DiffEntry>>,
-) -> Result<bool, String> {
+) -> AppResult<bool> {
     // Both trees are walked with `std::fs`; each side is asked
     // separately, so a local left pane never licenses a remote right
     // one (TICKET-031).
@@ -202,17 +204,17 @@ pub async fn compare_dirs(
     let lp = PathBuf::from(&left);
     let rp = PathBuf::from(&right);
     if !lp.is_dir() {
-        return Err(format!("{}: kein Verzeichnis", left));
+        return Err(AppError::from(format!("{}: kein Verzeichnis", left)));
     }
     if !rp.is_dir() {
-        return Err(format!("{}: kein Verzeichnis", right));
+        return Err(AppError::from(format!("{}: kein Verzeichnis", right)));
     }
     tauri::async_runtime::spawn_blocking(move || {
         let mut count = 0usize;
         walk_compare(&lp, &rp, "", recursive, &on_batch, &mut count)
     })
     .await
-    .map_err(|e| e.to_string())
+    .map_err(AppError::from)
 }
 
 /// Copies files from source → target (blocking).
@@ -226,19 +228,19 @@ fn sync_copy_impl(items: Vec<(String, String)>) -> OpResult {
         if let Err(e) =
             caps::require_pair(src, Capability::CompareDirs, dst, Capability::CompareDirs)
         {
-            errors.push(format!("{} → {}: {}", src, dst, e));
+            errors.push(ItemError::new(src, e.with("name", dst)));
             continue;
         }
         let dpath = Path::new(dst);
         if let Some(parent) = dpath.parent() {
             if let Err(e) = fs::create_dir_all(parent) {
-                errors.push(format!("{}: {}", dst, e));
+                errors.push(ItemError::new(dst, e.into()));
                 continue;
             }
         }
         match fs::copy(src, dst) {
             Ok(_) => ok += 1,
-            Err(e) => errors.push(format!("{} → {}: {}", src, dst, e)),
+            Err(e) => errors.push(ItemError::new(src, AppError::from(e).with("name", dst))),
         }
     }
     OpResult { ok, errors }
@@ -253,7 +255,7 @@ pub async fn sync_copy(items: Vec<(String, String)>) -> OpResult {
         Ok(res) => res,
         Err(e) => OpResult {
             ok: 0,
-            errors: vec![e.to_string()],
+            errors: vec![ItemError::new("", AppError::from(e.to_string()))],
         },
     }
 }

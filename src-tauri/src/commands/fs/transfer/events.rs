@@ -7,6 +7,7 @@
 // their own and nothing else in the engine defines a wire type.
 // ============================================================
 
+use crate::errors::AppError;
 use serde::Serialize;
 use ts_rs::TS;
 
@@ -43,7 +44,11 @@ pub struct OpDone {
     pub id: String,
     pub op: String,
     pub ok: u32,
-    pub errors: Vec<String>,
+    /// What failed, per item (ticket 036). A batch keeps both halves:
+    /// `ok` says how much succeeded, and each entry names the item it
+    /// belongs to — a flat list of sentences loses the first and makes
+    /// the second guesswork.
+    pub errors: Vec<ItemError>,
     pub cancelled: bool,
     /// Which transfer safety policy actually ran: `"safe"` (staged and
     /// committed) or `"direct"` (written straight to the final name).
@@ -83,5 +88,24 @@ pub struct CollisionReq {
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct OpResult {
     pub ok: u32,
-    pub errors: Vec<String>,
+    /// Per-item failures; `ok` is the count that succeeded anyway.
+    pub errors: Vec<ItemError>,
+}
+
+/// One item of a batch that failed, and why (ticket 036).
+#[derive(Serialize, Clone, Debug, TS)]
+#[ts(export, export_to = "../../src/ipc/bindings/")]
+pub struct ItemError {
+    /// The entry this is about — a path, or an archive member.
+    pub item: String,
+    pub error: AppError,
+}
+
+impl ItemError {
+    pub fn new(item: impl Into<String>, error: AppError) -> Self {
+        ItemError {
+            item: item.into(),
+            error,
+        }
+    }
 }

@@ -91,6 +91,8 @@ jobs:
         run: npm run check:rust
       - name: Generated bindings are current
         run: npm run check:bindings
+      - name: Error codes mirror the backend
+        run: npm run check:errorcodes
       - name: Architecture boundaries
         run: npm run check:boundaries
       - name: TypeScript

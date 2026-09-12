@@ -14,6 +14,7 @@
 // cannot keep.
 // ============================================================
 
+use crate::errors::{code, AppError, AppResult, ErrorAction};
 use crate::vfs;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -54,25 +55,26 @@ pub struct SelectionFile {
 /// Everything that could widen that — separators, traversal, a
 /// provider address — is rejected instead of being sanitised, so a
 /// crafted file cannot smuggle another location past the caller.
-fn check_name(name: &str) -> Result<(), String> {
-    if name.is_empty() {
-        return Err("Leerer Eintragsname".into());
+fn check_name(name: &str) -> AppResult<()> {
+    // One code for every shape of an unusable entry name; the offending
+    // name travels as a parameter so the frontend can quote it.
+    let bad = |name: &str| {
+        Err(AppError::new(code::FS_INVALID_NAME)
+            .with("name", name)
+            .action(ErrorAction::Report))
+    };
+    if name.is_empty() || name == "." || name == ".." {
+        return bad(name);
     }
-    if name == "." || name == ".." {
-        return Err(format!("Unzulässiger Eintragsname: {}", name));
-    }
-    if name.contains('/') || name.contains('\\') {
-        return Err(format!("Eintragsname enthält Pfadtrenner: {}", name));
-    }
-    if name.contains("://") {
-        return Err(format!("Eintragsname ist eine Adresse: {}", name));
+    if name.contains('/') || name.contains('\\') || name.contains("://") {
+        return bad(name);
     }
     // NUL can never occur in a real file name and would truncate the
     // name for any C-level API behind a provider. Tabs and line breaks,
     // on the other hand, are legal on POSIX — carrying them losslessly
     // is exactly why this format is JSON and not one name per line.
     if name.contains('\0') {
-        return Err("Eintragsname enthält ein Nullzeichen".into());
+        return bad(name);
     }
     Ok(())
 }
@@ -80,22 +82,21 @@ fn check_name(name: &str) -> Result<(), String> {
 /// Validates a parsed document and folds duplicates together.
 /// Two entries count as duplicates when name *and* kind match; the
 /// same name with two different kinds is a contradiction and fails.
-fn normalize(file: SelectionFile) -> Result<SelectionFile, String> {
+fn normalize(file: SelectionFile) -> AppResult<SelectionFile> {
     if file.version != SELECTION_VERSION {
-        return Err(format!(
-            "Nicht unterstützte Version {} (erwartet {})",
-            file.version, SELECTION_VERSION
-        ));
+        return Err(AppError::new(code::VALIDATION_BAD_INPUT)
+            .with("found", file.version)
+            .with("expected", SELECTION_VERSION)
+            .action(ErrorAction::Report));
     }
     if file.location.trim().is_empty() {
-        return Err("Ort fehlt in der Auswahldatei".into());
+        return Err(AppError::new(code::VALIDATION_BAD_INPUT).action(ErrorAction::Report));
     }
     if file.entries.len() > MAX_ENTRIES {
-        return Err(format!(
-            "Zu viele Einträge: {} (Grenze {})",
-            file.entries.len(),
-            MAX_ENTRIES
-        ));
+        return Err(AppError::new(code::FS_TOO_LARGE)
+            .with("found", file.entries.len())
+            .with("limit", MAX_ENTRIES)
+            .action(ErrorAction::Report));
     }
     let mut seen: HashSet<String> = HashSet::new();
     let mut entries = Vec::with_capacity(file.entries.len());
@@ -108,7 +109,10 @@ fn normalize(file: SelectionFile) -> Result<SelectionFile, String> {
                 .iter()
                 .any(|k: &SelEntry| k.name == e.name && k.is_dir != e.is_dir)
             {
-                return Err(format!("Widersprüchlicher Eintrag: {}", e.name));
+                return Err(AppError::from(format!(
+                    "Widersprüchlicher Eintrag: {}",
+                    e.name
+                )));
             }
             continue;
         }
@@ -131,21 +135,19 @@ pub fn save_selection(
     location: String,
     entries: Vec<SelEntry>,
     overwrite: bool,
-) -> Result<bool, String> {
+) -> AppResult<bool> {
     let file = normalize(SelectionFile {
         version: SELECTION_VERSION,
         location,
         entries,
     })?;
-    let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
+    let json = serde_json::to_string_pretty(&file).map_err(AppError::from)?;
     let (provider, resolved) = vfs::resolve(&path)?;
     let p = Path::new(&resolved);
     if !overwrite && provider.exists(p) {
         return Ok(false);
     }
-    provider
-        .write(p, json.as_bytes())
-        .map_err(|e| e.to_string())?;
+    provider.write(p, json.as_bytes()).map_err(AppError::from)?;
     Ok(true)
 }
 
@@ -153,27 +155,38 @@ pub fn save_selection(
 /// parsing: the reader stops one byte past the limit, so a huge or
 /// endless stream cannot be pulled into memory.
 #[tauri::command]
-pub fn load_selection(path: String) -> Result<SelectionFile, String> {
+pub fn load_selection(path: String) -> AppResult<SelectionFile> {
     let (provider, resolved) = vfs::resolve(&path)?;
     let p = Path::new(&resolved);
     if let Ok(st) = provider.stat(p) {
         if st.len > MAX_BYTES {
-            return Err(format!("Datei ist größer als {} MiB", MAX_BYTES / 1048576));
+            return Err(AppError::new(code::FS_TOO_LARGE)
+                .with("limit", MAX_BYTES / 1048576)
+                .action(ErrorAction::Report));
         }
     }
     let mut buf = Vec::new();
     provider
         .open_read(p)
-        .map_err(|e| e.to_string())?
+        .map_err(AppError::from)?
         .take(MAX_BYTES + 1)
         .read_to_end(&mut buf)
-        .map_err(|e| e.to_string())?;
+        .map_err(AppError::from)?;
     if buf.len() as u64 > MAX_BYTES {
-        return Err(format!("Datei ist größer als {} MiB", MAX_BYTES / 1048576));
+        return Err(AppError::new(code::FS_TOO_LARGE)
+            .with("limit", MAX_BYTES / 1048576)
+            .action(ErrorAction::Report));
     }
-    let text = String::from_utf8(buf).map_err(|_| "Datei ist kein UTF-8".to_string())?;
-    let parsed: SelectionFile =
-        serde_json::from_str(&text).map_err(|e| format!("Ungültiges Format: {}", e))?;
+    let text = String::from_utf8(buf).map_err(|e| {
+        AppError::new(code::VALIDATION_BAD_INPUT)
+            .action(ErrorAction::Report)
+            .detail(e)
+    })?;
+    let parsed: SelectionFile = serde_json::from_str(&text).map_err(|e| {
+        AppError::new(code::VALIDATION_BAD_INPUT)
+            .action(ErrorAction::Report)
+            .detail(e)
+    })?;
     normalize(parsed)
 }
 
@@ -269,7 +282,7 @@ mod tests {
     fn wrong_version_is_rejected() {
         let mut f = file(vec![entry("a", false)]);
         f.version = 2;
-        assert!(normalize(f).unwrap_err().contains("Version"));
+        assert!(normalize(f).unwrap_err().is(code::VALIDATION_BAD_INPUT));
     }
 
     #[test]
@@ -284,7 +297,15 @@ mod tests {
             "sftp://h/x",
         ] {
             let err = normalize(file(vec![entry(bad, false)])).unwrap_err();
-            assert!(!err.is_empty(), "{} sollte abgelehnt werden", bad);
+            assert!(
+                err.is(code::FS_INVALID_NAME),
+                "{} sollte abgelehnt werden, war: {:?}",
+                bad,
+                err
+            );
+            // The offending name travels as a parameter, so the
+            // frontend can quote it in either language.
+            assert_eq!(err.params.get("name").map(String::as_str), Some(bad));
         }
     }
 
@@ -313,7 +334,7 @@ mod tests {
         let many = (0..=MAX_ENTRIES)
             .map(|i| entry(&format!("f{}", i), false))
             .collect();
-        assert!(normalize(file(many)).unwrap_err().contains("Zu viele"));
+        assert!(normalize(file(many)).unwrap_err().is(code::FS_TOO_LARGE));
     }
 
     #[test]
@@ -330,12 +351,12 @@ mod tests {
         fs::write(&broken, b"{ nicht json").unwrap();
         assert!(load_selection(broken.to_string_lossy().into_owned())
             .unwrap_err()
-            .contains("Format"));
+            .is(code::VALIDATION_BAD_INPUT));
         let binary = dir.join("binaer.json");
         fs::write(&binary, [0xff, 0xfe, 0x00]).unwrap();
         assert!(load_selection(binary.to_string_lossy().into_owned())
             .unwrap_err()
-            .contains("UTF-8"));
+            .is(code::VALIDATION_BAD_INPUT));
         fs::remove_dir_all(&dir).ok();
     }
 
@@ -346,7 +367,7 @@ mod tests {
         fs::write(&big, vec![b'x'; (MAX_BYTES + 16) as usize]).unwrap();
         assert!(load_selection(big.to_string_lossy().into_owned())
             .unwrap_err()
-            .contains("MiB"));
+            .is(code::FS_TOO_LARGE));
         fs::remove_dir_all(&dir).ok();
     }
 

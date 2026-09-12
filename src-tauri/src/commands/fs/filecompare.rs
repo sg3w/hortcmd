@@ -6,6 +6,7 @@
 // files don't block the UI; results are hard-limited.
 // ============================================================
 
+use crate::errors::{AppError, AppResult};
 use crate::vfs::caps::{self, Capability};
 use serde::Serialize;
 use similar::{ChangeTag, TextDiff};
@@ -223,22 +224,21 @@ fn build_hex_diff(left: &[u8], right: &[u8]) -> Vec<HexRow> {
         .collect()
 }
 
-fn compare_impl(left: String, right: String) -> Result<FileDiff, String> {
+fn compare_impl(left: String, right: String) -> AppResult<FileDiff> {
     let lp = Path::new(&left);
     let rp = Path::new(&right);
-    let lmeta = std::fs::metadata(lp).map_err(|e| format!("{}: {}", left, e))?;
-    let rmeta = std::fs::metadata(rp).map_err(|e| format!("{}: {}", right, e))?;
+    let lmeta = std::fs::metadata(lp).map_err(|e| AppError::from(format!("{}: {}", left, e)))?;
+    let rmeta = std::fs::metadata(rp).map_err(|e| AppError::from(format!("{}: {}", right, e)))?;
     if lmeta.is_dir() || rmeta.is_dir() {
-        return Err("Beide Seiten müssen Dateien sein".into());
+        return Err(AppError::from("Beide Seiten müssen Dateien sein"));
     }
     let left_size = lmeta.len();
     let right_size = rmeta.len();
 
-    let identical =
-        left_size == right_size && files_identical(lp, rp).map_err(|e| e.to_string())?;
+    let identical = left_size == right_size && files_identical(lp, rp).map_err(AppError::from)?;
 
-    let (lbytes, lmore) = read_capped(lp, MAX_TEXT_BYTES).map_err(|e| e.to_string())?;
-    let (rbytes, rmore) = read_capped(rp, MAX_TEXT_BYTES).map_err(|e| e.to_string())?;
+    let (lbytes, lmore) = read_capped(lp, MAX_TEXT_BYTES).map_err(AppError::from)?;
+    let (rbytes, rmore) = read_capped(rp, MAX_TEXT_BYTES).map_err(AppError::from)?;
     let binary = looks_binary(&lbytes) || looks_binary(&rbytes);
 
     if binary {
@@ -275,7 +275,7 @@ fn compare_impl(left: String, right: String) -> Result<FileDiff, String> {
 
 /// Compares two files by content (text diff or hex comparison).
 #[tauri::command]
-pub async fn compare_files(left: String, right: String) -> Result<FileDiff, String> {
+pub async fn compare_files(left: String, right: String) -> AppResult<FileDiff> {
     // Both files are read with `std::fs`; each side is asked for its own
     // capability, so one local file never licenses a remote partner.
     caps::require_pair(
@@ -286,7 +286,7 @@ pub async fn compare_files(left: String, right: String) -> Result<FileDiff, Stri
     )?;
     tauri::async_runtime::spawn_blocking(move || compare_impl(left, right))
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(AppError::from)?
 }
 
 #[cfg(test)]

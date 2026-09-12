@@ -14,6 +14,7 @@
 // overrides a conflict in the other.
 // ============================================================
 
+use crate::errors::{code, AppError, AppResult, ErrorAction};
 use russh::keys::{known_hosts::known_host_keys_path, HashAlg, PublicKey};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -119,42 +120,56 @@ pub enum ConnectError {
     /// make every `Result<_, ConnectError>` in the connect path as large
     /// as the failure case nobody hits.
     HostKey(Box<HostKeyChallenge>),
-    /// Anything else, already phrased for the user.
-    Message(String),
+    /// Anything else, as a typed application error (ticket 036).
+    Message(AppError),
 }
 
 impl ConnectError {
-    /// Flattens to a message for callers without a host-key UI.
-    pub fn message(&self) -> String {
+    /// Flattens to a typed error for callers without a host-key UI.
+    /// The two host-key outcomes keep their own codes — a *changed* key
+    /// is a security event and must not read like an unknown one.
+    pub fn to_app_error(&self) -> AppError {
         match self {
-            ConnectError::Message(m) => m.clone(),
-            ConnectError::HostKey(c) if c.status == "mismatch" => format!(
-                "Host-Schlüssel von {}:{} hat sich geändert ({} {}) — Verbindung abgelehnt",
-                c.host, c.port, c.key_type, c.fingerprint
-            ),
-            ConnectError::HostKey(c) => format!(
-                "Host-Schlüssel von {}:{} ist unbekannt ({} {}) — bitte im Verbindungsmanager bestätigen",
-                c.host, c.port, c.key_type, c.fingerprint
-            ),
+            ConnectError::Message(e) => e.clone(),
+            ConnectError::HostKey(c) if c.status == "mismatch" => {
+                AppError::new(code::SECURITY_HOST_KEY_MISMATCH)
+                    .with("host", &c.host)
+                    .with("port", c.port)
+                    .with("keyType", &c.key_type)
+                    .with("fingerprint", &c.fingerprint)
+                    .action(ErrorAction::ConfirmHostKey)
+            }
+            ConnectError::HostKey(c) => AppError::new(code::SECURITY_HOST_KEY_UNKNOWN)
+                .with("host", &c.host)
+                .with("port", c.port)
+                .with("keyType", &c.key_type)
+                .with("fingerprint", &c.fingerprint)
+                .action(ErrorAction::ConfirmHostKey),
         }
+    }
+}
+
+impl From<AppError> for ConnectError {
+    fn from(e: AppError) -> Self {
+        ConnectError::Message(e)
     }
 }
 
 impl From<String> for ConnectError {
     fn from(message: String) -> Self {
-        ConnectError::Message(message)
+        ConnectError::Message(message.into())
     }
 }
 
 impl From<&str> for ConnectError {
     fn from(message: &str) -> Self {
-        ConnectError::Message(message.to_string())
+        ConnectError::Message(message.into())
     }
 }
 
 impl std::fmt::Display for ConnectError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.message())
+        write!(f, "{}", self.to_app_error())
     }
 }
 
@@ -179,7 +194,7 @@ fn key_type(key: &PublicKey) -> String {
 // ---------- Trust sources ----------
 
 /// The hortcmd-managed store — keys accepted in the connection manager.
-fn app_store_path() -> Result<PathBuf, String> {
+fn app_store_path() -> AppResult<PathBuf> {
     let dir = dirs::config_dir()
         .ok_or_else(|| "Kein Konfigurationsverzeichnis gefunden".to_string())?
         .join("hortcmd");
@@ -207,7 +222,7 @@ fn sources() -> Vec<PathBuf> {
 
 /// Reads the entries of `path` that apply to `id`. A file that does not
 /// exist simply contributes nothing.
-fn entries_for(id: &HostId, path: &Path) -> Result<Vec<(usize, PublicKey)>, String> {
+fn entries_for(id: &HostId, path: &Path) -> AppResult<Vec<(usize, PublicKey)>> {
     if !path.exists() {
         return Ok(Vec::new());
     }
@@ -217,18 +232,19 @@ fn entries_for(id: &HostId, path: &Path) -> Result<Vec<(usize, PublicKey)>, Stri
 /// Describes an unreadable known-hosts file, naming the offending lines
 /// where they can be pinned down. Entries for *other* hosts stay
 /// unaffected — only a broken entry for this host reaches here.
-fn unreadable(path: &Path, reason: &str) -> String {
+fn unreadable(path: &Path, reason: &str) -> AppError {
     let lines = malformed_lines(path);
+    let err = AppError::new(code::FS_IO)
+        .op("known_hosts")
+        .with("path", path.display())
+        .action(ErrorAction::Report);
     if lines.is_empty() {
-        return format!("{} konnte nicht gelesen werden: {}", path.display(), reason);
+        return err.detail(reason);
     }
+    // Naming the offending lines is what makes this actionable: the
+    // user's own file is never rewritten, only reported on.
     let list: Vec<String> = lines.iter().map(|l| l.to_string()).collect();
-    format!(
-        "{}: unlesbarer known_hosts-Eintrag in Zeile {} ({})",
-        path.display(),
-        list.join(", "),
-        reason
-    )
+    err.with("lines", list.join(", ")).detail(reason)
 }
 
 /// Best-effort scan for lines whose key blob does not parse.
@@ -259,7 +275,7 @@ fn scan(
     id: &HostId,
     presented: &PublicKey,
     paths: &[PathBuf],
-) -> Result<(bool, Vec<StoredHostKey>), String> {
+) -> AppResult<(bool, Vec<StoredHostKey>)> {
     let mut matched = false;
     let mut conflicts = Vec::new();
     for path in paths {
@@ -302,7 +318,7 @@ fn challenge(
 
 /// Decides whether the handshake may continue. A conflict anywhere wins
 /// over a match anywhere; only an untouched, matching host is trusted.
-pub fn check(id: &HostId, presented: &PublicKey) -> Result<Decision, String> {
+pub fn check(id: &HostId, presented: &PublicKey) -> AppResult<Decision> {
     let (matched, conflicts) = scan(id, presented, &sources())?;
     if !conflicts.is_empty() {
         return Ok(Decision::Challenge(challenge(
@@ -366,7 +382,7 @@ fn take(token: &str) -> Option<Pending> {
 
 /// Persists the key behind `token`. The token is consumed, so a second
 /// call cannot re-trust it, and a failed write aborts the whole flow.
-pub fn trust(token: &str) -> Result<HostId, String> {
+pub fn trust(token: &str) -> AppResult<HostId> {
     let pending = take(token).ok_or_else(|| {
         "Die Host-Schlüssel-Abfrage ist abgelaufen — bitte erneut verbinden".to_string()
     })?;
@@ -378,15 +394,15 @@ pub fn trust(token: &str) -> Result<HostId, String> {
 /// test stages a rotated key. The production path goes through `trust`,
 /// which can only confirm a key hortcmd actually displayed.
 #[cfg(test)]
-pub(crate) fn record(id: &HostId, key: &PublicKey) -> Result<(), String> {
+pub(crate) fn record(id: &HostId, key: &PublicKey) -> AppResult<()> {
     append(&app_store_path()?, id, key)
 }
 
 /// Appends one OpenSSH-formatted entry to the managed store.
-fn append(path: &Path, id: &HostId, key: &PublicKey) -> Result<(), String> {
-    let openssh = key
-        .to_openssh()
-        .map_err(|e| format!("Host-Schlüssel konnte nicht kodiert werden: {}", e))?;
+fn append(path: &Path, id: &HostId, key: &PublicKey) -> AppResult<()> {
+    let openssh = key.to_openssh().map_err(|e| {
+        AppError::from(format!("Host-Schlüssel konnte nicht kodiert werden: {}", e))
+    })?;
     let mut content = std::fs::read_to_string(path).unwrap_or_default();
     if !content.is_empty() && !content.ends_with('\n') {
         content.push('\n');
@@ -397,7 +413,7 @@ fn append(path: &Path, id: &HostId, key: &PublicKey) -> Result<(), String> {
 
 /// Removes every managed entry for `id`. The user's own files are only
 /// inspected, so a conflict there is reported rather than edited away.
-pub fn forget(id: &HostId) -> Result<ForgetResult, String> {
+pub fn forget(id: &HostId) -> AppResult<ForgetResult> {
     let store = app_store_path()?;
     let removed = remove_from(&store, id)?;
     let mut remaining = Vec::new();
@@ -412,7 +428,7 @@ pub fn forget(id: &HostId) -> Result<ForgetResult, String> {
 /// Drops the lines of `path` whose host field is exactly `id`. Only the
 /// managed store is passed here, and hortcmd writes it in plain
 /// (unhashed, single-host) form, so a literal comparison is enough.
-fn remove_from(path: &Path, id: &HostId) -> Result<u32, String> {
+fn remove_from(path: &Path, id: &HostId) -> AppResult<u32> {
     let Ok(text) = std::fs::read_to_string(path) else {
         return Ok(0);
     };
@@ -440,9 +456,9 @@ fn remove_from(path: &Path, id: &HostId) -> Result<u32, String> {
 
 /// Writes through a temporary sibling and renames it into place, so a
 /// crash never leaves a half-written trust store behind.
-fn write_atomic(path: &Path, content: &str) -> Result<(), String> {
+fn write_atomic(path: &Path, content: &str) -> AppResult<()> {
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(parent).map_err(AppError::from)?;
     }
     let tmp = path.with_extension("hortcmd-tmp");
     let write = || -> std::io::Result<()> {
@@ -451,15 +467,15 @@ fn write_atomic(path: &Path, content: &str) -> Result<(), String> {
     };
     if let Err(e) = write() {
         let _ = std::fs::remove_file(&tmp);
-        return Err(format!(
+        return Err(AppError::from(format!(
             "{} konnte nicht geschrieben werden: {}",
             path.display(),
             e
-        ));
+        )));
     }
     std::fs::rename(&tmp, path).map_err(|e| {
         let _ = std::fs::remove_file(&tmp);
-        format!("{} konnte nicht ersetzt werden: {}", path.display(), e)
+        AppError::from(e).with("path", path.display())
     })
 }
 
@@ -591,8 +607,10 @@ mod tests {
         std::fs::write(&path, "example.com ssh-ed25519 not-a-key\n").unwrap();
         let id = HostId::new("example.com", 22);
         let err = scan(&id, &key(KEY_A), std::slice::from_ref(&path)).unwrap_err();
-        assert!(err.contains(&path.display().to_string()), "{}", err);
-        assert!(err.contains("Zeile 1"), "{}", err);
+        // The file and the offending line are parameters now, not
+        // words in a sentence — the frontend phrases it.
+        assert_eq!(err.params.get("path"), Some(&path.display().to_string()));
+        assert_eq!(err.params.get("lines").map(String::as_str), Some("1"));
     }
 
     #[test]

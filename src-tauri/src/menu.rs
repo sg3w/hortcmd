@@ -27,6 +27,8 @@
 // window.
 // ============================================================
 
+use crate::errors::{AppError, AppResult};
+
 /// Event that carries the id of a native menu item to the frontend.
 #[cfg(target_os = "macos")]
 pub const MENU_EVENT: &str = "native-menu";
@@ -238,7 +240,7 @@ pub fn install<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
 /// this on startup and whenever the language setting changes, because
 /// only it knows the persisted choice.
 #[tauri::command]
-pub fn set_menu_language(app: tauri::AppHandle, lang: String) -> Result<(), String> {
+pub fn set_menu_language(app: tauri::AppHandle, lang: String) -> AppResult<()> {
     #[cfg(target_os = "macos")]
     {
         // muda touches AppKit, which is main-thread only.
@@ -246,7 +248,7 @@ pub fn set_menu_language(app: tauri::AppHandle, lang: String) -> Result<(), Stri
         app.run_on_main_thread(move || {
             let _ = imp::apply(&handle, &lang);
         })
-        .map_err(|e| e.to_string())?;
+        .map_err(AppError::from)?;
     }
     #[cfg(not(target_os = "macos"))]
     {

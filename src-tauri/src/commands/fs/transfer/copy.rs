@@ -11,8 +11,10 @@
 // turn and check that nothing is lost.
 // ============================================================
 
+use super::events::ItemError;
 use super::plan::{discard_staging, publish, Plan};
 use super::progress::Prog;
+use crate::errors::{AppError, ErrorAction};
 use crate::vfs::Provider;
 use std::io::{ErrorKind, Read, Write};
 use std::path::Path;
@@ -179,7 +181,7 @@ pub(crate) fn transfer_one_with<F>(
     src: &Path,
     plan: &Plan,
     remove_source: bool,
-    errors: &mut Vec<String>,
+    errors: &mut Vec<ItemError>,
     copy: F,
 ) -> std::io::Result<()>
 where
@@ -199,11 +201,11 @@ where
     // deleting the copy that just succeeded.
     if remove_source {
         if let Err(e) = srcp.remove(src) {
-            errors.push(format!(
-                "{}: Quelle konnte nach der Übertragung nicht entfernt werden ({}) — \
-                 beide Kopien bleiben bestehen",
-                src.display(),
-                e
+            // Two copies now exist. Reported as its own failure — never
+            // "repaired" by deleting the copy that just succeeded.
+            errors.push(ItemError::new(
+                src.display().to_string(),
+                AppError::from(e).op("move").action(ErrorAction::Report),
             ));
         }
     }
@@ -220,7 +222,7 @@ pub(crate) fn transfer_one(
     prog: &mut Prog,
     tune: CopyTuning,
     remove_source: bool,
-    errors: &mut Vec<String>,
+    errors: &mut Vec<ItemError>,
 ) -> std::io::Result<()> {
     transfer_one_with(srcp, dstp, src, plan, remove_source, errors, || {
         copy_tree(srcp, dstp, src, &plan.write_to, prog, tune)

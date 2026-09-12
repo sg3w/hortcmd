@@ -25,6 +25,7 @@
 
 use super::cancel;
 use super::walk::{walk_local, Flow, WalkOptions, WALK_THREADS};
+use crate::errors::{AppError, AppResult};
 use crate::vfs::caps::{self, Capability};
 use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
@@ -141,7 +142,7 @@ impl Limits {
 }
 
 /// Converts a glob pattern (`*`, `?`, multiple separated by space/`;`) to regex.
-fn glob_to_regex(pattern: &str, case_sensitive: bool) -> Result<regex::Regex, String> {
+fn glob_to_regex(pattern: &str, case_sensitive: bool) -> AppResult<regex::Regex> {
     let parts: Vec<String> = pattern
         .split([';', ' ', '\t'])
         .map(str::trim)
@@ -170,11 +171,11 @@ fn glob_to_regex(pattern: &str, case_sensitive: bool) -> Result<regex::Regex, St
     build_regex(&format!("^(?:{})$", body), case_sensitive)
 }
 
-fn build_regex(pattern: &str, case_sensitive: bool) -> Result<regex::Regex, String> {
+fn build_regex(pattern: &str, case_sensitive: bool) -> AppResult<regex::Regex> {
     regex::RegexBuilder::new(pattern)
         .case_insensitive(!case_sensitive)
         .build()
-        .map_err(|e| format!("Ungültiger Ausdruck: {}", e))
+        .map_err(|e| AppError::from(format!("Ungültiger Ausdruck: {}", e)))
 }
 
 /// A name matcher (regex or glob), or "everything" for an empty pattern.
@@ -184,7 +185,7 @@ enum NameMatch {
 }
 
 impl NameMatch {
-    fn build(opts: &SearchOptions) -> Result<Self, String> {
+    fn build(opts: &SearchOptions) -> AppResult<Self> {
         if opts.name.trim().is_empty() {
             return Ok(NameMatch::Any);
         }
@@ -312,7 +313,7 @@ enum Needle {
 }
 
 impl Needle {
-    fn build(opts: &SearchOptions) -> Result<Option<Self>, String> {
+    fn build(opts: &SearchOptions) -> AppResult<Option<Self>> {
         if opts.content.trim().is_empty() {
             return Ok(None);
         }
@@ -375,7 +376,7 @@ fn run_search(
     cancel_flag: Arc<AtomicBool>,
     limits: &Limits,
     channel: &Channel<Vec<SearchHit>>,
-) -> Result<SearchSummary, String> {
+) -> AppResult<SearchSummary> {
     let name_match = NameMatch::build(&opts)?;
     let needle = Needle::build(&opts)?;
     let mut sink = Sink::new(channel, limits);
@@ -538,7 +539,7 @@ pub async fn search(
     options: SearchOptions,
     token: String,
     on_batch: Channel<Vec<SearchHit>>,
-) -> Result<SearchSummary, String> {
+) -> AppResult<SearchSummary> {
     // The traversal is the local jwalk engine (TICKET-013); a remote
     // root would be walked as a relative local path (TICKET-031).
     caps::require(&root, Capability::Search)?;
@@ -550,9 +551,9 @@ pub async fn search(
             run_search(root_path, options, cancel_flag, &Limits::DEFAULT, &on_batch)
         })
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(AppError::from)?
     } else {
-        Err(format!("{}: kein Verzeichnis", root))
+        Err(AppError::from(format!("{}: kein Verzeichnis", root)))
     };
     cancel::unregister(KIND, &token);
     result

@@ -11,6 +11,7 @@
 
 use super::session::runtime;
 use super::ssh::SshSession;
+use crate::errors::{AppError, AppResult};
 use base64::Engine;
 use russh::client::Msg;
 use russh::{Channel, ChannelMsg, ChannelWriteHalf};
@@ -62,16 +63,16 @@ pub async fn open_shell_channel(
     path: &str,
     cols: u32,
     rows: u32,
-) -> Result<Channel<Msg>, String> {
+) -> AppResult<Channel<Msg>> {
     let channel = ssh.open_channel().await?;
     channel
         .request_pty(true, "xterm-256color", cols.max(1), rows.max(1), 0, 0, &[])
         .await
-        .map_err(|e| format!("PTY-Anforderung fehlgeschlagen: {}", e))?;
+        .map_err(|e| AppError::from(format!("PTY-Anforderung fehlgeschlagen: {}", e)))?;
     channel
         .request_shell(true)
         .await
-        .map_err(|e| format!("Shell-Start fehlgeschlagen: {}", e))?;
+        .map_err(|e| AppError::from(format!("Shell-Start fehlgeschlagen: {}", e)))?;
     // Start in the folder the pane shows. The shell echoes the line,
     // exactly like a manually typed `cd`.
     if !path.is_empty() && path != "/" {
@@ -79,7 +80,7 @@ pub async fn open_shell_channel(
         channel
             .data(cd.as_bytes())
             .await
-            .map_err(|e| format!("Wechsel in {} fehlgeschlagen: {}", path, e))?;
+            .map_err(|e| AppError::from(format!("Wechsel in {} fehlgeschlagen: {}", path, e)))?;
     }
     Ok(channel)
 }
@@ -90,12 +91,7 @@ pub async fn open_shell_channel(
 /// and starts it in that address' remote directory. Returns the id the
 /// other terminal commands and the events use.
 #[tauri::command]
-pub fn ssh_open_shell(
-    app: AppHandle,
-    address: String,
-    cols: u32,
-    rows: u32,
-) -> Result<String, String> {
+pub fn ssh_open_shell(app: AppHandle, address: String, cols: u32, rows: u32) -> AppResult<String> {
     let (provider, path) = crate::vfs::resolve(&address)?;
     let ssh = provider.ssh().ok_or_else(|| {
         "Für diesen Ort gibt es keine SSH-Verbindung — bitte eine SFTP-Verbindung öffnen"
@@ -170,27 +166,27 @@ pub fn ssh_open_shell(
 
 /// Sends keyboard input to a shell session.
 #[tauri::command]
-pub fn ssh_send(id: String, data: String) -> Result<(), String> {
+pub fn ssh_send(id: String, data: String) -> AppResult<()> {
     with_session(&id, |s| {
         runtime()
             .block_on(s.write.data(data.as_bytes()))
-            .map_err(|e| format!("Senden fehlgeschlagen: {}", e))
+            .map_err(|e| AppError::from(format!("Senden fehlgeschlagen: {}", e)))
     })
 }
 
 /// Reports a new terminal size to the remote side.
 #[tauri::command]
-pub fn ssh_resize(id: String, cols: u32, rows: u32) -> Result<(), String> {
+pub fn ssh_resize(id: String, cols: u32, rows: u32) -> AppResult<()> {
     with_session(&id, |s| {
         runtime()
             .block_on(s.write.window_change(cols.max(1), rows.max(1), 0, 0))
-            .map_err(|e| format!("Größenänderung fehlgeschlagen: {}", e))
+            .map_err(|e| AppError::from(format!("Größenänderung fehlgeschlagen: {}", e)))
     })
 }
 
 /// Closes a shell session (idempotent — an already ended session is fine).
 #[tauri::command]
-pub fn ssh_close(id: String) -> Result<(), String> {
+pub fn ssh_close(id: String) -> AppResult<()> {
     let Some(session) = sessions().lock().unwrap().remove(&id) else {
         return Ok(());
     };
@@ -198,9 +194,9 @@ pub fn ssh_close(id: String) -> Result<(), String> {
     Ok(())
 }
 
-fn with_session<F>(id: &str, f: F) -> Result<(), String>
+fn with_session<F>(id: &str, f: F) -> AppResult<()>
 where
-    F: FnOnce(&Session) -> Result<(), String>,
+    F: FnOnce(&Session) -> AppResult<()>,
 {
     let guard = sessions().lock().unwrap();
     let session = guard

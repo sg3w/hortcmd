@@ -7,6 +7,7 @@
 // the file module and the listing types from the dir module.
 // ============================================================
 
+use crate::errors::{code, AppError, AppResult, ErrorAction};
 use std::collections::{BTreeSet, HashSet};
 use std::fs;
 use std::fs::File;
@@ -22,14 +23,28 @@ use zip::{ZipArchive, ZipWriter};
 
 use super::attrs;
 use super::dir::{DirEntry, DirListing};
+use super::transfer::events::ItemError;
 use super::transfer::{spawn_op, OpDone, Prog};
 use crate::vfs::caps::{self, Capability};
 
-/// Sentinel error: the archive/entry is encrypted, but no password
-/// was provided. The frontend detects this and asks for one.
-const PW_REQUIRED: &str = "PASSWORD_REQUIRED";
-/// Sentinel error: the provided password is wrong.
-const PW_WRONG: &str = "PASSWORD_WRONG";
+/// The archive is encrypted and no password was given; the frontend
+/// asks for one. Since ticket 036 this is a real error code — the
+/// sentinel string it replaced was matched by substring, which made a
+/// password prompt depend on message wording.
+fn password_required() -> AppError {
+    AppError::new(code::ARCHIVE_PASSWORD_REQUIRED).action(ErrorAction::ProvidePassword)
+}
+
+/// The password that was given is wrong.
+fn password_wrong() -> AppError {
+    AppError::new(code::ARCHIVE_PASSWORD_WRONG).action(ErrorAction::ProvidePassword)
+}
+
+/// Whether an error is one of the two password outcomes. The one place
+/// that decides it, for both the 7z and the ZIP path.
+fn is_password_error(e: &AppError) -> bool {
+    e.is(code::ARCHIVE_PASSWORD_REQUIRED) || e.is(code::ARCHIVE_PASSWORD_WRONG)
+}
 
 /// Supported archive formats (detected by file extension).
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -80,18 +95,22 @@ fn password(opt: &Option<String>) -> sevenz_rust::Password {
     }
 }
 
-/// Translates 7z errors into the password sentinels or plain text.
-fn map_7z_err(e: sevenz_rust::Error) -> String {
+/// The 7z boundary: its two password outcomes become codes, everything
+/// else a corrupt-archive error keeping the library's own wording as
+/// redacted detail.
+fn map_7z_err(e: sevenz_rust::Error) -> AppError {
     match e {
-        sevenz_rust::Error::PasswordRequired => PW_REQUIRED.to_string(),
-        sevenz_rust::Error::MaybeBadPassword(_) => PW_WRONG.to_string(),
-        other => other.to_string(),
+        sevenz_rust::Error::PasswordRequired => password_required(),
+        sevenz_rust::Error::MaybeBadPassword(_) => password_wrong(),
+        other => AppError::new(code::ARCHIVE_CORRUPT)
+            .action(ErrorAction::Report)
+            .detail(other),
     }
 }
 
 /// Opens a streaming reader for a tar archive (decompressing if needed).
-fn open_tar_reader(kind: ArchiveKind, archive: &str) -> Result<Box<dyn Read>, String> {
-    let f = File::open(archive).map_err(|e| e.to_string())?;
+fn open_tar_reader(kind: ArchiveKind, archive: &str) -> AppResult<Box<dyn Read>> {
+    let f = File::open(archive).map_err(AppError::from)?;
     Ok(match kind {
         ArchiveKind::Tar => Box::new(f),
         ArchiveKind::TarGz => Box::new(flate2::read::GzDecoder::new(f)),
@@ -103,28 +122,28 @@ fn open_tar_reader(kind: ArchiveKind, archive: &str) -> Result<Box<dyn Read>, St
 // ---------- Listing ----------
 
 /// Reads the member list of a ZIP archive (metadata only, no password).
-fn zip_raw(archive: &str) -> Result<Vec<RawEntry>, String> {
-    let file = File::open(archive).map_err(|e| e.to_string())?;
-    let mut zip = ZipArchive::new(file).map_err(|e| e.to_string())?;
+fn zip_raw(archive: &str) -> AppResult<Vec<RawEntry>> {
+    let file = File::open(archive).map_err(AppError::from)?;
+    let mut zip = ZipArchive::new(file).map_err(AppError::from)?;
     let mut out = Vec::with_capacity(zip.len());
     for i in 0..zip.len() {
         // by_index_raw reads metadata even for encrypted entries.
-        let e = zip.by_index_raw(i).map_err(|e| e.to_string())?;
+        let e = zip.by_index_raw(i).map_err(AppError::from)?;
         out.push((e.name().to_string(), e.size(), e.is_dir()));
     }
     Ok(out)
 }
 
 /// Reads the member list of a tar archive (headers, without data streams).
-fn tar_raw(reader: Box<dyn Read>) -> Result<Vec<RawEntry>, String> {
+fn tar_raw(reader: Box<dyn Read>) -> AppResult<Vec<RawEntry>> {
     let mut ar = tar::Archive::new(reader);
     let mut out = Vec::new();
-    for entry in ar.entries().map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
+    for entry in ar.entries().map_err(AppError::from)? {
+        let entry = entry.map_err(AppError::from)?;
         let is_dir = entry.header().entry_type().is_dir();
         let name = entry
             .path()
-            .map_err(|e| e.to_string())?
+            .map_err(AppError::from)?
             .to_string_lossy()
             .replace('\\', "/");
         let size = entry.header().size().unwrap_or(0);
@@ -134,7 +153,7 @@ fn tar_raw(reader: Box<dyn Read>) -> Result<Vec<RawEntry>, String> {
 }
 
 /// Reads the member list of a 7z archive (with a password if needed).
-fn sevenz_raw(archive: &str, pw: &Option<String>) -> Result<Vec<RawEntry>, String> {
+fn sevenz_raw(archive: &str, pw: &Option<String>) -> AppResult<Vec<RawEntry>> {
     let ar =
         sevenz_rust::Archive::open_with_password(archive, &password(pw)).map_err(map_7z_err)?;
     Ok(ar
@@ -210,7 +229,7 @@ pub fn list_archive(
     archive: String,
     inner: String,
     password: Option<String>,
-) -> Result<DirListing, String> {
+) -> AppResult<DirListing> {
     // Every reader below opens the archive with `std::fs` (TICKET-031);
     // browsing an archive that lives on a remote share needs the
     // archive commands routed through the VFS first.
@@ -253,11 +272,11 @@ fn write_entry(
     name: &str,
     file_total: u64,
     prog: &mut Prog,
-) -> Result<(), String> {
+) -> AppResult<()> {
     if let Some(parent) = out.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        fs::create_dir_all(parent).map_err(AppError::from)?;
     }
-    let mut f = File::create(out).map_err(|e| e.to_string())?;
+    let mut f = File::create(out).map_err(AppError::from)?;
     let mut buf = vec![0u8; 64 * 1024];
     let mut file_done = 0u64;
     prog.emit(name, 0, file_total, true);
@@ -265,11 +284,11 @@ fn write_entry(
         if prog.cancelled() {
             break;
         }
-        let n = reader.read(&mut buf).map_err(|e| e.to_string())?;
+        let n = reader.read(&mut buf).map_err(AppError::from)?;
         if n == 0 {
             break;
         }
-        f.write_all(&buf[..n]).map_err(|e| e.to_string())?;
+        f.write_all(&buf[..n]).map_err(AppError::from)?;
         file_done += n as u64;
         prog.bytes_done += n as u64;
         prog.emit(name, file_done, file_total, false);
@@ -288,9 +307,9 @@ fn extract_zip(
     dest: &Path,
     pw: &Option<String>,
     prog: &mut Prog,
-) -> Result<(u32, Vec<String>), String> {
-    let open = || -> Result<ZipArchive<File>, String> {
-        ZipArchive::new(File::open(archive).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+) -> AppResult<(u32, Vec<ItemError>)> {
+    let open = || -> AppResult<ZipArchive<File>> {
+        ZipArchive::new(File::open(archive).map_err(AppError::from)?).map_err(AppError::from)
     };
 
     // Pass 1: determine matching indices + totals, check encryption.
@@ -298,7 +317,7 @@ fn extract_zip(
     let mut indices = Vec::new();
     let mut needs_pw = false;
     for i in 0..zip.len() {
-        let e = zip.by_index_raw(i).map_err(|e| e.to_string())?;
+        let e = zip.by_index_raw(i).map_err(AppError::from)?;
         if e.is_dir() {
             continue;
         }
@@ -313,7 +332,7 @@ fn extract_zip(
         }
     }
     if needs_pw && pw.is_none() {
-        return Err(PW_REQUIRED.to_string());
+        return Err(password_required());
     }
     prog.emit("", 0, 0, true);
 
@@ -325,11 +344,12 @@ fn extract_zip(
         if prog.cancelled() {
             break;
         }
+        let name = zip.name_for_index(i).unwrap_or_default().to_string();
         match extract_zip_one(&mut zip, i, base, dest, pw, prog) {
             Ok(()) => ok += 1,
             // A wrong password is fatal → abort immediately and report.
-            Err(e) if e == PW_WRONG || e == PW_REQUIRED => return Err(e),
-            Err(e) => errors.push(e),
+            Err(e) if is_password_error(&e) => return Err(e),
+            Err(e) => errors.push(ItemError::new(name, e)),
         }
     }
     Ok((ok, errors))
@@ -342,25 +362,25 @@ fn extract_zip_one(
     dest: &Path,
     pw: &Option<String>,
     prog: &mut Prog,
-) -> Result<(), String> {
+) -> AppResult<()> {
     // Read metadata in its own scope (separate borrow).
     let (name, encrypted, size) = {
-        let e = zip.by_index_raw(index).map_err(|e| e.to_string())?;
+        let e = zip.by_index_raw(index).map_err(AppError::from)?;
         (e.name().to_string(), e.encrypted(), e.size())
     };
     let rel = &name[base.len()..];
     let out = dest.join(rel);
     if encrypted {
-        let pw = pw.as_deref().ok_or_else(|| PW_REQUIRED.to_string())?;
+        let pw = pw.as_deref().ok_or_else(password_required)?;
         let mut e = zip
             .by_index_decrypt(index, pw.as_bytes())
             .map_err(|err| match err {
-                ZipError::InvalidPassword => PW_WRONG.to_string(),
-                o => o.to_string(),
+                ZipError::InvalidPassword => password_wrong(),
+                other => AppError::from(other),
             })?;
         write_entry(&mut e, &out, &name, size, prog)
     } else {
-        let mut e = zip.by_index(index).map_err(|e| e.to_string())?;
+        let mut e = zip.by_index(index).map_err(AppError::from)?;
         write_entry(&mut e, &out, &name, size, prog)
     }
 }
@@ -374,7 +394,7 @@ fn extract_tar(
     targets: &HashSet<String>,
     dest: &Path,
     prog: &mut Prog,
-) -> Result<(u32, Vec<String>), String> {
+) -> AppResult<(u32, Vec<ItemError>)> {
     // Pass 1: totals from the headers.
     for (name, size, is_dir) in tar_raw(open_tar_reader(kind, archive)?)? {
         if is_dir {
@@ -391,14 +411,14 @@ fn extract_tar(
     let mut ar = tar::Archive::new(open_tar_reader(kind, archive)?);
     let mut ok = 0u32;
     let mut errors = Vec::new();
-    for entry in ar.entries().map_err(|e| e.to_string())? {
+    for entry in ar.entries().map_err(AppError::from)? {
         if prog.cancelled() {
             break;
         }
         let mut entry = match entry {
             Ok(e) => e,
             Err(e) => {
-                errors.push(e.to_string());
+                errors.push(ItemError::new("", e.into()));
                 continue;
             }
         };
@@ -408,7 +428,7 @@ fn extract_tar(
         let name = match entry.path() {
             Ok(p) => p.to_string_lossy().replace('\\', "/"),
             Err(e) => {
-                errors.push(e.to_string());
+                errors.push(ItemError::new("", e.into()));
                 continue;
             }
         };
@@ -420,7 +440,7 @@ fn extract_tar(
         let out = dest.join(&rel);
         match write_entry(&mut entry, &out, &name, size, prog) {
             Ok(()) => ok += 1,
-            Err(e) => errors.push(e),
+            Err(e) => errors.push(ItemError::new(&name, e)),
         }
     }
     Ok((ok, errors))
@@ -435,7 +455,7 @@ fn extract_7z(
     dest: &Path,
     pw: &Option<String>,
     prog: &mut Prog,
-) -> Result<(u32, Vec<String>), String> {
+) -> AppResult<(u32, Vec<ItemError>)> {
     // Pass 1: totals from the metadata (also opens with the password).
     let meta =
         sevenz_rust::Archive::open_with_password(archive, &password(pw)).map_err(map_7z_err)?;
@@ -471,7 +491,7 @@ fn extract_7z(
             let out = dest.join(&rel);
             match write_entry(rd, &out, &name, entry.size, prog) {
                 Ok(()) => ok += 1,
-                Err(e) => errors.push(e),
+                Err(e) => errors.push(ItemError::new(&name, e)),
             }
             Ok(true)
         })
@@ -547,12 +567,12 @@ fn run_extract(
         Some(ArchiveKind::SevenZ) => {
             extract_7z(&archive, &base, all, &targets, &dest, &pw, &mut prog)
         }
-        None => Err("Unbekanntes Archivformat".to_string()),
+        None => Err(AppError::from("Unbekanntes Archivformat")),
     };
 
     let (ok, errors) = match result {
         Ok((ok, errors)) => (ok, errors),
-        Err(e) => (0, vec![e]),
+        Err(e) => (0, vec![ItemError::new(&archive, e)]),
     };
 
     let cancelled = prog.cancelled();
@@ -647,14 +667,14 @@ fn run_pack(
                 }
                 match pack_one(&mut zip, &path, &entry_name, opts, &mut prog) {
                     Ok(_) => ok += 1,
-                    Err(e) => errors.push(e),
+                    Err(e) => errors.push(ItemError::new(&entry_name, e)),
                 }
             }
             if let Err(e) = zip.finish() {
-                errors.push(e.to_string());
+                errors.push(ItemError::new("", e.into()));
             }
         }
-        Err(e) => errors.push(e.to_string()),
+        Err(e) => errors.push(ItemError::new(&dest_zip, e.into())),
     }
 
     // On abort, remove the incomplete archive.
@@ -683,20 +703,19 @@ fn pack_one(
     entry_name: &str,
     opts: SimpleFileOptions,
     prog: &mut Prog,
-) -> Result<(), String> {
-    zip.start_file(entry_name, opts)
-        .map_err(|e| e.to_string())?;
+) -> AppResult<()> {
+    zip.start_file(entry_name, opts).map_err(AppError::from)?;
     let file_total = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
-    let mut f = File::open(path).map_err(|e| e.to_string())?;
+    let mut f = File::open(path).map_err(AppError::from)?;
     let mut buf = vec![0u8; 64 * 1024];
     let mut file_done = 0u64;
     let name = path.to_string_lossy().into_owned();
     loop {
-        let n = f.read(&mut buf).map_err(|e| e.to_string())?;
+        let n = f.read(&mut buf).map_err(AppError::from)?;
         if n == 0 {
             break;
         }
-        zip.write_all(&buf[..n]).map_err(|e| e.to_string())?;
+        zip.write_all(&buf[..n]).map_err(AppError::from)?;
         file_done += n as u64;
         prog.bytes_done += n as u64;
         prog.emit(&name, file_done, file_total, false);
@@ -709,14 +728,14 @@ fn pack_one(
 /// Reports a refusal that happened before any work started, through the
 /// same `fs-done` event the frontend already listens on — a blocked
 /// operation must not leave the transfer window waiting forever.
-fn fail_op(app: &AppHandle, id: String, op: &str, err: String) {
+fn fail_op(app: &AppHandle, id: String, op: &str, err: AppError) {
     let _ = app.emit(
         "fs-done",
         OpDone {
             id,
             op: op.to_string(),
             ok: 0,
-            errors: vec![err],
+            errors: vec![ItemError::new("", err)],
             cancelled: false,
             mode: String::new(),
         },

@@ -12,6 +12,7 @@
 use super::credentials::{self, CredentialStore};
 use super::hostkey::{self, ConnectError, ForgetResult, HostId, HostKeyChallenge};
 use super::lifecycle::{self, Attempt, ConnFailure, FailureKind, Phase, Start, OVERALL_TIMEOUT};
+use crate::errors::{AppError, AppResult};
 use crate::vfs::Provider;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -130,7 +131,7 @@ pub enum ConnectOutcome {
 
 // ---------- Persistence ----------
 
-fn config_path() -> Result<PathBuf, String> {
+fn config_path() -> AppResult<PathBuf> {
     let dir = dirs::config_dir()
         .ok_or_else(|| "Kein Konfigurationsverzeichnis gefunden".to_string())?
         .join("hortcmd");
@@ -147,13 +148,13 @@ fn load_profiles() -> Vec<Profile> {
     }
 }
 
-fn store_profiles(profiles: &[Profile]) -> Result<(), String> {
+fn store_profiles(profiles: &[Profile]) -> AppResult<()> {
     let path = config_path()?;
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(parent).map_err(AppError::from)?;
     }
-    let json = serde_json::to_vec_pretty(profiles).map_err(|e| e.to_string())?;
-    std::fs::write(&path, json).map_err(|e| e.to_string())
+    let json = serde_json::to_vec_pretty(profiles).map_err(AppError::from)?;
+    std::fs::write(&path, json).map_err(AppError::from)
 }
 
 // ---------- Registry ----------
@@ -208,16 +209,16 @@ pub fn runtime() -> &'static tokio::runtime::Runtime {
 /// Resolves an active remote connection into its VFS provider.
 /// `scheme` is e.g. `"sftp"`, `key` the address' `user@host:port`.
 /// Returns a clear error when nothing is connected for that address.
-pub fn remote_provider(scheme: &str, key: &str) -> Result<Arc<dyn Provider>, String> {
+pub fn remote_provider(scheme: &str, key: &str) -> AppResult<Arc<dyn Provider>> {
     let store_id = format!("{}:{}", scheme, key);
     let reg = registry().lock().unwrap();
     match reg.live.get(&store_id) {
         Some(p) => Ok(p.clone()),
-        None => Err(format!(
+        None => Err(AppError::from(format!(
             "Keine aktive {}-Verbindung für {} — bitte zuerst verbinden",
             scheme.to_uppercase(),
             key
-        )),
+        ))),
     }
 }
 
@@ -328,7 +329,7 @@ pub fn net_list_profiles() -> Vec<Profile> {
 /// Creates or updates a profile. When `secret` is `Some`, it goes to the
 /// configured credential store under the profile id (never into the JSON).
 #[tauri::command]
-pub fn net_save_profile(profile: Profile, secret: Option<String>) -> Result<(), String> {
+pub fn net_save_profile(profile: Profile, secret: Option<String>) -> AppResult<()> {
     // Written before the registry lock: a locked KeePass file fails here,
     // and the profile list must not be touched when the secret is lost.
     if let Some(s) = &secret {
@@ -344,7 +345,7 @@ pub fn net_save_profile(profile: Profile, secret: Option<String>) -> Result<(), 
 
 /// Deletes a profile and its stored secret (disconnecting if live).
 #[tauri::command]
-pub fn net_delete_profile(id: String) -> Result<(), String> {
+pub fn net_delete_profile(id: String) -> AppResult<()> {
     // A profile that is still connecting loses its attempt with it.
     lifecycle::cancel_for_profile(&id);
     let mut reg = registry().lock().unwrap();
@@ -367,7 +368,7 @@ pub fn net_delete_profile(id: String) -> Result<(), String> {
 
 /// Looks up a saved profile without holding the registry lock any
 /// longer than the copy takes.
-fn profile_by_id(id: &str) -> Result<Profile, String> {
+fn profile_by_id(id: &str) -> AppResult<Profile> {
     registry()
         .lock()
         .unwrap()
@@ -375,7 +376,7 @@ fn profile_by_id(id: &str) -> Result<Profile, String> {
         .iter()
         .find(|p| p.id == id)
         .cloned()
-        .ok_or_else(|| format!("Profil {} nicht gefunden", id))
+        .ok_or_else(|| AppError::from(format!("Profil {} nicht gefunden", id)))
 }
 
 /// What a finished attempt produced, before the lifecycle decides
@@ -447,7 +448,7 @@ fn run_attempt(attempt: &Attempt, profile: &Profile) -> Result<Opened, ConnFailu
 /// challenge instead; nothing has been authenticated at that point
 /// (ticket 028).
 #[tauri::command]
-pub fn net_connect(app: AppHandle, id: String) -> Result<ConnectOutcome, String> {
+pub fn net_connect(app: AppHandle, id: String) -> AppResult<ConnectOutcome> {
     let profile = profile_by_id(&id)?;
 
     let attempt = match lifecycle::begin(&id) {
@@ -508,7 +509,7 @@ pub fn net_connect(app: AppHandle, id: String) -> Result<ConnectOutcome, String>
             lifecycle::cancel(&attempt.id);
             lifecycle::settle(&attempt, Err(failure.clone()), || {});
             emit_states(&app);
-            return Err(failure.tagged());
+            return Err(failure.error);
         }
     };
     // The worker is done the moment it sent; joining cannot block.
@@ -535,7 +536,7 @@ pub fn net_connect(app: AppHandle, id: String) -> Result<ConnectOutcome, String>
                     FailureKind::Cancelled,
                     "Verbindungsaufbau abgebrochen",
                 )
-                .tagged());
+                .error);
             }
             Ok(ConnectOutcome::Connected(status_of(&profile)))
         }
@@ -546,7 +547,7 @@ pub fn net_connect(app: AppHandle, id: String) -> Result<ConnectOutcome, String>
                 &attempt,
                 Err(ConnFailure::new(
                     FailureKind::HostKey,
-                    ConnectError::HostKey(Box::new(challenge.clone())).message(),
+                    ConnectError::HostKey(Box::new(challenge.clone())).to_app_error(),
                 )),
                 || {},
             );
@@ -556,7 +557,7 @@ pub fn net_connect(app: AppHandle, id: String) -> Result<ConnectOutcome, String>
         Err(failure) => {
             lifecycle::settle(&attempt, Err(failure.clone()), || {});
             emit_states(&app);
-            Err(failure.tagged())
+            Err(failure.error)
         }
     }
 }
@@ -575,11 +576,7 @@ pub fn net_cancel_connect(app: AppHandle, attempt: String) {
 /// the key hortcmd actually displayed can be trusted; a failed write
 /// aborts before any authentication is attempted (ticket 028).
 #[tauri::command]
-pub fn net_trust_host_key(
-    app: AppHandle,
-    id: String,
-    token: String,
-) -> Result<ConnectOutcome, String> {
+pub fn net_trust_host_key(app: AppHandle, id: String, token: String) -> AppResult<ConnectOutcome> {
     hostkey::trust(&token)?;
     net_connect(app, id)
 }
@@ -589,7 +586,7 @@ pub fn net_trust_host_key(
 /// itself offers no bypass. The user's own `known_hosts` files are only
 /// reported on, never rewritten.
 #[tauri::command]
-pub fn net_forget_host_key(id: String) -> Result<ForgetResult, String> {
+pub fn net_forget_host_key(id: String) -> AppResult<ForgetResult> {
     let profile = profile_by_id(&id)?;
     hostkey::forget(&HostId::new(&profile.host, profile.port))
 }
@@ -598,7 +595,7 @@ pub fn net_forget_host_key(id: String) -> Result<ForgetResult, String> {
 /// Open shell sessions on that connection are closed with it (026), so
 /// no channel outlives the connection it rides on.
 #[tauri::command]
-pub fn net_disconnect(app: AppHandle, id: String) -> Result<(), String> {
+pub fn net_disconnect(app: AppHandle, id: String) -> AppResult<()> {
     // A second disconnect while the first is still tearing down would
     // race it; the request is simply dropped (ticket 032).
     if lifecycle::snapshot(&id).0 == Phase::Disconnecting {

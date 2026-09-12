@@ -11,6 +11,7 @@
 
 use super::hostkey::{self, ConnectError, Decision, HostId};
 use super::session::Profile;
+use crate::errors::{code, AppError, AppResult, ErrorAction};
 use russh::client::{self, AuthResult, Msg};
 use russh::Channel;
 use std::sync::{Arc, Mutex};
@@ -21,7 +22,7 @@ use std::sync::{Arc, Mutex};
 /// generic handshake failure when the check says no.
 pub struct ClientHandler {
     id: HostId,
-    verdict: Arc<Mutex<Option<Result<Decision, String>>>>,
+    verdict: Arc<Mutex<Option<AppResult<Decision>>>>,
 }
 
 impl client::Handler for ClientHandler {
@@ -52,7 +53,7 @@ impl SshSession {
     /// `ConnectError::HostKey` and no secret ever leaves the machine.
     pub async fn connect(profile: &Profile, secret: Option<&str>) -> Result<Self, ConnectError> {
         let id = HostId::new(&profile.host, profile.port);
-        let verdict: Arc<Mutex<Option<Result<Decision, String>>>> = Arc::new(Mutex::new(None));
+        let verdict: Arc<Mutex<Option<AppResult<Decision>>>> = Arc::new(Mutex::new(None));
         let handler = ClientHandler {
             id: id.clone(),
             verdict: Arc::clone(&verdict),
@@ -73,14 +74,24 @@ impl SshSession {
             Some(Err(message)) => return Err(ConnectError::Message(message)),
             None => {
                 return Err(ConnectError::Message(match connected {
-                    Ok(_) => format!("Host-Schlüssel von {} wurde nicht geprüft", id.host),
-                    Err(e) => format!("Verbindung zu {} fehlgeschlagen: {}", profile.host, e),
+                    Ok(_) => AppError::new(code::SECURITY_HOST_KEY_UNKNOWN)
+                        .with("host", &id.host)
+                        .action(ErrorAction::ConfirmHostKey),
+                    Err(e) => AppError::new(code::NET_UNREACHABLE)
+                        .with("host", &profile.host)
+                        .provider("sftp")
+                        .action(ErrorAction::Retry)
+                        .detail(e),
                 }))
             }
         }
 
-        let mut handle = connected
-            .map_err(|e| format!("Verbindung zu {} fehlgeschlagen: {}", profile.host, e))?;
+        let mut handle = connected.map_err(|e| {
+            AppError::from(format!(
+                "Verbindung zu {} fehlgeschlagen: {}",
+                profile.host, e
+            ))
+        })?;
         authenticate(&mut handle, profile, secret).await?;
         Ok(SshSession { handle })
     }
@@ -94,11 +105,11 @@ impl SshSession {
         self.handle.is_closed()
     }
 
-    pub async fn open_channel(&self) -> Result<Channel<Msg>, String> {
+    pub async fn open_channel(&self) -> AppResult<Channel<Msg>> {
         self.handle
             .channel_open_session()
             .await
-            .map_err(|e| format!("SSH-Kanal fehlgeschlagen: {}", e))
+            .map_err(|e| AppError::from(format!("SSH-Kanal fehlgeschlagen: {}", e)))
     }
 }
 
@@ -106,7 +117,7 @@ async fn authenticate(
     handle: &mut client::Handle<ClientHandler>,
     profile: &Profile,
     secret: Option<&str>,
-) -> Result<(), String> {
+) -> AppResult<()> {
     let user = profile.user.as_str();
     let result = match profile.auth.as_str() {
         "password" => {
@@ -114,32 +125,39 @@ async fn authenticate(
             handle
                 .authenticate_password(user, pw)
                 .await
-                .map_err(|e| e.to_string())?
+                .map_err(AppError::from)?
         }
         "anonymous" => handle
             .authenticate_none(user)
             .await
-            .map_err(|e| e.to_string())?,
+            .map_err(AppError::from)?,
         "key" => {
             let path = profile
                 .key_path
                 .as_ref()
                 .ok_or("Kein Schlüsselpfad angegeben")?;
             let key = russh::keys::load_secret_key(path, secret)
-                .map_err(|e| format!("Schlüssel laden fehlgeschlagen: {}", e))?;
+                .map_err(|e| AppError::from(format!("Schlüssel laden fehlgeschlagen: {}", e)))?;
             let with = russh::keys::PrivateKeyWithHashAlg::new(Arc::new(key), None);
             handle
                 .authenticate_publickey(user, with)
                 .await
-                .map_err(|e| e.to_string())?
+                .map_err(AppError::from)?
         }
         "agent" => return authenticate_agent(handle, user).await,
-        other => return Err(format!("Unbekannte Auth-Methode: {}", other)),
+        other => {
+            return Err(AppError::from(format!(
+                "Unbekannte Auth-Methode: {}",
+                other
+            )))
+        }
     };
 
     match result {
         AuthResult::Success => Ok(()),
-        AuthResult::Failure { .. } => Err("Authentifizierung fehlgeschlagen".to_string()),
+        AuthResult::Failure { .. } => Err(AppError::new(code::NET_AUTH)
+            .provider("sftp")
+            .action(ErrorAction::Authenticate)),
     }
 }
 
@@ -148,25 +166,25 @@ async fn authenticate(
 async fn authenticate_agent(
     handle: &mut client::Handle<ClientHandler>,
     user: &str,
-) -> Result<(), String> {
+) -> AppResult<()> {
     let mut agent = russh::keys::agent::client::AgentClient::connect_env()
         .await
-        .map_err(|e| format!("ssh-agent nicht erreichbar: {}", e))?;
-    let identities = agent
-        .request_identities()
-        .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| AppError::from(format!("ssh-agent nicht erreichbar: {}", e)))?;
+    let identities = agent.request_identities().await.map_err(AppError::from)?;
     if identities.is_empty() {
-        return Err("ssh-agent bietet keine Schlüssel an".to_string());
+        return Err(AppError::new(code::NET_AUTH)
+            .provider("sftp")
+            .action(ErrorAction::Authenticate)
+            .detail("ssh-agent offers no keys"));
     }
     for key in identities {
         let result = handle
             .authenticate_publickey_with(user, key, None, &mut agent)
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| AppError::new(code::NET_AUTH).detail(e))?;
         if matches!(result, AuthResult::Success) {
             return Ok(());
         }
     }
-    Err("Kein ssh-agent-Schlüssel wurde akzeptiert".to_string())
+    Err(AppError::from("Kein ssh-agent-Schlüssel wurde akzeptiert"))
 }

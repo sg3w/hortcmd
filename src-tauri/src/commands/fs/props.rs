@@ -9,6 +9,7 @@
 // ============================================================
 
 use super::attrs;
+use crate::errors::{AppError, AppResult};
 use crate::vfs::caps::{self, Capability};
 use serde::Serialize;
 use std::fs;
@@ -139,13 +140,13 @@ fn read_acl(_path: &Path) -> Vec<String> {
 
 /// Reads all properties of an entry together.
 #[tauri::command]
-pub fn file_props(path: String) -> Result<FileProps, String> {
+pub fn file_props(path: String) -> AppResult<FileProps> {
     // Ownership, xattrs and ACLs are read with platform APIs that only
     // understand a local path (TICKET-031).
     caps::require(&path, Capability::Stat)?;
     let p = Path::new(&path);
     // symlink_metadata: describe the link itself, not the target.
-    let meta = fs::symlink_metadata(p).map_err(|e| e.to_string())?;
+    let meta = fs::symlink_metadata(p).map_err(AppError::from)?;
 
     #[cfg(unix)]
     let mode = {
@@ -190,18 +191,20 @@ pub fn file_props(path: String) -> Result<FileProps, String> {
 /// Sets the access rights (chmod). `mode` are the lower permission bits
 /// (0..=0o7777, incl. setuid/setgid/sticky).
 #[tauri::command]
-pub fn set_permissions(path: String, mode: u32) -> Result<(), String> {
+pub fn set_permissions(path: String, mode: u32) -> AppResult<()> {
     caps::require(&path, Capability::Permissions)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let perms = fs::Permissions::from_mode(mode & 0o7777);
-        fs::set_permissions(&path, perms).map_err(|e| e.to_string())
+        fs::set_permissions(&path, perms).map_err(AppError::from)
     }
     #[cfg(not(unix))]
     {
         let _ = (path, mode);
-        Err("Rechte bearbeiten wird auf dieser Plattform nicht unterstützt".into())
+        Err(AppError::from(
+            "Rechte bearbeiten wird auf dieser Plattform nicht unterstützt",
+        ))
     }
 }
 
@@ -209,7 +212,7 @@ pub fn set_permissions(path: String, mode: u32) -> Result<(), String> {
 /// numeric value ("501") or a name ("staff"); None leaves the
 /// respective value unchanged. Usually requires root privileges.
 #[tauri::command]
-pub fn set_owner(path: String, owner: Option<String>, group: Option<String>) -> Result<(), String> {
+pub fn set_owner(path: String, owner: Option<String>, group: Option<String>) -> AppResult<()> {
     caps::require(&path, Capability::Permissions)?;
     #[cfg(unix)]
     {
@@ -221,49 +224,51 @@ pub fn set_owner(path: String, owner: Option<String>, group: Option<String>) -> 
             Some(g) => Some(resolve_gid(&g)?),
             None => None,
         };
-        std::os::unix::fs::chown(&path, uid, gid).map_err(|e| e.to_string())
+        std::os::unix::fs::chown(&path, uid, gid).map_err(AppError::from)
     }
     #[cfg(not(unix))]
     {
         let _ = (path, owner, group);
-        Err("Besitzer ändern wird auf dieser Plattform nicht unterstützt".into())
+        Err(AppError::from(
+            "Besitzer ändern wird auf dieser Plattform nicht unterstützt",
+        ))
     }
 }
 
 #[cfg(unix)]
-fn resolve_uid(value: &str) -> Result<u32, String> {
+fn resolve_uid(value: &str) -> AppResult<u32> {
     if let Ok(id) = value.parse::<u32>() {
         return Ok(id);
     }
     uzers::get_user_by_name(value)
         .map(|u| u.uid())
-        .ok_or_else(|| format!("Unbekannter Benutzer: {}", value))
+        .ok_or_else(|| AppError::from(format!("Unbekannter Benutzer: {}", value)))
 }
 
 #[cfg(unix)]
-fn resolve_gid(value: &str) -> Result<u32, String> {
+fn resolve_gid(value: &str) -> AppResult<u32> {
     if let Ok(id) = value.parse::<u32>() {
         return Ok(id);
     }
     uzers::get_group_by_name(value)
         .map(|g| g.gid())
-        .ok_or_else(|| format!("Unbekannte Gruppe: {}", value))
+        .ok_or_else(|| AppError::from(format!("Unbekannte Gruppe: {}", value)))
 }
 
 /// Computes MD5, SHA-1, and SHA-256 in a single read pass.
 /// Runs synchronously; correspondingly slow for very large files.
 #[tauri::command]
-pub fn file_checksums(path: String) -> Result<Checksums, String> {
+pub fn file_checksums(path: String) -> AppResult<Checksums> {
     use md5::Digest as _; // shared Digest trait (also for sha1/sha2)
 
-    let mut file = fs::File::open(&path).map_err(|e| e.to_string())?;
+    let mut file = fs::File::open(&path).map_err(AppError::from)?;
     let mut md5 = md5::Md5::new();
     let mut sha1 = sha1::Sha1::new();
     let mut sha256 = sha2::Sha256::new();
     let mut buf = vec![0u8; 256 * 1024];
 
     loop {
-        let n = file.read(&mut buf).map_err(|e| e.to_string())?;
+        let n = file.read(&mut buf).map_err(AppError::from)?;
         if n == 0 {
             break;
         }

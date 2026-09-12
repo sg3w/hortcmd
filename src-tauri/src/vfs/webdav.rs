@@ -18,6 +18,7 @@
 
 use super::{Provider, Stat};
 use crate::commands::fs::dir::{DirEntry, DirListing};
+use crate::errors::{AppError, AppResult};
 use crate::net::session::{runtime, Profile};
 use reqwest_dav::list_cmd::ListEntity;
 use reqwest_dav::{Auth, Client, ClientBuilder, Depth};
@@ -28,7 +29,7 @@ use std::sync::Arc;
 /// Opens a WebDAV connection and returns the ready provider.
 /// The credentials are verified with a PROPFIND on the start path, so
 /// a wrong password or an unreachable host fails here, not later.
-pub fn connect(profile: &Profile, secret: Option<&str>) -> Result<Arc<dyn Provider>, String> {
+pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Provider>> {
     let auth = match profile.auth.as_str() {
         "anonymous" => Auth::Anonymous,
         // `digest` selects Digest; everything else uses Basic.
@@ -57,7 +58,9 @@ pub fn connect(profile: &Profile, secret: Option<&str>) -> Result<Arc<dyn Provid
         .set_host(host.clone())
         .set_auth(auth)
         .build()
-        .map_err(|e| format!("WebDAV-Client konnte nicht erstellt werden: {}", e))?;
+        .map_err(|e| {
+            AppError::from(format!("WebDAV-Client konnte nicht erstellt werden: {}", e))
+        })?;
 
     let provider = WebdavProvider {
         key: profile.connection_key(),
@@ -73,7 +76,7 @@ pub fn connect(profile: &Profile, secret: Option<&str>) -> Result<Arc<dyn Provid
     };
     provider
         .list(start)
-        .map_err(|e| format!("Verbindung fehlgeschlagen: {}", e))?;
+        .map_err(|e| AppError::from(format!("Verbindung fehlgeschlagen: {}", e)))?;
 
     Ok(Arc::new(provider))
 }
@@ -140,14 +143,14 @@ fn norm(s: &str) -> String {
 
 impl WebdavProvider {
     /// PROPFIND with depth 0 — metadata of the entry itself.
-    fn stat_entity(&self, path: &str) -> Result<ListEntity, String> {
+    fn stat_entity(&self, path: &str) -> AppResult<ListEntity> {
         let items = runtime()
             .block_on(self.client.list(path, Depth::Number(0)))
-            .map_err(|e| format!("{}: {}", path, e))?;
+            .map_err(|e| AppError::from(format!("{}: {}", path, e)))?;
         items
             .into_iter()
             .next()
-            .ok_or_else(|| format!("{}: nicht gefunden", path))
+            .ok_or_else(|| AppError::from(format!("{}: nicht gefunden", path)))
     }
 }
 
@@ -156,10 +159,10 @@ impl Provider for WebdavProvider {
         format!("webdav:{}", self.key)
     }
 
-    fn list(&self, path: &str) -> Result<DirListing, String> {
+    fn list(&self, path: &str) -> AppResult<DirListing> {
         let items = runtime()
             .block_on(self.client.list(path, Depth::Number(1)))
-            .map_err(|e| format!("{}: {}", path, e))?;
+            .map_err(|e| AppError::from(format!("{}: {}", path, e)))?;
 
         let self_key = norm(path);
         let mut entries = Vec::new();

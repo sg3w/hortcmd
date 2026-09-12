@@ -13,6 +13,7 @@
 // ============================================================
 
 use super::copy::{hash_file_sha256, CopyTuning};
+use super::events::ItemError;
 use super::plan::{discard_staging, publish, Plan};
 use super::progress::SharedProg;
 use crate::vfs::Provider;
@@ -145,7 +146,7 @@ pub(crate) fn run_parallel_copy(
     threads: u32,
     files_total: u32,
     bytes_total: u64,
-) -> (u32, Vec<String>) {
+) -> (u32, Vec<ItemError>) {
     // Flatten all source trees into file tasks (target folders are
     // created). In safe mode every job writes into its own staging
     // entry, so one worker's failure can never publish a half-copied
@@ -174,7 +175,7 @@ pub(crate) fn run_parallel_copy(
     let next = Arc::new(AtomicUsize::new(0));
     let failed: Arc<Vec<AtomicBool>> =
         Arc::new((0..jobs.len()).map(|_| AtomicBool::new(false)).collect());
-    let errors: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let errors: Arc<Mutex<Vec<ItemError>>> = Arc::new(Mutex::new(Vec::new()));
 
     let n_threads = (threads.clamp(2, 16) as usize).min(tasks.len().max(1));
     let handles: Vec<_> = (0..n_threads)
@@ -203,7 +204,7 @@ pub(crate) fn run_parallel_copy(
                         errors
                             .lock()
                             .unwrap()
-                            .push(format!("{}: {}", task.src.display(), e));
+                            .push(ItemError::new(task.src.display().to_string(), e.into()));
                     }
                 }
             })
@@ -237,7 +238,7 @@ pub(crate) fn commit_finished_jobs(
     plans: &[&Plan],
     done: &[bool],
     cancelled: bool,
-    errors: &mut Vec<String>,
+    errors: &mut Vec<ItemError>,
 ) -> u32 {
     let mut ok = 0u32;
     for (i, plan) in plans.iter().enumerate() {
@@ -248,7 +249,7 @@ pub(crate) fn commit_finished_jobs(
         match publish(dstp, plan) {
             Ok(()) => ok += 1,
             Err(e) => {
-                errors.push(format!("{}: {}", plan.target.display(), e));
+                errors.push(ItemError::new(plan.target.display().to_string(), e.into()));
                 discard_staging(dstp, plan, errors);
             }
         }

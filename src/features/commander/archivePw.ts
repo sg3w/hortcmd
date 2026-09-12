@@ -7,10 +7,16 @@
 import { KeyRound } from "lucide-react";
 import { useOps } from "@/store/opsStore";
 import { translate } from "@/store/settingsStore";
+import { isError, isOneOf } from "@/lib/appError";
 
-/** Sentinel errors of the backend (see archive.rs). */
-export const PW_REQUIRED = "PASSWORD_REQUIRED";
-export const PW_WRONG = "PASSWORD_WRONG";
+/**
+ * The two password outcomes, as error codes (TICKET-036). They used to
+ * be sentinel strings matched inside a message, which made a password
+ * prompt depend on wording; now they are codes the backend sends and
+ * this module branches on.
+ */
+export const PW_REQUIRED = "archive.passwordRequired";
+export const PW_WRONG = "archive.passwordWrong";
 
 const passwords = new Map<string, string>();
 
@@ -19,9 +25,14 @@ export function archivePassword(archive: string): string | undefined {
   return passwords.get(archive);
 }
 
-/** Does an error message contain a password sentinel? */
-export function isPasswordError(message: string): boolean {
-  return message.includes(PW_REQUIRED) || message.includes(PW_WRONG);
+/** Whether a thrown backend error is one of the two password outcomes. */
+export function isPasswordError(e: unknown): boolean {
+  return isOneOf(e, PW_REQUIRED, PW_WRONG);
+}
+
+/** Whether it is specifically the "wrong password" one. */
+export function isWrongPassword(e: unknown): boolean {
+  return isError(e, PW_WRONG);
 }
 
 /**

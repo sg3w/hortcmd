@@ -28,11 +28,13 @@ import { splitName } from "@/lib/format";
 import { isArchive } from "@/lib/archive";
 import {
   archivePassword,
-  isPasswordError,
   promptArchivePassword,
+  PW_REQUIRED,
   PW_WRONG,
 } from "@/features/commander/archivePw";
-import type { Leftovers, OpDone } from "@/ipc/bindings";
+import type { ItemError, Leftovers, OpDone } from "@/ipc/bindings";
+import { isError } from "@/lib/appError";
+import { describeErrorFull, describeItemErrors } from "@/store/errorText";
 import { openFileBrowser } from "@/store/fileBrowserStore";
 import {
   programForExtension,
@@ -80,11 +82,27 @@ export async function reloadBoth(): Promise<void> {
   ]);
 }
 
-function reportErrors(errors: string[]): void {
-  if (errors.length === 0) return;
+/** Shows one already-phrased message the frontend produced itself. */
+function reportMessage(message: string): void {
   useOps.getState().requestConfirm({
     title: translate("op.errors"),
-    message: errors.slice(0, 8).join("\n"),
+    message,
+    onConfirm: () => {},
+  });
+}
+
+/**
+ * Shows what failed in a batch. The messages are produced *here*, from
+ * the codes the backend sent (TICKET-036), so they arrive in the user's
+ * language; a cancelled item is dropped rather than reported as a
+ * failure.
+ */
+function reportErrors(errors: ItemError[]): void {
+  const lines = describeItemErrors(errors);
+  if (lines.length === 0) return;
+  useOps.getState().requestConfirm({
+    title: translate("op.errors"),
+    message: lines.slice(0, 8).join("\n"),
     onConfirm: () => {},
   });
 }
@@ -231,10 +249,13 @@ export function handleExtractDone(d: OpDone): boolean {
   const req = pendingExtracts.get(d.id);
   pendingExtracts.delete(d.id);
   if (!req || d.cancelled) return false;
-  const needsPassword = d.errors.some((e) => isPasswordError(e));
-  if (!needsPassword) return false;
-
-  const wrong = d.errors.some((e) => e.includes(PW_WRONG));
+  // Branching on codes, not on message text (TICKET-036): the two
+  // password outcomes are distinct answers, and "wrong" is what makes
+  // the prompt say so.
+  const wrong = d.errors.some((e) => isError(e.error, PW_WRONG));
+  if (!wrong && !d.errors.some((e) => isError(e.error, PW_REQUIRED))) {
+    return false;
+  }
   useTransfers.getState().remove(d.id); // gescheiterten Vorgang entfernen
   promptArchivePassword(req.archive, wrong, () => {
     beginExtract(req.archive, req.base, req.names, req.dest);
@@ -517,7 +538,7 @@ export function runRename(side: Side): void {
       const name = value.trim();
       if (!name || name === oldName) return;
       if (name.includes("/") || name.includes("\\")) {
-        reportErrors([translate("op.rename.invalid")]);
+        reportMessage(translate("op.rename.invalid"));
         return;
       }
       // Report a name conflict localized up front (the backend also checks).
@@ -525,7 +546,7 @@ export function runRename(side: Side): void {
         (e) => !e.parent && e.name === name,
       );
       if (exists) {
-        reportErrors([translate("op.collision.exists").replace("{name}", name)]);
+        reportMessage(translate("op.collision.exists").replace("{name}", name));
         return;
       }
       void withBusy(async () => {
@@ -535,7 +556,7 @@ export function runRename(side: Side): void {
             .getState()
             .refresh(side, { reveal: true, names: [name] });
         } catch (e) {
-          reportErrors([String(e)]);
+          reportMessage(describeErrorFull(e));
         }
       });
     },

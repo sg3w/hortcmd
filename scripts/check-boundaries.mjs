@@ -145,12 +145,14 @@ for (const [file, targets] of graph) {
 // importing one above it would undo that ordering.
 const RUST_LAYERS = ["events", "registry", "progress", "plan", "copy", "parallel", "engine"];
 const RUST_ALLOWED = {
+  // `events` is the bottom layer — the serialized payloads depend on
+  // nothing and everything above may use them.
   events: [],
   registry: ["events"],
   progress: ["events"],
-  plan: [],
-  copy: ["plan", "progress"],
-  parallel: ["copy", "plan", "progress"],
+  plan: ["events"],
+  copy: ["events", "plan", "progress"],
+  parallel: ["copy", "events", "plan", "progress"],
   engine: ["copy", "events", "parallel", "plan", "progress", "registry"],
 };
 for (const mod of RUST_LAYERS) {

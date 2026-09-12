@@ -16,6 +16,7 @@
 
 use super::{Provider, Stat};
 use crate::commands::fs::dir::{DirEntry, DirListing};
+use crate::errors::{AppError, AppResult};
 use crate::net::session::Profile;
 use smb::binrw_util::sized_string::SizedWideString;
 use smb::resource::{FileCreateArgs, Resource};
@@ -29,7 +30,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 /// Opens an SMB connection and returns the ready provider.
-pub fn connect(profile: &Profile, secret: Option<&str>) -> Result<Arc<dyn Provider>, String> {
+pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Provider>> {
     let client = Client::new(ClientConfig::default());
 
     // Domain/workgroup accounts are written `DOMAIN\user` (or `user@domain`),
@@ -62,7 +63,7 @@ pub fn connect(profile: &Profile, secret: Option<&str>) -> Result<Arc<dyn Provid
         None => {
             provider
                 .shares()
-                .map_err(|e| format!("Verbindung fehlgeschlagen: {}", e))?;
+                .map_err(|e| AppError::from(format!("Verbindung fehlgeschlagen: {}", e)))?;
         }
     }
 
@@ -121,7 +122,7 @@ fn unix_secs(t: impl Into<std::time::SystemTime>) -> u64 {
 
 impl SmbProvider {
     /// Attaches a share once per connection.
-    fn ensure_share(&self, share: &str) -> Result<(), String> {
+    fn ensure_share(&self, share: &str) -> AppResult<()> {
         {
             let done = self.connected.lock().unwrap();
             if done.contains(share) {
@@ -130,22 +131,22 @@ impl SmbProvider {
         }
         let unc = UncPath::new(&self.server)
             .and_then(|u| u.with_share(share))
-            .map_err(|e| format!("Ungültiger SMB-Pfad: {}", e))?;
+            .map_err(|e| AppError::from(format!("Ungültiger SMB-Pfad: {}", e)))?;
         self.client
             .share_connect(&unc, &self.user, self.password.clone())
-            .map_err(|e| format!("Share '{}' nicht erreichbar: {}", share, e))?;
+            .map_err(|e| AppError::from(format!("Share '{}' nicht erreichbar: {}", share, e)))?;
         self.connected.lock().unwrap().insert(share.to_string());
         Ok(())
     }
 
     /// UNC path for a provider path (share must be attached first).
-    fn unc_of(&self, path: &str) -> Result<UncPath, String> {
+    fn unc_of(&self, path: &str) -> AppResult<UncPath> {
         let (share, rest) =
             split_share(path).ok_or_else(|| "Pfad enthält keinen Share".to_string())?;
         self.ensure_share(&share)?;
         let mut unc = UncPath::new(&self.server)
             .and_then(|u| u.with_share(&share))
-            .map_err(|e| format!("Ungültiger SMB-Pfad: {}", e))?;
+            .map_err(|e| AppError::from(format!("Ungültiger SMB-Pfad: {}", e)))?;
         if !rest.is_empty() {
             // SMB uses backslashes inside a share.
             unc = unc.with_path(&rest.replace('/', "\\"));
@@ -154,7 +155,7 @@ impl SmbProvider {
     }
 
     /// The server's shares, as directory entries.
-    fn shares(&self) -> Result<Vec<DirEntry>, String> {
+    fn shares(&self) -> AppResult<Vec<DirEntry>> {
         // Enumerating shares talks to the `srvsvc` named pipe, which lives
         // on the hidden IPC$ share — that has to be attached first.
         {
@@ -162,7 +163,7 @@ impl SmbProvider {
             if !done.contains(IPC_SHARE) {
                 self.client
                     .ipc_connect(&self.server, &self.user, self.password.clone())
-                    .map_err(|e| format!("IPC$ nicht erreichbar: {}", e))?;
+                    .map_err(|e| AppError::from(format!("IPC$ nicht erreichbar: {}", e)))?;
                 done.insert(IPC_SHARE.to_string());
             }
         }
@@ -203,15 +204,15 @@ impl SmbProvider {
     }
 
     /// Opens a resource with the given create arguments.
-    fn open(&self, path: &str, args: &FileCreateArgs) -> Result<Resource, String> {
+    fn open(&self, path: &str, args: &FileCreateArgs) -> AppResult<Resource> {
         let unc = self.unc_of(path)?;
         self.client
             .create_file(&unc, args)
-            .map_err(|e| format!("{}: {}", path, e))
+            .map_err(|e| AppError::from(format!("{}: {}", path, e)))
     }
 
     /// Read-only open of an existing entry.
-    fn open_existing(&self, path: &str) -> Result<Resource, String> {
+    fn open_existing(&self, path: &str) -> AppResult<Resource> {
         self.open(
             path,
             &FileCreateArgs::make_open_existing(FileAccessMask::new().with_generic_read(true)),
@@ -223,21 +224,21 @@ impl SmbProvider {
     /// The directory handle is closed before returning — leaving it open
     /// locks the directory server-side and makes a later rename/delete
     /// fail with a sharing violation.
-    fn dir_entries(&self, path: &str) -> Result<Vec<DirEntry>, String> {
+    fn dir_entries(&self, path: &str) -> AppResult<Vec<DirEntry>> {
         let resource = self.open_existing(path)?;
         let dir = resource
             .is_dir()
             .then(|| resource.unwrap_dir())
-            .ok_or_else(|| format!("{}: kein Verzeichnis", path))?;
+            .ok_or_else(|| AppError::from(format!("{}: kein Verzeichnis", path)))?;
 
         // Scoped so the borrowing iterator is dropped before the close.
         let collected = {
             let mut entries = Vec::new();
             let iter = dir
                 .query::<FileIdBothDirectoryInformation>("*")
-                .map_err(|e| format!("{}: {}", path, e))?;
+                .map_err(|e| AppError::from(format!("{}: {}", path, e)))?;
             for item in iter {
-                let info = item.map_err(|e| format!("{}: {}", path, e))?;
+                let info = item.map_err(|e| AppError::from(format!("{}: {}", path, e)))?;
                 let name = info.file_name.to_string();
                 if name == "." || name == ".." {
                     continue;
@@ -271,7 +272,7 @@ impl Provider for SmbProvider {
         format!("smb:{}", self.key)
     }
 
-    fn list(&self, path: &str) -> Result<DirListing, String> {
+    fn list(&self, path: &str) -> AppResult<DirListing> {
         // The connection root lists the server's shares.
         let entries = match split_share(path) {
             None => self.shares()?,

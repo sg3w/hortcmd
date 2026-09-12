@@ -281,7 +281,12 @@ fn exercise_capabilities(p: Arc<dyn Provider>, address: &str, ssh_expected: bool
         );
         let err =
             caps::require(address, cap).expect_err("an unadvertised capability must be refused");
-        assert!(err.starts_with(UNSUPPORTED), "untyped refusal: {}", err);
+        assert!(
+            err.is(UNSUPPORTED),
+            "untyped refusal for {}: {:?}",
+            cap.id(),
+            err
+        );
     }
     println!("  OK: capability matrix matches the exercised behavior");
 }

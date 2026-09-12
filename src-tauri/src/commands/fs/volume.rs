@@ -6,6 +6,7 @@
 // Windows, macOS, and Linux stay in one place.
 // ============================================================
 
+use crate::errors::{AppError, AppResult};
 use crate::vfs::caps::{self, Capability};
 use serde::Serialize;
 use std::fs;
@@ -95,7 +96,7 @@ pub fn free_space_of(path: &Path) -> Option<u64> {
 /// mount point matches. Runs in the background – reading the disk list
 /// can be slow (network shares, spun-down drives).
 #[tauri::command]
-pub async fn volume_info(path: String) -> Result<Option<VolumeInfo>, String> {
+pub async fn volume_info(path: String) -> AppResult<Option<VolumeInfo>> {
     // `sysinfo` only knows locally mounted volumes; a remote address has
     // no disk of its own here (TICKET-031).
     caps::require(&path, Capability::VolumeInfo)?;
@@ -106,7 +107,7 @@ pub async fn volume_info(path: String) -> Result<Option<VolumeInfo>, String> {
         find(&target)
     })
     .await
-    .map_err(|e| e.to_string())
+    .map_err(AppError::from)
 }
 
 #[cfg(test)]

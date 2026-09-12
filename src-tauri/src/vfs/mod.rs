@@ -25,6 +25,7 @@ pub mod webdav;
 mod live_tests;
 
 use crate::commands::fs::dir::DirListing;
+use crate::errors::{AppError, AppResult};
 use local::LocalProvider;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -121,7 +122,7 @@ impl Address {
 ///   absolute `file:///…` URL stay part of the path).
 /// - `sftp://[user@]host[:port]/path` → remote scheme + authority.
 /// - Any other scheme → an error.
-pub fn parse_address(raw: &str) -> Result<Address, String> {
+pub fn parse_address(raw: &str) -> AppResult<Address> {
     let Some(idx) = raw.find("://") else {
         // No scheme: a plain local path.
         return Ok(local_address(raw));
@@ -132,7 +133,10 @@ pub fn parse_address(raw: &str) -> Result<Address, String> {
     match Scheme::from_scheme_str(scheme_str) {
         Some(Scheme::Local) => Ok(local_address(rest)),
         Some(scheme) => Ok(parse_remote(scheme, rest)),
-        None => Err(format!("Unbekanntes Adressschema: {}://", scheme_str)),
+        None => Err(AppError::from(format!(
+            "Unbekanntes Adressschema: {}://",
+            scheme_str
+        ))),
     }
 }
 
@@ -182,16 +186,19 @@ fn local_provider() -> Arc<dyn Provider> {
 /// Local addresses use the shared local provider; `sftp` addresses are
 /// bound to an active connection (see `net::session`). Unknown and
 /// reserved-but-unimplemented schemes return a clear error.
-pub fn resolve(raw: &str) -> Result<(Arc<dyn Provider>, String), String> {
+pub fn resolve(raw: &str) -> AppResult<(Arc<dyn Provider>, String)> {
     let addr = parse_address(raw)?;
     if addr.scheme == Scheme::Local {
         return Ok((local_provider(), addr.path));
     }
     // Every remote scheme is served by a live connection from the
     // session registry (opened via the connection manager, ticket 021).
-    let key = addr
-        .connection_key()
-        .ok_or_else(|| format!("{}-Adresse ohne Host", addr.scheme.as_str().to_uppercase()))?;
+    let key = addr.connection_key().ok_or_else(|| {
+        AppError::from(format!(
+            "{}-Adresse ohne Host",
+            addr.scheme.as_str().to_uppercase()
+        ))
+    })?;
     let provider = crate::net::session::remote_provider(addr.scheme.as_str(), &key)?;
     Ok((provider, addr.path))
 }
@@ -223,7 +230,7 @@ pub trait Provider: Send + Sync {
     fn store_id(&self) -> String;
 
     /// Full directory listing (drives the `list_dir` command).
-    fn list(&self, path: &str) -> Result<DirListing, String>;
+    fn list(&self, path: &str) -> AppResult<DirListing>;
 
     /// Cheap metadata (following symlinks) for the transfer totals.
     fn stat(&self, path: &Path) -> io::Result<Stat>;

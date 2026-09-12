@@ -3,6 +3,7 @@
 // Additionally: open with the default program (F4).
 // ============================================================
 
+use crate::errors::{code, AppError, AppResult};
 use crate::vfs::caps::{self, Capability};
 use crate::vfs::{self, Provider};
 use base64::Engine as _;
@@ -109,12 +110,12 @@ fn read_upto(provider: &dyn Provider, p: &Path, cap: usize) -> io::Result<Vec<u8
 /// Reads up to `max_bytes` of a file for the preview. Works for local
 /// and remote (VFS-resolved) paths alike.
 #[tauri::command]
-pub fn read_preview(path: String, max_bytes: u32) -> Result<Preview, String> {
+pub fn read_preview(path: String, max_bytes: u32) -> AppResult<Preview> {
     let (provider, rpath) = vfs::resolve(&path)?;
     let p = Path::new(&rpath);
-    let st = provider.stat(p).map_err(|e| e.to_string())?;
+    let st = provider.stat(p).map_err(AppError::from)?;
     if st.is_dir {
-        return Err("Verzeichnis kann nicht angezeigt werden".into());
+        return Err(AppError::from("Verzeichnis kann nicht angezeigt werden"));
     }
     let size = st.len;
     let name = p
@@ -128,7 +129,7 @@ pub fn read_preview(path: String, max_bytes: u32) -> Result<Preview, String> {
 
     // Return images as a data URL.
     if IMAGE_EXTS.contains(&ext.as_str()) {
-        let bytes = read_all(&*provider, p).map_err(|e| e.to_string())?;
+        let bytes = read_all(&*provider, p).map_err(AppError::from)?;
         let mime = match ext.as_str() {
             "jpg" | "jpeg" => "image/jpeg",
             "gif" => "image/gif",
@@ -153,7 +154,7 @@ pub fn read_preview(path: String, max_bytes: u32) -> Result<Preview, String> {
 
     // Read a text excerpt.
     let cap = (max_bytes as u64).min(size) as usize;
-    let buf = read_upto(&*provider, p, cap).map_err(|e| e.to_string())?;
+    let buf = read_upto(&*provider, p, cap).map_err(AppError::from)?;
     let truncated = (buf.len() as u64) < size;
 
     // Null bytes in the initial region → treat as binary (hex view).
@@ -179,11 +180,11 @@ pub fn read_preview(path: String, max_bytes: u32) -> Result<Preview, String> {
 /// rendered content — see `open_external`, which validates the scheme so
 /// a preview can never turn this into a general launcher (TICKET-030).
 #[tauri::command]
-pub fn open_path(path: String) -> Result<(), String> {
+pub fn open_path(path: String) -> AppResult<()> {
     // The OS launcher only understands a local path; `sftp://host/x`
     // would reach it as an opaque string (TICKET-031).
     caps::require(&path, Capability::SystemOpen)?;
-    opener::open(&path).map_err(|e| e.to_string())
+    opener::open(&path).map_err(AppError::from)
 }
 
 /// Whether a link from rendered content may be handed to the system
@@ -225,16 +226,19 @@ pub fn is_safe_external_url(url: &str) -> bool {
 /// way out of the WebView for links in rendered content (TICKET-030):
 /// the main window itself never navigates away from the app document.
 #[tauri::command]
-pub fn open_external(url: String) -> Result<(), String> {
+pub fn open_external(url: String) -> AppResult<()> {
     if !is_safe_external_url(&url) {
-        return Err(format!("Nicht unterstützte Adresse: {}", url));
+        return Err(AppError::from(format!(
+            "Nicht unterstützte Adresse: {}",
+            url
+        )));
     }
-    opener::open(&url).map_err(|e| e.to_string())
+    opener::open(&url).map_err(AppError::from)
 }
 
 /// Opens the native macOS Quick Look preview (Space). macOS only.
 #[tauri::command]
-pub fn quick_look(path: String) -> Result<(), String> {
+pub fn quick_look(path: String) -> AppResult<()> {
     // macOS-only and local-only — both gates live in the capability.
     caps::require(&path, Capability::QuickLook)?;
     #[cfg(target_os = "macos")]
@@ -247,19 +251,19 @@ pub fn quick_look(path: String) -> Result<(), String> {
             .stderr(Stdio::null())
             .spawn()
             .map(|_| ())
-            .map_err(|e| e.to_string())
+            .map_err(AppError::from)
     }
     #[cfg(not(target_os = "macos"))]
     {
         let _ = path;
-        Err("Quick Look ist nur unter macOS verfügbar".into())
+        Err(AppError::from("Quick Look ist nur unter macOS verfügbar"))
     }
 }
 
 /// Opens a file with a specific program.
 /// Empty `program` → system default (like `open_path`).
 #[tauri::command]
-pub fn open_with(path: String, program: String) -> Result<(), String> {
+pub fn open_with(path: String, program: String) -> AppResult<()> {
     use std::process::Command;
 
     caps::require(&path, Capability::OpenWith)?;
@@ -277,13 +281,13 @@ pub fn open_with(path: String, program: String) -> Result<(), String> {
                 .args(["-a", program, &path])
                 .spawn()
                 .map(|_| ())
-                .map_err(|e| e.to_string())
+                .map_err(AppError::from)
         } else {
             Command::new(program)
                 .arg(&path)
                 .spawn()
                 .map(|_| ())
-                .map_err(|e| e.to_string())
+                .map_err(AppError::from)
         }
     }
 
@@ -293,14 +297,14 @@ pub fn open_with(path: String, program: String) -> Result<(), String> {
             .arg(&path)
             .spawn()
             .map(|_| ())
-            .map_err(|e| e.to_string())
+            .map_err(AppError::from)
     }
 }
 
 /// Opens a terminal in the given folder.
 /// `program` overrides the default terminal (empty/None = platform default).
 #[tauri::command]
-pub fn open_terminal(path: String, program: Option<String>) -> Result<(), String> {
+pub fn open_terminal(path: String, program: Option<String>) -> AppResult<()> {
     use std::process::Command;
 
     // A local terminal has no notion of a remote location. SFTP folders
@@ -309,7 +313,7 @@ pub fn open_terminal(path: String, program: Option<String>) -> Result<(), String
     caps::require(&path, Capability::LocalTerminal)?;
     let dir = Path::new(&path);
     if !dir.is_dir() {
-        return Err("Kein Verzeichnis".into());
+        return Err(AppError::from("Kein Verzeichnis"));
     }
     let prog = program
         .map(|p| p.trim().to_string())
@@ -323,7 +327,7 @@ pub fn open_terminal(path: String, program: Option<String>) -> Result<(), String
             .args(["-a", &app, &path])
             .spawn()
             .map(|_| ())
-            .map_err(|e| e.to_string())
+            .map_err(AppError::from)
     }
 
     #[cfg(target_os = "windows")]
@@ -334,7 +338,7 @@ pub fn open_terminal(path: String, program: Option<String>) -> Result<(), String
             .current_dir(dir)
             .spawn()
             .map(|_| ())
-            .map_err(|e| e.to_string())
+            .map_err(AppError::from)
     }
 
     #[cfg(all(unix, not(target_os = "macos")))]
@@ -358,7 +362,7 @@ pub fn open_terminal(path: String, program: Option<String>) -> Result<(), String
                 return Ok(());
             }
         }
-        Err("Kein Terminal gefunden".into())
+        Err(AppError::from("Kein Terminal gefunden"))
     }
 }
 
@@ -381,7 +385,7 @@ const HELPER_WAIT: std::time::Duration = std::time::Duration::from_millis(4000);
 /// error. A process still running when the budget is used up counts as
 /// success (the native window is up, its lifetime is not ours).
 #[cfg(not(target_os = "windows"))]
-fn wait_briefly(mut child: std::process::Child) -> Result<(), String> {
+fn wait_briefly(mut child: std::process::Child) -> AppResult<()> {
     use std::time::Instant;
     let deadline = Instant::now() + HELPER_WAIT;
     loop {
@@ -396,13 +400,13 @@ fn wait_briefly(mut child: std::process::Child) -> Result<(), String> {
                 return Err(if msg.is_empty() {
                     "Systeminformationen konnten nicht geöffnet werden".into()
                 } else {
-                    msg.to_string()
+                    AppError::from(msg.to_string())
                 });
             }
             // Still running: the window is open, we do not wait for it.
             Ok(None) if Instant::now() >= deadline => return Ok(()),
             Ok(None) => std::thread::sleep(std::time::Duration::from_millis(25)),
-            Err(e) => return Err(e.to_string()),
+            Err(e) => return Err(e.into()),
         }
     }
 }
@@ -432,7 +436,7 @@ fn file_uri(path: &Path) -> String {
 /// Returns as soon as the window has been handed to the system; its
 /// lifetime is independent of this call and of hortcmd's own dialog.
 #[tauri::command]
-pub fn open_system_properties(path: String) -> Result<(), String> {
+pub fn open_system_properties(path: String) -> AppResult<()> {
     // Remote addresses (sftp://, smb://, …) are rejected here as well,
     // not only hidden in the UI (TICKET-031).
     caps::require(&path, Capability::SystemOpen)?;
@@ -442,7 +446,7 @@ pub fn open_system_properties(path: String) -> Result<(), String> {
     // entry — the info window is about the link, not its target.
     let target = Path::new(&addr.path);
     if target.symlink_metadata().is_err() {
-        return Err("Eintrag existiert nicht".into());
+        return Err(AppError::new(code::FS_NOT_FOUND).with("path", &path));
     }
 
     #[cfg(target_os = "macos")]
@@ -506,7 +510,7 @@ pub fn open_system_properties(path: String) -> Result<(), String> {
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(|e| e.to_string())?;
+            .map_err(AppError::from)?;
         wait_briefly(child)
     }
 
@@ -640,10 +644,12 @@ mod system_properties_tests {
             let err = open_system_properties(addr.to_string()).unwrap_err();
             // Since TICKET-031 the refusal is the typed capability
             // error, so the frontend recognizes it without reading prose.
+            // Since TICKET-036 the refusal is a typed code rather than
+            // a marker inside a sentence.
             assert!(
-                err.starts_with(crate::vfs::caps::UNSUPPORTED)
-                    && err.contains(Capability::SystemOpen.id()),
-                "unerwartete Meldung für {addr}: {err}"
+                err.is(crate::errors::code::CAPABILITY_OFFLINE)
+                    || err.is(crate::errors::code::CAPABILITY_UNSUPPORTED),
+                "unerwarteter Code für {addr}: {err:?}"
             );
         }
     }
@@ -652,7 +658,7 @@ mod system_properties_tests {
     fn rejects_missing_entries() {
         let missing = std::env::temp_dir().join("hortcmd-does-not-exist-015");
         let err = open_system_properties(missing.to_string_lossy().into_owned()).unwrap_err();
-        assert!(err.contains("existiert nicht"), "{err}");
+        assert!(err.is(crate::errors::code::FS_NOT_FOUND), "{err:?}");
     }
 
     #[cfg(all(unix, not(target_os = "macos")))]

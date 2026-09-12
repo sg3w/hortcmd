@@ -439,6 +439,66 @@ production CSP from TICKET-030 (`script-src 'self'`) covers them unchanged.
 
 ---
 
+### The error boundary (TICKET-036)
+
+Backend errors used to be display-ready strings: half German, several carrying
+raw platform or protocol wording, and four of them load-bearing — the frontend
+matched substrings to recognize a locked KeePass file (`KEEPASS_LOCKED`), an
+unsupported location (`UNSUPPORTED_LOCATION`), a connection failure (`CONN_*`)
+and an archive password prompt (`PASSWORD_REQUIRED`/`PASSWORD_WRONG`). Brittle
+control flow, inconsistent localization, and a place a credential-bearing URL
+could reach a dialog.
+
+**`AppError` is the contract.** A versioned payload with a stable namespaced
+`code`, safe localization `params`, `op`/`provider` context, `retryable`, an
+`action` hint, a redacted `detail` for diagnostics, and a correlation `id`. It
+crosses every command boundary: `AppResult<T>` replaced `Result<T, String>`
+throughout.
+
+**Who owns what.** The backend describes; the frontend phrases. Nothing
+display-ready crosses the boundary, so nothing can arrive in the wrong language
+or in a server's own words. `src/i18n/namespaces/errors.ts` holds one entry per
+code in both languages, and `src/store/errorText.ts` produces the sentence at
+the moment it is shown — which is why switching language re-renders an error
+already on screen.
+
+**Namespaces**: `fs.` · `transfer.` · `archive.` · `net.` · `cred.` ·
+`security.` · `capability.` · `validation.` · `cancelled` · `internal.`
+Codes are `&'static str`, not an enum, on purpose: an enum would force a
+lockstep upgrade of every consumer, while a string lets a newer backend
+introduce a code that an older frontend renders generically — with the
+correlation id, so it stays reportable. That is the compatibility rule the
+planned MCP and plugin interfaces inherit.
+
+**Mapping happens at the owning boundary.** One `From<io::Error>` serves every
+filesystem path, so "not found" reads the same whether it came from a local
+`stat` or an SFTP `open`; the keyring, KeePass, SSH, archive and capability
+boundaries each map their own. `cancelled` is distinct from failure everywhere
+and is never rendered as one.
+
+**Redaction is central, not per call site.** Everything entering an `AppError` —
+parameters and detail alike — passes through `redact`: URL user-info
+(`sftp://user:pw@host` → `sftp://user:***@host`, keeping the user name, which is
+what makes the message useful), `password=`/`token=` style assignments in any
+shape, bearer tokens, and pasted key blocks. Redaction that lives at call sites
+is redaction one new call site forgets.
+
+**Batches keep both halves.** `OpResult`/`OpDone` carry `Vec<ItemError>` — each
+failure named with the item it belongs to — alongside the count that succeeded.
+A flat list of sentences loses the first and makes the second guesswork.
+
+**Two smaller consequences.** `net::lifecycle` no longer guesses a failure kind
+from the words in a message: it reads the code, which is what the old
+heuristic's own comment said this ticket would replace. And `AppError`'s string
+fields are `Box<str>` so the struct stays under the size at which carrying an
+error in every `Result` starts to cost — a test pins that.
+
+**Checked, not assumed.** `scripts/gen-error-codes.mjs` mirrors the code list
+into TypeScript and `npm run check:errorcodes` fails when it drifts; a test
+walks that list and fails on a code without a translation in either language.
+
+---
+
 ## 5. State model (store)
 
 ```ts

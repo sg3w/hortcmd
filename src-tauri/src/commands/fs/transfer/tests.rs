@@ -22,6 +22,7 @@ use super::plan::{
     working_name, Plan, BACKUP_PREFIX, STAGE_PREFIX,
 };
 use super::progress::{Prog, ProgressSink, SharedProg};
+use crate::errors::{AppError, AppResult};
 use crate::vfs::local::LocalProvider;
 use crate::vfs::Provider;
 use std::collections::{HashMap, HashSet};
@@ -115,8 +116,8 @@ impl Provider for Fake {
     fn store_id(&self) -> String {
         "fake".into()
     }
-    fn list(&self, _path: &str) -> Result<crate::commands::fs::dir::DirListing, String> {
-        Err("nicht unterstützt".into())
+    fn list(&self, _path: &str) -> AppResult<crate::commands::fs::dir::DirListing> {
+        Err(AppError::from("nicht unterstützt"))
     }
     fn stat(&self, path: &Path) -> io::Result<crate::vfs::Stat> {
         let fs = self.fs.lock().unwrap();
@@ -554,7 +555,14 @@ fn an_undeletable_move_source_is_reported_and_both_copies_stay() {
     assert_eq!(fake.get("/dst/f.txt").as_deref(), Some("payload"));
     assert_eq!(fake.get("/src/f.txt").as_deref(), Some("payload"));
     assert_eq!(errors.len(), 1);
-    assert!(errors[0].contains("beide Kopien"), "{}", errors[0]);
+    // Both copies survive, and the failure names the source it could
+    // not remove.
+    assert_eq!(errors[0].item, "/src/f.txt");
+    assert!(
+        errors[0].error.op.as_deref() == Some("move"),
+        "{:?}",
+        errors[0]
+    );
 }
 
 #[test]
@@ -581,7 +589,14 @@ fn a_failed_cleanup_is_reported_on_its_own() {
 
     assert!(err.to_string().contains("Kopieren"), "{}", err);
     assert_eq!(errors.len(), 1);
-    assert!(errors[0].contains("Aufräumen"), "{}", errors[0]);
+    // The cleanup problem is reported on its own, naming the staging
+    // entry it could not remove — never mistaken for the failure that
+    // caused it.
+    assert!(
+        errors[0].item.contains(".hortcmd-stage-"),
+        "{:?}",
+        errors[0]
+    );
 }
 
 #[test]

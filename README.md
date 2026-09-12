@@ -140,6 +140,7 @@ npm run tauri dev      # native app: Vite + Rust backend
 ```bash
 npm run check          # everything CI runs, in the same order
 npm run check:boundaries # import cycles + the documented layer rules
+npm run gen:errorcodes   # mirror the backend's error codes into TypeScript
 npm run bundle:report  # build + chunk composition and the eager budget
 npm run typecheck      # tsc --noEmit
 npm run test           # vitest, non-watch (CI mode)

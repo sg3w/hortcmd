@@ -3,6 +3,7 @@
 // ============================================================
 
 mod commands;
+pub mod errors;
 mod menu;
 mod net;
 mod vfs;

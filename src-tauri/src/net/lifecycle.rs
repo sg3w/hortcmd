@@ -28,6 +28,7 @@
 // only to record a decision.
 // ============================================================
 
+use crate::errors::{code, AppError, ErrorAction};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::net::{TcpStream, ToSocketAddrs};
@@ -88,40 +89,61 @@ pub enum FailureKind {
     Keychain,
 }
 
+impl FailureKind {
+    /// The error code this kind corresponds to. One mapping, so the
+    /// lifecycle and the error contract cannot drift apart.
+    pub fn code(self) -> &'static str {
+        match self {
+            FailureKind::Timeout => code::NET_TIMEOUT,
+            FailureKind::Cancelled => code::CANCELLED,
+            FailureKind::Auth => code::NET_AUTH,
+            FailureKind::HostKey => code::SECURITY_HOST_KEY_UNKNOWN,
+            FailureKind::Unreachable => code::NET_UNREACHABLE,
+            FailureKind::Protocol => code::NET_PROTOCOL,
+            FailureKind::Keychain => code::CRED_STORE,
+        }
+    }
+
+    /// What the user can do about a failure of this kind.
+    pub fn action(self) -> Option<ErrorAction> {
+        match self {
+            FailureKind::Timeout | FailureKind::Unreachable => Some(ErrorAction::Retry),
+            FailureKind::Cancelled => None,
+            FailureKind::Auth => Some(ErrorAction::Authenticate),
+            FailureKind::HostKey => Some(ErrorAction::ConfirmHostKey),
+            FailureKind::Protocol => Some(ErrorAction::Report),
+            FailureKind::Keychain => Some(ErrorAction::ProvidePassword),
+        }
+    }
+}
+
 /// A typed attempt failure: the kind drives behavior, the message is
 /// what the user reads.
 #[derive(Serialize, Clone, Debug, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct ConnFailure {
     pub kind: FailureKind,
-    pub message: String,
+    /// The typed failure behind it (ticket 036). The lifecycle's own
+    /// `kind` drives the dialog; this is what the user is told.
+    pub error: AppError,
 }
 
 impl ConnFailure {
-    pub fn new(kind: FailureKind, message: impl Into<String>) -> Self {
+    /// A failure described by its lifecycle kind alone. The code is
+    /// derived from the kind, so the two can never disagree.
+    pub fn new(kind: FailureKind, detail: impl std::fmt::Display) -> Self {
         ConnFailure {
             kind,
-            message: message.into(),
+            error: AppError::new(kind.code())
+                .op("connect")
+                .maybe_action(kind.action())
+                .detail(detail),
         }
     }
 
-    /// Marker the frontend can recognize on a plain `Result` error, for
-    /// the paths that still travel as a string (same pattern as
-    /// `credentials::LOCKED` and `vfs::caps::UNSUPPORTED`).
-    pub fn tagged(&self) -> String {
-        format!("{}: {}", self.tag(), self.message)
-    }
-
-    fn tag(&self) -> &'static str {
-        match self.kind {
-            FailureKind::Timeout => "CONN_TIMEOUT",
-            FailureKind::Cancelled => "CONN_CANCELLED",
-            FailureKind::Auth => "CONN_AUTH",
-            FailureKind::HostKey => "CONN_HOSTKEY",
-            FailureKind::Unreachable => "CONN_UNREACHABLE",
-            FailureKind::Protocol => "CONN_PROTOCOL",
-            FailureKind::Keychain => "CONN_KEYCHAIN",
-        }
+    /// A failure that already carries a typed error from further down.
+    pub fn from_error(kind: FailureKind, error: AppError) -> Self {
+        ConnFailure { kind, error }
     }
 }
 
@@ -407,16 +429,23 @@ pub fn probe_transport(host: &str, port: u16) -> Result<(), ConnFailure> {
     let addrs = match target.to_socket_addrs() {
         Ok(a) => a.collect::<Vec<_>>(),
         Err(e) => {
-            return Err(ConnFailure::new(
+            return Err(ConnFailure::from_error(
                 FailureKind::Unreachable,
-                format!("{} ist nicht auflösbar: {}", bare, e),
+                AppError::new(code::NET_UNREACHABLE)
+                    .op("connect")
+                    .with("host", bare)
+                    .action(ErrorAction::Retry)
+                    .detail(e),
             ))
         }
     };
     if addrs.is_empty() {
-        return Err(ConnFailure::new(
+        return Err(ConnFailure::from_error(
             FailureKind::Unreachable,
-            format!("{} ist nicht auflösbar", bare),
+            AppError::new(code::NET_UNREACHABLE)
+                .op("connect")
+                .with("host", bare)
+                .action(ErrorAction::Retry),
         ));
     }
 
@@ -436,34 +465,24 @@ pub fn probe_transport(host: &str, port: u16) -> Result<(), ConnFailure> {
     ))
 }
 
-/// Classifies a protocol client's error message.
+/// Classifies a protocol client's failure.
 ///
-/// Structural outcomes — cancellation, timeout, host key, keychain,
-/// unreachable — are never guessed: they come from the phase that
-/// produced them. Only the protocol clients still hand back prose
-/// (TICKET-036 replaces that with structured errors), so this narrow
-/// vocabulary separates "the server refused your credentials" from
-/// everything else and defaults to `Protocol` when unsure.
-pub fn classify_protocol_error(message: &str) -> ConnFailure {
-    const AUTH_WORDS: [&str; 10] = [
-        "auth",
-        "password",
-        "passwort",
-        "credential",
-        "anmeld",
-        "permission denied",
-        "530",
-        "401",
-        "403",
-        "logon",
-    ];
-    let lower = message.to_lowercase();
-    let kind = if AUTH_WORDS.iter().any(|w| lower.contains(w)) {
-        FailureKind::Auth
-    } else {
-        FailureKind::Protocol
+/// Until ticket 036 this had to guess from the words in a message,
+/// because the protocol clients handed back prose. They now hand back a
+/// typed `AppError`, so the kind is *read* rather than inferred — and
+/// anything this does not recognize stays `Protocol` rather than being
+/// guessed into something more specific.
+pub fn classify_protocol_error(error: &AppError) -> ConnFailure {
+    let kind = match &*error.code {
+        code::NET_AUTH | code::CRED_WRONG_PASSWORD => FailureKind::Auth,
+        code::NET_UNREACHABLE => FailureKind::Unreachable,
+        code::NET_TIMEOUT => FailureKind::Timeout,
+        code::CANCELLED => FailureKind::Cancelled,
+        code::SECURITY_HOST_KEY_UNKNOWN | code::SECURITY_HOST_KEY_MISMATCH => FailureKind::HostKey,
+        code::CRED_LOCKED | code::CRED_STORE | code::CRED_NOT_FOUND => FailureKind::Keychain,
+        _ => FailureKind::Protocol,
     };
-    ConnFailure::new(kind, message)
+    ConnFailure::from_error(kind, error.clone())
 }
 
 #[cfg(test)]
@@ -696,33 +715,48 @@ mod tests {
 
     #[test]
     fn failures_carry_a_recognizable_marker() {
+        // Since ticket 036 the failure carries a typed error rather
+        // than a marker inside a sentence.
         let f = ConnFailure::new(FailureKind::Timeout, "zu langsam");
-        assert!(f.tagged().starts_with("CONN_TIMEOUT: "));
-        assert!(ConnFailure::new(FailureKind::Cancelled, "x")
-            .tagged()
-            .starts_with("CONN_CANCELLED"));
+        assert!(f.error.is(code::NET_TIMEOUT));
+        assert_eq!(f.error.detail.as_deref(), Some("zu langsam"));
+        let cancelled = ConnFailure::new(FailureKind::Cancelled, "x");
+        assert!(cancelled.error.is(code::CANCELLED));
+        assert!(cancelled.error.action.is_none());
     }
 
     #[test]
-    fn protocol_errors_are_classified_conservatively() {
-        assert_eq!(
-            classify_protocol_error("Authentifizierung fehlgeschlagen").kind,
-            FailureKind::Auth
-        );
-        assert_eq!(
-            classify_protocol_error("530 Login incorrect").kind,
-            FailureKind::Auth
-        );
-        assert_eq!(
-            classify_protocol_error("permission denied (publickey)").kind,
-            FailureKind::Auth
-        );
-        // Anything unrecognized stays a protocol error rather than being
-        // guessed into a more specific one.
-        assert_eq!(
-            classify_protocol_error("SFTP-Subsystem fehlgeschlagen").kind,
-            FailureKind::Protocol
-        );
+    fn a_protocol_failure_is_read_from_its_code_not_guessed() {
+        // Ticket 036 replaced the word-matching heuristic this used to
+        // need: the provider hands back a typed error and the kind is
+        // read off it.
+        for (code, expected) in [
+            (code::NET_AUTH, FailureKind::Auth),
+            (code::CRED_WRONG_PASSWORD, FailureKind::Auth),
+            (code::NET_UNREACHABLE, FailureKind::Unreachable),
+            (code::NET_TIMEOUT, FailureKind::Timeout),
+            (code::CANCELLED, FailureKind::Cancelled),
+            (code::SECURITY_HOST_KEY_MISMATCH, FailureKind::HostKey),
+            (code::CRED_LOCKED, FailureKind::Keychain),
+        ] {
+            let failure = classify_protocol_error(&AppError::new(code));
+            assert_eq!(failure.kind, expected, "{}", code);
+            assert!(failure.error.is(code), "the typed error survives: {}", code);
+        }
+    }
+
+    #[test]
+    fn an_unrecognized_code_stays_a_protocol_error() {
+        // Never guessed into something more specific — including a code
+        // from a newer backend this build does not know.
+        for code in [code::FS_IO, "net.somethingNewerAddedLater"] {
+            assert_eq!(
+                classify_protocol_error(&AppError::new(code)).kind,
+                FailureKind::Protocol,
+                "{}",
+                code
+            );
+        }
     }
 
     #[test]
@@ -753,12 +787,9 @@ mod tests {
     fn a_url_scheme_in_the_host_is_stripped_before_resolving() {
         // WebDAV profiles store `http://host`; the probe resolves `host`.
         let err = probe_transport("http://host.invalid.example.test/", 8080).unwrap_err();
-        assert!(
-            err.message.contains("host.invalid.example.test"),
-            "scheme should be stripped: {}",
-            err.message
-        );
-        assert!(!err.message.contains("http://"), "{}", err.message);
+        // The host is a parameter now, not a word in a sentence.
+        let host = err.error.params.get("host").map(String::as_str);
+        assert_eq!(host, Some("host.invalid.example.test"));
     }
 
     #[test]

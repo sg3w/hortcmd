@@ -14,6 +14,7 @@
 // leftovers report — follows from that.
 // ============================================================
 
+use super::events::ItemError;
 use crate::vfs::Provider;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -188,15 +189,14 @@ pub(crate) fn publish(dstp: &dyn Provider, plan: &Plan) -> std::io::Result<()> {
 /// the staging entry — the destination is either untouched or already
 /// committed. Cleanup problems are reported on their own so they are not
 /// mistaken for the failure that caused them.
-pub(crate) fn discard_staging(dstp: &dyn Provider, plan: &Plan, errors: &mut Vec<String>) {
+pub(crate) fn discard_staging(dstp: &dyn Provider, plan: &Plan, errors: &mut Vec<ItemError>) {
     if !plan.is_staged() || !dstp.exists(&plan.write_to) {
         return;
     }
     if let Err(e) = dstp.remove(&plan.write_to) {
-        errors.push(format!(
-            "Aufräumen von {} fehlgeschlagen: {}",
-            plan.write_to.display(),
-            e
+        errors.push(ItemError::new(
+            plan.write_to.display().to_string(),
+            e.into(),
         ));
     }
 }

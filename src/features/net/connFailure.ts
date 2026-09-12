@@ -7,14 +7,20 @@
 // without matching on message text.
 //
 // Two shapes carry the same information: the `ConnFailure` on a
-// `ConnectionStatus`, and the tagged string a rejected `net_connect`
-// throws (the IPC layer still transports errors as strings until
-// TICKET-036). Both resolve to the same localized sentence here.
+// `ConnectionStatus`, and the `AppError` a rejected `net_connect`
+// throws. Both resolve to the same localized sentence here.
+//
+// Since TICKET-036 neither carries a finished message: the failure's
+// own `AppError` is translated by `lib/appError.ts`, and the kind adds
+// the headline that makes the two languages read alike even when the
+// detail behind them came from a server that speaks neither.
 // ============================================================
 
 import type { ConnFailure, FailureKind } from "@/ipc/bindings";
 import type { TransKey } from "@/i18n/dictionaries";
 import { translate } from "@/store/settingsStore";
+import { asAppError } from "@/lib/appError";
+import { describeError, describeErrorFull } from "@/store/errorText";
 
 const REASON: Record<FailureKind, TransKey> = {
   timeout: "net.fail.timeout",
@@ -26,52 +32,62 @@ const REASON: Record<FailureKind, TransKey> = {
   keychain: "net.fail.keychain",
 };
 
-/** Markers the backend puts in front of a thrown connection error. */
-const TAGS: Record<string, FailureKind> = {
-  CONN_TIMEOUT: "timeout",
-  CONN_CANCELLED: "cancelled",
-  CONN_AUTH: "auth",
-  CONN_HOSTKEY: "hostKey",
-  CONN_UNREACHABLE: "unreachable",
-  CONN_PROTOCOL: "protocol",
-  CONN_KEYCHAIN: "keychain",
-};
-
 /**
- * The localized headline for a failure kind, followed by the server's
- * own words when they add something. The kind is always shown first, so
- * the reason reads the same in both languages even when the detail
- * behind it comes from a server that speaks neither.
+ * The localized headline for a failure kind, followed by what the
+ * underlying error says when that adds something. The kind comes first,
+ * so the reason reads the same in both languages.
  */
 export function describeFailure(failure: ConnFailure): string {
   const head = translate(REASON[failure.kind]);
-  const detail = failure.message.trim();
-  return detail ? `${head} (${detail})` : head;
+  const detail = describeError(failure.error);
+  // A generic underlying message would only repeat the headline.
+  return detail && detail !== head ? `${head} (${detail})` : head;
 }
 
 /**
- * Same for the tagged string a rejected `net_connect` throws. An
- * untagged error — anything that did not come from the lifecycle — is
- * passed through unchanged rather than being dressed up as one.
+ * Same for the error a rejected `net_connect` throws. Anything that is
+ * not a backend error — a transport failure, say — is passed through
+ * rather than dressed up as one.
  */
 export function describeConnError(e: unknown): string {
-  const text = String(e);
-  for (const [tag, kind] of Object.entries(TAGS)) {
-    const at = text.indexOf(`${tag}: `);
-    if (at < 0) continue;
-    return describeFailure({
-      kind,
-      message: text.slice(at + tag.length + 2),
-    });
-  }
-  return text;
+  const err = asAppError(e);
+  if (!err) return String(e);
+  const kind = failureKindOf(e);
+  return kind
+    ? describeFailure({ kind, error: err })
+    : describeErrorFull(e);
 }
 
-/** The failure kind inside a thrown error, or null when it carries none. */
+/**
+ * The lifecycle kind a thrown error corresponds to, or null.
+ *
+ * Read from the error's code — the markers this used to search for in
+ * message text are gone (TICKET-036). The mapping mirrors
+ * `net::lifecycle::classify_protocol_error` on the backend.
+ */
 export function failureKindOf(e: unknown): FailureKind | null {
-  const text = String(e);
-  for (const [tag, kind] of Object.entries(TAGS)) {
-    if (text.includes(`${tag}: `)) return kind;
+  const code = asAppError(e)?.code;
+  if (!code) return null;
+  switch (code) {
+    case "net.timeout":
+      return "timeout";
+    case "cancelled":
+      return "cancelled";
+    case "net.auth":
+    case "cred.wrongPassword":
+      return "auth";
+    case "security.hostKeyUnknown":
+    case "security.hostKeyMismatch":
+      return "hostKey";
+    case "net.unreachable":
+      return "unreachable";
+    case "net.protocol":
+      return "protocol";
+    case "cred.locked":
+    case "cred.store":
+    case "cred.notFound":
+      return "keychain";
+    default:
+      return null;
   }
-  return null;
 }

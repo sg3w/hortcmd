@@ -13,11 +13,12 @@
 // ============================================================
 
 use super::copy::{resolve_buf, transfer_one, CopyTuning};
-use super::events::{Leftovers, OpDone};
+use super::events::{ItemError, Leftovers, OpDone};
 use super::parallel::run_parallel_copy;
 use super::plan::{commit, free_name, measure, plan_for, stale_working_entries, target_in, Plan};
 use super::progress::Prog;
 use super::registry::{ask_collision, Resolution};
+use crate::errors::{code, AppError, ErrorAction};
 use crate::vfs;
 use crate::vfs::caps::{self, Capability};
 use std::io::ErrorKind;
@@ -50,14 +51,14 @@ pub(crate) fn run_transfer(
         buf_size: resolve_buf(buf_kb),
     };
     let mode = if safe { "safe" } else { "direct" };
-    let fail = |id: String, op: String, err: String| {
+    let fail = |id: String, op: String, item: &str, err: AppError| {
         let _ = app.emit(
             "fs-done",
             OpDone {
                 id,
                 op,
                 ok: 0,
-                errors: vec![err],
+                errors: vec![ItemError::new(item, err)],
                 cancelled: false,
                 mode: mode.to_string(),
             },
@@ -76,7 +77,7 @@ pub(crate) fn run_transfer(
     };
     for src in &sources {
         if let Err(e) = caps::require_pair(src, src_cap, &dest_dir, Capability::CopyTo) {
-            return fail(id, op, e);
+            return fail(id, op, src, e);
         }
     }
 
@@ -85,7 +86,7 @@ pub(crate) fn run_transfer(
     // provider, so a transfer may cross providers (local↔remote).
     let (dstp, dest_path) = match vfs::resolve(&dest_dir) {
         Ok(v) => v,
-        Err(e) => return fail(id, op, e),
+        Err(e) => return fail(id, op, &dest_dir, e),
     };
     let dest = PathBuf::from(&dest_path);
     // Safe mode never degrades to direct writes behind the user's back:
@@ -95,12 +96,11 @@ pub(crate) fn run_transfer(
         return fail(
             id,
             op,
-            format!(
-                "Ausfallsichere Übertragung wird von {} nicht unterstützt — \
-                 in den Einstellungen unter Dateioperationen abschalten, \
-                 um hierher zu übertragen",
-                dest_dir
-            ),
+            &dest_dir,
+            AppError::new(code::TRANSFER_NO_STAGING)
+                .with("dest", &dest_dir)
+                .provider(&dstp.store_id())
+                .action(ErrorAction::Unsupported),
         );
     }
     // All sources of one operation come from the same location; resolve
@@ -108,9 +108,16 @@ pub(crate) fn run_transfer(
     let srcp = match sources.first() {
         Some(first) => match vfs::resolve(first) {
             Ok((p, _)) => p,
-            Err(e) => return fail(id, op, e),
+            Err(e) => return fail(id, op, first, e),
         },
-        None => return fail(id, op, "Keine Quellen angegeben".into()),
+        None => {
+            return fail(
+                id,
+                op,
+                "",
+                AppError::new(code::VALIDATION_BAD_INPUT).action(ErrorAction::Report),
+            )
+        }
     };
     // The in-place `rename` fast-path only applies within one store.
     let same_store = srcp.store_id() == dstp.store_id();
@@ -121,7 +128,7 @@ pub(crate) fn run_transfer(
 
     // Resolve + measure each source up front (totals + bookkeeping for a
     // rename move). `measured` holds the resolved provider-local path.
-    let mut errors: Vec<String> = Vec::new();
+    let mut errors: Vec<ItemError> = Vec::new();
     let measured: Vec<(String, u32, u64)> = sources
         .iter()
         .filter_map(|s| match vfs::resolve(s) {
@@ -130,11 +137,14 @@ pub(crate) fn run_transfer(
                 Some((spath, f, b))
             }
             Ok(_) => {
-                errors.push(format!("{}: Quelle aus einem anderen Speicher", s));
+                errors.push(ItemError::new(
+                    s,
+                    AppError::new(code::TRANSFER_SOURCE_GONE).action(ErrorAction::Report),
+                ));
                 None
             }
             Err(e) => {
-                errors.push(format!("{}: {}", s, e));
+                errors.push(ItemError::new(s, e));
                 None
             }
         })
@@ -152,11 +162,11 @@ pub(crate) fn run_transfer(
                 return fail(
                     id,
                     op,
-                    format!(
-                        "Zu wenig Platz für die ausfallsichere Zwischenablage: \
-                         {} Bytes nötig, {} Bytes frei",
-                        bytes_total, free
-                    ),
+                    &dest_dir,
+                    AppError::new(code::FS_NO_SPACE)
+                        .with("needed", bytes_total)
+                        .with("free", free)
+                        .action(ErrorAction::FreeSpace),
                 );
             }
         }
@@ -201,11 +211,17 @@ pub(crate) fn run_transfer(
         }
         let src = Path::new(s);
         let Some(mut target) = target_in(&dest, src) else {
-            errors.push(format!("{}: ungültiger Name", s));
+            errors.push(ItemError::new(
+                s,
+                AppError::new(code::FS_INVALID_NAME).action(ErrorAction::Report),
+            ));
             continue;
         };
         if target == *src {
-            errors.push(format!("{}: Quelle und Ziel sind identisch", s));
+            errors.push(ItemError::new(
+                s,
+                AppError::new(code::TRANSFER_INTO_ITSELF).action(ErrorAction::Report),
+            ));
             continue;
         }
 
@@ -231,7 +247,7 @@ pub(crate) fn run_transfer(
                 Resolution::Overwrite if safe => replace = true,
                 Resolution::Overwrite => {
                     if let Err(e) = dstp.remove(&target) {
-                        errors.push(format!("{}: {}", s, e));
+                        errors.push(ItemError::new(s, e.into()));
                         continue;
                     }
                 }
@@ -274,7 +290,7 @@ pub(crate) fn run_transfer(
         match result {
             Ok(_) => ok += 1,
             Err(e) if e.kind() == ErrorKind::Interrupted => break 'outer,
-            Err(e) => errors.push(format!("{}: {}", s, e)),
+            Err(e) => errors.push(ItemError::new(s, e.into())),
         }
     }
 

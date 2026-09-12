@@ -19,6 +19,7 @@
 
 use super::{Provider, Stat};
 use crate::commands::fs::dir::{DirEntry, DirListing};
+use crate::errors::{AppError, AppResult};
 use crate::net::session::Profile;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -51,25 +52,29 @@ struct Params {
 
 impl Params {
     /// Opens and logs in a fresh connection (passive mode by default).
-    fn open(&self) -> Result<NativeTlsFtpStream, String> {
+    fn open(&self) -> AppResult<NativeTlsFtpStream> {
         let addr = format!("{}:{}", self.host, self.port);
-        let connector = || -> Result<NativeTlsConnector, String> {
+        let connector = || -> AppResult<NativeTlsConnector> {
             TlsConnector::new()
                 .map(NativeTlsConnector::from)
-                .map_err(|e| format!("TLS-Initialisierung fehlgeschlagen: {}", e))
+                .map_err(|e| AppError::from(format!("TLS-Initialisierung fehlgeschlagen: {}", e)))
         };
 
         let mut ftp = match self.tls {
             Tls::Implicit => {
                 NativeTlsFtpStream::connect_secure_implicit(&addr, connector()?, &self.host)
-                    .map_err(|e| format!("Verbindung zu {} fehlgeschlagen: {}", addr, e))?
+                    .map_err(|e| {
+                        AppError::from(format!("Verbindung zu {} fehlgeschlagen: {}", addr, e))
+                    })?
             }
             _ => {
-                let s = NativeTlsFtpStream::connect(&addr)
-                    .map_err(|e| format!("Verbindung zu {} fehlgeschlagen: {}", addr, e))?;
+                let s = NativeTlsFtpStream::connect(&addr).map_err(|e| {
+                    AppError::from(format!("Verbindung zu {} fehlgeschlagen: {}", addr, e))
+                })?;
                 if self.tls == Tls::Explicit {
-                    s.into_secure(connector()?, &self.host)
-                        .map_err(|e| format!("TLS (AUTH TLS) fehlgeschlagen: {}", e))?
+                    s.into_secure(connector()?, &self.host).map_err(|e| {
+                        AppError::from(format!("TLS (AUTH TLS) fehlgeschlagen: {}", e))
+                    })?
                 } else {
                     s
                 }
@@ -77,13 +82,13 @@ impl Params {
         };
 
         ftp.login(&self.user, &self.password)
-            .map_err(|e| format!("Anmeldung fehlgeschlagen: {}", e))?;
+            .map_err(|e| AppError::from(format!("Anmeldung fehlgeschlagen: {}", e)))?;
         Ok(ftp)
     }
 }
 
 /// Opens an FTP/FTPS connection and returns the ready provider.
-pub fn connect(profile: &Profile, secret: Option<&str>) -> Result<Arc<dyn Provider>, String> {
+pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Provider>> {
     // Anonymous FTP is the conventional fallback when no user is given.
     let (user, password) = if profile.auth == "anonymous" || profile.user.is_empty() {
         ("anonymous".to_string(), "anonymous@".to_string())
@@ -138,11 +143,11 @@ fn to_io<E: std::fmt::Display>(e: E) -> io::Error {
 
 impl FtpProvider {
     /// Parses a directory listing into VFS entries.
-    fn entries_of(&self, path: &str) -> Result<Vec<DirEntry>, String> {
+    fn entries_of(&self, path: &str) -> AppResult<Vec<DirEntry>> {
         let lines = {
             let mut ctrl = self.ctrl.lock().unwrap();
             ctrl.list(Some(path))
-                .map_err(|e| format!("{}: {}", path, e))?
+                .map_err(|e| AppError::from(format!("{}: {}", path, e)))?
         };
 
         Ok(lines
@@ -195,7 +200,7 @@ impl Provider for FtpProvider {
         format!("ftp:{}", self.key)
     }
 
-    fn list(&self, path: &str) -> Result<DirListing, String> {
+    fn list(&self, path: &str) -> AppResult<DirListing> {
         let entries = self.entries_of(path)?;
         // Full address so the pane keeps its remote context.
         Ok(DirListing {
