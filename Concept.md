@@ -801,157 +801,11 @@ advanced file work. **P4** are large subsystems. Cross-cutting topics and a
 "Later/Discussion" list at the end.
 
 ### ✅ Done
-- Tauri scaffold, dual-pane, React+TS rework, ts-rs types
-- FileTable (TanStack Table+Virtual), TC keyboard, sorting
-- Selection: Shift+Arrow, Cmd/Ctrl+Click, `+`/`-`/`*` patterns
-- Tabs per pane (active tab = target)
-- Work-direction indicator on the splitter (arrow from the active pane to the target pane;
-  copy/move always run in this direction)
-- Settings modal (category tree + resizable split); language, theme Light/Dark,
-  system-files filter (localStorage)
-- Clipboard Copy/Cut/Paste; context menu (Paste active only when clipboard is filled;
-  right-click on folder → into it, on file/empty space → current folder)
-- File operations in the backend: Copy/Move/Delete/Mkdir/Paste
-- Concurrent transfers (threads) with two-bar window, minimize to the status bar
-- Cancel transfer; collision dialog (Overwrite/Rename/Skip + "for all")
-- Preview F3 (text/image/hex); F4 open with default program; Shift+F4 "Open in editor"
-  (extension-based, configurable); Enter opens files
-- Browse & extract archives (F5): ZIP, tar, tar.gz, tar.xz, 7z — incl.
-  password-protected ZIP/7z archives; packing (Alt+F5) produces ZIP
-- Rust code modular (dir/file/preview/archive/watch)
-- Draggable pane splitter (persisted); directory watcher (auto-refresh)
-- Favorite folders (Settings → location picker); "Open in new tab"
-- View modes Detail/List/Thumbnails/Tree+List (per pane); command bar with
-  special-function icons
-- ~~Real native windows instead of HTML overlays (TICKET-002)~~ — superseded again by
-  TICKET-012, see below.
-- Force modal when closing during running transfers (TICKET-004): closing
-  the main window during active copy/move/extract/pack operations is
-  intercepted via `Window.onCloseRequested`; modal forces "Cancel & Close"
-  / "Wait" / "Close anyway" (`opsStore.forceClose`, `ForceCloseDialog` in
-  `OperationDialogs.tsx`). Browser demo mode unchanged (no-op without the Tauri window API).
-  *(Still current — concerns closing the main window, independent of
-  the multi-window dialog management superseded below.)*
-  - Bugfix: `ForceCloseDialog` closes via `getCurrentWindow().destroy()`
-    (so `onCloseRequested` does not fire again), but `capabilities/default.json`
-    only allowed `core:window:allow-close`, not `allow-destroy` → "Close
-    anyway"/"Cancel & Close" failed silently and the window stayed open.
-    Added `core:window:allow-destroy`. At the same time reduced the `windows` list in
-    the capabilities to `["main"]` (the windows `settings/rename/export/
-    compare/filecompare` no longer exist since TICKET-012).
-  - Hardening `onCloseRequested` (App.tsx): now blocks only on genuinely active
-    operations — `!done && !cancelled && (queued || fileTotal > 0)`. A transfer
-    without progress/queue (e.g. a canceled password-extract operation that never
-    becomes `done`) no longer holds the red X permanently.
-- Bugfix: "Quit" (Alt+F4, `actions.ts` action `quit`) still called the
-  browser API `window.close()` — a leftover from before the
-  Tauri migration, ineffective on the native, OS-opened main window
-  (no effect, no error). Now via
-  `getCurrentWindow().close()`, so the same `onCloseRequested` handler
-  as the native window button applies (incl. the transfer check above).
-- ~~Real modal behavior of the dialog windows via `Window::set_enabled` (TICKET-005)~~
-  and ~~main-window re-enable hardening (TICKET-011)~~ — both made obsolete by
-  TICKET-012: there are no separate dialog windows anymore that would need to be
-  disabled/re-enabled.
-- Preserve scroll position/selection after file operations (TICKET-006):
-  `reloadBoth()` (after Copy/Move/Extract/Pack/Delete/Trash) as well as Rename
-  and New Folder now use `panesStore.refresh(side, {reveal:true})`
-  instead of `loadDir` — cursor/selection no longer jump back to 0/empty.
-  Newly added entries (target of a copy/move/paste
-  operation, renamed/newly created file) are automatically selected;
-  the existing `scrollToIndex(…, {align:"auto"})` effect in `FileTable`
-  only scrolls when necessary. Verified in browser demo mode (cursor/
-  selection stay exactly preserved after copying).
-- Directory comparison no longer starts recursive (TICKET-007):
-  `CompareDialog.tsx` incorrectly set "Recursive" to `true` on open
-  (default state and the first comparison run); the dialog now always starts
-  with the option disabled, regardless of the previous state. Verified in
-  browser demo mode (default off → enabling takes effect →
-  close/reopen resets).
-- Window management rebuilt onto React dialogs (TICKET-012): the separate
-  Tauri `WebviewWindow`s (Settings/Rename/Export/Compare/
-  FileCompare, TICKET-002) are fully replaced by in-app React dialogs
-  — this also made TICKET-005 (macOS modality) and TICKET-011
-  (main-window re-enable) obsolete. New central building block
-  `components/ui/AppDialog.tsx` (Radix `Dialog.Root`, always centered, resizable
-  via a drag handle, clamped to `[minimum, 90% of the main window]`,
-  reacts to main-window resize); size persisted per dialog type in
-  `store/dialogSizeStore.ts` (`zustand` `persist`, independent per `dialogKey`).
-  - Bugfix "app stops responding / hangs after some clicking even though no
-    operation is running": `FileBrowserDialog` and `PreviewDialog` used the
-    pattern `if (!x) return null` followed by `<Dialog.Root open>` (hardcoded `true`).
-    On close, Radix unmounted in the open state and left `pointer-events:
-    none` (scroll/focus lock) on `<body>` → the whole app unclickable.
-    Both dialogs now stay permanently mounted and are controlled via
-    `open={!!x}` (portal content via `{x && (…)}`), so Radix sees the
-    `open→closed` transition and releases the body styles again — analogous
-    to the already-correct `AppDialog`-based dialogs and the
-    `open={!!…}` dialogs in `OperationDialogs.tsx`.
-  All 5 dialogs lost their `win` prop/payload branching and now always read live
-  from their respective stores (no more difference between
-  Tauri and browser demo mode). `useKeyboard.ts` received a central guard
-  (`[role="dialog"]` check) so shortcuts are no longer passed through
-  to the file panes while a dialog is open. Removed: `commands/window.rs`
-  entirely, the `on_window_event` hook in `lib.rs`, `features/dialogWindow/`,
-  and `?win=` routing in `main.tsx`. Fully verified in browser demo mode
-  (all 5 dialogs individually + simultaneously, resize, persistence, Esc, focus
-  restoration, keyboard isolation); no live test against a real
-  Tauri app (uncritical, since no Tauri-specific logic exists anymore).
-- Made the selection in the inactive panel visible (TICKET-008): the cursor row
-  in the inactive pane previously had only a 1px outline without a fill and
-  was therefore hard to see. New CSS variable `--cursor-inactive-marker`
-  (`rgba(154, 194, 123, 0.4)`, both themes) now fills the cursor row in the
-  inactive panel with a subtle green (`FileTable.tsx`'s `stateClass()`); with
-  an additional selection the yellow selection color stays dominant. Verified in
-  browser demo mode in dark and light theme.
-- Legend of the file colors + configurable color scheme (TICKET-009): the colors
-  of the file list used to be a hardcoded Git→Tailwind-class map (`lib/gitColor.ts`),
-  and nothing explained them. New central registry `lib/fileColors.ts` (see §8):
-  slots with semantic id, label, per-theme default, and — for rules — matcher and
-  priority; published as `--fc-*` CSS variables. The properties dialog gained a
-  "Color" section showing the entry's name in its actual color plus the rule that
-  produced it (only the highest-priority one, message when none applies); it
-  resolves through the same registry and context as the list, so both cannot
-  disagree. New settings category **File colors** with a live preview, one picker
-  per theme, per-rule and global reset, plus an editor for custom wildcard rules
-  (matched before the built-ins, reorderable). Prerequisites in the backend:
-  `DirEntry`/`FileProps` now carry `hidden`/`readonly`/`executable` from the new
-  `commands/fs/attrs.rs` (per platform, so the frontend stops guessing from the
-  name/mode — this also fixes hidden-file filtering on Windows), and `classify()`
-  in `git.rs` now distinguishes `untracked` (`??`) from `staged` (index-only
-  change) instead of lumping both into `new`. `index.css` no longer hardcodes
-  `--selection`/`--cursor-active`/`--cursor-inactive-marker` but references the
-  registry. Verified in browser demo mode: all 11 rules incl. priority
-  (git-ignored beats executable), custom rule beats built-ins, live update of
-  list/dialog/preview, dark↔light independent, persistence across reload,
-  restore defaults, and invalid configuration falling back to the defaults.
-- Keystrokes confirming a dialog no longer leak into the file pane (TICKET-014):
-  `Enter` in the "New folder" prompt created the folder *and* opened the cursor
-  entry behind it — with the cursor on `..` the panel jumped one directory up.
-  Cause: `PromptDialog` handled `Enter`/`Escape` without
-  `preventDefault()`/`stopPropagation()`, and `submit()` unmounts the dialog
-  synchronously while the native event is still propagating; the global handler
-  on `window` (`useKeyboard.ts`) then judged the event by `document.activeElement`,
-  which had already fallen back to `<body>`. Fixed on both ends: the prompt input
-  consumes both keys, and the global handler no longer relies on state that the
-  unmount destroys — new `lib/keys.ts` marks a keystroke as belonging to a dialog
-  (`markDialogKey` as `onKeyDownCapture` on every `Dialog.Content`,
-  `consumeDialogKey` where a dialog acts on the key), `useKeyboard` skips marked
-  events, reads `e.target` instead of `document.activeElement`, and additionally
-  ignores everything while any `[role="dialog"]` is open (covers the frame in which
-  a freshly opened dialog has not taken focus yet). This covers all `requestPrompt`
-  consumers at once (New Folder, Rename, pattern selection, archive password); the
-  other `Enter`-submitting dialog inputs (Search, file browser, tag editor,
-  editor extensions) consume the key the same way. `panesStore.refresh` gained
-  `names` so New Folder/Rename reveal the entry by name instead of by diffing
-  against the previous listing (a watcher refresh in between would otherwise
-  swallow the reveal). Verified in browser demo mode: F7 + `Enter` keeps the
-  panel in its directory (cursor on `..` as well as on a file, no `open_path`),
-  F2 + `Enter` renames without navigating, pattern selection marks via `Enter`,
-  `Escape` in the prompt leaves an active quick filter untouched, the **Create**
-  button is unchanged, search still runs on `Enter`, and `Enter` in the pane
-  without a dialog still opens the cursor entry. A `keydown` probe on `window`
-  confirms the confirming keystroke never reaches the global handler.
+
+Everything completed so far now lives in **§12. Implementation history** — the
+chronological record, kept out of the way of the forward-looking plan below.
+The *design* those changes settled is described where it belongs, in §3–§9.
+
 
 ### P1 — Complete the core
 - [x] **Rename (F2)** of individual entries (also in the context menu; the dialog preselects
@@ -1375,7 +1229,7 @@ Five modules had grown into catch-alls. They were split along what they are
 | `ipc/client.ts` (1,413) | `invoke.ts`, `events.ts`, `demo.ts`, `domains/*.ts`, `client.ts` (34, the public surface) |
 | `i18n/dictionaries.ts` (1,508) | ten feature namespaces + `dictionaries.ts` (81) |
 | `components/ui/SettingsDialog.tsx` (1,297) | the shell (155) + one module per page + a shared control vocabulary |
-| `store/panesStore.ts` (942) | `panesStore.ts` (755, stateful and async) + `panes/state.ts` (247, pure) |
+| `store/panesStore.ts` (942) | `panesStore.ts` (755, stateful and async) + `store/panes/state.ts` (247, pure) |
 
 Three of those splits changed more than the file layout:
 
@@ -1406,7 +1260,7 @@ import graph and fails on a cycle or on a layer violation:
 - The IPC foundation (`invoke`/`events`/`demo`/`types`) sits below the domain
   clients; the IPC layer as a whole knows nothing of stores or UI.
 - Translations are data: nothing may reach into them.
-- `panes/state.ts` must not depend on the store that uses it — the point of
+- `store/panes/state.ts` must not depend on the store that uses it — the point of
   extracting it.
 - The Rust transfer modules run strictly downwards, in the order their
   `mod.rs` documents.
@@ -1421,7 +1275,8 @@ One command is the whole gate, and `.github/workflows/ci.yml` runs exactly it,
 so a red build is reproducible locally:
 
 ```bash
-npm run check   # fmt → clippy → cargo test → bindings → tsc → vitest → build
+npm run check   # fmt → clippy → cargo test → bindings → error codes →
+                # boundaries → docs → tsc → vitest → build → bundle
 ```
 
 - **Rust baseline**: `cargo fmt --check` and Clippy across all targets *and*
@@ -1461,6 +1316,43 @@ npm run check   # fmt → clippy → cargo test → bindings → tsc → vitest 
   instructions when the servers are not there. Workflow permissions are
   `contents: read`; no job receives secrets, so a fork's pull request cannot
   reach them.
+
+### Cross-cutting — documentation (TICKET-037)
+
+Documentation rots in a way nothing else in this repository does: a renamed file
+leaves a dead link, a removed script leaves an instruction that fails on a clean
+checkout, and a capability that moves leaves a matrix that quietly lies. None of
+it breaks a build, so none of it gets noticed.
+
+**Each document has one job.** `README.md` is what a newcomer needs to run,
+build, package and trust the app — setup per platform, browser-demo limits, and
+the security boundaries including the ones that do *not* exist. `Concept.md`
+§1–§11 is the current design and nothing else; §12 is the chronological record,
+which names files as they were and is deliberately exempt from the path check.
+`CONTRIBUTING.md` is the working agreement — ticket lifecycle, `.done.md`
+naming, the one command, and what must be updated alongside which kind of
+change. `tickets/done/` keeps the reasoning behind each decision.
+
+**The ownership rule.** Four kinds of change carry a documentation obligation,
+because in each the code is the source of truth and the document is a copy:
+
+| Change | Also update |
+|---|---|
+| A public IPC command | Concept §7 · `npm run gen:types` |
+| A provider capability | the matrix in §7 (`check:docs` enforces it) |
+| An error code | `errors.ts` in **both** languages · `npm run gen:errorcodes` |
+| A persisted schema | Concept + a migration |
+| A security policy | README § Security |
+
+**Enforced, not agreed.** `scripts/check-docs.mjs` (`npm run check:docs`, part
+of `npm run check` and of CI) checks every markdown file in the repository:
+repository-relative links and backticked paths resolve (following a ticket that
+has moved to `tickets/done/`); every `npm run …` a document tells a reader to
+run exists in `package.json`; every `TICKET-NNN` referenced outside `tickets/`
+has a file; and the provider matrix agrees with `vfs/caps.rs` in both
+directions, with the `remote_core_caps()` rows required to read ✅ for all four
+protocols. What it cannot check — whether a paragraph is still *true* — is why
+the ownership table above exists.
 
 ### Cross-cutting — performance
 - [~] Directory watcher (P1) ✅ · **library-backed, streaming, bounded local traversal**
@@ -1514,3 +1406,176 @@ ended up (nothing was lost).
 **Deliberate deprioritization / clarification** (see §10 "Later / to be clarified"):
 Read RAR (license), show milliseconds, three-way comparison, AppleScript,
 plugin marketplace.
+
+
+---
+
+## 12. Implementation history
+
+The chronological record: what was built, in the order it was built, with the
+reasoning that applied at the time. Kept because the *why* of a decision is
+often only legible next to the problem that prompted it — and kept **here**,
+away from §3–§9, because those describe the design as it stands rather than how
+it got there.
+
+Two things follow from that split:
+
+- A statement in §3–§9 describes the current code and is checked against it
+  (`npm run check:docs`). A statement here describes a moment and is not.
+- Paths named below are paths as they were. Several have since moved or been
+  removed; that is the point of a record, and the documentation check
+  deliberately stops at this heading.
+
+
+### ✅ Done
+- Tauri scaffold, dual-pane, React+TS rework, ts-rs types
+- FileTable (TanStack Table+Virtual), TC keyboard, sorting
+- Selection: Shift+Arrow, Cmd/Ctrl+Click, `+`/`-`/`*` patterns
+- Tabs per pane (active tab = target)
+- Work-direction indicator on the splitter (arrow from the active pane to the target pane;
+  copy/move always run in this direction)
+- Settings modal (category tree + resizable split); language, theme Light/Dark,
+  system-files filter (localStorage)
+- Clipboard Copy/Cut/Paste; context menu (Paste active only when clipboard is filled;
+  right-click on folder → into it, on file/empty space → current folder)
+- File operations in the backend: Copy/Move/Delete/Mkdir/Paste
+- Concurrent transfers (threads) with two-bar window, minimize to the status bar
+- Cancel transfer; collision dialog (Overwrite/Rename/Skip + "for all")
+- Preview F3 (text/image/hex); F4 open with default program; Shift+F4 "Open in editor"
+  (extension-based, configurable); Enter opens files
+- Browse & extract archives (F5): ZIP, tar, tar.gz, tar.xz, 7z — incl.
+  password-protected ZIP/7z archives; packing (Alt+F5) produces ZIP
+- Rust code modular (dir/file/preview/archive/watch)
+- Draggable pane splitter (persisted); directory watcher (auto-refresh)
+- Favorite folders (Settings → location picker); "Open in new tab"
+- View modes Detail/List/Thumbnails/Tree+List (per pane); command bar with
+  special-function icons
+- ~~Real native windows instead of HTML overlays (TICKET-002)~~ — superseded again by
+  TICKET-012, see below.
+- Force modal when closing during running transfers (TICKET-004): closing
+  the main window during active copy/move/extract/pack operations is
+  intercepted via `Window.onCloseRequested`; modal forces "Cancel & Close"
+  / "Wait" / "Close anyway" (`opsStore.forceClose`, `ForceCloseDialog` in
+  `OperationDialogs.tsx`). Browser demo mode unchanged (no-op without the Tauri window API).
+  *(Still current — concerns closing the main window, independent of
+  the multi-window dialog management superseded below.)*
+  - Bugfix: `ForceCloseDialog` closes via `getCurrentWindow().destroy()`
+    (so `onCloseRequested` does not fire again), but `capabilities/default.json`
+    only allowed `core:window:allow-close`, not `allow-destroy` → "Close
+    anyway"/"Cancel & Close" failed silently and the window stayed open.
+    Added `core:window:allow-destroy`. At the same time reduced the `windows` list in
+    the capabilities to `["main"]` (the windows `settings/rename/export/
+    compare/filecompare` no longer exist since TICKET-012).
+  - Hardening `onCloseRequested` (App.tsx): now blocks only on genuinely active
+    operations — `!done && !cancelled && (queued || fileTotal > 0)`. A transfer
+    without progress/queue (e.g. a canceled password-extract operation that never
+    becomes `done`) no longer holds the red X permanently.
+- Bugfix: "Quit" (Alt+F4, `actions.ts` action `quit`) still called the
+  browser API `window.close()` — a leftover from before the
+  Tauri migration, ineffective on the native, OS-opened main window
+  (no effect, no error). Now via
+  `getCurrentWindow().close()`, so the same `onCloseRequested` handler
+  as the native window button applies (incl. the transfer check above).
+- ~~Real modal behavior of the dialog windows via `Window::set_enabled` (TICKET-005)~~
+  and ~~main-window re-enable hardening (TICKET-011)~~ — both made obsolete by
+  TICKET-012: there are no separate dialog windows anymore that would need to be
+  disabled/re-enabled.
+- Preserve scroll position/selection after file operations (TICKET-006):
+  `reloadBoth()` (after Copy/Move/Extract/Pack/Delete/Trash) as well as Rename
+  and New Folder now use `panesStore.refresh(side, {reveal:true})`
+  instead of `loadDir` — cursor/selection no longer jump back to 0/empty.
+  Newly added entries (target of a copy/move/paste
+  operation, renamed/newly created file) are automatically selected;
+  the existing `scrollToIndex(…, {align:"auto"})` effect in `FileTable`
+  only scrolls when necessary. Verified in browser demo mode (cursor/
+  selection stay exactly preserved after copying).
+- Directory comparison no longer starts recursive (TICKET-007):
+  `CompareDialog.tsx` incorrectly set "Recursive" to `true` on open
+  (default state and the first comparison run); the dialog now always starts
+  with the option disabled, regardless of the previous state. Verified in
+  browser demo mode (default off → enabling takes effect →
+  close/reopen resets).
+- Window management rebuilt onto React dialogs (TICKET-012): the separate
+  Tauri `WebviewWindow`s (Settings/Rename/Export/Compare/
+  FileCompare, TICKET-002) are fully replaced by in-app React dialogs
+  — this also made TICKET-005 (macOS modality) and TICKET-011
+  (main-window re-enable) obsolete. New central building block
+  `components/ui/AppDialog.tsx` (Radix `Dialog.Root`, always centered, resizable
+  via a drag handle, clamped to `[minimum, 90% of the main window]`,
+  reacts to main-window resize); size persisted per dialog type in
+  `store/dialogSizeStore.ts` (`zustand` `persist`, independent per `dialogKey`).
+  - Bugfix "app stops responding / hangs after some clicking even though no
+    operation is running": `FileBrowserDialog` and `PreviewDialog` used the
+    pattern `if (!x) return null` followed by `<Dialog.Root open>` (hardcoded `true`).
+    On close, Radix unmounted in the open state and left `pointer-events:
+    none` (scroll/focus lock) on `<body>` → the whole app unclickable.
+    Both dialogs now stay permanently mounted and are controlled via
+    `open={!!x}` (portal content via `{x && (…)}`), so Radix sees the
+    `open→closed` transition and releases the body styles again — analogous
+    to the already-correct `AppDialog`-based dialogs and the
+    `open={!!…}` dialogs in `OperationDialogs.tsx`.
+  All 5 dialogs lost their `win` prop/payload branching and now always read live
+  from their respective stores (no more difference between
+  Tauri and browser demo mode). `useKeyboard.ts` received a central guard
+  (`[role="dialog"]` check) so shortcuts are no longer passed through
+  to the file panes while a dialog is open. Removed: `commands/window.rs`
+  entirely, the `on_window_event` hook in `lib.rs`, `features/dialogWindow/`,
+  and `?win=` routing in `main.tsx`. Fully verified in browser demo mode
+  (all 5 dialogs individually + simultaneously, resize, persistence, Esc, focus
+  restoration, keyboard isolation); no live test against a real
+  Tauri app (uncritical, since no Tauri-specific logic exists anymore).
+- Made the selection in the inactive panel visible (TICKET-008): the cursor row
+  in the inactive pane previously had only a 1px outline without a fill and
+  was therefore hard to see. New CSS variable `--cursor-inactive-marker`
+  (`rgba(154, 194, 123, 0.4)`, both themes) now fills the cursor row in the
+  inactive panel with a subtle green (`FileTable.tsx`'s `stateClass()`); with
+  an additional selection the yellow selection color stays dominant. Verified in
+  browser demo mode in dark and light theme.
+- Legend of the file colors + configurable color scheme (TICKET-009): the colors
+  of the file list used to be a hardcoded Git→Tailwind-class map (`lib/gitColor.ts`),
+  and nothing explained them. New central registry `lib/fileColors.ts` (see §8):
+  slots with semantic id, label, per-theme default, and — for rules — matcher and
+  priority; published as `--fc-*` CSS variables. The properties dialog gained a
+  "Color" section showing the entry's name in its actual color plus the rule that
+  produced it (only the highest-priority one, message when none applies); it
+  resolves through the same registry and context as the list, so both cannot
+  disagree. New settings category **File colors** with a live preview, one picker
+  per theme, per-rule and global reset, plus an editor for custom wildcard rules
+  (matched before the built-ins, reorderable). Prerequisites in the backend:
+  `DirEntry`/`FileProps` now carry `hidden`/`readonly`/`executable` from the new
+  `commands/fs/attrs.rs` (per platform, so the frontend stops guessing from the
+  name/mode — this also fixes hidden-file filtering on Windows), and `classify()`
+  in `git.rs` now distinguishes `untracked` (`??`) from `staged` (index-only
+  change) instead of lumping both into `new`. `index.css` no longer hardcodes
+  `--selection`/`--cursor-active`/`--cursor-inactive-marker` but references the
+  registry. Verified in browser demo mode: all 11 rules incl. priority
+  (git-ignored beats executable), custom rule beats built-ins, live update of
+  list/dialog/preview, dark↔light independent, persistence across reload,
+  restore defaults, and invalid configuration falling back to the defaults.
+- Keystrokes confirming a dialog no longer leak into the file pane (TICKET-014):
+  `Enter` in the "New folder" prompt created the folder *and* opened the cursor
+  entry behind it — with the cursor on `..` the panel jumped one directory up.
+  Cause: `PromptDialog` handled `Enter`/`Escape` without
+  `preventDefault()`/`stopPropagation()`, and `submit()` unmounts the dialog
+  synchronously while the native event is still propagating; the global handler
+  on `window` (`useKeyboard.ts`) then judged the event by `document.activeElement`,
+  which had already fallen back to `<body>`. Fixed on both ends: the prompt input
+  consumes both keys, and the global handler no longer relies on state that the
+  unmount destroys — new `lib/keys.ts` marks a keystroke as belonging to a dialog
+  (`markDialogKey` as `onKeyDownCapture` on every `Dialog.Content`,
+  `consumeDialogKey` where a dialog acts on the key), `useKeyboard` skips marked
+  events, reads `e.target` instead of `document.activeElement`, and additionally
+  ignores everything while any `[role="dialog"]` is open (covers the frame in which
+  a freshly opened dialog has not taken focus yet). This covers all `requestPrompt`
+  consumers at once (New Folder, Rename, pattern selection, archive password); the
+  other `Enter`-submitting dialog inputs (Search, file browser, tag editor,
+  editor extensions) consume the key the same way. `panesStore.refresh` gained
+  `names` so New Folder/Rename reveal the entry by name instead of by diffing
+  against the previous listing (a watcher refresh in between would otherwise
+  swallow the reveal). Verified in browser demo mode: F7 + `Enter` keeps the
+  panel in its directory (cursor on `..` as well as on a file, no `open_path`),
+  F2 + `Enter` renames without navigating, pattern selection marks via `Enter`,
+  `Escape` in the prompt leaves an active quick filter untouched, the **Create**
+  button is unchanged, search still runs on `Enter`, and `Enter` in the pane
+  without a dialog still opens the cursor entry. A `keydown` probe on `window`
+  confirms the confirming keystroke never reaches the global handler.

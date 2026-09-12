@@ -16,13 +16,14 @@
     "check:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
     "check:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets --all-features -- -D warnings",
     "check:rust": "cargo test --manifest-path src-tauri/Cargo.toml --locked",
-    "check": "npm run check:fmt && npm run check:clippy && npm run check:rust && npm run check:bindings && npm run check:errorcodes && npm run check:boundaries && npm run typecheck && npm test && npm run build && npm run check:bundle",
+    "check": "npm run check:fmt && npm run check:clippy && npm run check:rust && npm run check:bindings && npm run check:errorcodes && npm run check:boundaries && npm run check:docs && npm run typecheck && npm test && npm run build && npm run check:bundle",
     "tauri": "tauri",
     "check:bundle": "node scripts/bundle-report.mjs",
     "bundle:report": "node scripts/bundle-report.mjs --build",
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "gen:errorcodes": "node scripts/gen-error-codes.mjs",
-    "check:errorcodes": "node scripts/gen-error-codes.mjs --check"
+    "check:errorcodes": "node scripts/gen-error-codes.mjs --check",
+    "check:docs": "node scripts/check-docs.mjs"
   },
   "dependencies": {
     "@radix-ui/react-context-menu": "^2.3.3",

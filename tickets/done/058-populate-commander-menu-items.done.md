@@ -148,7 +148,7 @@ Prüfliste; der Bestandsabgleich entscheidet über Erweiterungen und Verfügbark
 ## Implementation
 
 Ausgangsstand `b8bbec8`. Der Bestandsabgleich liegt vollständig in
-[`docs/menu-command-inventory.md`](../docs/menu-command-inventory.md): je Funktion
+[`docs/menu-command-inventory.md`](../../docs/menu-command-inventory.md): je Funktion
 Implementierungsnachweis (Datei/Symbol), Befehls-ID, Menüpfad, Kürzel, Kontext,
 Verfügbarkeit und Status (aus 040 übernommen · hier angebunden · bewusst im
 Dialog · 059 · noch offen). Geprüft wurden Toolbar (`CommandBar.tsx`),
