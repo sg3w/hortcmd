@@ -19,6 +19,7 @@ import { compare } from "./namespaces/compare";
 import { errors } from "./namespaces/errors";
 import { exporting } from "./namespaces/exporting";
 import { net } from "./namespaces/net";
+import { persist } from "./namespaces/persist";
 import { operations } from "./namespaces/operations";
 import { preview } from "./namespaces/preview";
 import { properties } from "./namespaces/properties";
@@ -41,6 +42,7 @@ const NAMESPACES = [
   exporting,
   preview,
   settings,
+  persist,
 ] as const;
 
 export const DICT = {
@@ -56,6 +58,7 @@ export const DICT = {
     ...exporting.de,
     ...preview.de,
     ...settings.de,
+    ...persist.de,
   },
   en: {
     ...chrome.en,
@@ -69,6 +72,7 @@ export const DICT = {
     ...exporting.en,
     ...preview.en,
     ...settings.en,
+    ...persist.en,
   },
 } as const;
 

@@ -8,6 +8,7 @@ import type { Lang, TransKey } from "@/i18n/dictionaries";
 import { useSettings, useT } from "@/store/settingsStore";
 import type { Scale, Theme } from "@/store/settingsStore";
 import { Field, Segmented } from "./controls";
+import { BackupSection } from "./backup";
 import {
   Image as ImageIcon,
   Languages,
@@ -15,6 +16,7 @@ import {
   Moon,
   Palette,
   Sun,
+  Save,
   Terminal,
   Type,
 } from "lucide-react";
@@ -98,6 +100,10 @@ export function GeneralForm() {
           className="w-full rounded border border-edge bg-panel-inactive px-2 py-1 font-mono text-[12px] text-text outline-none focus:border-accent"
         />
         <span className="text-[11px] text-dim">{t("settings.terminal.hint")}</span>
+      </Field>
+
+      <Field icon={Save} label={t("persist.section")}>
+        <BackupSection />
       </Field>
     </div>
   );

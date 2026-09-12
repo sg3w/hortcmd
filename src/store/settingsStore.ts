@@ -1,121 +1,42 @@
 // ============================================================
 // App settings (language, theme, system files) with
 // localStorage persistence.
+//
+// The persisted shape, its enums and its bounds are in
+// `settingsSchema.ts`; the versioning, migration and validation of what
+// comes back out of storage are in `persisted/settings.ts`
+// (TICKET-039). This file is the store and its setters.
 // ============================================================
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { guardedStorage } from "./persisted/storage";
+import { acceptVersion, PERSISTED_KEYS, rehydrate } from "./persisted/gate";
+import {
+  migrateSettings,
+  SETTINGS_VERSION,
+  validateSettings,
+} from "./persisted/settings";
 import { DICT, type Lang, type TransKey } from "@/i18n/dictionaries";
-import type {
-  CustomColorRule,
-  FileColorOverrides,
-  ThemeMode,
-} from "@/lib/fileColors";
+import type { CustomColorRule, ThemeMode } from "@/lib/fileColors";
+import {
+  DEFAULT_COLUMN_WIDTHS,
+  MAX_COLUMN_WIDTH,
+  MIN_COLUMN_WIDTH,
+  normalizeExt,
+  type DateFormat,
+  type EditorProgram,
+  type EditorTrigger,
+  type Favorite,
+  type PersistedSettings,
+  type Scale,
+  type SizeFormat,
+  type Theme,
+} from "./settingsSchema";
 
-export type Theme = "dark" | "light" | "system";
-/** Size step for the font or icons in the file list. */
-export type Scale = "sm" | "md" | "lg";
-/** Display format of the size column. */
-export type SizeFormat = "auto" | "bytes";
-/** Display format of the date column. */
-export type DateFormat = "medium" | "short" | "iso";
+export * from "./settingsSchema";
 
-/** Default widths (px) of the fixed-width columns in the detail view. */
-export const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
-  ext: 60,
-  perms: 100,
-  size: 90,
-  date: 130,
-};
-
-/** Limits for drag-adjustable column widths (px). */
-export const MIN_COLUMN_WIDTH = 40;
-export const MAX_COLUMN_WIDTH = 600;
-
-export interface Favorite {
-  name: string;
-  path: string;
-}
-
-/** A user-created program for opening files. */
-export interface EditorProgram {
-  id: string;
-  name: string;
-  path: string;
-}
-
-/** How "Open in editor" (the mapping) is triggered via the keyboard. */
-export type EditorTrigger = "shiftF4" | "contextOnly" | "f4";
-
-interface SettingsStore {
-  language: Lang;
-  theme: Theme;
-  hideSystemFiles: boolean;
-  /** Share of the width taken by the left pane (0.15–0.85). */
-  paneSplit: number;
-  favorites: Favorite[];
-  /** Terminal program for "Open in terminal" (empty = system default). */
-  terminalProgram: string;
-  /** Show the Git status in the file list (colors + branch badge). */
-  gitEnabled: boolean;
-  /** Move to the trash when deleting (Shift = permanent). */
-  useTrash: boolean;
-
-  // ----- Transfers (copy/move) -----
-  /** Verify copies against the source via SHA-256 after writing. */
-  verifyCopies: boolean;
-  /** Speed limit in KB/s (0 = unlimited). */
-  speedLimit: number;
-  /** Process copy/move operations one after another (queue). */
-  queueTransfers: boolean;
-  /** Copy buffer size in KB (default 256). */
-  bufferSizeKb: number;
-  /** Number of parallel copy threads (1 = sequential). */
-  copyThreads: number;
-  /**
-   * Failure-safe transfers (TICKET-029): copy into a hidden staging
-   * entry on the destination store and publish it with one rename, so
-   * a failure never leaves a partial file under the final name and
-   * never destroys the previous destination. Opt-in — it needs room
-   * for the copy next to the target, and not every destination can
-   * commit that way.
-   */
-  safeTransfers: boolean;
-
-  // ----- File view -----
-  /** Always sort folders before files. */
-  foldersFirst: boolean;
-  /** Show the extension as its own column (off = full name in the name column). */
-  showExtColumn: boolean;
-  /** Show the permissions column (rwxr-xr-x). */
-  showPermissions: boolean;
-  /** Format of the size column. */
-  sizeFormat: SizeFormat;
-  /** Format of the date column. */
-  dateFormat: DateFormat;
-  /** Font size of the file list. */
-  fontScale: Scale;
-  /** Icon size of the file list. */
-  iconScale: Scale;
-  /** Drag-adjusted column widths (px) per column id. */
-  columnWidths: Record<string, number>;
-
-  // ----- File colors (see lib/fileColors.ts) -----
-  /** Color overrides per slot id; missing/invalid → registry default. */
-  fileColors: FileColorOverrides;
-  /** User rules, matched before the built-in rules in list order. */
-  customColorRules: CustomColorRule[];
-
-  // ----- Open with / editors -----
-  /** Programs created by the user. */
-  programs: EditorProgram[];
-  /** Mapping extension (lowercase, without the dot) → program id. */
-  associations: Record<string, string>;
-  /** Global default editor (path; empty = none → system default). */
-  defaultEditor: string;
-  /** Trigger behavior for "Open in editor". */
-  editorTrigger: EditorTrigger;
-
+interface SettingsStore extends PersistedSettings {
   setLanguage: (l: Lang) => void;
   setTheme: (t: Theme) => void;
   setHideSystemFiles: (v: boolean) => void;
@@ -161,10 +82,6 @@ interface SettingsStore {
   setEditorTrigger: (v: EditorTrigger) => void;
 }
 
-/** Normalizes an extension: lowercase, without a leading dot/whitespace. */
-export function normalizeExt(ext: string): string {
-  return ext.trim().replace(/^\.+/, "").toLowerCase();
-}
 
 export const useSettings = create<SettingsStore>()(
   persist(
@@ -182,7 +99,7 @@ export const useSettings = create<SettingsStore>()(
       queueTransfers: true,
       bufferSizeKb: 256,
       copyThreads: 1,
-      safeTransfers: false,
+      safeTransfers: true,
 
       foldersFirst: true,
       showExtColumn: true,
@@ -329,7 +246,23 @@ export const useSettings = create<SettingsStore>()(
       setDefaultEditor: (defaultEditor) => set({ defaultEditor }),
       setEditorTrigger: (editorTrigger) => set({ editorTrigger }),
     }),
-    { name: "hortcmd-settings" },
+    {
+      name: PERSISTED_KEYS.settings,
+      version: SETTINGS_VERSION,
+      storage: guardedStorage("settings"),
+      // `migrate` reshapes; `merge` validates. Both run, and `merge`
+      // runs even when the version already matched — a stored value can
+      // be out of range without the schema ever having changed
+      // (TICKET-039).
+      migrate: (stored, from) =>
+        acceptVersion("settings", from, SETTINGS_VERSION)
+          ? migrateSettings(stored, from)
+          : {},
+      merge: (stored, current) => ({
+        ...current,
+        ...rehydrate("settings", stored, validateSettings),
+      }),
+    },
   ),
 );
 

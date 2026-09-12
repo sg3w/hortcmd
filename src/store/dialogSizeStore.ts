@@ -7,11 +7,15 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { guardedStorage } from "./persisted/storage";
+import { acceptVersion, PERSISTED_KEYS, rehydrate } from "./persisted/gate";
+import {
+  DIALOG_SIZES_VERSION,
+  validateDialogSizes,
+  type DialogSize,
+} from "./persisted/domains";
 
-export interface DialogSize {
-  w: number;
-  h: number;
-}
+export type { DialogSize };
 
 interface DialogSizeStore {
   sizes: Record<string, DialogSize>;
@@ -25,6 +29,20 @@ export const useDialogSizeStore = create<DialogSizeStore>()(
       setSize: (key, size) =>
         set((s) => ({ sizes: { ...s.sizes, [key]: size } })),
     }),
-    { name: "hortcmd-dialog-sizes" },
+    {
+      name: PERSISTED_KEYS.dialogSizes,
+      version: DIALOG_SIZES_VERSION,
+      storage: guardedStorage("dialogSizes"),
+      migrate: (stored, from) =>
+        acceptVersion("dialogSizes", from, DIALOG_SIZES_VERSION) ? stored : {},
+      merge: (stored, current) => ({
+        ...current,
+        sizes: rehydrate(
+          "dialogSizes",
+          (stored as { sizes?: unknown } | null)?.sizes,
+          validateDialogSizes,
+        ),
+      }),
+    },
   ),
 );

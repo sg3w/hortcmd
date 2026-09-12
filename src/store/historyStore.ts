@@ -5,8 +5,11 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { guardedStorage } from "./persisted/storage";
+import { acceptVersion, PERSISTED_KEYS, rehydrate } from "./persisted/gate";
+import { HISTORY_MAX, HISTORY_VERSION, validateHistory } from "./persisted/domains";
 
-const MAX = 20;
+const MAX = HISTORY_MAX;
 
 interface HistoryStore {
   recent: string[];
@@ -29,7 +32,21 @@ export const useHistory = create<HistoryStore>()(
         }),
       clear: () => set({ recent: [] }),
     }),
-    { name: "hortcmd-history" },
+    {
+      name: PERSISTED_KEYS.history,
+      version: HISTORY_VERSION,
+      storage: guardedStorage("history"),
+      migrate: (stored, from) =>
+        acceptVersion("history", from, HISTORY_VERSION) ? stored : {},
+      merge: (stored, current) => ({
+        ...current,
+        recent: rehydrate(
+          "history",
+          (stored as { recent?: unknown } | null)?.recent,
+          validateHistory,
+        ),
+      }),
+    },
   ),
 );
 

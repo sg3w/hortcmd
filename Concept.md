@@ -92,6 +92,13 @@ ipc/
 store/
 ├── panesStore.ts            panes with tabs, navigation, selection, sorting, archive
 ├── settingsStore.ts         language/theme/system files (localStorage-persisted)
+├── settingsSchema.ts        the persisted settings shape, its enums and bounds
+├── persisted/               version, migrate, validate, quarantine (TICKET-039)
+│   ├── gate.ts              the policy every persisted domain passes through
+│   ├── storage.ts           the storage adapter (a parse failure is not silence)
+│   ├── settings.ts          the settings schema version + migration chain
+│   ├── domains.ts           session, history, dialog sizes
+│   └── transfer.ts          preferences export/import (no secrets, ever)
 ├── clipboardStore.ts        Copy/Cut → Paste (metadata)
 ├── opsStore.ts              confirm/input dialogs, collision queue, preview, busy
 ├── uiStore.ts               open state of the app-level dialogs reachable from
@@ -1318,6 +1325,63 @@ npm run check   # fmt → clippy → cargo test → bindings → error codes →
   get. `protocol-harness.yml` runs them weekly and on demand instead; the
   keychain tests stay local-only. Workflow permissions are `contents: read`; no
   job receives secrets, so a fork's pull request cannot reach them.
+
+### Cross-cutting — persisted state (TICKET-039)
+
+Four Zustand stores and the window geometry write to `localStorage`, and
+rehydration puts what they find straight back into typed fields. The setters
+clamp; rehydration goes around them. A stored `paneSplit: 400` therefore left
+one pane invisible with no gesture to get it back, an association could point at
+a program that no longer existed, and a write interrupted by a crash meant the
+settings were silently gone.
+
+**One policy, five domains.** Everything stored declares a schema version, is
+migrated to the current one, and is then *validated on every load* — not only
+when the version changed, because a value can be out of range without the schema
+having moved. A validator never throws and never returns nothing: it returns the
+valid value or the default, so no caller can forget a case. Out of range is
+clamped (a dragged divider at 400 meant "as far as it goes"), a wrong *type* is
+replaced (nobody chose `"wide"`), and an entry with no identity is dropped — a
+favourite without a path cannot be shown or removed.
+
+**The original is kept.** Repairing broken data and writing the result back
+destroys the evidence, so the raw text is copied to a quarantine key first (the
+last five, then they rotate). A parse failure goes the same way: Zustand's own
+adapter returns `null` and says nothing, which is the right recovery and the
+wrong amount of silence.
+
+**The user is told once.** Rehydration happens while the modules load, long
+before anything can render, so the recovered domains are collected and one
+notice names them after the first paint. Never a modal: a shell that works must
+not be held up by an explanation.
+
+**A newer schema is refused, not read.** Reading version 9 with the version-1
+validator would drop what 9 added and write the truncated result back —
+downgrading data that the newer installation still needs. It is quarantined
+instead and the defaults are used.
+
+**One migration changes behaviour**, and it is a correction: TICKET-029
+specified failure-safe transfers as the default for new *and* existing
+installations and shipped them off. A stored `false` from before this version is
+therefore the wrong default recorded, not a decision, so v0 → v1 turns it on —
+and the File-operations panel keeps a standing warning while it is off, so
+anyone who really wants direct writes turns it back off and sees why.
+
+**Preferences travel, secrets do not.** Settings → General exports every setting
+into one envelope and imports it back through the *same* migration and
+validation — an imported file is exactly as trustworthy as a stored one. The
+session, history, dialog sizes and window position stay out: they describe one
+machine's last state, not a preference. A file that is not ours, comes from a
+newer schema, or carries a field whose *name* suggests a secret is refused
+outright rather than stripped — quietly removing a password would hide from the
+person importing that somebody put one in a preferences file. Nothing is applied
+until the value has already been validated, so a confirmation cannot fail
+halfway.
+
+**Window geometry** has a failure mode of its own: the display it was saved on
+may be gone. Every number in it is plausible and the window is simply invisible.
+It is checked against the available monitors and re-centred when it lands on
+none, with the size the user chose kept.
 
 ### Cross-cutting — the protocol harness (TICKET-038)
 

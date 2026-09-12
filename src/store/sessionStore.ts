@@ -7,6 +7,9 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { guardedStorage } from "./persisted/storage";
+import { acceptVersion, PERSISTED_KEYS, rehydrate } from "./persisted/gate";
+import { SESSION_VERSION, validateSession } from "./persisted/domains";
 import { usePanes, type Side, type ViewMode } from "./panesStore";
 import { parentPath } from "@/lib/path";
 
@@ -56,6 +59,21 @@ export const useSession = create<SessionStore>()(
         });
       },
     }),
-    { name: "hortcmd-session", partialize: (s) => ({ session: s.session }) },
+    {
+      name: PERSISTED_KEYS.session,
+      version: SESSION_VERSION,
+      storage: guardedStorage("session"),
+      partialize: (s) => ({ session: s.session }),
+      migrate: (stored, from) =>
+        acceptVersion("session", from, SESSION_VERSION) ? stored : {},
+      merge: (stored, current) => ({
+        ...current,
+        session: rehydrate(
+          "session",
+          (stored as { session?: unknown } | null)?.session,
+          validateSession,
+        ),
+      }),
+    },
   ),
 );

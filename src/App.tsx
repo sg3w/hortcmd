@@ -26,6 +26,9 @@ import { useTransfers } from "@/store/transfersStore";
 import { useOps } from "@/store/opsStore";
 import { useSettings, useT } from "@/store/settingsStore";
 import { initWindowState } from "@/lib/windowState";
+import { recoveredDomains } from "@/store/persisted/gate";
+import type { TransKey } from "@/i18n/dictionaries";
+import { notify } from "@/store/noticeStore";
 import type { ThemeMode } from "@/lib/fileColors";
 import { useKeyboard } from "@/features/commander/useKeyboard";
 import { useNativeMenu } from "@/features/commander/nativeMenu";
@@ -125,6 +128,22 @@ export default function App() {
       offLeftovers();
     };
   }, []);
+
+  // One notice for everything the persistence gate had to recover at
+  // startup (TICKET-039). It runs after the first render, because the
+  // stores rehydrate while the modules load — long before anything can
+  // show a message — and because a shell that works must never be held
+  // up by an explanation.
+  useEffect(() => {
+    const domains = recoveredDomains();
+    if (!domains.length) return;
+    notify(
+      "left",
+      "persist.recovered",
+      { domains: domains.map((d) => t(`persist.domain.${d}` as TransKey)).join(", ") },
+      "error",
+    );
+  }, [t]);
 
   useEffect(() => {
     (async () => {

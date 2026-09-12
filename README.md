@@ -231,6 +231,15 @@ for the life of a connection (no zeroing on drop, no protection against a core
 dump or a debugger attached to the process). On Linux without a running Secret
 Service, saving fails and says so — there is no plaintext fallback.
 
+**Browser storage.** Settings, the session, the folder history, dialog sizes and
+the window geometry live in the WebView's `localStorage`, in plain text and
+unencrypted. No secret is ever written there — not a password, not a passphrase,
+not a key — and the preferences export refuses a file carrying a field whose
+name suggests one rather than silently stripping it. Everything stored is
+versioned, migrated and validated on every load, with the original kept aside
+when it has to be repaired (Concept.md § Persisted state); the reset in
+Settings → General lists exactly what it clears before it does it.
+
 **Remote transport.** Certificates are validated by the platform TLS stack and
 there is no "continue anyway": an invalid or expired certificate fails the
 connection. There is also no certificate pinning and no trust-on-first-use for
