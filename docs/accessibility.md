@@ -60,8 +60,21 @@ announcements for this workflow. They are screen-reader output text, not a
 recording or an assessment of audio intelligibility. VoiceOver was switched off
 again, its AppleScript-control option was verified off (the original value), and
 the utility window was closed. The complete manual matrix below remains pending;
-this check does not cover other workflows, English, actual zoom, or Windows/Linux
+this check does not cover other workflows, actual zoom, or Windows/Linux
 screen readers.
+
+A subsequent English settings run captured the following VoiceOver output after
+its startup announcement had finished. The screen reader's system language
+remained German, while the application's labels were English:
+
+- Enter: `Settings web dialog mit 5 Objekten File view ausgewählt tab, 2 von 8 Settings tab group`
+- Arrow Up: `General ausgewählt tab, 1 von 8`
+- Escape: `Settings button`
+
+The application language was then restored to German, verified by the returned
+focus name Einstellungen. VoiceOver was quit after the test. Disabling its
+temporary AppleScript-control option presented a macOS password confirmation;
+restoration of that option awaits the user's confirmation in that system dialog.
 
 ## Translation ownership
 
