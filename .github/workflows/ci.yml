@@ -6,7 +6,7 @@
 # point of routing CI through package scripts rather than inlining
 # cargo/vitest invocations.
 #
-# Three jobs:
+# Four jobs:
 #   check   – the full gate on Linux (format, clippy, Rust tests,
 #             generated bindings, types, frontend tests, build)
 #   rust    – Ubuntu/macOS/Windows, so the cfg-gated platform code
@@ -107,6 +107,21 @@ jobs:
         run: npm run build
       - name: Bundle budget
         run: npm run check:bundle
+
+  frontend-node20:
+    name: Frontend (Node 20)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --engine-strict
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run check:bundle
 
   rust:
     name: Rust (${{ matrix.os }})

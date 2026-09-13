@@ -289,7 +289,7 @@ the maintainer directly rather than filing publicly.
   (`rust-version` in `src-tauri/Cargo.toml`, verified by its own CI job; the
   SMB client needs Rust 1.85 and the pinned KeePass library needs 1.85.1).
   Install from <https://rustup.rs>.
-- **Node.js** ≥ 20 (CI uses 22).
+- **Node.js** 20.19+, 22.13+, or 24+ (CI checks Node 20 and 22).
 - The **Tauri CLI** comes with `npm install`; run it as `npm run tauri`.
 
 Then, on each platform:
