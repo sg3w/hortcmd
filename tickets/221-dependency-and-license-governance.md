@@ -1,4 +1,9 @@
-# TICKET-050: Establish dependency, vulnerability, and license governance
+# TICKET-221: Establish dependency, vulnerability, and license governance
+
+## Backlog placement
+
+Moved from 050 to 221 as dependency and license governance. This is supporting
+work in the 220+ backlog; the requirements and open status are unchanged.
 
 ## Goal
 
@@ -72,4 +77,4 @@ evidence.
 - Exceptions are narrow, owned, justified, and automatically expire.
 - Direct dependency additions have a review checklist.
 - Scheduled update and advisory response processes have clear owners.
-- Rename this file to `050-dependency-and-license-governance.done.md`.
+- Rename this file to `221-dependency-and-license-governance.done.md`.

@@ -20,7 +20,7 @@ configuration. Verify each advisory against the actual configuration during fixe
 ## Scheduling
 Before starting interactive development-server/UI-server verification for 249.
 Headless component tests and source work can proceed without those servers.
-This is a concrete dependency finding; 050 still owns ongoing governance.
+This is a concrete dependency finding; 221 still owns ongoing governance.
 
 ## Additional compatibility finding
 The pre-existing jsdom 30.0.1 lock entry required Node 22.22.2/24.15/26 despite

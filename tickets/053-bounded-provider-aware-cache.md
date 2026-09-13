@@ -75,7 +75,7 @@ those identity and freshness contracts exist.
 - Directory and metadata caching uses canonical, security-aware identities.
 - Capacity, freshness, invalidation, isolation, and mutation rules are documented
   and enforced.
-- Cache use measurably improves selected scenarios from TICKET-052.
+- Cache use measurably improves selected scenarios from TICKET-223.
 - Stale data cannot silently drive destructive decisions.
 - Privacy and profile-deletion behavior are tested.
 - Rename this file to `053-bounded-provider-aware-cache.done.md`.

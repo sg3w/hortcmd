@@ -1,4 +1,9 @@
-# TICKET-051: Produce signed, reproducible releases with safe updates
+# TICKET-222: Produce signed, reproducible releases with safe updates
+
+## Backlog placement
+
+Moved from 051 to 222 as release and update infrastructure. This is supporting
+work in the 220+ backlog; the requirements and open status are unchanged.
 
 ## Goal
 
@@ -16,7 +21,7 @@ updates would increase risk unless signatures, channels, compatibility, settings
 migrations, and failure recovery are designed together.
 
 TICKET-033 supplies build gates, TICKET-039 owns persisted-state migrations, and
-TICKET-050 supplies dependency/SBOM evidence.
+TICKET-221 supplies dependency/SBOM evidence.
 
 ## Requirements
 
@@ -79,4 +84,4 @@ TICKET-050 supplies dependency/SBOM evidence.
 - Release artifacts include checksums, SBOM, notices, provenance, and notes.
 - Key-management and emergency procedures have named owners.
 - Users can verify an official release without trusting the download channel alone.
-- Rename this file to `051-signed-reproducible-releases-and-updates.done.md`.
+- Rename this file to `222-signed-reproducible-releases-and-updates.done.md`.

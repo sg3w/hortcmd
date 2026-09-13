@@ -381,7 +381,7 @@ npm run tauri build
 
 Produces a platform bundle in `src-tauri/target/release/bundle/` (`.app`/`.dmg`
 on macOS, `.deb`/`.AppImage` on Linux, `.msi`/`.exe` on Windows). Signing and
-notarization are not configured — TICKET-051 owns that.
+notarization are not configured — TICKET-222 owns that.
 
 A packaged build differs from `tauri dev` in two ways that matter: it uses the
 production CSP rather than `devCsp`, and it serves the app document over the

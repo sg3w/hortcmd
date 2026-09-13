@@ -147,7 +147,7 @@ instead of failing after invocation.
 | P1 | Directory freshness is local-only and race-prone | Remote paths are sent to a local watcher and late asynchronous results can make panes stale. | [TICKET-042](tickets/042-provider-aware-refresh-and-cache-coherence.md) |
 | P1 | Remote tests depend on manual infrastructure | Wire-protocol, security, and disconnection regressions are skipped in ordinary validation. | [TICKET-038](tickets/038-protocol-integration-test-harness.md) |
 | P2 | Accessibility and localization are not enforced | Hard-coded labels and complex keyboard/focus behavior can exclude users or regress silently. | [TICKET-249](tickets/249-accessibility-and-localization-quality.md) |
-| P2 | Production diagnostics are fragmented | Cross-layer failures are difficult to investigate safely without leaking sensitive data. | [TICKET-045](tickets/045-redacted-diagnostics-and-support-bundle.md) |
+| P2 | Production diagnostics are fragmented | Cross-layer failures are difficult to investigate safely without leaking sensitive data. | [TICKET-220](tickets/220-redacted-diagnostics-and-support-bundle.md) |
 | P2 | The eager frontend bundle is oversized | Heavy optional features increase startup parsing and obscure performance regressions. | [TICKET-034](tickets/034-frontend-bundle-splitting.md) |
 | P2 | Several modules combine unrelated responsibilities | Large transfer, IPC, settings, pane, and translation files raise review and regression cost. | [TICKET-035](tickets/035-modularize-high-complexity-subsystems.md) |
 | P2 | Repository documentation describes an older architecture | Contributors cannot reliably discover the current VFS, networking, or validation model. | [TICKET-037](tickets/037-architecture-and-contributor-documentation.md) |
@@ -161,9 +161,9 @@ instead of failing after invocation.
 | P1 | VFS locations are ambiguous strings | Frontend/backend parsing can diverge across IPv6, Unicode, Windows, encoding, and identity cases. | [TICKET-055](tickets/055-canonical-vfs-address-and-path-model.md) |
 | P1 | Predictable transfer constraints are discovered late | Self-copy, naming, staging, capacity, and provider-limit failures can surface after work begins. | [TICKET-049](tickets/049-transfer-preflight-and-resource-estimation.md) |
 | P1 | Completed operations have no explicit inverse contract | Users cannot safely undo eligible actions, while a generic undo could overwrite later changes. | [TICKET-048](tickets/048-reversible-file-operations-and-undo.md) |
-| P1 | Release artifacts and updates lack an integrity pipeline | Users cannot independently verify official builds or safely recover from failed updates. | [TICKET-051](tickets/051-signed-reproducible-releases-and-updates.md) |
-| P1 | Dependency security and licensing are not continuously checked | Parser, crypto, protocol, and frontend supply-chain risks may reach releases unnoticed. | [TICKET-050](tickets/050-dependency-and-license-governance.md) |
-| P2 | Runtime performance has no shared baseline or budget | Optimizations and regressions cannot be assessed consistently across layers. | [TICKET-052](tickets/052-performance-benchmarks-and-budgets.md) |
+| P1 | Release artifacts and updates lack an integrity pipeline | Users cannot independently verify official builds or safely recover from failed updates. | [TICKET-222](tickets/222-signed-reproducible-releases-and-updates.md) |
+| P1 | Dependency security and licensing are not continuously checked | Parser, crypto, protocol, and frontend supply-chain risks may reach releases unnoticed. | [TICKET-221](tickets/221-dependency-and-license-governance.md) |
+| P2 | Runtime performance has no shared baseline or budget | Optimizations and regressions cannot be assessed consistently across layers. | [TICKET-223](tickets/223-performance-benchmarks-and-budgets.md) |
 | P2 | Repeated listings have no shared bounded cache | Remote navigation repeats expensive work, but ad hoc caches would risk stale or cross-session data. | [TICKET-053](tickets/053-bounded-provider-aware-cache.md) |
 | P2 | Search rescans local trees for every query | Large repeated searches are expensive and remote/native index behavior is undefined. | [TICKET-054](tickets/054-scalable-indexed-search.md) |
 
@@ -171,9 +171,15 @@ instead of failing after invocation.
 
 | Priority | Finding | Impact | Ticket |
 |---|---|---|---|
-| P2 | Recursive folder size has no hierarchical visualization or scan-depth control | Users receive one total but cannot identify the largest branches, while a visual scan needs explicit depth and memory bounds. | [TICKET-056](tickets/056-folder-storage-usage-visualizer.md) |
+| P2 | Recursive folder size has no hierarchical visualization or scan-depth control | Users receive one total but cannot identify the largest branches, while a visual scan needs explicit depth and memory bounds. | [TICKET-209](tickets/209-folder-storage-usage-visualizer.md) |
 
 ## Recommended order
+
+The current user-directed grouping is recorded in the
+[ticket overview](tickets/README.md). The waves below describe technical
+dependencies from the analysis, not the current sequential work queue. Supporting
+work is now in 220+, while direct application development keeps its existing
+numbers and the first functional plugin is 209.
 
 1. Establish the CI and frontend-test foundation from TICKET-033 so subsequent
    safety work has repeatable gates.
@@ -193,7 +199,7 @@ For the second wave:
 1. Add persisted-state versioning (TICKET-039) before introducing more stored
    settings or durable operations.
 2. Implement structured errors (TICKET-036), then build redacted diagnostics on
-   that contract (TICKET-045).
+   that contract (TICKET-220).
 3. Use provider capabilities and connection lifecycle state as inputs to the
    refresh work (TICKET-042), and validate provider behavior through the protocol
    harness (TICKET-038).
@@ -212,15 +218,17 @@ For the third wave:
    preflight (TICKET-049), caching (TICKET-053), and indexed search (TICKET-054).
 3. Enforce the transport policy (TICKET-047) on top of SSH host verification and
    connection lifecycle handling.
-4. Establish dependency governance (TICKET-050) and the existing CI gates before
-   building the signed release/update pipeline (TICKET-051).
+4. Establish dependency governance (TICKET-221) and the existing CI gates before
+   building the signed release/update pipeline (TICKET-222).
 5. Add reversible operation plans (TICKET-048) after safe commits, durable journals,
    structured errors, capabilities, and transfer preflight are available.
-6. Establish runtime performance budgets (TICKET-052) before measuring the benefits
+6. Establish runtime performance budgets (TICKET-223) before measuring the benefits
    of the shared cache (TICKET-053) and scalable index (TICKET-054).
 
-TICKET-056 should follow provider capabilities and performance budgets. Its scan
-may reuse the cache only after TICKET-053 establishes identity and freshness rules.
+TICKET-209 is the first functional plugin and follows the plugin interface in
+TICKET-201 through TICKET-207, plus the provider capabilities required for scanning.
+Its scan may reuse the cache only after TICKET-053 establishes identity and
+freshness rules. TICKET-223 owns the shared performance infrastructure.
 
 ## Additional observations now tracked
 
@@ -228,17 +236,18 @@ The earlier lower-priority observations are now represented by TICKET-034 throug
 TICKET-038. The expanded review also records versioned persistence (TICKET-039),
 provider-aware refresh (TICKET-042), accessibility/localization quality
 (TICKET-249), restart-safe operation recovery (TICKET-044), and redacted
-diagnostics (TICKET-045). Frontend regression coverage remains part of
+diagnostics (TICKET-220). Frontend regression coverage remains part of
 TICKET-033, with the concrete Enter-key defect still independently tracked by
 TICKET-014.
 
-The third-wave findings are tracked by TICKET-046 through TICKET-055. They remain
+The third-wave findings are tracked by TICKET-046 through TICKET-049,
+TICKET-053 through TICKET-055, and TICKET-221 through TICKET-223. They remain
 separate from the native menu (TICKET-040), MCP server (TICKET-041), and plugin
 series because they harden the core application and its release process regardless
 of whether those expansion features are implemented.
 
-TICKET-056 adds the requested folder storage-usage visualization with explicit
-recursion-depth and memory limits.
+TICKET-209 adds the requested folder storage-usage visualization as the first
+functional plugin, with explicit recursion-depth and memory limits.
 
 ## Relationship to the existing backlog
 

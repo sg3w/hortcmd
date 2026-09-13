@@ -1,4 +1,9 @@
-# TICKET-074: Make test transport mock initialization explicit
+# TICKET-224: Make test transport mock initialization explicit
+
+## Backlog placement
+
+Moved from 074 to 224 as test harness maintenance. This is supporting
+work in the 220+ backlog; the requirements and open status are unchanged.
 
 ## Problem
 

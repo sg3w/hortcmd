@@ -3,7 +3,7 @@
 ## Goal
 The binding contract of the plugin system is in place: manifest schema, permission model,
 broker protocol, and the shared types. No execution of plugins yet — only the
-API that all following tickets (202–208) build on.
+API that all following tickets (202–209) build on.
 
 ## Background
 Concept.md (§10 P4, §Vision) explicitly requires **defining the plugin API early**,
@@ -98,8 +98,9 @@ This ticket only fixes the contract. The surfaces themselves belong to:
 window), **205** (feeding `path`/context into a running view), **207** (granting
 `ui:preview`/`ui:tab` at install time) and **208** (the demo plugin gains a preview
 renderer and a path-bound tab, which is what proves the contract).
-If the embedded-frame surface makes 202 too large, it is split out as **209
-"Embedded plugin views"** — the contract here stays unchanged either way.
+Embedded views remain part of 202. Number 209 is assigned to the first functional
+plugin, the [storage-usage analyzer](209-folder-storage-usage-visualizer.md).
+If embedded views need a separate ticket, allocate an unused plugin-series number.
 
 ## Acceptance criteria
 - [ ] The manifest schema is typed in Rust and available in the frontend via ts-rs.

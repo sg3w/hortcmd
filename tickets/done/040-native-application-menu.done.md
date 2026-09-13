@@ -207,7 +207,7 @@ in der separaten Plugin-Toolbar aus TICKET-204; keine vorweggenommene Menü-API.
 | 031 | Gemeinsame Provider-Fähigkeiten und Sperren auch für das Hauptmenü. |
 | 249 | Übergreifende Accessibility/Übersetzung; 040 liefert bereits vollständige Menübedienbarkeit. |
 | 048 | Später Datei-Undo unter Dateien mit konkretem Aktionsnamen; derzeit kein Datei-Undo-Platzhalter. |
-| 056 | Später Speicherbelegungsanalyse unter Befehle; vorhandene Ordnergröße bleibt unter Eigenschaften. |
+| 209 | Später Speicherbelegungsanalyse unter Befehle; vorhandene Ordnergröße bleibt unter Eigenschaften. |
 | 204 / 207 | Separate Plugin-Toolbar und Plugin-Verwaltung; kein Starter-Menü in 040. |
 | 012 (done) | Bestehende React-Dialoge wiederverwenden, keine neuen nativen Dialogfenster. |
 

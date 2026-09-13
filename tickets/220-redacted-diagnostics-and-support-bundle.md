@@ -1,4 +1,9 @@
-# TICKET-045: Add redacted diagnostics and an exportable support bundle
+# TICKET-220: Add redacted diagnostics and an exportable support bundle
+
+## Backlog placement
+
+Moved from 045 to 220 as support and diagnostic infrastructure. This is supporting
+work in the 220+ backlog; the requirements and open status are unchanged.
 
 ## Goal
 
@@ -78,4 +83,4 @@ telemetry.
 - Users can inspect, export, and delete local diagnostic information.
 - Support-bundle schema and privacy behavior are documented.
 - No telemetry or upload behavior is added by this ticket.
-- Rename this file to `045-redacted-diagnostics-and-support-bundle.done.md`.
+- Rename this file to `220-redacted-diagnostics-and-support-bundle.done.md`.

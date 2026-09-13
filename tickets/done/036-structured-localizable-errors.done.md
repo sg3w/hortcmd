@@ -16,7 +16,7 @@ same channel. This creates inconsistent localization, brittle control flow, and 
 risk of leaking credentials, URLs, or sensitive paths in dialogs and future logs.
 
 The generated ts-rs bindings provide a natural place for a versioned error
-contract. Diagnostics from TICKET-045 may retain redacted technical details, but
+contract. Diagnostics from TICKET-220 may retain redacted technical details, but
 user-facing messages must be derived from stable fields.
 
 ## Requirements
@@ -193,7 +193,7 @@ clean.
 
 ### Not done
 
-Diagnostics that *would* surface `detail` are TICKET-045's scope; the field is
+Diagnostics that *would* surface `detail` are TICKET-220's scope; the field is
 carried and redacted but nothing renders it yet. A handful of internal helpers
 still produce prose that arrives as `internal.unexpected` with the text as
 detail — safe by construction, and each one is a local improvement to make

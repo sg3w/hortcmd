@@ -1,4 +1,9 @@
-# TICKET-052: Establish performance benchmarks and regression budgets
+# TICKET-223: Establish performance benchmarks and regression budgets
+
+## Backlog placement
+
+Moved from 052 to 223 as benchmark and regression infrastructure. This is supporting
+work in the 220+ backlog; the requirements and open status are unchanged.
 
 ## Goal
 
@@ -72,4 +77,4 @@ repeatable measurement rather than prescribing a specific optimization.
 - Profiling procedures identify whether regressions originate in UI, IPC, backend,
   or provider work.
 - Optimization tickets reference baseline and final measurements.
-- Rename this file to `052-performance-benchmarks-and-budgets.done.md`.
+- Rename this file to `223-performance-benchmarks-and-budgets.done.md`.

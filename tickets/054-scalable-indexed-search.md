@@ -46,7 +46,7 @@ TICKET-053 reusable metadata identity/invalidation rules.
 ## Acceptance Criteria
 
 - [ ] Only explicitly approved roots and metadata/content categories are indexed.
-- [ ] Repeated representative queries improve against the TICKET-052 live-scan
+- [ ] Repeated representative queries improve against the TICKET-223 live-scan
       baseline without changing result correctness.
 - [ ] Indexing is cancellable, resumable, resource-bounded, and recovers from a
       corrupt or outdated database through rebuild.

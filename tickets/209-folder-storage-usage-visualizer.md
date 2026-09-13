@@ -1,8 +1,16 @@
-# TICKET-056: Add a folder storage-usage visualizer with bounded scan depth
+# TICKET-209: First functional plugin — folder storage-usage visualizer
+
+## Scheduling and plugin ownership
+
+Moved from 056 to 209 at the user's request. This is the first functional plugin
+for the plugin interface, following the foundation in TICKET-201 through
+TICKET-207. TICKET-208 remains a technical reference/demo for validating the hosts;
+it is not a competing product feature. All scan limits and verification criteria
+from the original ticket remain in scope.
 
 ## Goal
 
-Provide an interactive visual breakdown of how a folder consumes storage while
+Provide an installable plugin with an interactive visual breakdown of how a folder consumes storage while
 keeping traversal depth, node count, memory use, provider load, and scan duration
 explicitly bounded.
 
@@ -16,14 +24,37 @@ visual explanation of which subfolders and files account for the total.
 
 For this ticket, “memory usage” means filesystem storage usage, not process RAM.
 The visualizer must report its own bounded RAM consumption separately. TICKET-031
-defines remote-provider capabilities, TICKET-052 supplies performance budgets, and
+defines remote-provider capabilities, TICKET-223 supplies performance budgets, and
 TICKET-053 supplies cache rules that may later be reused without making stale data
 look current.
 
 ## Requirements
 
+### Plugin integration
+
+- Package the visualization as a JS plugin with a manifest, versioned API contract,
+  and its own window through TICKET-202. Installation, activation, permissions,
+  deactivation and removal use TICKET-207; no always-enabled built-in analyzer.
+- Register the entry through TICKET-204 and obtain the selected folder, pane and
+  provider context through TICKET-205. Use canonical VFS locations for local and
+  remote roots. Existing Properties totals remain a core feature.
+- Keep traversal, accounting and resource enforcement in Rust services. The plugin
+  frontend only presents results and interaction; every request passes through
+  the permission-checked broker from TICKET-201 and TICKET-206, never direct Tauri
+  IPC, filesystem access or a second traversal implementation in JavaScript.
+- Extend the shared broker contract with bounded scan requests, result batches,
+  progress and pause/resume/cancel messages as needed. Export types via ts-rs and
+  document required permissions, approved roots, ownership and lifecycle rules.
+  A read-only scan must not request write permission; mutations require separate
+  grants and ordinary core operation validation.
+- Closing or deactivating the plugin releases subscriptions and cancels its scan.
+  Permission revocation and connection changes prevent further reads/results;
+  failures leave the commander usable. Verify cleanup for partial scans as well.
+
 - Once implemented, expose **Befehle → Speicherbelegung analysieren…** through
   the shared command definition from [TICKET-040](040-native-application-menu.md).
+  This entry and pane/Properties launchers are available only while the plugin
+  is installed, active and permitted; they launch the same plugin workflow.
   The existing folder/volume size display stays in Properties; the new analyzer
   is a distinct workflow. Do not add a non-functional menu placeholder in 040.
 
@@ -99,6 +130,10 @@ look current.
 
 ## Acceptance Criteria
 
+- [ ] The analyzer installs, activates and uninstalls through plugin management;
+      its entry opens a plugin window with the correct selected-folder context.
+- [ ] All scans and actions use the broker, and denied/revoked permissions,
+      plugin closure and deactivation stop owned work and release subscriptions.
 - [ ] Users can open a folder usage treemap and equivalent sortable table from the
       pane or folder Properties dialog.
 - [ ] Root depth is `0`; scans stop at the requested limit and never exceed the
@@ -117,6 +152,10 @@ look current.
 
 ## Tests
 
+- Exercise installation, activation, command-bar and menu launch, context handoff,
+  denied/revoked permissions, shutdown during a scan, reactivation and uninstall.
+  Verify no direct IPC/filesystem access from the plugin frontend and no orphaned
+  scan tasks or subscriptions after failure or closure.
 - Test exact depth boundaries at `0`, `1`, the default `32`, user maximum `128`,
   hard ceiling `256`, and rejected negative/overflowing/malformed requests.
 - Generate a tree deeper than 256 levels and verify iterative traversal, truncation
@@ -131,11 +170,13 @@ look current.
   disconnect, reconnect, latency, and rate limiting.
 - Component-test treemap/table parity, “Other” aggregation, drill-down, breadcrumbs,
   stale/partial states, keyboard navigation, accessible names, and reduced motion.
-- Benchmark representative deep and wide trees through TICKET-052 and assert agreed
+- Benchmark representative deep and wide trees through TICKET-223 and assert agreed
   backend/frontend peak-memory budgets.
 
 ## Definition of Done
 
+- The first functional plugin is packaged and documented against the shared API,
+  with lifecycle and broker-permission coverage; no duplicate built-in analyzer.
 - Folder storage use is available as an interactive treemap and accessible table.
 - Scan depth semantics, default `32`, selectable maximum `128`, and backend ceiling
   `256` are enforced and documented.
@@ -143,4 +184,4 @@ look current.
 - Traversal, streaming, retained nodes, concurrency, time, and memory are bounded.
 - Local and capable remote providers have contract and performance coverage.
 - Concept.md and provider documentation describe metrics, limits, and link behavior.
-- Rename this file to `056-folder-storage-usage-visualizer.done.md`.
+- Rename this file to `209-folder-storage-usage-visualizer.done.md`.

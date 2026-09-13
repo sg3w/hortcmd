@@ -141,7 +141,7 @@ delete (`panesStore.pruneSelection`).
 | Running / queued transfers | `transfersStore`, `TransferView` | dyn. `transfer:*` | Befehle › Übertragungen ▸ | — | empty list → placeholder | 040 |
 | Pause / resume / cancel a transfer | `transfersStore.setPaused`, `cancelTransfer` | — | inside the transfer dialog | — | — | dialog |
 | Drive / volume switch | `panel/DriveSelect.tsx` | — | per-pane location picker (also lists favorites and connections) | — | — | dialog |
-| Storage usage analysis | — (TICKET-056) | — | — | — | — | open |
+| Storage usage analysis | — (TICKET-209) | — | — | — | — | open |
 | Plugin management | — (TICKET-207) | — | — | — | — | open |
 
 ## Netz / Network

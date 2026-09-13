@@ -48,7 +48,7 @@ Funktionsumfang ist der aktuelle hortcmd-Code, nicht allein die heutige Roadmap.
    Detailaktionen innerhalb eines Dialogs dürfen dort bleiben; die Erreichbarkeit
    des Dialogs und die Entscheidung dokumentieren. Keine IPC-Kommandoliste ins Menü.
 5. Seit 040 hinzugekommene Funktionen aufnehmen, etwa Datei-Undo (048),
-   Speicherbelegungsanalyse (056) oder Plugin-Verwaltung (207), **nur wenn ihr
+   Speicherbelegungsanalyse (209) oder Plugin-Verwaltung (207), **nur wenn ihr
    Benutzerablauf inzwischen implementiert ist**. Offene Funktionen mit Ticketbezug
    als zurückgestellt dokumentieren, ohne funktionslose Menüeinträge zu erzeugen.
 

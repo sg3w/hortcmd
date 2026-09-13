@@ -5,6 +5,10 @@ A complete example plugin exercises the entire API for real and serves third par
 template. Additionally, a minimal native plugin validates the second host.
 
 ## Background
+
+This ticket provides technical examples and host/API verification. The first
+functional plugin is the storage-usage analyzer in
+[TICKET-209](209-folder-storage-usage-visualizer.md).
 An API is only proven once a real plugin uses it. The demo plugin bundles
 window, command-bar button with a colorful icon, context handoff, and a mediated
 action into a comprehensible example.
