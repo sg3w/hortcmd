@@ -1,4 +1,8 @@
-# TICKET-046: Contain archive extraction and limit hostile input
+# TICKET-225: Contain archive extraction and limit hostile input
+
+Originally ticket 046. Implementation is present; only the final platform/security
+audit remains. Deferred by user instruction to keep the current batch focused on
+bug fixes and new features. Historical implementation references retain 046.
 
 ## Goal
 
@@ -83,7 +87,7 @@ remaining independently testable for every supported archive format.
 - Limits and unsupported entry types are documented in user and developer docs.
 - Security review confirms no path is derived from archive metadata without
   validation.
-- Rename this file to `046-safe-archive-extraction.done.md`.
+- Rename this file to `225-safe-archive-extraction.done.md`.
 
 ## Implementation evidence (2026-09-13)
 
@@ -95,9 +99,8 @@ recovery behavior are documented in [archive extraction](../docs/archive-extract
 Local verification covers all five formats, cancellation, unchanged prior output,
 Unicode/platform names, limits, a substituted destination symlink and a forced
 publication failure with rollback. The Windows DACL helper was cross-compiled
-with Rust 1.85.0. Native Windows/Linux execution and the complete application's
-MSRV guarantee remain to be verified; the latter has a pre-existing dependency
-blocker tracked by TICKET-068. Decoder-internal allocations are tracked by
+with Rust 1.85.0. Native Windows/Linux execution remains to be verified. The previous MSRV
+blocker was resolved in TICKET-068. Decoder-internal allocations are tracked by
 TICKET-067 and are not bounded by the output-byte counter.
 
 This ticket stays open for its final cross-platform/security audit.

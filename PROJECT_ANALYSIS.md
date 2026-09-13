@@ -156,7 +156,7 @@ instead of failing after invocation.
 
 | Priority | Finding | Impact | Ticket |
 |---|---|---|---|
-| P0 | Archive-controlled paths lack one explicit containment layer | Crafted ZIP, tar, or 7z input could escape the selected destination or exhaust resources. | [TICKET-046](tickets/046-safe-archive-extraction.md) |
+| P0 | Archive-controlled paths lack one explicit containment layer | Crafted ZIP, tar, or 7z input could escape the selected destination or exhaust resources. | [TICKET-225](tickets/225-safe-archive-extraction.md) |
 | P1 | Remote transport strength is not governed centrally | Plain FTP/HTTP and implicit provider defaults can expose credentials or permit unintended downgrade. | [TICKET-047](tickets/047-remote-transport-security-policy.md) |
 | P1 | VFS locations are ambiguous strings | Frontend/backend parsing can diverge across IPv6, Unicode, Windows, encoding, and identity cases. | [TICKET-055](tickets/055-canonical-vfs-address-and-path-model.md) |
 | P1 | Predictable transfer constraints are discovered late | Self-copy, naming, staging, capacity, and provider-limit failures can surface after work begins. | [TICKET-049](tickets/049-transfer-preflight-and-resource-estimation.md) |
@@ -212,7 +212,7 @@ For the second wave:
 
 For the third wave:
 
-1. Implement archive containment and resource limits (TICKET-046) immediately
+1. Implement archive containment and resource limits (TICKET-225) immediately
    because it closes an untrusted-input boundary independent of the other work.
 2. Define canonical typed locations (TICKET-055), then use them in transfer
    preflight (TICKET-049), caching (TICKET-053), and indexed search (TICKET-054).
@@ -240,7 +240,7 @@ diagnostics (TICKET-220). Frontend regression coverage remains part of
 TICKET-033, with the concrete Enter-key defect still independently tracked by
 TICKET-014.
 
-The third-wave findings are tracked by TICKET-046 through TICKET-049,
+The third-wave findings are tracked by TICKET-225 and TICKET-047 through TICKET-049,
 TICKET-053 through TICKET-055, and TICKET-221 through TICKET-223. They remain
 separate from the native menu (TICKET-040), MCP server (TICKET-041), and plugin
 series because they harden the core application and its release process regardless
