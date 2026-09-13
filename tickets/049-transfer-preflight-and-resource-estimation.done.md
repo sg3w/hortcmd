@@ -46,15 +46,15 @@ replace commit-time checks or promise that remote capacity remains unchanged.
 
 ## Acceptance Criteria
 
-- [ ] Predictable self-copy, naming, capability, staging, and known-capacity
+- [x] Predictable self-copy, naming, capability, staging, and known-capacity
       failures are reported before destination content changes.
-- [ ] Unknown remote quota is represented as unknown, not unlimited.
-- [ ] Space estimates include peak temporary requirements for the selected mode.
-- [ ] Queued operations retain the approved immutable plan and settings but still
+- [x] Unknown remote quota is represented as unknown, not unlimited.
+- [x] Space estimates include peak temporary requirements for the selected mode.
+- [x] Queued operations retain the approved immutable plan and settings but still
       revalidate volatile facts before execution.
-- [ ] Planning remains cancellable and memory-bounded for very large trees.
-- [ ] A dry run has no filesystem side effects and cannot be executed as authority.
-- [ ] Commit-time safety remains authoritative when conditions change after review.
+- [x] Planning remains cancellable and memory-bounded for very large trees.
+- [x] A dry run has no filesystem side effects and cannot be executed as authority.
+- [x] Commit-time safety remains authoritative when conditions change after review.
 
 ## Tests
 
@@ -76,3 +76,24 @@ replace commit-time checks or promise that remote capacity remains unchanged.
 - Planning is cancellable, bounded, and reusable by trusted future interfaces.
 - Estimation semantics and limitations are documented.
 - Rename this file to `049-transfer-preflight-and-resource-estimation.done.md`.
+
+## Implementation scope and evidence
+
+Implemented typed immutable plans, optional provider limits, streamed bounded
+summaries, read-only/cancellable IPC, DE/EN confirmation summaries, queued plan and
+settings snapshots, connection generations, before-write source/destination checks
+and staged commit collision revalidation. Archive pack/extract capacity checks run
+before staging. Unknown constraints are explicit and do not promise unlimited space.
+
+Windows/Linux native constraint queries and their real filesystem matrix are
+tracked in [TICKET-255](255-preflight-native-provider-limits.md), per the user's
+current scope. Legacy remote directory APIs still return a provider vector before
+the planner's bound is checked; the planner does not keep another full file tree.
+The exact memory/selection bounds, conservative case handling and space semantics
+are documented in [Transfer preflight](../docs/transfer-preflight.md).
+
+Tests cover overlap/duplicates, Unicode normalization, declared name/object bounds,
+checked space arithmetic, capacity/quota changes, source/destination replacement,
+connection generations, synthetic million-entry bounds, cancellation and refusal
+of a target changed before commit. UI tests cover blocked confirmation, cancellation
+and immutable settings. `npm run check` validates the complete implementation.

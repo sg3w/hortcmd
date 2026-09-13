@@ -129,14 +129,13 @@ pub(super) fn write_entry(
 pub(super) fn extract_zip(
     archive: &str,
     base: &str,
-    limits: safety::Limits,
+    mut manifest: safety::Manifest,
     targets: &HashSet<String>,
     dest: &mut staging::Stage,
     pw: &Option<String>,
     prog: &mut Prog,
 ) -> AppResult<(u32, Vec<ItemError>)> {
     let all = targets.is_empty();
-    let mut manifest = preflight(archive, pw, limits, &prog.cancel)?;
     let open = || -> AppResult<ZipArchive<File>> {
         ZipArchive::new(File::open(archive).map_err(AppError::from)?).map_err(AppError::from)
     };
@@ -229,13 +228,12 @@ pub(super) fn extract_tar(
     kind: ArchiveKind,
     archive: &str,
     base: &str,
-    limits: safety::Limits,
+    mut manifest: safety::Manifest,
     targets: &HashSet<String>,
     dest: &mut staging::Stage,
     prog: &mut Prog,
 ) -> AppResult<(u32, Vec<ItemError>)> {
     let all = targets.is_empty();
-    let mut manifest = preflight(archive, &None, limits, &prog.cancel)?;
     // Pass 1: totals from the headers.
     for (name, size, is_dir) in tar_raw(open_tar_reader(kind, archive)?)? {
         if is_dir {
@@ -297,14 +295,13 @@ pub(super) fn extract_tar(
 pub(super) fn extract_7z(
     archive: &str,
     base: &str,
-    limits: safety::Limits,
+    mut manifest: safety::Manifest,
     targets: &HashSet<String>,
     dest: &mut staging::Stage,
     pw: &Option<String>,
     prog: &mut Prog,
 ) -> AppResult<(u32, Vec<ItemError>)> {
     let all = targets.is_empty();
-    let mut manifest = preflight(archive, pw, limits, &prog.cancel)?;
     // Pass 1: totals from the metadata (also opens with the password).
     let meta =
         sevenz_rust::Archive::open_with_password(archive, &password(pw)).map_err(map_7z_err)?;
@@ -407,16 +404,32 @@ pub(crate) fn run_with_recovery(
     let base = inner_prefix(&base_inner);
     let targets: HashSet<String> = names.into_iter().collect();
     check_cancel(&prog.cancel)?;
+    let manifest = match (|| -> AppResult<safety::Manifest> {
+        let manifest = preflight(&archive, &pw, limits, &prog.cancel)?;
+        let (files, bytes) = manifest.selected_totals(|name| {
+            match_target(name, &base, targets.is_empty(), &targets).is_some()
+        })?;
+        crate::commands::fs::transfer::preflight::archive_capacity(
+            std::path::Path::new(&dest_dir),
+            crate::commands::fs::transfer::recovery::types::RecoveryKind::Extract,
+            bytes,
+            files,
+        )?;
+        Ok(manifest)
+    })() {
+        Ok(manifest) => manifest,
+        Err(error) => return Ok((0, vec![ItemError::new(&archive, error)])),
+    };
     let mut stage = staging::Stage::new_with_recovery(std::path::Path::new(&dest_dir), recovery)?;
     let result = match archive_kind(&archive) {
         Some(ArchiveKind::Zip) => {
-            extract_zip(&archive, &base, limits, &targets, &mut stage, &pw, prog)
+            extract_zip(&archive, &base, manifest, &targets, &mut stage, &pw, prog)
         }
         Some(kind @ (ArchiveKind::Tar | ArchiveKind::TarGz | ArchiveKind::TarXz)) => {
-            extract_tar(kind, &archive, &base, limits, &targets, &mut stage, prog)
+            extract_tar(kind, &archive, &base, manifest, &targets, &mut stage, prog)
         }
         Some(ArchiveKind::SevenZ) => {
-            extract_7z(&archive, &base, limits, &targets, &mut stage, &pw, prog)
+            extract_7z(&archive, &base, manifest, &targets, &mut stage, &pw, prog)
         }
         None => Err(AppError::new(code::ARCHIVE_UNKNOWN_FORMAT)),
     };

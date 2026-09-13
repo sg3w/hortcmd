@@ -733,11 +733,12 @@ mod tests {
             let mut stage = staging::Stage::new(&dest).unwrap();
             let mut prog = progress();
             let path = archive.to_str().unwrap();
+            let manifest = preflight(path, &None, safety::Limits::default()).unwrap();
             let result = match archive_kind(path).unwrap() {
                 ArchiveKind::Zip => extract_zip(
                     path,
                     "",
-                    safety::Limits::default(),
+                    manifest,
                     &HashSet::new(),
                     &mut stage,
                     &None,
@@ -746,7 +747,7 @@ mod tests {
                 ArchiveKind::SevenZ => extract_7z(
                     path,
                     "",
-                    safety::Limits::default(),
+                    manifest,
                     &HashSet::new(),
                     &mut stage,
                     &None,
@@ -756,7 +757,7 @@ mod tests {
                     kind,
                     path,
                     "",
-                    safety::Limits::default(),
+                    manifest,
                     &HashSet::new(),
                     &mut stage,
                     &mut prog,

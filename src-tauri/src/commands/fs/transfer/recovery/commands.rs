@@ -9,6 +9,7 @@ pub async fn recovery_queue_transfer(
     sources: Vec<String>,
     destination: String,
     settings: RecoverySettings,
+    review: Option<String>,
 ) -> AppResult<()> {
     if !super::supported() {
         return Ok(());
@@ -17,10 +18,23 @@ pub async fn recovery_queue_transfer(
         if !matches!(kind, RecoveryKind::Copy | RecoveryKind::Move) {
             return Err(AppError::new(code::VALIDATION_BAD_INPUT));
         }
-        journal()?.enqueue(
+        let plan = super::super::preflight::build(
+            kind.clone(),
+            &sources,
+            &destination,
+            settings.clone(),
+            &std::sync::atomic::AtomicBool::new(false),
+        )?;
+        plan.ensure_executable()?;
+        if let Some(review) = review {
+            plan.matches_review(&review)?;
+        }
+        let journal = journal()?;
+        journal.enqueue(
             &id,
             Intent::transfer(kind, &sources, &destination, settings)?,
-        )
+        )?;
+        journal.attach_preflight(&id, plan)
     })
     .await
     .map_err(|_| AppError::new(code::FS_IO))?

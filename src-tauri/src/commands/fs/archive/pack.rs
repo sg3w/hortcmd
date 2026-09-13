@@ -112,6 +112,12 @@ pub(crate) fn run_with_recovery(
         }
         entries.push((path, name, directory, meta.len()));
     }
+    crate::commands::fs::transfer::preflight::archive_capacity(
+        &parent,
+        crate::commands::fs::transfer::recovery::types::RecoveryKind::Pack,
+        prog.bytes_total,
+        entries.len().try_into().map_err(|_| safety::limit())?,
+    )?;
     let mut stage = staging::Stage::new_with_recovery(&parent, recovery)?;
     let result = (|| -> AppResult<u32> {
         let output = stage.file(name, &limits)?.into_std();

@@ -122,6 +122,53 @@ impl Provider for LocalProvider {
         fs::read_dir(path)?.map(|e| e.map(|d| d.path())).collect()
     }
 
+    fn visit_dir(
+        &self,
+        path: &Path,
+        limit: usize,
+        visit: &mut dyn FnMut(PathBuf) -> io::Result<()>,
+    ) -> io::Result<()> {
+        for (index, entry) in fs::read_dir(path)?.enumerate() {
+            if index >= limit {
+                return Err(io::Error::other("preflight directory limit"));
+            }
+            visit(entry?.path())?;
+        }
+        Ok(())
+    }
+
+    fn limits(&self, path: &Path) -> io::Result<super::limits::ProviderLimits> {
+        let mut limits = super::limits::ProviderLimits {
+            available_bytes: self.free_space(path),
+            staging: true,
+            reserved_names: Some(vec![".".into(), "..".into()]),
+            forbidden_characters: Some("/\0".into()),
+            ..Default::default()
+        };
+        #[cfg(target_os = "macos")]
+        {
+            use std::ffi::CString;
+            use std::os::unix::ffi::OsStrExt;
+            unsafe extern "C" {
+                fn access(path: *const std::ffi::c_char, mode: i32) -> i32;
+                fn pathconf(path: *const std::ffi::c_char, name: i32) -> std::ffi::c_long;
+            }
+            let path = CString::new(path.as_os_str().as_bytes()).map_err(io::Error::other)?;
+            // Darwin SDK sys/unistd.h: W_OK=2, _PC_NAME_MAX=4, _PC_PATH_MAX=5.
+            // SAFETY: path is NUL-terminated and outlives all three read-only calls.
+            unsafe {
+                limits.writable = Some(access(path.as_ptr(), 2) == 0);
+                limits.maximum_name_bytes = u32::try_from(pathconf(path.as_ptr(), 4)).ok();
+                limits.maximum_path_bytes = u32::try_from(pathconf(path.as_ptr(), 5)).ok();
+            }
+        }
+        Ok(limits)
+    }
+
+    fn planning_identity(&self, path: &Path) -> io::Result<Option<String>> {
+        crate::commands::fs::transfer::recovery::durability::rename_identity(path)
+    }
+
     fn open_read(&self, path: &Path) -> io::Result<Box<dyn Read + Send>> {
         Ok(Box::new(fs::File::open(path)?))
     }

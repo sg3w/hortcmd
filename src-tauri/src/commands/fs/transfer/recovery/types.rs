@@ -102,6 +102,8 @@ pub struct Record {
     pub version: u32,
     pub id: String,
     pub intent: Intent,
+    #[serde(default)]
+    pub preflight: Option<super::super::preflight::types::OperationPlan>,
     pub order: u64,
     pub created: u64,
     pub updated: u64,

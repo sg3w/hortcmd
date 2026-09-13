@@ -15,6 +15,8 @@
 
 pub mod caps;
 pub mod ftp;
+pub mod identity;
+pub mod limits;
 pub mod local;
 pub mod sftp;
 pub mod smb;
@@ -243,6 +245,37 @@ pub trait Provider: Send + Sync {
 
     /// Child paths of a directory (errors propagate).
     fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>>;
+
+    /// Bounded traversal hook. Streaming providers can stop without materializing
+    /// the entire directory. Legacy protocol APIs still have their own read bound.
+    fn visit_dir(
+        &self,
+        path: &Path,
+        limit: usize,
+        visit: &mut dyn FnMut(PathBuf) -> io::Result<()>,
+    ) -> io::Result<()> {
+        let entries = self.read_dir(path)?;
+        if entries.len() > limit {
+            return Err(io::Error::other("preflight directory limit"));
+        }
+        for entry in entries {
+            visit(entry)?;
+        }
+        Ok(())
+    }
+
+    fn limits(&self, path: &Path) -> io::Result<limits::ProviderLimits> {
+        Ok(limits::ProviderLimits {
+            available_bytes: self.free_space(path),
+            staging: self.supports_staging(),
+            ..Default::default()
+        })
+    }
+
+    /// A cheap stable object/version token where supported. Never a cached answer.
+    fn planning_identity(&self, _path: &Path) -> io::Result<Option<String>> {
+        Ok(None)
+    }
 
     /// Opens a file for streaming reads (transfer / checksum).
     fn open_read(&self, path: &Path) -> io::Result<Box<dyn Read + Send>>;

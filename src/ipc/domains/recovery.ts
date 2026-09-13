@@ -5,9 +5,9 @@ import type { RecoverySettings } from "../bindings/RecoverySettings";
 
 // Serialize intent registration in user order, independently of backend worker scheduling.
 let pending: Promise<void> = Promise.resolve();
-export function queueRecovery(id: string, kind: "copy" | "move", sources: string[], destination: string, settings: RecoverySettings): Promise<void> {
+export function queueRecovery(id: string, kind: "copy" | "move", sources: string[], destination: string, settings: RecoverySettings, review?: string): Promise<void> {
   if (!hasTauri) return Promise.resolve();
-  const registered = pending.then(() => invoke<void>("recovery_queue_transfer", { id, kind, sources, destination, settings }));
+  const registered = pending.then(() => invoke<void>("recovery_queue_transfer", { id, kind, sources, destination, settings, ...(review ? { review } : {}) }));
   pending = registered.catch(() => {});
   return registered;
 }

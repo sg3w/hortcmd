@@ -18,7 +18,8 @@
 use super::{for_each_service, harness_or_skip, Harness};
 use crate::commands::fs::transfer::copy::{copy_tree, CopyTuning};
 use crate::commands::fs::transfer::events::OpProgress;
-use crate::commands::fs::transfer::plan::{measure, plan_for, publish};
+use crate::commands::fs::transfer::plan::{plan_for, publish};
+use crate::commands::fs::transfer::preflight::measure;
 use crate::commands::fs::transfer::progress::{Prog, ProgressSink};
 use crate::vfs::local::LocalProvider;
 use crate::vfs::Provider;
@@ -74,7 +75,7 @@ fn transfer(
     dst: &Path,
     safe: bool,
 ) -> Arc<Recorder> {
-    let (files, bytes) = measure(srcp, src);
+    let (files, bytes) = measure(srcp, src).unwrap();
     let sink = Arc::new(Recorder::default());
     let mut p = prog(sink.clone(), files.max(1), bytes);
     let plan = plan_for(dstp, dst.to_path_buf(), dstp.exists(dst), safe);

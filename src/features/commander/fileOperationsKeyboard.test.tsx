@@ -1,3 +1,5 @@
+import { preflightFixture } from "@/test/preflight";
+import type { PreflightRequest } from "@/ipc/domains/preflight";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
@@ -24,7 +26,7 @@ function Host() {
 function setup(language: "de" | "en") {
   const runtime = useTauri({ commands: {
     recovery_queue_transfer: () => {},
-    undo_classify: () => "conditional", copy_entries: () => {}, move_entries: () => {}, rename_entry: () => {},
+    transfer_preflight: args => preflightFixture(args as unknown as PreflightRequest), cancel_preflight: () => {}, undo_classify: () => "conditional", copy_entries: () => {}, move_entries: () => {}, rename_entry: () => {},
     trash_entries: () => ({ ok: 1, errors: [] }),
     list_dir: ({ path }) => ({ path, entries: [file("renamed.txt")] }),
     request_git_status: () => {},
@@ -57,7 +59,9 @@ it.each(["de", "en"] as const)("renames by F2 and Enter and restores keyboard fo
     expect((input as HTMLInputElement).selectionEnd).toBe("original".length);
   });
   // Replace the preselected base name; preserve the extension.
-  await user.keyboard("renamed{Enter}");
+  await user.keyboard("renamed");
+  await waitFor(() => expect(screen.getByRole("button", { name: translate("op.rename.confirm") })).toBeEnabled());
+  await user.keyboard("{Enter}");
   await waitFor(() => expect(runtime.calls).toContainEqual({ cmd: "rename_entry", args: {
     from: "/src/original.txt", to: "/src/renamed.txt",
   } }));
@@ -108,7 +112,9 @@ it.each(["de", "en"] as const)("keeps an asynchronous rename error keyboard-acce
   await user.keyboard("{F2}");
   const input = screen.getByRole("textbox", { name: translate("op.rename.label") });
   await waitFor(() => expect((input as HTMLInputElement).selectionEnd).toBe("original".length));
-  await user.keyboard("changed{Enter}");
+  await user.keyboard("changed");
+  await waitFor(() => expect(screen.getByRole("button", { name: translate("op.rename.confirm") })).toBeEnabled());
+  await user.keyboard("{Enter}");
   const dialog = await screen.findByRole("dialog", { name: translate("op.errors") });
   expect(dialog).toHaveAccessibleDescription(describeErrorFull(error));
   expect(dialog).not.toHaveTextContent("private diagnostic");

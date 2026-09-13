@@ -14,6 +14,7 @@
 // File and folder *names* stay untranslated — those are data.
 // ============================================================
 
+import { preflight } from "./namespaces/preflight";
 import { undo } from "./namespaces/undo";
 import { recovery } from "./namespaces/recovery";
 import { chrome } from "./namespaces/chrome";
@@ -33,6 +34,7 @@ export type Lang = "de" | "en";
 
 /** Every namespace, in the order they are merged. */
 const NAMESPACES = [
+  preflight,
   undo,
   recovery,
   chrome,
@@ -51,6 +53,7 @@ const NAMESPACES = [
 
 export const DICT = {
   de: {
+    ...preflight.de,
     ...undo.de,
     ...recovery.de,    ...chrome.de,
     ...errors.de,
@@ -66,6 +69,7 @@ export const DICT = {
     ...persist.de,
   },
   en: {
+    ...preflight.en,
     ...undo.en,
     ...recovery.en,    ...chrome.en,
     ...errors.en,

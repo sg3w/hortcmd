@@ -131,6 +131,20 @@ pub struct Manifest {
 }
 
 impl Manifest {
+    pub fn selected_totals(&self, selected: impl Fn(&str) -> bool) -> AppResult<(u32, u64)> {
+        let mut count = 0u32;
+        let mut bytes = 0u64;
+        for node in self
+            .nodes
+            .values()
+            .filter(|n| !n.directory && selected(&n.spelling))
+        {
+            count = count.checked_add(1).ok_or_else(limit)?;
+            bytes = bytes.checked_add(node.size).ok_or_else(limit)?;
+        }
+        Ok((count, bytes))
+    }
+
     pub fn new(limits: Limits, compressed: u64) -> Self {
         Self {
             limits,

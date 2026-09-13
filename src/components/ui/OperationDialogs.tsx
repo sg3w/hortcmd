@@ -4,6 +4,7 @@
 // progress overlay (fed from fs-progress events).
 // ============================================================
 
+import { TransferPreflight, useTransferPreflight } from "./TransferPreflight";
 import { joinPath } from "@/lib/path";
 import { useUndoClassification } from "./useUndoClassification";
 import { useEffect, useId, useRef, useState } from "react";
@@ -114,6 +115,7 @@ function ConfirmDialog() {
   const returnFocus = useDialogFocusReturn();
   const confirm = useOps((s) => s.confirm);
   const undoClass = useUndoClassification(confirm?.undo);
+  const preflight = useTransferPreflight(confirm?.preflight);
   const closeDialogs = useOps((s) => s.closeDialogs);
   const t = useT();
 
@@ -129,7 +131,7 @@ function ConfirmDialog() {
         <Dialog.Content
           onCloseAutoFocus={returnFocus}
           onKeyDownCapture={markDialogKey}
-          className="fixed left-1/2 top-1/2 z-[61] w-[420px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-panel shadow-2xl"
+          className="fixed left-1/2 top-1/2 z-[61] max-h-[90vh] w-[420px] max-w-[92vw] overflow-y-auto -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-panel shadow-2xl"
         >
           <Dialog.Title className="flex items-center gap-2 border-b border-edge px-4 py-2.5 text-text">
             {Icon && (
@@ -144,6 +146,7 @@ function ConfirmDialog() {
             {confirm?.message}
             {undoClass !== undefined && <span className="mt-3 block">{t(undoClass === null ? "undo.checking" : undoClass === "irreversible" ? "undo.irreversible" : "undo.conditional")}</span>}
           </Dialog.Description>
+          {confirm?.preflight && <TransferPreflight {...preflight} />}
           <div className="flex justify-end gap-2 border-t border-edge px-4 py-2.5">
             <button
               onClick={closeDialogs}
@@ -153,11 +156,11 @@ function ConfirmDialog() {
             </button>
             <button
               autoFocus
-              disabled={undoClass === null}
+              disabled={undoClass === null || preflight.blocked}
               onClick={() => {
                 const onConfirm = confirm?.onConfirm;
                 closeDialogs();
-                onConfirm?.();
+                onConfirm?.(preflight.plan ?? undefined);
               }}
               className={cn(
                 "rounded px-3 py-1 text-[13px] text-white",

@@ -3,12 +3,15 @@
 // as well as confirmation and input dialogs.
 // ============================================================
 
+import type { PreflightRequest } from "@/ipc/domains/preflight";
+import type { OperationPlan } from "@/ipc/bindings/OperationPlan";
 import type { UndoRequest } from "@/ipc/domains/undo";
 import { create } from "zustand";
 import type { LucideIcon } from "lucide-react";
 import type { CollisionReq, Preview } from "@/ipc/bindings";
 
 export interface ConfirmRequest {
+  preflight?: PreflightRequest;
   undo?: UndoRequest;
   title: string;
   message: string;
@@ -17,7 +20,7 @@ export interface ConfirmRequest {
   confirmLabel?: string;
   /** Icon in the dialog header (default: warning triangle for danger). */
   icon?: LucideIcon;
-  onConfirm: () => void;
+  onConfirm: (plan?: OperationPlan) => void;
 }
 
 export interface PromptRequest {

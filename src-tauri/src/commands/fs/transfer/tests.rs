@@ -18,8 +18,8 @@ use super::copy::{
 use super::events::OpProgress;
 use super::parallel::{commit_finished_jobs, flatten_tree, parallel_copy_file, CopyTask};
 use super::plan::{
-    commit, free_name, is_working_entry, measure, plan_for, stale_working_entries, target_in,
-    working_name, Plan, BACKUP_PREFIX, STAGE_PREFIX,
+    commit, free_name, is_working_entry, plan_for, stale_working_entries, target_in, working_name,
+    Plan, BACKUP_PREFIX, STAGE_PREFIX,
 };
 use super::progress::{Prog, ProgressSink, SharedProg};
 use crate::errors::{AppError, AppResult};
@@ -802,28 +802,6 @@ fn the_target_keeps_the_sources_base_name() {
     );
     // A path with no final component has no target.
     assert_eq!(target_in(Path::new("/dst"), Path::new("/")), None);
-}
-
-#[test]
-fn measuring_a_tree_counts_every_file_and_byte() {
-    let fake = Fake::new(false);
-    fake.put("/src/a.txt", "12345");
-    fake.put("/src/sub/b.txt", "123");
-    fake.put("/src/sub/c.txt", "1");
-    fake.fs.lock().unwrap().dirs.insert(PathBuf::from("/src"));
-    fake.fs
-        .lock()
-        .unwrap()
-        .dirs
-        .insert(PathBuf::from("/src/sub"));
-
-    let (files, bytes) = measure(&*fake, Path::new("/src"));
-    assert_eq!((files, bytes), (3, 9));
-    // A single file measures itself.
-    assert_eq!(measure(&*fake, Path::new("/src/a.txt")), (1, 5));
-    // An unreadable entry counts as one empty file rather than
-    // aborting the totals.
-    assert_eq!(measure(&*fake, Path::new("/src/gone")), (1, 0));
 }
 
 // ---------- Characterization: sequential copy ----------

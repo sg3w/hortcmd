@@ -1,3 +1,5 @@
+import type { OperationPlan } from "@/ipc/bindings/OperationPlan";
+import type { RecoverySettings } from "@/ipc/bindings/RecoverySettings";
 // ============================================================
 // Execution of the file operations.
 // Copy/move/paste run concurrently as a transfer (progress
@@ -142,31 +144,31 @@ function hasActiveTransfer(exceptId?: string): boolean {
     );
 }
 
-function beginTransfer(op: "copy" | "move", sources: string[], dest: string): void {
+function transferSettings(): RecoverySettings {
+  const st = useSettings.getState();
+  return { limit: Math.max(0, Math.round(st.speedLimit)) * 1024, verify: st.verifyCopies, bufKb: st.bufferSizeKb, threads: st.copyThreads, safe: st.safeTransfers };
+}
+function beginTransfer(op: "copy" | "move", sources: string[], dest: string, onApproved?: () => void): void {
   if (!sources.length) return;
   useOps.getState().requestConfirm({
     title: translate(op === "copy" ? "fn.copy" : "fn.move"),
     message: `${sources.join("\n")} → ${dest}`,
     undo: { kind: op, sources, target: dest, directory: true },
-    onConfirm: () => beginApprovedTransfer(op, sources, dest),
+    preflight: { kind: op, sources, destination: dest, settings: transferSettings() },
+    onConfirm: plan => { beginApprovedTransfer(op, sources, dest, plan); onApproved?.(); },
   });
 }
 
-function beginApprovedTransfer(op: "copy" | "move", sources: string[], dest: string): void {
+function beginApprovedTransfer(op: "copy" | "move", sources: string[], dest: string, plan?: OperationPlan): void {
   if (!sources.length) return;
   const st = useSettings.getState();
-  const limit = Math.max(0, Math.round(st.speedLimit)) * 1024; // KB/s → Bytes/s
-  const verify = st.verifyCopies;
-  const bufKb = st.bufferSizeKb;
-  const threads = st.copyThreads;
-  // Snapshot: a transfer keeps the safety policy it was started with,
-  // even if the setting changes while it waits in the queue.
-  const safe = st.safeTransfers;
+  const settings = plan?.settings ?? transferSettings();
+  const { limit, verify, bufKb, threads, safe } = settings;
   const id = newId();
   useTransfers.getState().start(op, id);
 
   if (hasTauri) {
-    persistedIntents.set(id, queueRecovery(id, op, sources, dest, { limit, verify, bufKb, threads, safe }).then(() => true, error => {
+    persistedIntents.set(id, queueRecovery(id, op, sources, dest, { limit, verify, bufKb, threads, safe }, plan?.digest).then(() => true, error => {
       useTransfers.getState().finish({ id, op, ok: 0, errors: [{ item: "", error: ipcError(error) }], cancelled: false, mode: safe ? "safe" : "direct" });
       startNextQueued();
       return false;
@@ -361,8 +363,10 @@ export function runPaste(side: Side, destDir?: string): void {
     return;
   }
   const sources = clip.names.map((n) => joinPath(clip.sourcePath, n));
-  beginTransfer(op, sources, target);
-  if (clip.mode === "cut") clip.clear();
+  beginTransfer(op, sources, target, () => {
+    const current = useClipboard.getState();
+    if (clip.mode === "cut" && current.mode === clip.mode && current.sourcePath === clip.sourcePath && current.names === clip.names) current.clear();
+  });
 }
 
 /** "Extract": selected archives (real FS) completely into the opposite side. */

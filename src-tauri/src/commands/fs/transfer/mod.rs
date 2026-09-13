@@ -29,6 +29,7 @@ pub mod engine;
 pub mod events;
 pub mod parallel;
 pub mod plan;
+pub mod preflight;
 pub mod progress;
 pub mod recovery;
 pub mod registry;

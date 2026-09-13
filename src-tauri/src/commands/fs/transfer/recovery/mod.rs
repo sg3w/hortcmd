@@ -127,6 +127,7 @@ impl Journal {
             version: 1,
             id: id.into(),
             intent,
+            preflight: None,
             order: state.next,
             created: timestamp,
             updated: timestamp,
@@ -151,6 +152,20 @@ impl Journal {
             }
         }
         Ok(())
+    }
+
+    pub fn attach_preflight(
+        &self,
+        id: &str,
+        plan: super::preflight::types::OperationPlan,
+    ) -> AppResult<()> {
+        self.update(id, |record| {
+            if record.started || record.terminal {
+                return Err(invalid());
+            }
+            record.preflight = Some(plan);
+            Ok(())
+        })
     }
 
     pub fn begin(self: &Arc<Self>, id: &str) -> AppResult<Handle> {
@@ -279,6 +294,15 @@ impl Handle {
             .active
             .remove(&self.id);
         Ok(())
+    }
+    pub fn preflight(&self) -> AppResult<Option<super::preflight::types::OperationPlan>> {
+        let state = self.journal.state.lock().map_err(|_| invalid())?;
+        Ok(state
+            .records
+            .get(&self.id)
+            .ok_or_else(invalid)?
+            .preflight
+            .clone())
     }
     pub fn intent(&self) -> AppResult<Intent> {
         let state = self.journal.state.lock().map_err(|_| invalid())?;

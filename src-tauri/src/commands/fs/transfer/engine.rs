@@ -15,9 +15,7 @@
 use super::copy::{resolve_buf, transfer_one, CopyTuning};
 use super::events::{ItemError, Leftovers, OpDone};
 use super::parallel::run_parallel_copy;
-use super::plan::{
-    commit, free_name, measure, plan_for, publish, stale_working_entries, target_in, Plan,
-};
+use super::plan::{commit, free_name, plan_for, publish, stale_working_entries, target_in, Plan};
 use super::progress::Prog;
 use super::recovery::{
     self,
@@ -105,7 +103,7 @@ pub(crate) fn run_transfer(
                 op,
                 ok: 0,
                 errors,
-                cancelled: false,
+                cancelled: cancel.load(std::sync::atomic::Ordering::Relaxed),
                 mode: mode.to_string(),
             },
         );
@@ -172,27 +170,51 @@ pub(crate) fn run_transfer(
     // count > 1. Cross-store copies stay sequential (streamed).
     let parallel = !remove_source && threads > 1 && same_store;
 
-    // Resolve + measure each source up front (totals + bookkeeping for a
-    // rename move). `measured` holds the resolved provider-local path.
+    let live_plan = match super::preflight::build(
+        if remove_source {
+            RecoveryKind::Move
+        } else {
+            RecoveryKind::Copy
+        },
+        &sources,
+        &dest_dir,
+        RecoverySettings {
+            limit,
+            verify,
+            buf_kb,
+            threads,
+            safe,
+        },
+        &cancel,
+    ) {
+        Ok(plan) => plan,
+        Err(error) => return fail(id, op, "", error),
+    };
+    if let Err(error) = live_plan.ensure_executable() {
+        return fail(id, op, "", error);
+    }
+    if let Some(run) = &run {
+        match run.0.preflight() {
+            Ok(Some(reviewed)) => {
+                if let Err(error) = live_plan.matches_review(&reviewed.digest) {
+                    return fail(id, op, "", error);
+                }
+            }
+            Ok(None) => (),
+            Err(error) => return fail(id, op, "", error),
+        }
+    }
+    let live_plan = Arc::new(live_plan);
     let mut errors: Vec<ItemError> = Vec::new();
-    let measured: Vec<(String, u32, u64)> = sources
+    let measured: Vec<(String, u32, u64)> = live_plan
+        .mappings
         .iter()
-        .filter_map(|s| match vfs::resolve(s) {
-            Ok((sp, spath)) if sp.store_id() == srcp.store_id() => {
-                let (f, b) = measure(&*srcp, Path::new(&spath));
-                Some((spath, f, b))
-            }
-            Ok(_) => {
-                errors.push(ItemError::new(
-                    s,
-                    AppError::new(code::TRANSFER_SOURCE_GONE).action(ErrorAction::Report),
-                ));
-                None
-            }
-            Err(e) => {
-                errors.push(ItemError::new(s, e));
-                None
-            }
+        .map(|m| {
+            let path = match &m.source {
+                super::recovery::types::RecoveryLocation::Local { path }
+                | super::recovery::types::RecoveryLocation::Remote { path, .. } => path.clone(),
+            };
+            (path, m.files, m.bytes)
         })
         .collect();
     let files_total = measured.iter().map(|m| m.1).sum();
@@ -204,13 +226,13 @@ pub(crate) fn run_transfer(
     // still untouched at this point.
     if safe {
         if let Some(free) = dstp.free_space(&dest) {
-            if free < bytes_total {
+            if free < live_plan.space.additional_bytes {
                 return fail(
                     id,
                     op,
                     &dest_dir,
                     AppError::new(code::FS_NO_SPACE)
-                        .with("needed", bytes_total)
+                        .with("needed", live_plan.space.additional_bytes)
                         .with("free", free)
                         .action(ErrorAction::FreeSpace),
                 );
@@ -251,7 +273,7 @@ pub(crate) fn run_transfer(
                                                     // copied in parallel (collisions are resolved here sequentially/interactively).
     let mut copy_jobs: Vec<(PathBuf, Plan)> = Vec::new();
 
-    'outer: for (s, files, bytes) in &measured {
+    'outer: for (index, (s, files, bytes)) in measured.iter().enumerate() {
         if prog.cancelled() {
             break;
         }
@@ -271,6 +293,28 @@ pub(crate) fn run_transfer(
             continue;
         }
 
+        if let Err(error) = super::preflight::revalidate_source(
+            &live_plan.mappings[index],
+            &*srcp,
+            &live_plan.limits,
+            &cancel,
+        ) {
+            errors.push(ItemError::new(s, error));
+            break;
+        }
+        if let Err(error) = super::preflight::revalidate_destination(
+            &live_plan,
+            &*dstp,
+            &dest,
+            if live_plan.mappings[index].native_move {
+                0
+            } else {
+                *bytes
+            },
+        ) {
+            errors.push(ItemError::new(s, error));
+            break;
+        }
         // Name conflict: ask the frontend (or apply the remembered choice).
         // `replace` records an accepted overwrite: in safe mode the old
         // destination stays put until the commit, in direct mode it is
@@ -302,10 +346,15 @@ pub(crate) fn run_transfer(
 
         let mut plan = plan_for(&*dstp, target, replace, safe);
         plan.cancel = prog.cancel.clone();
+        plan.preflight = Some(live_plan.clone());
         plan.native_move = run.is_some()
             && remove_source
             && same_store
             && (srcp.store_id() != "local" || recovery::durability::same_device(src, &dest));
+        if let Err(error) = plan.observe_target(&*dstp) {
+            errors.push(ItemError::new(s, error.into()));
+            break;
+        }
         if let Some(run) = &run {
             if let Err(error) = plan.track(&run.0, src, &*dstp) {
                 errors.push(ItemError::new(s, error));

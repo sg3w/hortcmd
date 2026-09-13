@@ -27,22 +27,6 @@ pub(crate) fn target_in(dest_dir: &Path, src: &Path) -> Option<PathBuf> {
     src.file_name().map(|name| dest_dir.join(name))
 }
 
-/// Counts files and bytes recursively (for the progress totals).
-pub(crate) fn measure(provider: &dyn Provider, p: &Path) -> (u32, u64) {
-    match provider.stat(p) {
-        Ok(s) if s.is_dir => match provider.read_dir(p) {
-            Ok(children) => children.iter().fold((0, 0), |(f, b), c| {
-                let (cf, cb) = measure(provider, c);
-                (f + cf, b + cb)
-            }),
-            Err(_) => (0, 0),
-        },
-        Ok(s) => (1, s.len),
-        // Unreadable/missing entry: count as one 0-byte file (as before).
-        Err(_) => (1, 0),
-    }
-}
-
 /// Finds a free name "Name (2)", "Name (3)" … in the target folder.
 pub(crate) fn free_name(provider: &dyn Provider, target: &Path) -> PathBuf {
     let parent = target.parent().map(Path::to_path_buf).unwrap_or_default();
@@ -99,6 +83,8 @@ pub(crate) fn working_name(provider: &dyn Provider, dir: &Path, prefix: &str) ->
 
 /// How one top-level source reaches its final name.
 pub(crate) struct Plan {
+    pub(crate) preflight: Option<Arc<super::preflight::types::OperationPlan>>,
+    target_stamp: Option<String>,
     pub(crate) cancel: Arc<AtomicBool>,
     /// Where the bytes are written: the staging entry in safe mode, the
     /// final name in direct mode.
@@ -119,6 +105,8 @@ impl Plan {
     /// Direct mode: the bytes already go to their final name.
     pub(crate) fn direct(target: PathBuf) -> Self {
         Plan {
+            preflight: None,
+            target_stamp: None,
             cancel: Arc::new(AtomicBool::new(false)),
             write_to: target.clone(),
             target,
@@ -135,6 +123,8 @@ impl Plan {
     pub(crate) fn staged(provider: &dyn Provider, target: PathBuf, replace: bool) -> Self {
         let dir = target.parent().unwrap_or(Path::new("/")).to_path_buf();
         Plan {
+            preflight: None,
+            target_stamp: None,
             cancel: Arc::new(AtomicBool::new(false)),
             write_to: working_name(provider, &dir, STAGE_PREFIX),
             target,
@@ -145,6 +135,11 @@ impl Plan {
             owned_root: None,
             undo: std::sync::Mutex::new(None),
         }
+    }
+
+    pub(crate) fn observe_target(&mut self, provider: &dyn Provider) -> std::io::Result<()> {
+        self.target_stamp = super::preflight::target_stamp(provider, &self.target)?;
+        Ok(())
     }
 
     pub(crate) fn track(
@@ -302,6 +297,24 @@ pub(crate) fn publish(dstp: &dyn Provider, plan: &Plan) -> std::io::Result<()> {
         ));
     }
     let local = dstp.store_id() == "local";
+    if let Some(review) = &plan.preflight {
+        super::preflight::revalidate_destination(
+            review,
+            dstp,
+            plan.target
+                .parent()
+                .ok_or_else(|| std::io::Error::other("missing parent"))?,
+            0,
+        )
+        .map_err(std::io::Error::other)?;
+        if plan.is_staged()
+            && super::preflight::target_stamp(dstp, &plan.target)? != plan.target_stamp
+        {
+            return Err(std::io::Error::other(
+                "preflight target changed before commit",
+            ));
+        }
+    }
     if let Some(step) = &plan.recovery {
         let digest = if local && plan.native_move {
             recovery::durability::rename_identity(&plan.write_to)?
