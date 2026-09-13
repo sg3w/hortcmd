@@ -81,14 +81,7 @@ impl Profile {
         } else {
             &self.start_path
         };
-        format!(
-            "{}://{}@{}:{}{}",
-            self.scheme(),
-            self.user,
-            self.host,
-            self.port,
-            start
-        )
+        format!("{}://{}{}", self.scheme(), self.connection_key(), start)
     }
 }
 
@@ -668,6 +661,28 @@ mod tests {
         let p = profile();
         assert_eq!(p.connection_key(), "alice@example.com:2222");
         assert_eq!(p.address(), "sftp://alice@example.com:2222/srv");
+    }
+
+    #[test]
+    fn explicit_webdav_schemes_share_the_registry_address() {
+        for host in [
+            "https://dav.example",
+            "http://dav.example",
+            "https://dav.example/",
+        ] {
+            let mut p = profile();
+            p.protocol = "webdav".into();
+            p.host = host.into();
+            p.port = 8443;
+            p.start_path = "/shared".into();
+            assert_eq!(p.address(), "webdav://alice@dav.example:8443/shared");
+            let address = crate::vfs::parse_address(&p.address()).unwrap();
+            assert_eq!(
+                address.connection_key().as_deref(),
+                Some(p.connection_key().as_str())
+            );
+            assert_eq!(p.host, host);
+        }
     }
 
     #[test]
