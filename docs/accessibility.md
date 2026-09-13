@@ -73,8 +73,26 @@ remained German, while the application's labels were English:
 
 The application language was then restored to German, verified by the returned
 focus name Einstellungen. VoiceOver was quit after the test. Disabling its
-temporary AppleScript-control option presented a macOS password confirmation;
-restoration of that option awaits the user's confirmation in that system dialog.
+temporary AppleScript-control option presented a macOS password confirmation.
+A subsequent read confirmed that VoiceOver was not running and the option was
+off (value 0); the utility window was then closed.
+
+Additional German native keyboard checks used System Events against the bundled
+app, with VoiceOver off:
+
+- From the in-window Hilfe menu trigger, Arrow Right wrapped to Dateien; Arrow
+  Down opened that menu on Öffnen. Escape returned focus to Dateien. No menu
+  command was executed.
+- Tab moved from that menu trigger to the enabled Übergeordneter Ordner toolbar
+  button. F7 opened the new-folder prompt and focused its text field.
+- After typing `hortcmd-a11y-cancel-only`, Cmd+A exposed that complete string as
+  the native `AXSelectedText`. Typing `hortcmd-a11y-replacement` replaced the
+  entire value. Escape cancelled the prompt and returned focus to Übergeordneter
+  Ordner. No folder creation was submitted.
+
+These checks cover native menu navigation, one toolbar Tab transition, macOS text
+selection/replacement, prompt cancellation and focus restoration. They do not
+establish completion of other filesystem-operation or screen-reader workflows.
 
 ## Translation ownership
 
