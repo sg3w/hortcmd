@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
 import { useTauri } from "@/test/tauri";
-import { file } from "@/test/fixtures";
+import { dir, file } from "@/test/fixtures";
 import { usePanes } from "@/store/panesStore";
 import { useCaps } from "@/store/capsStore";
 import { translate, useSettings } from "@/store/settingsStore";
@@ -114,3 +114,16 @@ it.each(["de", "en"] as const)("keeps an asynchronous rename error keyboard-acce
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(runtime.calls.filter(c => c.cmd === "rename_entry")).toHaveLength(1);
 });
+
+for (const [key, command] of [["F5", "copy_entries"], ["F6", "move_entries"]] as const) {
+  it(`${key} passes a mixed menu selection to the transfer command`, async () => {
+    const { runtime, user } = setup("en");
+    const entries = [dir("folder"), file("marked.txt")];
+    usePanes.setState(s => ({ left: { ...s.left, tabs: [{ ...s.left.tabs[0], raw: entries, entries, selected: new Set<string>() }] } }));
+    usePanes.getState().selectAllFiles("left");
+    await user.keyboard(`{${key}}`);
+    await waitFor(() => expect(runtime.calls.find(c => c.cmd === command)?.args).toMatchObject({
+      sources: ["/src/folder", "/src/marked.txt"], destDir: "/dst",
+    }));
+  });
+}

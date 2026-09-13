@@ -53,21 +53,20 @@ Owned and completed by TICKET-059: the menu now carries all sixteen functions of
 the Norton Commander model in four separator-delimited groups, and the previously
 missing ones are implemented rather than merely listed.
 
-**Selection semantics.** A command whose label says *files* leaves folders as
-they are — a folder the user marked by hand keeps its mark; only "Keine Dateien
-markieren" clears the tab's selection wholesale, folders included. The two
-pattern dialogs offer "Ordner einbeziehen" as an explicit checkbox. `..` is never
-selectable. Every command works on the *visible* rows: an entry hidden by the
-quick filter or the comparison filter can never stay a target for a later copy or
-delete (`panesStore.pruneSelection`).
+**Selection semantics (TICKET-060).** General selection actions include visible
+files and folders equally: select all, clear, invert and select/unselect by pattern.
+The pattern dialog needs no folder opt-in. `..` is never selectable. Extension
+selection and file-content comparison remain file-specific. Every command works
+on the *visible* rows; quick and comparison filters prune hidden operation targets
+(`panesStore.pruneSelection`). Existing shortcuts and selection colors are unchanged.
 
 | Function | Implementation | Command id | Shortcut | Status |
 |---|---|---|---|---|
-| Select group by pattern | `selection.ts:promptSelect(true)` | `mark.selectGroup` | `+`, Num + | 040 / **059** (folder option) |
-| Unselect group by pattern | `selection.ts:promptSelect(false)` | `mark.unselectGroup` | `-`, Num − | 040 / **059** (folder option) |
-| Select all files | `panesStore.selectAllFiles` | `mark.allFiles` | ⌘/Ctrl+Num + | **059** |
-| Select no files | `panesStore.clearSelection` | `mark.noFiles` | ⌘/Ctrl+Num − | **059** |
-| Invert selection (files only) | `panesStore.invertSelection` | `mark.invert` | `*`, Num * | 040 / **059** (file semantics) |
+| Select group by pattern | `selection.ts:promptSelect(true)` | `mark.selectGroup` | `+`, Num + | 040 / **059** (060: folders included) |
+| Unselect group by pattern | `selection.ts:promptSelect(false)` | `mark.unselectGroup` | `-`, Num − | 040 / **059** (060: folders included) |
+| Select all entries | `panesStore.selectAllFiles` | `mark.allFiles` | ⌘/Ctrl+Num + | **059** |
+| Select no entries | `panesStore.clearSelection` | `mark.noFiles` | ⌘/Ctrl+Num − | **059** |
+| Invert selection (files and folders) | `panesStore.invertSelection` | `mark.invert` | `*`, Num * | 040 / **059** (060: folders included) |
 | Select same extension | `panesStore.selectSameExt` | `mark.sameExt` | ⌥/Alt+Num + | **059** |
 | Remember selection | `panesStore.rememberSelection` | `mark.remember` | — | **059** |
 | Restore selection | `panesStore.restoreSelection` | `mark.restore` | Num / | **059** |

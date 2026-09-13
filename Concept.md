@@ -555,9 +555,9 @@ does not eat a remembered selection. `snapshot` is keyed by `locationOf(tab)`
 | `Insert` | Select + cursor down (`Space` outside macOS as well) |
 | `Space` | macOS: Quick Look · otherwise: select |
 | `Shift+↑/↓` | Range selection · `Cmd/Ctrl+Click` single toggle · `Shift+Click` range |
-| `+` / `-` / `*` | Select / deselect by pattern · invert (files only) |
+| `+` / `-` / `*` | Select / deselect by pattern · invert (files and folders) |
 | `Num +` / `Num −` / `Num *` | Same as above from the keypad |
-| `⌘/Ctrl+Num +` / `⌘/Ctrl+Num −` | Select all files / clear the selection |
+| `⌘/Ctrl+Num +` / `⌘/Ctrl+Num −` | Select all entries / clear the selection |
 | `⌥/Alt+Num +` | Select all files with the cursor file's extension |
 | `Num /` | Restore the remembered selection |
 | `⇧F2` | Compare the two panes and mark the differences |
@@ -594,7 +594,7 @@ connection cannot act on a stale context.
 | Menu | Commands |
 |---|---|
 | Dateien | open · view (F3) · edit (F4) · open with ▸ (configured programs, **other program…**, manage) ‖ copy (F5) · move (F6) · rename (F2) · new folder (F7) · delete (F8) · delete permanently (⇧F8) ‖ clipboard copy/cut/paste (⌘C/X/V) ‖ pack (⌥F5) · extract · batch rename · compare files by content ‖ properties (⌥⏎) ‖ quit (Windows/Linux only) |
-| Markieren | **(TICKET-059, complete)** select/unselect group by pattern (+/−, with "include folders") · select all files (⌘Num +) · select no files (⌘Num −) · invert (*) · same extension (⌥Num +) ‖ remember selection · restore (Num /) · save selection to file · load selection from file ‖ copy names · names with path · names with all details · path with details · export file list ‖ compare directories (⇧F2) · mark newer, hide identical · clear comparison filter |
+| Markieren | **(TICKET-059, complete)** select/unselect group by pattern (+/−, files and folders equally, TICKET-060) · select all entries (⌘Num +) · clear selection (⌘Num −) · invert (*) · same extension (⌥Num +) ‖ remember selection · restore (Num /) · save selection to file · load selection from file ‖ copy names · names with path · names with all details · path with details · export file list ‖ compare directories (⇧F2) · mark newer, hide identical · clear comparison filter |
 | Befehle | search (⌥F7) · **special search ▸ (duplicates, empty folders, large files)** · compare/synchronize directories ‖ navigation ▸ (back ⌥←, forward ⌥→, parent) · favorites ▸ · recent folders ▸ ‖ terminal in the current folder · open in the system file manager ‖ transfers ▸ (running/queued, opens the existing transfer dialog) |
 | Netz | manage connections · **connect to ▸ (saved, not yet connected profiles)** · active connections ▸ ‖ disconnect current connection · open SSH terminal |
 | Ansicht | layout ▸ (radio) · sort by ▸ (key + ascending/descending, radio) ‖ hidden files · **folders first** · extension column · permissions column · Git status (checkboxes) ‖ reset quick filter ‖ new tab (⌘T) · close tab (⌘W) · open folder under cursor in a new tab ‖ refresh pane · Quick Look (macOS) |
@@ -613,9 +613,9 @@ mapping, including what stays inside a dialog on purpose and what has no
 implementation yet, lives in
 [`docs/menu-command-inventory.md`](docs/menu-command-inventory.md).
 
-**Selection model (TICKET-059).** A command whose label says *files* leaves
-folders untouched; only "Keine Dateien markieren" clears a tab wholesale. `..` is
-never selectable, and every command works on the *visible* rows — an entry hidden
+**Selection model (TICKET-060, updating 059).** General mark commands include
+files and folders equally, including pattern selection without an opt-in.
+Same-extension and content comparison remain file-specific. `..` is never selectable, and every command works on the *visible* rows — an entry hidden
 by the quick filter or the comparison filter is pruned from the selection, so it
 can never remain the target of a later copy or delete. A **snapshot** ("Auswahl
 merken") is bound to the canonical location (`panesStore.locationOf`: provider

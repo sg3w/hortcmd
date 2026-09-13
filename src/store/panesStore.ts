@@ -112,16 +112,15 @@ interface PanesStore {
   toggleMark: (side: Side, index: number, advance?: boolean) => void;
   shiftMove: (side: Side, delta: number) => void;
   shiftTo: (side: Side, index: number) => void;
-  /** "*": invert the *file* selection; folder marks stay untouched. */
+  /** "*": invert all visible entry marks, excluding the parent row. */
   invertSelection: (side: Side) => void;
-  /** Pattern selection; folders only take part with `includeFolders`. */
+  /** Pattern selection includes visible files and folders. */
   selectPattern: (
     side: Side,
     pattern: string,
     add: boolean,
-    includeFolders?: boolean,
   ) => void;
-  /** Mark every visible file; existing folder marks stay. */
+  /** Mark every visible entry except the parent row. */
   selectAllFiles: (side: Side) => void;
   /** Clear the whole selection of the active tab, folders included. */
   clearSelection: (side: Side) => void;
@@ -549,12 +548,11 @@ export const usePanes = create<PanesStore>((set, get) => ({
   invertSelection: (side) =>
     set(
       withActiveTab(get(), side, (t) => {
-        // File semantics (TICKET-059): only files flip, a folder the
-        // user marked by hand keeps its mark. Menu entry and "*" run
-        // through this very action, so they cannot disagree.
+        // General selection includes folders (TICKET-060). Menu and
+        // keyboard share this action and the same visible target set.
         const selected = new Set(t.selected);
         for (const r of t.entries) {
-          if (r.parent || r.is_dir) continue;
+          if (r.parent) continue;
           selected.has(r.name)
             ? selected.delete(r.name)
             : selected.add(r.name);
@@ -563,14 +561,13 @@ export const usePanes = create<PanesStore>((set, get) => ({
       }),
     ),
 
-  selectPattern: (side, pattern, add, includeFolders = false) =>
+  selectPattern: (side, pattern, add) =>
     set(
       withActiveTab(get(), side, (t) => {
         const re = globToRegExp(pattern);
         const selected = new Set(t.selected);
         for (const r of t.entries) {
           if (r.parent) continue;
-          if (r.is_dir && !includeFolders) continue;
           if (re.test(r.name)) {
             add ? selected.add(r.name) : selected.delete(r.name);
           }
@@ -584,7 +581,7 @@ export const usePanes = create<PanesStore>((set, get) => ({
       withActiveTab(get(), side, (t) => {
         const selected = new Set(t.selected);
         for (const r of t.entries) {
-          if (!r.parent && !r.is_dir) selected.add(r.name);
+          if (!r.parent) selected.add(r.name);
         }
         return { ...t, selected, shiftBase: null };
       }),

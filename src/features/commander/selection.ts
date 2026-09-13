@@ -6,9 +6,8 @@
 // filter or by the comparison filter may never end up marked, because
 // a mark is what a later copy or delete acts on.
 //
-// Wording follows the menu: commands that say "files" leave folders
-// alone (a folder the user marked by hand keeps its mark); the two
-// pattern dialogs offer "include folders" as an explicit option.
+// General actions include folders (TICKET-060); only extension and
+// content comparisons retain file-specific semantics.
 // ============================================================
 
 import { locationOf, panelOf, usePanes, type Side } from "@/store/panesStore";
@@ -17,12 +16,12 @@ import { notify } from "@/store/noticeStore";
 import { translate } from "@/store/settingsStore";
 import { splitName } from "@/lib/format";
 
-/** "*": invert the file selection (folders keep their marks). */
+/** "*": invert the visible file and folder selection. */
 export function invertSelection(side: Side): void {
   usePanes.getState().invertSelection(side);
 }
 
-/** Mark every visible file. */
+/** Mark every visible file and folder. */
 export function selectAllFiles(side: Side): void {
   usePanes.getState().selectAllFiles(side);
 }
@@ -49,11 +48,10 @@ export function promptSelect(side: Side, add: boolean): void {
     label: translate("sel.pattern"),
     initial,
     confirmLabel: translate("op.confirm"),
-    checkbox: { label: translate("sel.includeFolders"), initial: false },
-    onSubmit: (pattern, includeFolders) =>
+    onSubmit: (pattern) =>
       usePanes
         .getState()
-        .selectPattern(side, pattern.trim() || "*", add, includeFolders),
+        .selectPattern(side, pattern.trim() || "*", add),
   });
 }
 

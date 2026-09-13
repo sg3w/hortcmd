@@ -30,6 +30,25 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+for (const path of ["/fixture", "sftp://user@example.org/fixture", "inside"]) {
+  it.each(["details", "list", "thumbnails", "tree"] as const)(
+    `renders general folder marks in %s at ${path}`, viewMode => {
+      const entries = [row("..", { parent: true, is_dir: true }), row("a.txt"), row("folder", { is_dir: true }), row("b.txt")];
+      usePanes.setState(s => ({ right: { ...s.right, viewMode, tabs: [{
+        ...newTab(path), archive: path === "inside" ? "/fixture.zip" : null,
+        raw: entries, entries,
+      }] } }));
+      render(<FileTable side="right" onOpen={() => {}} />);
+      act(() => usePanes.getState().selectAllFiles("right"));
+      expect(document.getElementById("right-entry-2")).toHaveAttribute("aria-selected", "true");
+      expect(document.getElementById("right-entry-3")).toHaveAttribute("aria-selected", "true");
+      act(() => usePanes.getState().invertSelection("right"));
+      expect(document.getElementById("right-entry-2")).toHaveAttribute("aria-selected", "false");
+      expect(document.getElementById("right-entry-3")).toHaveAttribute("aria-selected", "false");
+    },
+  );
+}
+
 for (const language of ["de", "en"] as const) {
   it.each(["details", "list", "thumbnails"] as const)(`exposes virtual positions and independent marks in ${language} %s`, async viewMode => {
     useSettings.setState({ language });

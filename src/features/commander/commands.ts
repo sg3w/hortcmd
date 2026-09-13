@@ -195,9 +195,9 @@ function hasTarget(): CommandState {
   return {};
 }
 
-/** At least one real file is visible in the active tab. */
-function hasVisibleFile(): boolean {
-  return activePanel().entries.some((r) => !r.parent && !r.is_dir);
+/** At least one real entry is visible in the active tab. */
+function hasVisibleEntry(): boolean {
+  return activePanel().entries.some((r) => !r.parent);
 }
 
 /** Shared availability of the two pane comparisons (TICKET-059). */
@@ -483,7 +483,7 @@ export const COMMANDS = {
     label: "menu.mark.allFiles",
     shortcut: { mods: ["Mod"], key: "Num+" },
     run: () => selectAllFiles(activeSide()),
-    state: () => (hasVisibleFile() ? {} : { disabled: true, reason: "menu.why.empty" }),
+    state: () => (hasVisibleEntry() ? {} : { disabled: true, reason: "menu.why.empty" }),
   },
   "mark.noFiles": {
     label: "menu.mark.noFiles",
@@ -499,7 +499,7 @@ export const COMMANDS = {
     label: "menu.mark.invert",
     shortcut: { key: "*" },
     run: () => invertSelection(activeSide()),
-    state: () => (hasVisibleFile() ? {} : { disabled: true, reason: "menu.why.empty" }),
+    state: () => (hasVisibleEntry() ? {} : { disabled: true, reason: "menu.why.empty" }),
   },
   "mark.sameExt": {
     label: "menu.mark.sameExt",
