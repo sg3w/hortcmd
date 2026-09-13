@@ -199,6 +199,15 @@ at 25×25 after reset. The test left the app at 100% with the dialog closed.
 This proves native page zoom and these interactions; the complete layout,
 screen-reader and Windows/Linux matrix below remains pending.
 
+Ticket 089's native 200% toolbar check found and fixed document-wide horizontal
+scrolling when focus reached the offscreen Settings button. The toolbar now has
+its own horizontal scroll area. Twelve Tab presses from Up reached Settings,
+fully visible at 50×50; Shift-Tab returned to Up. The Files menu kept exactly the
+same position (746,368) throughout, whereas the unfixed version had moved it
+outside the window to x=692. The toolbar remains a single row, and the screenshot
+confirmed its independent scrollbar and unchanged pane split. Zoom was reset to
+100% afterwards. This verifies this toolbar overflow path, not the entire matrix.
+
 ## Translation ownership
 
 German and English UI wording belongs in the typed resources under

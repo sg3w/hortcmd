@@ -87,7 +87,7 @@ export function CommandBar() {
   const t = useT();
 
   return (
-    <div className="flex flex-shrink-0 items-center gap-1 border-b border-edge bg-header px-2 py-1">
+    <div className="flex min-w-0 flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-edge bg-header px-2 py-1 [&>*]:shrink-0">
       <ToolButton
         title={t("tb.back")}
         Icon={ArrowLeft}
