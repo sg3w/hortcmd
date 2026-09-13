@@ -28,6 +28,7 @@ import {
   type SearchOptions,
 } from "@/ipc/client";
 import { useSearchDialog, searchRoot, revealPath } from "@/store/searchStore";
+import { describeErrorFull } from "@/store/errorText";
 import { useT } from "@/store/settingsStore";
 import { formatSize } from "@/lib/format";
 import { parentPath } from "@/lib/path";
@@ -92,12 +93,14 @@ export function SearchDialog() {
   /** Why the chosen root cannot be searched, or null (TICKET-031). The
    *  root is a free-text field, so the answer is re-checked per run
    *  rather than taken from the pane the dialog was opened over. */
+  const [failure, setFailure] = useState<string | null>(null);
   const [blocked, setBlocked] = useState<string | null>(null);
   const [skipped, setSkipped] = useState(0);
   const [ran, setRan] = useState(false);
   const runToken = useRef(0);
   // Token of the run currently in the backend (null = nothing running).
   const activeToken = useRef<string | null>(null);
+  const startedToken = useRef<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -120,9 +123,17 @@ export function SearchDialog() {
 
   /** Stops the run in the backend (new search, dialog closed, Stop). */
   const stopRunning = useCallback(() => {
-    if (activeToken.current) {
-      void cancelSearch(activeToken.current);
-      activeToken.current = null;
+    const token = activeToken.current;
+    if (!token) return;
+    const cancelledRun = ++runToken.current;
+    activeToken.current = null;
+    setRunning(false);
+    setStatus("cancelled");
+    if (startedToken.current === token) {
+      startedToken.current = null;
+      void cancelSearch(token).catch(error => {
+        if (runToken.current === cancelledRun) setFailure(describeErrorFull(error));
+      });
     }
   }, []);
 
@@ -130,6 +141,8 @@ export function SearchDialog() {
   useEffect(() => {
     if (!open) stopRunning();
   }, [open, stopRunning]);
+
+  useEffect(() => () => stopRunning(), [stopRunning]);
 
   const runSearch = useCallback(async () => {
     if (!root.trim()) return;
@@ -143,7 +156,9 @@ export function SearchDialog() {
     setSkipped(0);
     setRan(true);
     setBlocked(null);
+    setFailure(null);
     const reason = await explainRoot(root);
+    if (run !== runToken.current || activeToken.current !== token) return;
     if (reason) {
       setBlocked(reason);
       setRunning(false);
@@ -161,6 +176,7 @@ export function SearchDialog() {
       min_size: mode === "large_files" ? Math.max(0, minSizeMb) * 1024 * 1024 : 0,
     };
     try {
+      startedToken.current = token;
       const summary = await search(root, options, token, (batch) => {
         if (run !== runToken.current) return; // stale batch
         setHits((prev) => (prev.length ? [...prev, ...batch] : batch));
@@ -169,7 +185,10 @@ export function SearchDialog() {
         setStatus(summary.status);
         setSkipped(summary.unreadable);
       }
+    } catch (error) {
+      if (run === runToken.current) setFailure(describeErrorFull(error));
     } finally {
+      if (startedToken.current === token) startedToken.current = null;
       if (activeToken.current === token) activeToken.current = null;
       if (run === runToken.current) setRunning(false);
     }
@@ -346,6 +365,8 @@ export function SearchDialog() {
             </div>
           </div>
 
+          {failure && <div role="alert" className="px-3 py-2 text-[12px] text-red-400">{failure}</div>}
+
           {/* Status line */}
           <div className="flex items-center gap-3 border-b border-edge bg-panel-inactive px-3 py-1 text-[11px] text-dim">
             <span>
@@ -372,7 +393,7 @@ export function SearchDialog() {
 
           {/* Result list */}
           <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
-            {ran && !running && hits.length === 0 ? (
+            {ran && !running && !failure && hits.length === 0 ? (
               <div className="p-4 text-[13px] text-dim">{t("search.empty")}</div>
             ) : (
               <div
