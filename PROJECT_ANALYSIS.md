@@ -165,7 +165,7 @@ instead of failing after invocation.
 | P1 | Dependency security and licensing are not continuously checked | Parser, crypto, protocol, and frontend supply-chain risks may reach releases unnoticed. | [TICKET-221](tickets/221-dependency-and-license-governance.md) |
 | P2 | Runtime performance has no shared baseline or budget | Optimizations and regressions cannot be assessed consistently across layers. | [TICKET-223](tickets/223-performance-benchmarks-and-budgets.md) |
 | P2 | Repeated listings have no shared bounded cache | Remote navigation repeats expensive work, but ad hoc caches would risk stale or cross-session data. | [TICKET-053](tickets/053-bounded-provider-aware-cache.done.md) |
-| P2 | Search rescans local trees for every query | Large repeated searches are expensive and remote/native index behavior is undefined. | [TICKET-054](tickets/054-scalable-indexed-search.md) |
+| P2 | Search rescans local trees for every query | Large repeated searches are expensive and remote/native index behavior is undefined. | [TICKET-054](tickets/054-scalable-indexed-search.done.md) |
 
 ## Additional feature proposal
 

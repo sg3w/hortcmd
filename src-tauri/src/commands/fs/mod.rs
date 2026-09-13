@@ -42,3 +42,5 @@ pub mod watch;
 pub mod staging_test_support {
     pub(crate) use super::transfer::plan::commit;
 }
+
+pub mod search_index;

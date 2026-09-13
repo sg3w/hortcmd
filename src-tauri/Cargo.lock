@@ -2540,6 +2540,7 @@ dependencies = [
  "regex",
  "reqwest 0.13.4",
  "reqwest_dav",
+ "ring",
  "russh",
  "russh-sftp",
  "rustls-platform-verifier",

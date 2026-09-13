@@ -41,3 +41,4 @@ export * from "./domains/window";
 export * from "./domains/recovery";
 
 export * from "./domains/undo";
+export * from "./domains/index";

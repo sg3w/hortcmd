@@ -34,6 +34,7 @@ import { Check } from "@/components/ui/dialogControls";
 import { cn } from "@/lib/cn";
 import { consumeDialogKey, markDialogKey } from "@/lib/keys";
 
+import { SearchIndexPanel } from "./SearchIndexPanel";
 import { SearchResults } from "./SearchResults";
 import { useDialogFocusReturn } from "./useDialogFocusReturn";
 
@@ -77,6 +78,7 @@ export function SearchDialog() {
   const requestedMode = useSearchDialog((s) => s.mode);
   const t = useT();
 
+  const [indexed, setIndexed] = useState(false);
   const [root, setRoot] = useState("");
   const [mode, setMode] = useState<SearchMode>("files");
   const [name, setName] = useState("");
@@ -233,6 +235,11 @@ export function SearchDialog() {
             <span className="text-[13px] font-medium">{t("search.title")}</span>
           </Dialog.Title>
 
+          <div className="flex gap-2 border-b border-edge p-2">
+            <button aria-pressed={!indexed} onClick={() => setIndexed(false)}>{t("index.live")}</button>
+            <button aria-pressed={indexed} onClick={() => { stopRunning(); setIndexed(true); }}>{t("index.title")}</button>
+          </div>
+          {indexed ? <SearchIndexPanel initialRoot={root} onReveal={path => { close(); if (side) void revealPath(side, path); }} /> : <>
           {/* Form */}
           <div className="flex min-h-0 flex-col gap-3 overflow-y-auto border-b border-edge p-3">
             {/* Mode switch */}
@@ -406,6 +413,7 @@ export function SearchDialog() {
           ) : (
             <SearchResults key={runToken.current} hits={hits} onReveal={onReveal} />
           )}
+          </>}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

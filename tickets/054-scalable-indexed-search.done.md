@@ -45,16 +45,16 @@ TICKET-053 reusable metadata identity/invalidation rules.
 
 ## Acceptance Criteria
 
-- [ ] Only explicitly approved roots and metadata/content categories are indexed.
-- [ ] Repeated representative queries improve against the TICKET-223 live-scan
+- [x] Only explicitly approved roots and metadata/content categories are indexed.
+- [x] Repeated representative queries improve against the TICKET-223 live-scan
       baseline without changing result correctness.
-- [ ] Indexing is cancellable, resumable, resource-bounded, and recovers from a
+- [x] Indexing is cancellable, resumable, resource-bounded, and recovers from a
       corrupt or outdated database through rebuild.
-- [ ] Results expose source and freshness and are revalidated before file mutation.
-- [ ] Remote profile deletion removes its index data and disconnected results are
+- [x] Results expose source and freshness and are revalidated before file mutation.
+- [x] Remote profile deletion removes its index data and disconnected results are
       clearly marked stale.
-- [ ] Exclusions, symlink, mount, staging, and binary/size policies are enforced.
-- [ ] Native and application index adapters satisfy one query contract.
+- [x] Exclusions, symlink, mount, staging, and binary/size policies are enforced.
+- [x] Native and application index adapters satisfy one query contract.
 
 ## Tests
 
@@ -78,3 +78,21 @@ TICKET-053 reusable metadata identity/invalidation rules.
 - Users can inspect, pause, rebuild, and delete each index scope.
 - Documentation explains indexed versus live search and remote limitations.
 - Rename this file to `054-scalable-indexed-search.done.md`.
+
+## Implementation
+
+Implemented explicit metadata/content scopes, bounded incremental checkpoints,
+private authenticated encrypted persistence, cancellation/resource pauses, watch
+and timed reconciliation, stable paginated queries and an accessible scope UI.
+See [search-index.md](../docs/search-index.md) for exact bounds and supported policy.
+
+The application and live adapters share the scoped contract. Native requests use
+an explicit, tested application fallback; Spotlight is not enabled without proven
+contract equivalence. Remote scopes are metadata-only under current capabilities;
+remote stable-content guarantees are tracked in TICKET-257. Windows/Linux local
+native validation is deferred to TICKET-256 per user instruction.
+
+Validation: `npm run check`, deterministic indexed/live result comparison,
+checkpoint/cancellation, exclusion/link/root replacement, encryption/corruption,
+private permissions, profile deletion and UI consent/offline/cancellation tests.
+The benchmark compares 20 prefix queries against the existing live-search engine.

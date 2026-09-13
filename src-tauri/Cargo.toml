@@ -33,6 +33,7 @@ http-body-util = "0.1"
 # Randomness for the MCP bearer token (TICKET-041) — already in the
 # tree via the TLS stack, named here because this is a security use.
 getrandom = "0.3"
+ring = "0.17.14" # Authenticated encryption for opt-in search snapshots
 sysinfo = "0.31"     # Laufwerke / Mountpunkte
 dirs = "5"           # Home-Verzeichnis
 ts-rs = "10"         # generiert TS-Typen aus den Rust-Structs

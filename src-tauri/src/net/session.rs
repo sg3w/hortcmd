@@ -362,6 +362,7 @@ pub fn net_save_profile(profile: Profile, secret: Option<String>) -> AppResult<(
     if let Some(s) = &secret {
         credentials::store().set(&profile.id, s)?;
     }
+    crate::commands::fs::search_index::delete_profile(&profile.id)?;
     let mut reg = registry().lock().unwrap();
     if let Some(existing) = reg.profiles.iter().find(|p| p.id == profile.id) {
         let key = existing.store_id();
@@ -378,6 +379,7 @@ pub fn net_save_profile(profile: Profile, secret: Option<String>) -> AppResult<(
 /// Deletes a profile and its stored secret (disconnecting if live).
 #[tauri::command]
 pub fn net_delete_profile(id: String) -> AppResult<()> {
+    crate::commands::fs::search_index::delete_profile(&id)?;
     crate::commands::fs::cache::invalidate();
     // A profile that is still connecting loses its attempt with it.
     lifecycle::cancel_for_profile(&id);
