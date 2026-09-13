@@ -84,3 +84,20 @@ remaining independently testable for every supported archive format.
 - Security review confirms no path is derived from archive metadata without
   validation.
 - Rename this file to `046-safe-archive-extraction.done.md`.
+
+## Implementation evidence (2026-09-13)
+
+The validator, bounded writer, staging/rollback service and generated malicious
+archive corpus are implemented in the archive submodules. The application
+command is a thin adapter to the shared extraction service. Configuration and
+recovery behavior are documented in [archive extraction](../docs/archive-extraction.md).
+
+Local verification covers all five formats, cancellation, unchanged prior output,
+Unicode/platform names, limits, a substituted destination symlink and a forced
+publication failure with rollback. The Windows DACL helper was cross-compiled
+with Rust 1.85.0. Native Windows/Linux execution and the complete application's
+MSRV guarantee remain to be verified; the latter has a pre-existing dependency
+blocker tracked by TICKET-068. Decoder-internal allocations are tracked by
+TICKET-067 and are not bounded by the output-byte counter.
+
+This ticket stays open for its final cross-platform/security audit.

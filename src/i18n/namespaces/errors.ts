@@ -44,8 +44,10 @@ export const errors = ns(
     "error.archive.passwordRequired": "Das Archiv ist verschlüsselt",
     "error.archive.passwordWrong": "Falsches Passwort",
     "error.archive.unknownFormat": "Unbekanntes Archivformat",
+    "error.archive.unsafeEntry": "Archiv enthält einen unsicheren Pfad oder Link",
+    "error.archive.limit": "Sicherheitsgrenze für das Entpacken überschritten",
+    "error.archive.conflict": "Archiv enthält kollidierende Namen oder Dateitypen",
     "error.archive.corrupt": "Archiv ist beschädigt oder nicht lesbar",
-    "error.archive.unsafeEntry": "Eintrag zeigt aus dem Zielordner heraus",
 
     // --- network ---
     "error.net.unreachable": "{host} ist nicht erreichbar",
@@ -134,8 +136,10 @@ export const errors = ns(
     "error.archive.passwordRequired": "The archive is encrypted",
     "error.archive.passwordWrong": "Wrong password",
     "error.archive.unknownFormat": "Unknown archive format",
+    "error.archive.unsafeEntry": "The archive contains an unsafe path or link",
+    "error.archive.limit": "An extraction safety limit was exceeded",
+    "error.archive.conflict": "The archive contains conflicting names or entry types",
     "error.archive.corrupt": "The archive is damaged or unreadable",
-    "error.archive.unsafeEntry": "An entry points outside the destination folder",
 
     // --- network ---
     "error.net.unreachable": "{host} is not reachable",

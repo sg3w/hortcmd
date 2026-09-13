@@ -19,6 +19,8 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+unicode-normalization = "0.1"
+cap-std = "4.0.3"
 # Randomness for the MCP bearer token (TICKET-041) — already in the
 # tree via the TLS stack, named here because this is a security use.
 getrandom = "0.3"
@@ -70,6 +72,8 @@ keepass = { version = "=0.10.5", features = ["save_kdbx4"] }
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [
   "Win32_Foundation",
+  "Win32_Security_Authorization",
+  "Win32_Storage_FileSystem",
   "Win32_System_Com",
   "Win32_System_Registry", # SHELLEXECUTEINFOW hängt daran
   "Win32_UI_Shell",

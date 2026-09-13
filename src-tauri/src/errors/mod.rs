@@ -232,8 +232,10 @@ pub mod code {
     pub const ARCHIVE_PASSWORD_REQUIRED: &str = "archive.passwordRequired";
     pub const ARCHIVE_PASSWORD_WRONG: &str = "archive.passwordWrong";
     pub const ARCHIVE_UNKNOWN_FORMAT: &str = "archive.unknownFormat";
-    pub const ARCHIVE_CORRUPT: &str = "archive.corrupt";
     pub const ARCHIVE_UNSAFE_ENTRY: &str = "archive.unsafeEntry";
+    pub const ARCHIVE_LIMIT: &str = "archive.limit";
+    pub const ARCHIVE_CONFLICT: &str = "archive.conflict";
+    pub const ARCHIVE_CORRUPT: &str = "archive.corrupt";
 
     // --- network ---
     pub const NET_UNREACHABLE: &str = "net.unreachable";
@@ -300,6 +302,8 @@ pub mod code {
         ARCHIVE_UNKNOWN_FORMAT,
         ARCHIVE_CORRUPT,
         ARCHIVE_UNSAFE_ENTRY,
+        ARCHIVE_LIMIT,
+        ARCHIVE_CONFLICT,
         NET_UNREACHABLE,
         NET_TIMEOUT,
         NET_AUTH,

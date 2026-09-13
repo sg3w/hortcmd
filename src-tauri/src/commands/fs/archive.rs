@@ -7,7 +7,14 @@
 // the file module and the listing types from the dir module.
 // ============================================================
 
+pub(crate) mod extract;
+#[cfg(windows)]
+mod private_windows;
+pub(crate) mod safety;
+mod staging;
+
 use crate::errors::{code, AppError, AppResult, ErrorAction};
+use extract::ExtractJob;
 use std::collections::{BTreeSet, HashSet};
 use std::fs;
 use std::fs::File;
@@ -17,7 +24,6 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Instant;
 use tauri::{AppHandle, Emitter};
-use zip::result::ZipError;
 use zip::write::SimpleFileOptions;
 use zip::{ZipArchive, ZipWriter};
 
@@ -247,272 +253,6 @@ pub fn list_archive(
 
 // ---------- Extracting ----------
 
-/// Checks whether an entry is to be extracted and returns its target path
-/// relative to the chosen level (`base`).
-fn match_target(name: &str, base: &str, all: bool, targets: &HashSet<String>) -> Option<String> {
-    if !name.starts_with(base) {
-        return None;
-    }
-    let rel = &name[base.len()..];
-    if rel.is_empty() {
-        return None;
-    }
-    let first = rel.split('/').next().unwrap_or("");
-    if all || targets.contains(first) {
-        Some(rel.to_string())
-    } else {
-        None
-    }
-}
-
-/// Writes a data stream as a file to `out` and reports progress.
-fn write_entry(
-    reader: &mut dyn Read,
-    out: &Path,
-    name: &str,
-    file_total: u64,
-    prog: &mut Prog,
-) -> AppResult<()> {
-    if let Some(parent) = out.parent() {
-        fs::create_dir_all(parent).map_err(AppError::from)?;
-    }
-    let mut f = File::create(out).map_err(AppError::from)?;
-    let mut buf = vec![0u8; 64 * 1024];
-    let mut file_done = 0u64;
-    prog.emit(name, 0, file_total, true);
-    loop {
-        if prog.cancelled() {
-            break;
-        }
-        let n = reader.read(&mut buf).map_err(AppError::from)?;
-        if n == 0 {
-            break;
-        }
-        f.write_all(&buf[..n]).map_err(AppError::from)?;
-        file_done += n as u64;
-        prog.bytes_done += n as u64;
-        prog.emit(name, file_done, file_total, false);
-    }
-    prog.files_done += 1;
-    prog.emit(name, file_total, file_total, true);
-    Ok(())
-}
-
-/// Extracts matching entries from a ZIP archive.
-fn extract_zip(
-    archive: &str,
-    base: &str,
-    all: bool,
-    targets: &HashSet<String>,
-    dest: &Path,
-    pw: &Option<String>,
-    prog: &mut Prog,
-) -> AppResult<(u32, Vec<ItemError>)> {
-    let open = || -> AppResult<ZipArchive<File>> {
-        ZipArchive::new(File::open(archive).map_err(AppError::from)?).map_err(AppError::from)
-    };
-
-    // Pass 1: determine matching indices + totals, check encryption.
-    let mut zip = open()?;
-    let mut indices = Vec::new();
-    let mut needs_pw = false;
-    for i in 0..zip.len() {
-        let e = zip.by_index_raw(i).map_err(AppError::from)?;
-        if e.is_dir() {
-            continue;
-        }
-        let name = e.name().to_string();
-        if match_target(&name, base, all, targets).is_some() {
-            indices.push(i);
-            prog.files_total += 1;
-            prog.bytes_total += e.size();
-            if e.encrypted() {
-                needs_pw = true;
-            }
-        }
-    }
-    if needs_pw && pw.is_none() {
-        return Err(password_required());
-    }
-    prog.emit("", 0, 0, true);
-
-    // Pass 2: extract.
-    let mut zip = open()?;
-    let mut ok = 0u32;
-    let mut errors = Vec::new();
-    for i in indices {
-        if prog.cancelled() {
-            break;
-        }
-        let name = zip.name_for_index(i).unwrap_or_default().to_string();
-        match extract_zip_one(&mut zip, i, base, dest, pw, prog) {
-            Ok(()) => ok += 1,
-            // A wrong password is fatal → abort immediately and report.
-            Err(e) if is_password_error(&e) => return Err(e),
-            Err(e) => errors.push(ItemError::new(name, e)),
-        }
-    }
-    Ok((ok, errors))
-}
-
-fn extract_zip_one(
-    zip: &mut ZipArchive<File>,
-    index: usize,
-    base: &str,
-    dest: &Path,
-    pw: &Option<String>,
-    prog: &mut Prog,
-) -> AppResult<()> {
-    // Read metadata in its own scope (separate borrow).
-    let (name, encrypted, size) = {
-        let e = zip.by_index_raw(index).map_err(AppError::from)?;
-        (e.name().to_string(), e.encrypted(), e.size())
-    };
-    let rel = &name[base.len()..];
-    let out = dest.join(rel);
-    if encrypted {
-        let pw = pw.as_deref().ok_or_else(password_required)?;
-        let mut e = zip
-            .by_index_decrypt(index, pw.as_bytes())
-            .map_err(|err| match err {
-                ZipError::InvalidPassword => password_wrong(),
-                other => AppError::from(other),
-            })?;
-        write_entry(&mut e, &out, &name, size, prog)
-    } else {
-        let mut e = zip.by_index(index).map_err(AppError::from)?;
-        write_entry(&mut e, &out, &name, size, prog)
-    }
-}
-
-/// Extracts matching entries from a tar archive (decompressing if needed).
-fn extract_tar(
-    kind: ArchiveKind,
-    archive: &str,
-    base: &str,
-    all: bool,
-    targets: &HashSet<String>,
-    dest: &Path,
-    prog: &mut Prog,
-) -> AppResult<(u32, Vec<ItemError>)> {
-    // Pass 1: totals from the headers.
-    for (name, size, is_dir) in tar_raw(open_tar_reader(kind, archive)?)? {
-        if is_dir {
-            continue;
-        }
-        if match_target(&name, base, all, targets).is_some() {
-            prog.files_total += 1;
-            prog.bytes_total += size;
-        }
-    }
-    prog.emit("", 0, 0, true);
-
-    // Pass 2: extract (reopen the reader, tar streams are not seekable).
-    let mut ar = tar::Archive::new(open_tar_reader(kind, archive)?);
-    let mut ok = 0u32;
-    let mut errors = Vec::new();
-    for entry in ar.entries().map_err(AppError::from)? {
-        if prog.cancelled() {
-            break;
-        }
-        let mut entry = match entry {
-            Ok(e) => e,
-            Err(e) => {
-                errors.push(ItemError::new("", e.into()));
-                continue;
-            }
-        };
-        if entry.header().entry_type().is_dir() {
-            continue;
-        }
-        let name = match entry.path() {
-            Ok(p) => p.to_string_lossy().replace('\\', "/"),
-            Err(e) => {
-                errors.push(ItemError::new("", e.into()));
-                continue;
-            }
-        };
-        let rel = match match_target(&name, base, all, targets) {
-            Some(r) => r,
-            None => continue,
-        };
-        let size = entry.header().size().unwrap_or(0);
-        let out = dest.join(&rel);
-        match write_entry(&mut entry, &out, &name, size, prog) {
-            Ok(()) => ok += 1,
-            Err(e) => errors.push(ItemError::new(&name, e)),
-        }
-    }
-    Ok((ok, errors))
-}
-
-/// Extracts matching entries from a 7z archive (with a password if needed).
-fn extract_7z(
-    archive: &str,
-    base: &str,
-    all: bool,
-    targets: &HashSet<String>,
-    dest: &Path,
-    pw: &Option<String>,
-    prog: &mut Prog,
-) -> AppResult<(u32, Vec<ItemError>)> {
-    // Pass 1: totals from the metadata (also opens with the password).
-    let meta =
-        sevenz_rust::Archive::open_with_password(archive, &password(pw)).map_err(map_7z_err)?;
-    for f in &meta.files {
-        if f.is_directory {
-            continue;
-        }
-        let name = f.name.replace('\\', "/");
-        if match_target(&name, base, all, targets).is_some() {
-            prog.files_total += 1;
-            prog.bytes_total += f.size;
-        }
-    }
-    prog.emit("", 0, 0, true);
-
-    // Pass 2: extract via the streaming reader.
-    let mut reader = sevenz_rust::SevenZReader::open(archive, password(pw)).map_err(map_7z_err)?;
-    let mut ok = 0u32;
-    let mut errors = Vec::new();
-    reader
-        .for_each_entries(|entry, rd| {
-            if prog.cancelled() {
-                return Ok(false);
-            }
-            if entry.is_directory {
-                return Ok(true);
-            }
-            let name = entry.name.replace('\\', "/");
-            let rel = match match_target(&name, base, all, targets) {
-                Some(r) => r,
-                None => return Ok(true),
-            };
-            let out = dest.join(&rel);
-            match write_entry(rd, &out, &name, entry.size, prog) {
-                Ok(()) => ok += 1,
-                Err(e) => errors.push(ItemError::new(&name, e)),
-            }
-            Ok(true)
-        })
-        .map_err(map_7z_err)?;
-    Ok((ok, errors))
-}
-
-/// What to extract and where to. Carried as one value because the five
-/// parts are one request — the archive, the level inside it, the chosen
-/// members, the destination and the password — and splitting them
-/// across a parameter list only made the signature harder to read.
-struct ExtractJob {
-    archive: String,
-    /// Level inside the archive the names are relative to.
-    base_inner: String,
-    /// Chosen members; empty means the whole level.
-    names: Vec<String>,
-    dest_dir: String,
-    pw: Option<String>,
-}
-
 /// Extracts selected entries (or the whole archive if `names` is empty).
 fn run_extract(
     app: AppHandle,
@@ -521,29 +261,6 @@ fn run_extract(
     cancel: Arc<AtomicBool>,
     pause: Arc<AtomicBool>,
 ) {
-    let ExtractJob {
-        archive,
-        base_inner,
-        names,
-        dest_dir,
-        pw,
-    } = job;
-    // Source archive and destination folder are separate questions
-    // (TICKET-031). A refusal is reported through the same `fs-done`
-    // event as any other failure, so the transfer window shows it.
-    if let Err(e) = caps::require_pair(
-        &archive,
-        Capability::ArchiveExtractFrom,
-        &dest_dir,
-        Capability::ArchiveExtractTo,
-    ) {
-        return fail_op(&app, id, "extract", e);
-    }
-    let dest = PathBuf::from(&dest_dir);
-    let base = inner_prefix(&base_inner);
-    let targets: HashSet<String> = names.into_iter().collect();
-    let all = targets.is_empty();
-
     let mut prog = Prog {
         sink: Arc::new(app.clone()),
         id: id.clone(),
@@ -557,23 +274,11 @@ fn run_extract(
         pause: pause.clone(),
     };
 
-    let result = match archive_kind(&archive) {
-        Some(ArchiveKind::Zip) => {
-            extract_zip(&archive, &base, all, &targets, &dest, &pw, &mut prog)
-        }
-        Some(kind @ (ArchiveKind::Tar | ArchiveKind::TarGz | ArchiveKind::TarXz)) => {
-            extract_tar(kind, &archive, &base, all, &targets, &dest, &mut prog)
-        }
-        Some(ArchiveKind::SevenZ) => {
-            extract_7z(&archive, &base, all, &targets, &dest, &pw, &mut prog)
-        }
-        None => Err(AppError::from("Unbekanntes Archivformat")),
-    };
-
-    let (ok, errors) = match result {
-        Ok((ok, errors)) => (ok, errors),
-        Err(e) => (0, vec![ItemError::new(&archive, e)]),
-    };
+    let (ok, errors) =
+        match safety::Limits::load().and_then(|limits| extract::run(job, &mut prog, limits)) {
+            Ok(result) => result,
+            Err(error) => (0, vec![ItemError::new("", error)]),
+        };
 
     let cancelled = prog.cancelled();
     let _ = app.emit(
@@ -779,7 +484,9 @@ pub fn create_archive(app: AppHandle, id: String, sources: Vec<String>, dest_zip
 
 #[cfg(test)]
 mod tests {
+    use super::extract::{extract_7z, extract_tar, extract_zip, match_target, write_entry};
     use super::*;
+    use std::collections::HashSet;
     use std::io::Write;
 
     /// One format under test: its file name and the builder for it.
@@ -920,5 +627,258 @@ mod tests {
             match_target("sub/deep.txt", "sub/", true, &empty),
             Some("deep.txt".to_string())
         );
+    }
+    fn preflight(
+        path: &str,
+        password: &Option<String>,
+        limits: safety::Limits,
+    ) -> AppResult<safety::Manifest> {
+        extract::preflight(path, password, limits, &AtomicBool::new(false))
+    }
+
+    struct Quiet;
+    impl super::super::transfer::progress::ProgressSink for Quiet {
+        fn progress(&self, _: super::super::transfer::events::OpProgress) {}
+    }
+
+    fn progress() -> Prog {
+        Prog {
+            sink: Arc::new(Quiet),
+            id: "test".into(),
+            op: "extract".into(),
+            files_total: 0,
+            bytes_total: 0,
+            files_done: 0,
+            bytes_done: 0,
+            last: Instant::now(),
+            cancel: Arc::new(AtomicBool::new(false)),
+            pause: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    #[test]
+    fn safe_extraction_round_trip_all_formats() {
+        let root = tmp_dir("extract-safe");
+        for (name, make) in [
+            ("a.zip", make_zip as fn(&Path)),
+            ("a.tar", make_tar),
+            ("a.tar.gz", make_tar_gz),
+            ("a.tar.xz", make_tar_xz),
+            ("a.7z", make_7z),
+        ] {
+            let archive = root.join(name);
+            make(&archive);
+            let dest = root.join(format!("{name}-out"));
+            fs::create_dir(&dest).unwrap();
+            let mut stage = staging::Stage::new(&dest).unwrap();
+            let mut prog = progress();
+            let path = archive.to_str().unwrap();
+            let result = match archive_kind(path).unwrap() {
+                ArchiveKind::Zip => extract_zip(
+                    path,
+                    "",
+                    safety::Limits::default(),
+                    &HashSet::new(),
+                    &mut stage,
+                    &None,
+                    &mut prog,
+                ),
+                ArchiveKind::SevenZ => extract_7z(
+                    path,
+                    "",
+                    safety::Limits::default(),
+                    &HashSet::new(),
+                    &mut stage,
+                    &None,
+                    &mut prog,
+                ),
+                kind => extract_tar(
+                    kind,
+                    path,
+                    "",
+                    safety::Limits::default(),
+                    &HashSet::new(),
+                    &mut stage,
+                    &mut prog,
+                ),
+            }
+            .unwrap();
+            assert!(result.1.is_empty(), "{name}");
+            stage.commit(&prog.cancel).unwrap();
+            stage.cleanup().unwrap();
+            assert_eq!(fs::read(dest.join("hello.txt")).unwrap(), HELLO, "{name}");
+            assert_eq!(fs::read(dest.join("sub/deep.txt")).unwrap(), DEEP, "{name}");
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn zip_traversal_and_duplicates_fail_before_output() {
+        for names in [
+            ["safe", "../outside"],
+            ["safe", "SAFE"],
+            ["DIR/a", "dir/b"],
+            ["safe", "C:/outside"],
+        ] {
+            let root = tmp_dir("malicious");
+            let archive = root.join("input.zip");
+            let mut zip = ZipWriter::new(File::create(&archive).unwrap());
+            for name in names {
+                zip.start_file(name, SimpleFileOptions::default()).unwrap();
+                zip.write_all(b"x").unwrap();
+            }
+            zip.finish().unwrap();
+            assert!(
+                preflight(archive.to_str().unwrap(), &None, safety::Limits::default()).is_err()
+            );
+            assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+            fs::remove_dir_all(root).unwrap();
+        }
+    }
+    fn hostile_tar(names: &[&str], link: bool) -> Vec<u8> {
+        let mut builder = tar::Builder::new(Vec::new());
+        for name in names {
+            let mut header = tar::Header::new_gnu();
+            header.set_mode(0o644);
+            header.set_size(if link { 0 } else { 1 });
+            if link {
+                header.set_entry_type(tar::EntryType::Symlink);
+                header.set_link_name("/outside").unwrap();
+            }
+            // Fixture construction deliberately bypasses Builder's safe path setter.
+            header.as_mut_bytes()[..name.len()].copy_from_slice(name.as_bytes());
+            header.set_cksum();
+            builder
+                .append(&header, if link { &b""[..] } else { &b"x"[..] })
+                .unwrap();
+        }
+        builder.into_inner().unwrap()
+    }
+
+    #[test]
+    fn hostile_paths_and_links_are_rejected_in_tar_variants_and_sevenz() {
+        let root = tmp_dir("hostile-corpus");
+        for (names, link) in [
+            (vec!["../outside"], false),
+            (vec!["/outside"], false),
+            (vec!["C:/outside"], false),
+            (vec!["a\\b"], false),
+            (vec!["a", "a"], false),
+            (vec!["Dir/a", "dir/b"], false),
+            (vec!["NUL.txt"], false),
+            (vec!["link"], true),
+        ] {
+            let data = hostile_tar(&names, link);
+            let tar_path = root.join("bad.tar");
+            fs::write(&tar_path, &data).unwrap();
+            let gz_path = root.join("bad.tar.gz");
+            let mut gz = flate2::write::GzEncoder::new(
+                File::create(&gz_path).unwrap(),
+                flate2::Compression::default(),
+            );
+            gz.write_all(&data).unwrap();
+            gz.finish().unwrap();
+            let xz_path = root.join("bad.tar.xz");
+            let mut xz = xz2::write::XzEncoder::new(File::create(&xz_path).unwrap(), 1);
+            xz.write_all(&data).unwrap();
+            xz.finish().unwrap();
+            let seven_path = root.join("bad.7z");
+            let mut seven = sevenz_rust::SevenZWriter::create(&seven_path).unwrap();
+            for name in &names {
+                let mut entry = sevenz_rust::SevenZArchiveEntry::new();
+                entry.name = (*name).into();
+                entry.has_stream = true;
+                if link {
+                    entry.has_windows_attributes = true;
+                    entry.windows_attributes = 0x400;
+                }
+                seven.push_archive_entry(entry, Some(&b"x"[..])).unwrap();
+            }
+            seven.finish().unwrap();
+            for path in [&tar_path, &gz_path, &xz_path, &seven_path] {
+                assert!(
+                    preflight(path.to_str().unwrap(), &None, safety::Limits::default()).is_err(),
+                    "accepted {names:?} in {path:?}"
+                );
+            }
+        }
+        let zip_path = root.join("link.zip");
+        let mut zip = ZipWriter::new(File::create(&zip_path).unwrap());
+        zip.add_symlink("link", "/outside", SimpleFileOptions::default())
+            .unwrap();
+        zip.finish().unwrap();
+        assert!(preflight(zip_path.to_str().unwrap(), &None, safety::Limits::default()).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn cancellation_discards_staged_partial_output() {
+        let root = tmp_dir("cancel-extract");
+        fs::write(root.join("old"), b"original").unwrap();
+        let mut stage = staging::Stage::new(&root).unwrap();
+        let mut manifest = safety::Manifest::new(safety::Limits::default(), 100);
+        manifest.add("old", false, 3, false).unwrap();
+        let mut prog = progress();
+        prog.cancel
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        let error = write_entry(
+            &mut &b"new"[..],
+            &mut stage,
+            "old",
+            3,
+            &mut prog,
+            &mut manifest,
+        )
+        .unwrap_err();
+        assert!(error.is(code::CANCELLED));
+        stage.cleanup().unwrap();
+        assert_eq!(fs::read(root.join("old")).unwrap(), b"original");
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn shared_service_rejects_limits_without_touching_existing_output() {
+        let root = tmp_dir("service-budget");
+        let archive = root.join("a.zip");
+        make_zip(&archive);
+        let destination = root.join("out");
+        fs::create_dir(&destination).unwrap();
+        fs::write(destination.join("hello.txt"), b"original").unwrap();
+        let (ok, errors) = extract::run(
+            ExtractJob {
+                archive: archive.to_string_lossy().into_owned(),
+                base_inner: String::new(),
+                names: Vec::new(),
+                dest_dir: destination.to_string_lossy().into_owned(),
+                pw: None,
+            },
+            &mut progress(),
+            safety::Limits {
+                entry_bytes: 1,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(ok, 0);
+        assert!(errors.iter().any(|e| e.error.is(code::ARCHIVE_LIMIT)));
+        assert_eq!(
+            fs::read(destination.join("hello.txt")).unwrap(),
+            b"original"
+        );
+        assert_eq!(fs::read_dir(&destination).unwrap().count(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn cancelled_preflight_does_not_open_the_archive() {
+        let error = extract::preflight(
+            "/not-an-archive",
+            &None,
+            safety::Limits::default(),
+            &AtomicBool::new(true),
+        )
+        .err()
+        .unwrap();
+        assert!(error.is(code::CANCELLED));
     }
 }
