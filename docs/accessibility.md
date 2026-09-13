@@ -251,6 +251,20 @@ the checks. The app was returned to German and 100% with no dialog open. This
 establishes these zoomed dialog and cancellation paths; it does not establish a
 successful native trash operation or additional screen-reader speech coverage.
 
+## Native system appearance check (2026-09-13)
+
+With the native app at revision `0faa78e`, the initial macOS appearance was Dark
+and the app explicitly used Dark. The isolated app was changed to System, then
+macOS was switched to Light and back to Dark without restarting hortcmd. Native
+window screenshots showed the file panes, menus, toolbar, status and function
+bar adopting the light palette and then returning to the dark palette. The
+System control remained selected throughout the OS changes.
+
+Both original values were restored and checked: macOS Dark was true and the
+app's Dark control was selected. The app remained in German at 100% zoom with no
+dialog open. This verifies live native system-theme changes; reduced-motion,
+high-contrast and additional screen-reader checks are separate requirements.
+
 ## Translation ownership
 
 German and English UI wording belongs in the typed resources under
