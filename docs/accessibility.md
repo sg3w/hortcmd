@@ -150,6 +150,36 @@ cancelled F2 prompt verified that exact revealed filename. The app was restored
 to German afterward, confirmed by the Einstellungen focus name. These tests ran
 with VoiceOver off and did not retry the previously unsuccessful trash operation.
 
+Native connection and terminal checks used the repository's disposable protocol
+harness (run `c6442c`), with all seven containers healthy and published only on
+loopback. A new SFTP profile was filled through named native controls and Tab
+navigation, saved with the generated test credentials, and connected to the
+local SSH server. The unknown-host prompt's address and SHA-256 fingerprint were
+matched against the harness's generated public host key before using Vertrauen
+und verbinden. The left pane then displayed the actual SFTP `/data` directory.
+
+In German, arrows and Enter in Befehle opened Terminal im aktuellen Ordner öffnen;
+native focus became SSH-Terminaleingabe. Sending an echo command produced both
+the echoed command and a separate exact `HORTCMD_NATIVE_TERMINAL_OK` output line
+in xterm's native accessibility list. Escape retained terminal input focus;
+Ctrl+Shift+F6 focused Schließen, and Enter closed the terminal and restored focus
+to Befehle. Enter on Trennen changed the profile action back to Verbinden.
+
+The English run reconnected with Connect and loaded the same SFTP path. Commands
+and Open terminal in current folder opened SSH terminal input; a separate exact
+`HORTCMD_NATIVE_EN_OK` server-output line was verified. Escape retained input,
+Ctrl+Shift+F6 reached Close, and Enter returned focus to Commands. Disconnect
+restored the Connect action. These checks used real SSH traffic and the rendered
+xterm accessibility buffer with VoiceOver off; they do not prove spoken terminal
+output or the Windows/Linux matrix.
+
+Cleanup removed the test host key through Drop host key and deleted the test
+profile through the UI. The isolated profile list was empty, its managed host-key
+file was empty, and an exact service/account keychain lookup returned item-not-found
+(44), without reading a password. The private input script, harness containers and
+run directory were removed. The app returned to German and the previous local
+fixture directory. No test credentials are included in these test notes.
+
 ## Translation ownership
 
 German and English UI wording belongs in the typed resources under
@@ -304,14 +334,14 @@ verify that Escape reaches `ssh_send`, the exit chord does not, Close calls
 semantics with axe. These tests do not prove xterm's rendered accessibility buffer
 or actual screen-reader speech; that requires the manual terminal workflow below.
 
-## Manual verification matrix (not yet executed)
+## Manual verification matrix
 
 Record OS, application revision, screen-reader version, date, language, input
 method and observed result for every run. Execute in both German and English:
 
 | Platform | Native surface | Screen reader | Status |
 | --- | --- | --- | --- |
-| macOS | Tauri WebView and minimal native app menu | VoiceOver | Pending |
+| macOS | Tauri WebView and minimal native app menu | VoiceOver | Partial: settings DE/EN output verified; remaining smoke script pending |
 | Windows | Tauri WebView | NVDA | Pending |
 | Linux | Tauri WebView | Orca | Pending |
 
