@@ -17,3 +17,17 @@ Windows helper and cap-std dependency do compile with 1.85.0.
 - npm run check passes. Commit only this ticket; do not push.
 
 Priority: fix before considering the CI/build guarantees complete.
+
+## Completed — 2026-09-13
+- Manifest, README and CI declare Rust 1.85.1, retaining the original major/minor
+  floor while accommodating the pinned KeePass patch requirement.
+- The lockfile uses compatible SMB, serde_with/darling, home, plist, time and
+  ICU/idna releases. deflate64 0.1.12 used unstable unbounded_shr on 1.85.1
+  without declaring that MSRV; locked to 0.1.9 after reproducing the error.
+- Cargo resolver fallback prefers versions compatible with rust-version. It
+  cannot detect missing/incorrect dependency metadata, so the locked MSRV CI
+  build remains necessary (notably for deflate64 updates).
+- Passed on macOS: cargo +1.85.1 check --manifest-path src-tauri/Cargo.toml
+  --locked --all-targets and the complete npm run check (354 Rust tests passed,
+  22 ignored; 366 frontend tests passed; all other gates passed). Linux MSRV
+  compilation remains covered by the existing CI job, not a local execution.

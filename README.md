@@ -284,9 +284,10 @@ the maintainer directly rather than filing publicly.
 
 ## Requirements
 
-- **Rust** — stable for day-to-day work. The declared minimum is **1.85**
+- **Rust** — stable for day-to-day work. The declared minimum is **1.85.1**
   (`rust-version` in `src-tauri/Cargo.toml`, verified by its own CI job; the
-  pure-Rust SMB client needs it). Install from <https://rustup.rs>.
+  SMB client needs Rust 1.85 and the pinned KeePass library needs 1.85.1).
+  Install from <https://rustup.rs>.
 - **Node.js** ≥ 20 (CI uses 22).
 - The **Tauri CLI** comes with `npm install`; run it as `npm run tauri`.
 
@@ -513,5 +514,5 @@ from a store is enough to undo the split, and nothing else would notice.
 
 **CI jobs.** `check` (the full gate, Linux), `rust` (Ubuntu/macOS/Windows, so
 the `cfg`-gated platform code keeps compiling and its portable tests keep
-passing) and `msrv` (Rust 1.85 with `--locked`). Workflow permissions are
+passing) and `msrv` (Rust 1.85.1 with `--locked`). Workflow permissions are
 `contents: read`, and no job receives secrets.
