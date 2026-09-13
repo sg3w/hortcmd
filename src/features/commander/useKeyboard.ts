@@ -181,6 +181,13 @@ export function useKeyboard(): void {
       // ----- Clipboard & tabs (Cmd/Ctrl shortcuts) -----
       if (mod) {
         switch (e.key.toLowerCase()) {
+          case "+":
+          case "=":
+          case "-":
+          case "0":
+            // Leave main-keyboard zoom shortcuts to the host. Numeric
+            // keypad selection shortcuts have already been handled above.
+            return;
           case "c":
             e.preventDefault();
             return runAction("clip-copy", side);
