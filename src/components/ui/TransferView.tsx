@@ -28,6 +28,7 @@ import { dequeueTransfer } from "@/features/commander/fileOps";
 import { useT } from "@/store/settingsStore";
 import type { TransKey } from "@/i18n/dictionaries";
 import { formatSize } from "@/lib/format";
+import { describeItemErrors } from "@/store/errorText";
 
 const OP_ICON: Record<Transfer["op"], LucideIcon> = {
   copy: Copy,
@@ -174,7 +175,7 @@ function TransferCard({ t }: { t: Transfer }) {
         />
         {hasErrors && (
           <div className="max-h-24 overflow-y-auto whitespace-pre-line rounded bg-panel-inactive p-2 text-[11px] text-red-300">
-            {t.errors.slice(0, 6).join("\n")}
+            {describeItemErrors(t.errors).slice(0, 6).join("\n")}
           </div>
         )}
       </div>
