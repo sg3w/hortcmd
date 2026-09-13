@@ -145,8 +145,9 @@ function ConfirmDialog() {
             <button
               autoFocus
               onClick={() => {
-                confirm?.onConfirm();
+                const onConfirm = confirm?.onConfirm;
                 closeDialogs();
+                onConfirm?.();
               }}
               className={cn(
                 "rounded px-3 py-1 text-[13px] text-white",
