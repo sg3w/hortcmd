@@ -20,6 +20,8 @@ import {
 import { panelOf, usePanes } from "@/store/panesStore";
 import { useNet } from "@/features/net/netStore";
 import { useSession } from "@/store/sessionStore";
+import { useRecovery } from "@/store/recoveryStore";
+import { acknowledgeRecovery } from "@/ipc/client";
 import { useTransfers } from "@/store/transfersStore";
 import { useOps } from "@/store/opsStore";
 import { useSettings, useT } from "@/store/settingsStore";
@@ -121,6 +123,7 @@ export default function App() {
       startNextQueued();
       // Remove successful/cancelled operations after showing them briefly.
       if (d.errors.length === 0) {
+        void acknowledgeRecovery(d.id).catch(() => { /* Remains visible for explicit recovery review. */ });
         setTimeout(() => useTransfers.getState().remove(d.id), 900);
       }
     });
@@ -134,6 +137,8 @@ export default function App() {
       offLeftovers();
     };
   }, []);
+
+  useEffect(() => { void useRecovery.getState().refresh(true); }, []);
 
   // One notice for everything the persistence gate had to recover at
   // startup (TICKET-039). It runs after the first render, because the

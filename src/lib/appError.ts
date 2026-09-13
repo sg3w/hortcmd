@@ -72,3 +72,12 @@ export function fillParams(
     text,
   );
 }
+
+/** A transport failure can precede a structured backend response. */
+export function ipcError(error: unknown): AppError {
+  return asAppError(error) ?? {
+    version: 1, code: "fs.io", params: {}, op: "ipc", provider: null,
+    retryable: true, action: "retry", detail: null,
+    id: typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `ipc-${Date.now()}`,
+  };
+}

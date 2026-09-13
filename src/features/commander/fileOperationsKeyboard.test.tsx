@@ -23,6 +23,7 @@ function Host() {
 
 function setup(language: "de" | "en") {
   const runtime = useTauri({ commands: {
+    recovery_queue_transfer: () => {},
     copy_entries: () => {}, move_entries: () => {}, rename_entry: () => {},
     trash_entries: () => ({ ok: 1, errors: [] }),
     list_dir: ({ path }) => ({ path, entries: [file("renamed.txt")] }),

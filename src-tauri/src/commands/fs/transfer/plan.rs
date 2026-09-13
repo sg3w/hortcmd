@@ -15,9 +15,12 @@
 // ============================================================
 
 use super::events::ItemError;
+use super::recovery::types::{Item, Phase};
+use super::recovery::{self, Handle, Step};
 use crate::vfs::Provider;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
 
 /// Builds the target path in the target folder from the source base name.
 pub(crate) fn target_in(dest_dir: &Path, src: &Path) -> Option<PathBuf> {
@@ -96,6 +99,7 @@ pub(crate) fn working_name(provider: &dyn Provider, dir: &Path, prefix: &str) ->
 
 /// How one top-level source reaches its final name.
 pub(crate) struct Plan {
+    pub(crate) cancel: Arc<AtomicBool>,
     /// Where the bytes are written: the staging entry in safe mode, the
     /// final name in direct mode.
     pub(crate) write_to: PathBuf,
@@ -104,15 +108,24 @@ pub(crate) struct Plan {
     /// The final name still exists and has to be replaced on commit.
     /// Only ever true in safe mode — direct mode deletes it up front.
     pub(crate) replace: bool,
+    pub(crate) recovery: Option<Step>,
+    pub(crate) backup: Option<PathBuf>,
+    pub(crate) native_move: bool,
+    pub(crate) owned_root: Option<PathBuf>,
 }
 
 impl Plan {
     /// Direct mode: the bytes already go to their final name.
     pub(crate) fn direct(target: PathBuf) -> Self {
         Plan {
+            cancel: Arc::new(AtomicBool::new(false)),
             write_to: target.clone(),
             target,
             replace: false,
+            recovery: None,
+            backup: None,
+            native_move: false,
+            owned_root: None,
         }
     }
 
@@ -120,10 +133,92 @@ impl Plan {
     pub(crate) fn staged(provider: &dyn Provider, target: PathBuf, replace: bool) -> Self {
         let dir = target.parent().unwrap_or(Path::new("/")).to_path_buf();
         Plan {
+            cancel: Arc::new(AtomicBool::new(false)),
             write_to: working_name(provider, &dir, STAGE_PREFIX),
             target,
             replace,
+            recovery: None,
+            backup: None,
+            native_move: false,
+            owned_root: None,
         }
+    }
+
+    pub(crate) fn track(
+        &mut self,
+        handle: &Handle,
+        source: &Path,
+        dstp: &dyn Provider,
+    ) -> crate::errors::AppResult<()> {
+        let intent = handle.intent()?;
+        if self.native_move {
+            if self.replace && dstp.store_id() == "local" {
+                self.owned_root = Some(working_name(
+                    dstp,
+                    self.target.parent().unwrap_or(Path::new("/")),
+                    STAGE_PREFIX,
+                ));
+            }
+            self.write_to = source.to_path_buf();
+        }
+        if self.is_staged() && !self.native_move && dstp.store_id() == "local" {
+            self.owned_root = Some(self.write_to.clone());
+            self.write_to = self.write_to.join("data");
+        }
+        let parent = self.target.parent().unwrap_or(Path::new("/"));
+        self.backup = self.replace.then(|| {
+            self.owned_root
+                .as_ref()
+                .map(|p| p.join("backup"))
+                .unwrap_or_else(|| working_name(dstp, parent, BACKUP_PREFIX))
+        });
+        self.recovery = Some(
+            handle.track(Item {
+                source: Some(intent.sources[0].with_path(source)?),
+                target: intent.destination.with_path(&self.target)?,
+                staging: if self.is_staged() && !self.native_move {
+                    Some(
+                        intent
+                            .destination
+                            .with_path(self.owned_root.as_deref().unwrap_or(&self.write_to))?,
+                    )
+                } else {
+                    None
+                },
+                backup: self
+                    .backup
+                    .as_ref()
+                    .map(|p| intent.destination.with_path(p))
+                    .transpose()?,
+                phase: Phase::Planned,
+                digest: None,
+                durable: false,
+                owner: None,
+            })?,
+        );
+        if let Some(root) = &self.owned_root {
+            let mut builder = std::fs::DirBuilder::new();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::DirBuilderExt;
+                builder.mode(0o700);
+            }
+            builder.create(root)?;
+            recovery::durability::sync_parent(root)?;
+            if let Some(step) = &self.recovery {
+                step.own(intent.destination.with_path(root)?)?;
+            }
+            recovery::fault("staging");
+        }
+        Ok(())
+    }
+
+    pub(crate) fn writing(&self) -> std::io::Result<()> {
+        if let Some(step) = &self.recovery {
+            step.transition(Phase::Writing)
+                .map_err(std::io::Error::other)?;
+        }
+        Ok(())
     }
 
     pub(crate) fn is_staged(&self) -> bool {
@@ -179,10 +274,73 @@ pub(crate) fn plan_for(dstp: &dyn Provider, target: PathBuf, replace: bool, safe
 
 /// Publishes a finished plan. A no-op in direct mode.
 pub(crate) fn publish(dstp: &dyn Provider, plan: &Plan) -> std::io::Result<()> {
-    if !plan.is_staged() {
-        return Ok(());
+    // Only local providers currently expose durable data/namespace verification.
+    // Remote publication is recorded but cannot claim crash-safe resumability.
+    if plan.cancel.load(Ordering::Relaxed) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Interrupted,
+            "transfer cancelled",
+        ));
     }
-    commit(dstp, &plan.write_to, &plan.target, plan.replace)
+    let local = dstp.store_id() == "local";
+    if let Some(step) = &plan.recovery {
+        let digest = if local && plan.native_move {
+            recovery::durability::rename_identity(&plan.write_to)?
+        } else if local {
+            Some(recovery::durability::fingerprint_cancellable(
+                &plan.write_to,
+                true,
+                &plan.cancel,
+            )?)
+        } else {
+            None
+        };
+        step.prepared(digest, local)
+            .map_err(std::io::Error::other)?;
+        step.transition(Phase::Publishing)
+            .map_err(std::io::Error::other)?;
+    }
+    if plan.is_staged() {
+        if let Some(backup) = &plan.backup {
+            dstp.rename(&plan.target, backup)?;
+            recovery::fault("backup");
+            if local {
+                recovery::durability::sync_parent(backup)?;
+            }
+            if let Err(error) = dstp.rename(&plan.write_to, &plan.target) {
+                // Keep both references in the journal if rollback itself fails.
+                dstp.rename(backup, &plan.target)?;
+                if local {
+                    recovery::durability::sync_parent(&plan.target)?;
+                }
+                return Err(error);
+            }
+        } else {
+            commit(dstp, &plan.write_to, &plan.target, plan.replace)?;
+        }
+    }
+    recovery::fault("swapped");
+    if local && plan.recovery.is_some() {
+        recovery::durability::sync_parent(&plan.target)?;
+        if plan.native_move {
+            recovery::durability::sync_parent(&plan.write_to)?;
+        }
+    }
+    if let Some(step) = &plan.recovery {
+        step.transition(Phase::Committed)
+            .map_err(std::io::Error::other)?;
+    }
+    if let Some(backup) = &plan.backup {
+        dstp.remove(backup)?;
+        if local {
+            recovery::durability::sync_parent(backup)?;
+        }
+    }
+    if let Some(root) = &plan.owned_root {
+        std::fs::remove_dir(root)?;
+        recovery::durability::sync_parent(root)?;
+    }
+    Ok(())
 }
 
 /// Removes the staging entry after a failed or cancelled transfer. Only
@@ -190,6 +348,12 @@ pub(crate) fn publish(dstp: &dyn Provider, plan: &Plan) -> std::io::Result<()> {
 /// committed. Cleanup problems are reported on their own so they are not
 /// mistaken for the failure that caused them.
 pub(crate) fn discard_staging(dstp: &dyn Provider, plan: &Plan, errors: &mut Vec<ItemError>) {
+    if let Some(step) = &plan.recovery {
+        if let Err(error) = step.cleanup_unpublished() {
+            errors.push(ItemError::new(plan.write_to.display().to_string(), error));
+        }
+        return;
+    }
     if !plan.is_staged() || !dstp.exists(&plan.write_to) {
         return;
     }

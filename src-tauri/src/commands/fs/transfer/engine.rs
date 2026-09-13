@@ -15,8 +15,14 @@
 use super::copy::{resolve_buf, transfer_one, CopyTuning};
 use super::events::{ItemError, Leftovers, OpDone};
 use super::parallel::run_parallel_copy;
-use super::plan::{commit, free_name, measure, plan_for, stale_working_entries, target_in, Plan};
+use super::plan::{
+    commit, free_name, measure, plan_for, publish, stale_working_entries, target_in, Plan,
+};
 use super::progress::Prog;
+use super::recovery::{
+    self,
+    types::{Intent, RecoveryKind, RecoverySettings},
+};
 use super::registry::{ask_collision, Resolution};
 use crate::errors::{code, AppError, ErrorAction};
 use crate::vfs;
@@ -51,14 +57,54 @@ pub(crate) fn run_transfer(
         buf_size: resolve_buf(buf_kb),
     };
     let mode = if safe { "safe" } else { "direct" };
+    let run = match recovery::optional_begin(&id, || {
+        Intent::transfer(
+            if remove_source {
+                RecoveryKind::Move
+            } else {
+                RecoveryKind::Copy
+            },
+            &sources,
+            &dest_dir,
+            RecoverySettings {
+                limit,
+                verify,
+                buf_kb,
+                threads,
+                safe,
+            },
+        )
+    }) {
+        Ok(run) => run,
+        Err(error) => {
+            let _ = app.emit(
+                "fs-done",
+                OpDone {
+                    id,
+                    op,
+                    ok: 0,
+                    errors: vec![ItemError::new("", error)],
+                    cancelled: false,
+                    mode: mode.into(),
+                },
+            );
+            return;
+        }
+    };
     let fail = |id: String, op: String, item: &str, err: AppError| {
+        let mut errors = vec![ItemError::new(item, err.clone())];
+        if let Some(run) = &run {
+            if let Err(error) = run.0.finish(Some(err.code.as_ref())) {
+                errors.push(ItemError::new("", error));
+            }
+        }
         let _ = app.emit(
             "fs-done",
             OpDone {
                 id,
                 op,
                 ok: 0,
-                errors: vec![ItemError::new(item, err)],
+                errors,
                 cancelled: false,
                 mode: mode.to_string(),
             },
@@ -254,7 +300,18 @@ pub(crate) fn run_transfer(
             }
         }
 
-        let plan = plan_for(&*dstp, target, replace, safe);
+        let mut plan = plan_for(&*dstp, target, replace, safe);
+        plan.cancel = prog.cancel.clone();
+        plan.native_move = run.is_some()
+            && remove_source
+            && same_store
+            && (srcp.store_id() != "local" || recovery::durability::same_device(src, &dest));
+        if let Some(run) = &run {
+            if let Err(error) = plan.track(&run.0, src, &*dstp) {
+                errors.push(ItemError::new(s, error));
+                break;
+            }
+        }
 
         // Parallel mode (copy only): remember the plan, actual copying happens later.
         if parallel {
@@ -262,18 +319,31 @@ pub(crate) fn run_transfer(
             continue;
         }
 
-        let result = if remove_source
+        let result = if run.is_none()
+            && remove_source
             && same_store
             && commit(&*dstp, src, &plan.target, plan.replace).is_ok()
         {
-            // Move inside one store: the rename *is* the commit, so the
-            // fast path needs no staging. A replacement still goes
-            // through the same backup dance, so the old destination
-            // survives a failed rename.
             prog.files_done += files;
             prog.bytes_done += bytes;
             prog.emit(&src.to_string_lossy(), *bytes, *bytes, true);
             Ok(())
+        } else if plan.native_move {
+            // A native rename is one journaled namespace commit. On an ambiguous
+            // failure leave recovery records intact; never fall back to copying
+            // from a name that the attempted rename may already have removed.
+            plan.writing()
+                .and_then(|()| publish(&*dstp, &plan))
+                .and_then(|()| {
+                    if let Some(step) = &plan.recovery {
+                        step.transition(recovery::types::Phase::SourceRemoved)
+                            .map_err(std::io::Error::other)?;
+                    }
+                    prog.files_done += files;
+                    prog.bytes_done += bytes;
+                    prog.emit(&src.to_string_lossy(), *bytes, *bytes, true);
+                    Ok(())
+                })
         } else {
             transfer_one(
                 &*srcp,
@@ -315,6 +385,16 @@ pub(crate) fn run_transfer(
     }
 
     let cancelled = prog.cancelled();
+    let reason = if cancelled {
+        Some(code::CANCELLED)
+    } else {
+        errors.first().map(|e| e.error.code.as_ref())
+    };
+    if let Some(run) = &run {
+        if let Err(error) = run.0.finish(reason) {
+            errors.push(ItemError::new("", error));
+        }
+    }
     let _ = app.emit(
         "fs-done",
         OpDone {

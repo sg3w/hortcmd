@@ -30,6 +30,7 @@ pub mod events;
 pub mod parallel;
 pub mod plan;
 pub mod progress;
+pub mod recovery;
 pub mod registry;
 
 // The surface the rest of the crate uses. Re-exported here rather than

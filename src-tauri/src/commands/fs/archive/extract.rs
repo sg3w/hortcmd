@@ -111,6 +111,7 @@ pub(super) fn write_entry(
         }
         file_done = manifest.charge(file_done, n as u64, file_total)?;
         f.write_all(&buf[..n]).map_err(AppError::from)?;
+        crate::commands::fs::transfer::recovery::fault("write");
         prog.bytes_done += n as u64;
         prog.emit(name, file_done, file_total, false);
     }
@@ -118,6 +119,7 @@ pub(super) fn write_entry(
         return Err(AppError::new(code::ARCHIVE_CORRUPT));
     }
     f.sync_all()?;
+    crate::commands::fs::transfer::recovery::fault("flush");
     prog.files_done += 1;
     prog.emit(name, file_total, file_total, true);
     Ok(())
@@ -379,6 +381,15 @@ pub(crate) fn run(
     prog: &mut Prog,
     limits: safety::Limits,
 ) -> AppResult<(u32, Vec<ItemError>)> {
+    run_with_recovery(job, prog, limits, None)
+}
+
+pub(crate) fn run_with_recovery(
+    job: ExtractJob,
+    prog: &mut Prog,
+    limits: safety::Limits,
+    recovery: Option<&crate::commands::fs::transfer::recovery::Handle>,
+) -> AppResult<(u32, Vec<ItemError>)> {
     use crate::vfs::caps::{self, Capability};
     let ExtractJob {
         archive,
@@ -396,7 +407,7 @@ pub(crate) fn run(
     let base = inner_prefix(&base_inner);
     let targets: HashSet<String> = names.into_iter().collect();
     check_cancel(&prog.cancel)?;
-    let mut stage = staging::Stage::new(std::path::Path::new(&dest_dir))?;
+    let mut stage = staging::Stage::new_with_recovery(std::path::Path::new(&dest_dir), recovery)?;
     let result = match archive_kind(&archive) {
         Some(ArchiveKind::Zip) => {
             extract_zip(&archive, &base, limits, &targets, &mut stage, &pw, prog)

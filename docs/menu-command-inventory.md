@@ -126,6 +126,7 @@ on the *visible* rows; quick and comparison filters prune hidden operation targe
 
 | Function | Implementation | Command id | Menu path | Shortcut | Availability | Status |
 |---|---|---|---|---|---|---|
+| Transfer recovery | `recoveryStore.openRecovery`, `RecoveryDialog` | `cmd.recovery` | Befehle | — | macOS journal; explicit recovery actions | 044 |
 | Search (files) | `searchStore.openSearch`, `SearchDialog` | `cmd.search` | Befehle › Suchen | ⌥F7 | not in archive | 040 |
 | **Search: duplicates** | `SearchDialog` mode `duplicates` | `cmd.searchDuplicates` | Befehle › Spezialsuche ▸ | — | not in archive | **058** |
 | **Search: empty folders** | `SearchDialog` mode `empty_dirs` | `cmd.searchEmptyDirs` | Befehle › Spezialsuche ▸ | — | not in archive | **058** |

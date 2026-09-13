@@ -8,6 +8,8 @@
 // ============================================================
 
 import { hasTauri, invoke } from "../invoke";
+import { ensureTauriEvents, doneSubs } from "../events";
+import { ipcError } from "@/lib/appError";
 import * as demo from "../demo";
 
 /** Starts a copy/move transfer (fire-and-forget).
@@ -31,7 +33,7 @@ export function startTransfer(
     return;
   }
   const cmd = op === "copy" ? "copy_entries" : "move_entries";
-  void invoke<void>(cmd, {
+  void ensureTauriEvents().then(() => invoke<void>(cmd, {
     id,
     sources,
     destDir,
@@ -40,7 +42,7 @@ export function startTransfer(
     bufKb,
     threads,
     safe,
-  });
+  })).catch(error => failed(id, op, error));
 }
 
 /** Pauses or resumes a running transfer. */
@@ -65,14 +67,14 @@ export function startExtract(
     demo.demoTransfer("extract", id, names.length ? names : ["(alles)"], destDir, false);
     return;
   }
-  void invoke<void>("extract_entries", {
+  void ensureTauriEvents().then(() => invoke<void>("extract_entries", {
     id,
     archive,
     base,
     names,
     destDir,
     password: password ?? null,
-  });
+  })).catch(error => failed(id, "extract", error));
 }
 
 /** Packs sources into a new ZIP archive (fire-and-forget). */
@@ -81,7 +83,7 @@ export function startPack(id: string, sources: string[], destZip: string): void 
     demo.demoTransfer("pack", id, sources, destZip, false);
     return;
   }
-  void invoke<void>("create_archive", { id, sources, destZip });
+  void ensureTauriEvents().then(() => invoke<void>("create_archive", { id, sources, destZip })).catch(error => failed(id, "pack", error));
 }
 
 /** Cancels a running transfer. */
@@ -106,4 +108,10 @@ export function resolveCollision(
     return;
   }
   void invoke<void>("resolve_collision", { reqId, action, applyAll });
+}
+
+
+function failed(id: string, op: string, error: unknown): void {
+  const done = { id, op, ok: 0, errors: [{ item: "", error: ipcError(error) }], cancelled: false, mode: "" };
+  doneSubs.forEach(subscriber => subscriber(done));
 }

@@ -33,6 +33,8 @@ export const errors = ns(
     "error.fs.tooLarge": "Zu groß",
 
     // --- transfers ---
+    "error.transfer.journalLimit": "Wiederherstellungsgrenze erreicht. Prüfe offene Aufträge oder teile den Auftrag in kleinere Gruppen.",
+    "error.transfer.journalUnavailable": "Wiederherstellungsdaten nicht verfügbar. Schließe weitere App-Instanzen und prüfe den Konfigurationsordner. Vorhandene Daten bleiben erhalten.",
     "error.transfer.checksum": "Prüfsumme stimmt nicht — die Kopie ist beschädigt",
     "error.transfer.noStaging":
       "Ausfallsichere Übertragung wird an diesem Ort nicht unterstützt — in den Einstellungen unter „Dateioperationen“ abschalten",
@@ -125,6 +127,8 @@ export const errors = ns(
     "error.fs.tooLarge": "Too large",
 
     // --- transfers ---
+    "error.transfer.journalLimit": "Recovery limit reached. Review pending jobs or split this job into smaller groups.",
+    "error.transfer.journalUnavailable": "Recovery data unavailable. Close other app instances and check the configuration folder. Existing data is preserved.",
     "error.transfer.checksum": "Checksum mismatch — the copy is corrupted",
     "error.transfer.noStaging":
       "Failure-safe transfers are not supported at this location — turn them off under “File operations” in the settings",

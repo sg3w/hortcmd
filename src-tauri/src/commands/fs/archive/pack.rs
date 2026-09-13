@@ -31,6 +31,17 @@ pub(crate) fn run(
     limits: safety::Limits,
     check: &dyn Fn(&Path) -> AppResult<()>,
 ) -> AppResult<u32> {
+    run_with_recovery(sources, destination, prog, limits, check, None)
+}
+
+pub(crate) fn run_with_recovery(
+    sources: &[String],
+    destination: &str,
+    prog: &mut Prog,
+    limits: safety::Limits,
+    check: &dyn Fn(&Path) -> AppResult<()>,
+    recovery: Option<&crate::commands::fs::transfer::recovery::Handle>,
+) -> AppResult<u32> {
     if sources.is_empty() {
         return Err(AppError::new(code::VALIDATION_BAD_INPUT)
             .detail("at least one archive source is required"));
@@ -101,7 +112,7 @@ pub(crate) fn run(
         }
         entries.push((path, name, directory, meta.len()));
     }
-    let mut stage = staging::Stage::new(&parent)?;
+    let mut stage = staging::Stage::new_with_recovery(&parent, recovery)?;
     let result = (|| -> AppResult<u32> {
         let output = stage.file(name, &limits)?.into_std();
         let mut zip = ZipWriter::new(output);
@@ -140,6 +151,7 @@ pub(crate) fn run(
                     return Err(safety::limit());
                 }
                 zip.write_all(&buffer[..bytes])?;
+                crate::commands::fs::transfer::recovery::fault("write");
                 prog.bytes_done += bytes as u64;
                 prog.emit(&name, done, size, false);
             }
@@ -152,6 +164,7 @@ pub(crate) fn run(
             prog.emit(&name, done, size, true);
         }
         zip.finish()?.sync_all()?;
+        crate::commands::fs::transfer::recovery::fault("flush");
         cancelled(prog)?;
         check(&destination)?;
         stage.commit(&prog.cancel)?;

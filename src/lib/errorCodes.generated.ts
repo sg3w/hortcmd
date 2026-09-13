@@ -20,6 +20,8 @@ export const ERROR_CODES = [
   "fs.io",
   "fs.invalidName",
   "fs.tooLarge",
+  "transfer.journalLimit",
+  "transfer.journalUnavailable",
   "transfer.checksum",
   "transfer.noStaging",
   "transfer.commit",

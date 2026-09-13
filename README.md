@@ -517,3 +517,5 @@ from a store is enough to undo the split, and nothing else would notice.
 the `cfg`-gated platform code keeps compiling and its portable tests keep
 passing) and `msrv` (Rust 1.85.1 with `--locked`). Workflow permissions are
 `contents: read`, and no job receives secrets.
+
+Desktop transfer recovery on macOS is documented in [Transfer recovery](docs/transfer-recovery.md), including recovery choices, journal bounds and deferred platform checks.

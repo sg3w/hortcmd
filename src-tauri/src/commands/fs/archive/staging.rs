@@ -1,6 +1,11 @@
 //! Extraction writes only inside a private directory held by an open handle.
 //! Publication backs up each old file and rolls back completed renames on error.
 use super::safety;
+use crate::commands::fs::transfer::recovery::{
+    self,
+    types::{Item, Phase, RecoveryLocation},
+    Handle, Step,
+};
 use crate::errors::{AppError, AppResult};
 use cap_std::fs::{Dir, DirBuilder, File, OpenOptions};
 use std::collections::BTreeSet;
@@ -8,6 +13,10 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 pub struct Stage {
+    recovery: Option<Handle>,
+    committed: bool,
+    recovery_root: Option<Step>,
+    destination: PathBuf,
     root: Dir,
     data: Dir,
     backups: Dir,
@@ -19,11 +28,33 @@ pub struct Stage {
 }
 
 impl Stage {
+    #[cfg(test)]
     pub fn new(destination: &Path) -> AppResult<Self> {
+        Self::new_with_recovery(destination, None)
+    }
+
+    pub fn new_with_recovery(destination: &Path, recovery: Option<&Handle>) -> AppResult<Self> {
         let root = Dir::open_ambient_dir(destination, cap_std::ambient_authority())?;
         let mut random = [0u8; 16];
         getrandom::fill(&mut random).map_err(|_| safety::unsafe_entry())?;
         let name = format!(".hortcmd-extract-{}", hex::encode(random));
+        let location = RecoveryLocation::Local {
+            path: destination.to_string_lossy().into_owned(),
+        };
+        let recovery_root = recovery
+            .map(|handle| {
+                handle.track(Item {
+                    source: None,
+                    target: location.clone(),
+                    staging: Some(location.with_path(&destination.join(&name))?),
+                    backup: None,
+                    phase: Phase::Writing,
+                    digest: None,
+                    durable: false,
+                    owner: None,
+                })
+            })
+            .transpose()?;
         let builder = DirBuilder::new();
         #[cfg(unix)]
         let builder = {
@@ -33,6 +64,11 @@ impl Stage {
             builder
         };
         root.create_dir_with(&name, &builder)?;
+        if let Some(step) = &recovery_root {
+            root.try_clone()?.into_std_file().sync_all()?;
+            step.own(location.with_path(&destination.join(&name))?)?;
+            recovery::fault("staging");
+        }
         let result = (|| -> io::Result<(Dir, Dir)> {
             #[cfg(windows)]
             super::private_windows::protect(&root, &name)?;
@@ -43,6 +79,10 @@ impl Stage {
         })();
         match result {
             Ok((data, backups)) => Ok(Self {
+                recovery: recovery.cloned(),
+                committed: false,
+                recovery_root,
+                destination: destination.to_path_buf(),
                 root,
                 data,
                 backups,
@@ -121,7 +161,7 @@ impl Stage {
             self.check_destination(name, false)?;
         }
         let mut created = Vec::new();
-        let mut published: Vec<(&str, bool, bool)> = Vec::new();
+        let mut published: Vec<(String, bool, bool, Option<Step>)> = Vec::new();
         let result = (|| -> AppResult<()> {
             for name in &self.directories {
                 if cancel.load(std::sync::atomic::Ordering::Relaxed) {
@@ -140,20 +180,67 @@ impl Stage {
                     return Err(AppError::new(crate::errors::code::CANCELLED));
                 }
                 self.check_destination(name, false)?;
+                let step = self
+                    .recovery
+                    .as_ref()
+                    .map(|handle| {
+                        let location = RecoveryLocation::Local {
+                            path: self.destination.to_string_lossy().into_owned(),
+                        };
+                        let staging = self.destination.join(&self.name).join("data").join(name);
+                        handle.track(Item {
+                            source: None,
+                            target: location.with_path(&self.destination.join(name))?,
+                            staging: Some(location.with_path(&staging)?),
+                            backup: Some(
+                                location.with_path(
+                                    &self
+                                        .destination
+                                        .join(&self.name)
+                                        .join("backups")
+                                        .join(i.to_string()),
+                                )?,
+                            ),
+                            phase: Phase::Prepared,
+                            digest: Some(recovery::durability::fingerprint_cancellable(
+                                &staging, true, cancel,
+                            )?),
+                            durable: true,
+                            owner: None,
+                        })
+                    })
+                    .transpose()?;
+                if let Some(step) = &step {
+                    recovery::fault("prepared");
+                    step.transition(Phase::Publishing)?;
+                }
                 let backup = match self.root.rename(name, &self.backups, i.to_string()) {
                     Ok(()) => true,
                     Err(e) if e.kind() == io::ErrorKind::NotFound => false,
                     Err(e) => return Err(e.into()),
                 };
-                published.push((name, backup, false));
+                published.push((name.to_owned(), backup, false, step.clone()));
+                if self.recovery.is_some() {
+                    self.backups.try_clone()?.into_std_file().sync_all()?;
+                    self.root.try_clone()?.into_std_file().sync_all()?;
+                }
+                recovery::fault("backup");
                 self.data.rename(name, &self.root, name)?;
                 published.last_mut().unwrap().2 = true;
+                recovery::fault("swapped");
+                if let Some(step) = &step {
+                    recovery::durability::sync_parent(&self.destination.join(name))?;
+                    self.backups.try_clone()?.into_std_file().sync_all()?;
+                    self.data.try_clone()?.into_std_file().sync_all()?;
+                    step.transition(Phase::Committed)?;
+                    recovery::fault("committed");
+                }
             }
             Ok(())
         })();
         if let Err(error) = result {
             let mut incomplete = false;
-            for (i, (name, backup, installed)) in published.iter().enumerate().rev() {
+            for (i, (name, backup, installed, _)) in published.iter().enumerate().rev() {
                 if *installed && self.root.remove_file(name).is_err() {
                     incomplete = true;
                 }
@@ -171,7 +258,20 @@ impl Stage {
                     incomplete = true;
                 }
             }
-            self.keep = incomplete;
+            // Keep recovery evidence until rollback and its journal updates are durable.
+            self.keep = true;
+            if !incomplete {
+                if self.recovery.is_some() {
+                    self.root.try_clone()?.into_std_file().sync_all()?;
+                    self.backups.try_clone()?.into_std_file().sync_all()?;
+                }
+                for (_, _, _, step) in &published {
+                    if let Some(step) = step {
+                        step.transition(Phase::Skipped)?;
+                    }
+                }
+                self.keep = false;
+            }
             if self.keep {
                 return Err(AppError::new(crate::errors::code::TRANSFER_COMMIT)
                     .op("extract-rollback")
@@ -182,6 +282,14 @@ impl Stage {
             }
             return Err(error);
         }
+        if let Some(step) = &self.recovery_root {
+            for name in self.directories.iter().rev() {
+                self.root.open_dir(name)?.into_std_file().sync_all()?;
+            }
+            self.root.try_clone()?.into_std_file().sync_all()?;
+            step.transition(Phase::Committed)?;
+        }
+        self.committed = true;
         Ok(())
     }
 
@@ -193,6 +301,14 @@ impl Stage {
                     .op("extract-cleanup")
                     .detail(format!("Staging cleanup failed; inspect {}", self.name))
             })?;
+            if let Some(step) = &self.recovery_root {
+                self.root.try_clone()?.into_std_file().sync_all()?;
+                step.transition(if self.committed {
+                    Phase::Committed
+                } else {
+                    Phase::Skipped
+                })?;
+            }
         }
         Ok(())
     }

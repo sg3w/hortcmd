@@ -2,8 +2,8 @@
 
 ## Current scheduling
 
-The user stopped implementation work and requested this backlog reorganization.
-Renumbering does not complete tickets or start their implementation.
+The current batch covers ten bug-fix or feature tickets. Windows/Linux-specific
+work and supporting tasks remain deferred. Renumbering does not complete tickets.
 
 - Direct development retains its existing numbers: user-facing file-manager
   features, backend functionality, data safety and concrete application defects.
@@ -31,3 +31,6 @@ Renumbering does not complete tickets or start their implementation.
 
 [250](250-windows-linux-screen-reader-verification.md) remains the Windows/NVDA
 and Linux/Orca follow-up. The outstanding macOS evidence remains in 249.
+
+[251](251-windows-linux-transfer-recovery.md) tracks native Windows/Linux transfer
+recovery enablement and verification deferred from 044.

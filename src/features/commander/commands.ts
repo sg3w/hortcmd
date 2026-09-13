@@ -47,6 +47,7 @@ import { openExport } from "@/store/exportStore";
 import { openFileCompare } from "@/store/fileCompareStore";
 import { openProps } from "@/store/propsStore";
 import { openRename } from "@/store/renameStore";
+import { openRecovery } from "@/store/recoveryStore";
 import { openSearch } from "@/store/searchStore";
 import { openAbout, openSettings, openShortcuts } from "@/store/uiStore";
 import { runAction } from "./actions";
@@ -467,6 +468,7 @@ export const COMMANDS = {
 
   // ----- Markieren (TICKET-059) -----
   // Group 1 – what is marked.
+  "cmd.recovery": { label: "recovery.title", dialog: true, run: openRecovery },
   "mark.selectGroup": {
     label: "menu.mark.selectGroup",
     dialog: true,
@@ -1275,6 +1277,7 @@ export const MENUS: MenuCategory[] = [
       sep(),
       item("cmd.terminal"),
       item("cmd.openFolder"),
+      item("cmd.recovery"),
       sep(),
       {
         kind: "sub",

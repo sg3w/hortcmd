@@ -85,6 +85,7 @@ pub(crate) fn copy_file_prog(
             break;
         }
         writer.write_all(&buf[..n])?;
+        super::recovery::fault("write");
         if let Some(h) = hasher.as_mut() {
             h.update(&buf[..n]);
         }
@@ -108,6 +109,10 @@ pub(crate) fn copy_file_prog(
         }
     }
 
+    // Finalize remote buffered writers even when checksum verification is off.
+    writer.flush()?;
+    super::recovery::fault("flush");
+
     // Verification: read the target again and compare checksums.
     if let Some(h) = hasher {
         // Flush first. A local `File` is already on disk by now, but a
@@ -116,6 +121,7 @@ pub(crate) fn copy_file_prog(
         // against an incomplete copy and report a corruption that is
         // not there.
         writer.flush()?;
+        super::recovery::fault("flush");
         let src_hash = h.finalize();
         let dst_hash = hash_file_sha256(dstp, dst)?;
         if src_hash.as_slice() != dst_hash.as_slice() {
@@ -188,6 +194,7 @@ where
     F: FnOnce() -> std::io::Result<()>,
 {
     // Until this returns, the old destination has not been touched.
+    plan.writing()?;
     if let Err(e) = copy() {
         discard_staging(dstp, plan, errors);
         return Err(e);
@@ -207,6 +214,12 @@ where
                 src.display().to_string(),
                 AppError::from(e).op("move").action(ErrorAction::Report),
             ));
+        } else if let Some(step) = &plan.recovery {
+            if srcp.store_id() == "local" {
+                super::recovery::durability::sync_parent(src)?;
+            }
+            step.transition(super::recovery::types::Phase::SourceRemoved)
+                .map_err(std::io::Error::other)?;
         }
     }
     Ok(())

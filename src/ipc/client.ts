@@ -37,3 +37,5 @@ export * from "./domains/mcp";
 
 export * from "./domains/refresh";
 export * from "./domains/window";
+
+export * from "./domains/recovery";

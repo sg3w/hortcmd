@@ -10,6 +10,9 @@ import { useTransfers } from "@/store/transfersStore";
 import { useClipboard } from "@/store/clipboardStore";
 import { PenLine, ShieldAlert, Trash2 } from "lucide-react";
 import {
+  hasTauri,
+  queueRecovery,
+  discardRecovery,
   deleteEntries,
   makeDir,
   openPath,
@@ -33,7 +36,7 @@ import {
   PW_WRONG,
 } from "@/features/commander/archivePw";
 import type { ItemError, Leftovers, OpDone } from "@/ipc/bindings";
-import { isError } from "@/lib/appError";
+import { ipcError, isError } from "@/lib/appError";
 import { describeErrorFull, describeItemErrors } from "@/store/errorText";
 import { openFileBrowser } from "@/store/fileBrowserStore";
 import {
@@ -124,6 +127,7 @@ interface QueuedParams {
 }
 /** Parameters of waiting (not yet started) transfers per id. */
 const queuedParams = new Map<string, QueuedParams>();
+const persistedIntents = new Map<string, Promise<boolean>>();
 
 /** Whether a copy/move operation is currently active (not waiting/done). */
 function hasActiveTransfer(exceptId?: string): boolean {
@@ -151,12 +155,22 @@ function beginTransfer(op: "copy" | "move", sources: string[], dest: string): vo
   const id = newId();
   useTransfers.getState().start(op, id);
 
+  if (hasTauri) {
+    persistedIntents.set(id, queueRecovery(id, op, sources, dest, { limit, verify, bufKb, threads, safe }).then(() => true, error => {
+      useTransfers.getState().finish({ id, op, ok: 0, errors: [{ item: "", error: ipcError(error) }], cancelled: false, mode: safe ? "safe" : "direct" });
+      startNextQueued();
+      return false;
+    }));
+  }
   // Queue active and an operation already underway → enqueue.
   if (st.queueTransfers && hasActiveTransfer(id)) {
     queuedParams.set(id, { op, sources, dest, limit, verify, bufKb, threads, safe });
     useTransfers.getState().setQueued(id, true);
   } else {
-    startTransfer(op, id, sources, dest, limit, verify, bufKb, threads, safe);
+    const start = () => startTransfer(op, id, sources, dest, limit, verify, bufKb, threads, safe);
+    const persisted = persistedIntents.get(id);
+    if (persisted) void persisted.then(ok => { persistedIntents.delete(id); if (ok) start(); });
+    else start();
   }
 }
 
@@ -169,7 +183,7 @@ export function startNextQueued(): void {
   if (!params) return;
   queuedParams.delete(next.id);
   useTransfers.getState().setQueued(next.id, false);
-  startTransfer(
+  const start = () => startTransfer(
     params.op,
     next.id,
     params.sources,
@@ -180,11 +194,22 @@ export function startNextQueued(): void {
     params.threads,
     params.safe,
   );
+  const persisted = persistedIntents.get(next.id);
+  if (persisted) void persisted.then(ok => {
+    persistedIntents.delete(next.id);
+    if (ok && useTransfers.getState().transfers.some(t => t.id === next.id && !t.done)) start();
+  });
+  else start();
 }
 
 /** Removes a still-waiting transfer from the queue (cancel before start). */
 export function dequeueTransfer(id: string): void {
   queuedParams.delete(id);
+  if (hasTauri) {
+    const persisted = persistedIntents.get(id) ?? Promise.resolve(true);
+    void persisted.then(ok => ok ? discardRecovery(id) : undefined).catch(error => reportErrors([{ item: "", error: ipcError(error) }]));
+  }
+  persistedIntents.delete(id);
   useTransfers.getState().remove(id);
 }
 
@@ -231,8 +256,8 @@ function beginExtract(
   base: string,
   names: string[],
   dest: string,
+  id = newId(),
 ): void {
-  const id = newId();
   pendingExtracts.set(id, { archive, base, names, dest });
   useTransfers.getState().start("extract", id);
   startExtract(id, archive, base, names, dest, archivePassword(archive));
@@ -583,4 +608,17 @@ export function runMkdir(side: Side): void {
       });
     },
   });
+}
+
+
+/** Executes an already journaled, freshly revalidated recovery request. */
+export function startRecovered(request: import("@/ipc/bindings/RecoveryLaunch").RecoveryLaunch): void {
+  const { id, kind, sources, destination, settings } = request;
+  if (kind === "extract") {
+    beginExtract(sources[0], request.base, request.names, destination, id);
+    return;
+  }
+  useTransfers.getState().start(kind, id);
+  if (kind === "pack") startPack(id, sources, destination);
+  else startTransfer(kind, id, sources, destination, settings.limit, settings.verify, settings.bufKb, settings.threads, settings.safe);
 }

@@ -43,40 +43,51 @@ export const nativeMenuSubs = new Set<(id: string) => void>();
 
 export const netStateSubs = new Set<(states: ConnectionStatus[]) => void>();
 
-let tauriWired = false;
+let tauriReady: Promise<void> | null = null;
 
-export async function ensureTauriEvents(): Promise<void> {
-  if (!hasTauri || tauriWired) return;
-  tauriWired = true;
+export function ensureTauriEvents(): Promise<void> {
+  if (!hasTauri) return Promise.resolve();
+  if (!tauriReady) tauriReady = wireEvents().catch(error => { tauriReady = null; throw error; });
+  return tauriReady;
+}
+
+async function wireEvents(): Promise<void> {
   const { listen } = await import("@tauri-apps/api/event");
-  listen<OpProgress>("fs-progress", (e) =>
+  const results = await Promise.allSettled([
+    listen<OpProgress>("fs-progress", (e) =>
     progressSubs.forEach((f) => f(e.payload)),
-  );
-  listen<OpDone>("fs-done", (e) => doneSubs.forEach((f) => f(e.payload)));
-  listen<CollisionReq>("fs-collision", (e) =>
+    ),
+    listen<OpDone>("fs-done", (e) => doneSubs.forEach((f) => f(e.payload))),
+    listen<CollisionReq>("fs-collision", (e) =>
     collisionSubs.forEach((f) => f(e.payload)),
-  );
-  listen<string>("fs-changed", (e) =>
+    ),
+    listen<string>("fs-changed", (e) =>
     changedSubs.forEach((f) => f(e.payload)),
-  );
-  listen<Leftovers>("fs-leftovers", (e) =>
+    ),
+    listen<Leftovers>("fs-leftovers", (e) =>
     leftoverSubs.forEach((f) => f(e.payload)),
-  );
-  listen<GitStatusEvent>("git-support-ready", (e) =>
+    ),
+    listen<GitStatusEvent>("git-support-ready", (e) =>
     gitReadySubs.forEach((f) => f(e.payload.path, e.payload.status)),
-  );
-  listen<TermData>("ssh-term-data", (e) =>
+    ),
+    listen<TermData>("ssh-term-data", (e) =>
     termDataSubs.forEach((f) => f(e.payload)),
-  );
-  listen<TermClosed>("ssh-term-closed", (e) =>
+    ),
+    listen<TermClosed>("ssh-term-closed", (e) =>
     termClosedSubs.forEach((f) => f(e.payload)),
-  );
-  listen<string>("native-menu", (e) =>
+    ),
+    listen<string>("native-menu", (e) =>
     nativeMenuSubs.forEach((f) => f(e.payload)),
-  );
-  listen<ConnectionStatus[]>("net-state", (e) =>
+    ),
+    listen<ConnectionStatus[]>("net-state", (e) =>
     netStateSubs.forEach((f) => f(e.payload)),
-  );
+    ),
+  ]);
+  const failure = results.find(r => r.status === "rejected");
+  if (failure?.status === "rejected") {
+    for (const result of results) if (result.status === "fulfilled") result.value();
+    throw failure.reason;
+  }
 }
 
 /** Subscribes to the remains of interrupted failure-safe transfers found

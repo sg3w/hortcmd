@@ -106,6 +106,7 @@ pub(crate) fn parallel_copy_file(
             break;
         }
         writer.write_all(&buf[..n])?;
+        super::recovery::fault("write");
         if let Some(h) = hasher.as_mut() {
             h.update(&buf[..n]);
         }
@@ -115,6 +116,8 @@ pub(crate) fn parallel_copy_file(
         sp.rate_limit(n, limit);
     }
 
+    writer.flush()?;
+    super::recovery::fault("flush");
     if let Some(h) = hasher {
         let src_hash = h.finalize();
         let dst_hash = hash_file_sha256(dstp, &task.dst)?;
@@ -154,6 +157,12 @@ pub(crate) fn run_parallel_copy(
     // tree or disturb a pre-existing destination.
     let mut tasks = Vec::new();
     for (i, (src, plan)) in jobs.iter().enumerate() {
+        if let Err(error) = plan.writing() {
+            return (
+                0,
+                vec![ItemError::new(src.display().to_string(), error.into())],
+            );
+        }
         if let Err(error) = flatten_tree(&*srcp, &*dstp, src, &plan.write_to, i, &mut tasks) {
             let mut errors = vec![ItemError::new(src.display().to_string(), error.into())];
             for (_, plan) in &jobs {

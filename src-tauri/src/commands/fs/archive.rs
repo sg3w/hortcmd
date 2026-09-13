@@ -14,6 +14,10 @@ mod private_windows;
 pub(crate) mod safety;
 mod staging;
 
+use super::transfer::recovery::{
+    self,
+    types::{Intent, RecoveryKind, RecoverySettings},
+};
 use crate::errors::{code, AppError, AppResult, ErrorAction};
 use extract::ExtractJob;
 use std::collections::{BTreeSet, HashSet};
@@ -280,13 +284,39 @@ fn run_extract(
         pause: pause.clone(),
     };
 
-    let (ok, errors) =
-        match safety::Limits::load().and_then(|limits| extract::run(job, &mut prog, limits)) {
-            Ok(result) => result,
-            Err(error) => (0, vec![ItemError::new("", error)]),
-        };
+    let run = recovery::optional_begin(&id, || {
+        Intent::transfer(
+            RecoveryKind::Extract,
+            std::slice::from_ref(&job.archive),
+            &job.dest_dir,
+            RecoverySettings::default(),
+        )
+        .map(|mut intent| {
+            intent.base = job.base_inner.clone();
+            intent.names = job.names.clone();
+            intent
+        })
+    });
+    let (ok, mut errors) = match run.as_ref().map_err(Clone::clone).and_then(|run| {
+        safety::Limits::load().and_then(|limits| {
+            extract::run_with_recovery(job, &mut prog, limits, run.as_ref().map(|run| &run.0))
+        })
+    }) {
+        Ok(result) => result,
+        Err(error) => (0, vec![ItemError::new("", error)]),
+    };
 
     let cancelled = prog.cancelled();
+    if let Ok(Some(run)) = &run {
+        let reason = if cancelled {
+            Some(code::CANCELLED)
+        } else {
+            errors.first().map(|e| e.error.code.as_ref())
+        };
+        if let Err(error) = run.0.finish(reason) {
+            errors.push(ItemError::new("", error));
+        }
+    }
     let _ = app.emit(
         "fs-done",
         OpDone {
@@ -324,12 +354,39 @@ fn run_pack(
         cancel,
         pause,
     };
-    let (ok, errors) = match safety::Limits::load()
-        .and_then(|limits| pack::run(&sources, &dest_zip, &mut prog, limits, &|_| Ok(())))
-    {
+    let run = recovery::optional_begin(&id, || {
+        Intent::transfer(
+            RecoveryKind::Pack,
+            &sources,
+            &dest_zip,
+            RecoverySettings::default(),
+        )
+    });
+    let (ok, mut errors) = match run.as_ref().map_err(Clone::clone).and_then(|run| {
+        safety::Limits::load().and_then(|limits| {
+            pack::run_with_recovery(
+                &sources,
+                &dest_zip,
+                &mut prog,
+                limits,
+                &|_| Ok(()),
+                run.as_ref().map(|run| &run.0),
+            )
+        })
+    }) {
         Ok(count) => (count, Vec::new()),
         Err(error) => (0, vec![ItemError::new(&dest_zip, error)]),
     };
+    if let Ok(Some(run)) = &run {
+        let reason = if prog.cancelled() {
+            Some(code::CANCELLED)
+        } else {
+            errors.first().map(|e| e.error.code.as_ref())
+        };
+        if let Err(error) = run.0.finish(reason) {
+            errors.push(ItemError::new("", error));
+        }
+    }
     let _ = app.emit(
         "fs-done",
         OpDone {

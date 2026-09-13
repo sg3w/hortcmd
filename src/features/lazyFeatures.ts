@@ -28,6 +28,7 @@ const asDefault =
     load().then((m) => ({ default: m[name] as ComponentType }));
 
 export const LAZY = {
+  recovery: () => import("@/components/ui/RecoveryDialog").then(m => ({ default: m.RecoveryDialog })),
   /** Markdown, syntax highlighting, EXIF, hex view (F3). */
   preview: asDefault(() => import("@/components/ui/PreviewDialog"), "PreviewDialog"),
   /** xterm.js plus its fit addon (ticket 026). */

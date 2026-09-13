@@ -44,16 +44,16 @@ state, or expose credentials in persisted operation data.
 
 ## Acceptance Criteria
 
-- [ ] A forced termination at any tested transfer phase produces a deterministic
+- [x] A forced termination at any tested transfer phase produces a deterministic
       recovery state on next launch.
-- [ ] No recovery path deletes an uncommitted move source or replaces a valid
+- [x] No recovery path deletes an uncommitted move source or replaces a valid
       destination with unverified data.
-- [ ] Queued operations retain order and snapshotted settings after restart.
-- [ ] Direct-write interruptions are labeled unsafe and are never represented as
+- [x] Queued operations retain order and snapshotted settings after restart.
+- [x] Direct-write interruptions are labeled unsafe and are never represented as
       successfully committed.
-- [ ] Remote recovery waits for a verified session and handles unavailable profiles.
-- [ ] The journal and support diagnostics contain no credentials.
-- [ ] Completed records and orphan staging artifacts are cleaned by documented,
+- [x] Remote recovery waits for a verified session and handles unavailable profiles.
+- [x] The journal and support diagnostics contain no credentials.
+- [x] Completed records and orphan staging artifacts are cleaned by documented,
       bounded retention rules.
 
 ## Tests
@@ -78,3 +78,33 @@ state, or expose credentials in persisted operation data.
 - Fault-injection tests cover every commit-critical transition.
 - Journal schema, retention, and recovery choices are documented.
 - Rename this file to `044-restart-safe-transfer-recovery.done.md`.
+
+## Implementation evidence (macOS scope)
+
+The current user instruction defers Windows/Linux work. The adapter is therefore
+activated on macOS; native enablement and platform/remote fault-harness runs are
+tracked in [TICKET-251](../251-windows-linux-transfer-recovery.md). The journal covers
+the desktop transfer queue and desktop archive commands. MCP has its separate
+execution lifecycle and is not attached to the desktop queue.
+
+Implemented version-1 atomic, exclusively locked snapshots, bounded retention,
+profile-ID references without credentials, staged commit records and conservative
+restart reconciliation. Recovery actions require a fresh backend check; neither
+startup nor cleanup deletes a move source. Remote item-boundary resumption is
+refused when provider durability cannot be proven.
+
+Local process-exit tests exercise sequential/parallel copy, copy-based/native
+move, ZIP pack/extract and journal/publication boundaries. Additional tests cover
+queue settings/order, direct-write classification, corrupt/future/oversized
+snapshots, missing sources/profiles, replaced staging, preserved backups,
+cancellation, journal capacity and acknowledgment after a lost terminal event.
+Frontend tests cover explicit cleanup confirmation, unavailable actions, queue
+order, reattachment and a lost completion event. No live remote endpoint or native
+Windows/Linux fault run is claimed here.
+
+Schema, retention bounds and user actions are documented in
+[transfer recovery](../../docs/transfer-recovery.md). TICKET-092 was interposed and
+completed separately because parallel planning previously swallowed provider
+errors, which could allow an incomplete staged tree to be published.
+
+Validation: `npm run check` passed (411 Rust tests, 25 ignored protocol/keychain tests; 522 frontend tests; all remaining checks and production build passed).

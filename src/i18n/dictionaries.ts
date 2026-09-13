@@ -14,6 +14,7 @@
 // File and folder *names* stay untranslated — those are data.
 // ============================================================
 
+import { recovery } from "./namespaces/recovery";
 import { chrome } from "./namespaces/chrome";
 import { compare } from "./namespaces/compare";
 import { errors } from "./namespaces/errors";
@@ -31,6 +32,7 @@ export type Lang = "de" | "en";
 
 /** Every namespace, in the order they are merged. */
 const NAMESPACES = [
+  recovery,
   chrome,
   errors,
   operations,
@@ -47,7 +49,7 @@ const NAMESPACES = [
 
 export const DICT = {
   de: {
-    ...chrome.de,
+    ...recovery.de,    ...chrome.de,
     ...errors.de,
     ...operations.de,
     ...net.de,
@@ -61,7 +63,7 @@ export const DICT = {
     ...persist.de,
   },
   en: {
-    ...chrome.en,
+    ...recovery.en,    ...chrome.en,
     ...errors.en,
     ...operations.en,
     ...net.en,

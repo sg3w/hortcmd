@@ -74,6 +74,7 @@ reqwest = { version = "0.13", features = ["stream"] }
 # `hmac =0.13.0-rc.2` festnageln — Cargo kann das nicht vereinen. 0.10.5 ist
 # die neueste auflösbare Version; prüfen, sobald `sspi` das Pre-Release verlässt.
 keepass = { version = "=0.10.5", features = ["save_kdbx4"] }
+fs2 = "0.4.3"
 
 # Windows-spezifisch: die Shell-Eigenschaftenseite (TICKET-015) wird über
 # `ShellExecuteEx` mit dem Verb "properties" geöffnet; dafür werden COM und

@@ -222,6 +222,8 @@ pub mod code {
     pub const FS_TOO_LARGE: &str = "fs.tooLarge";
 
     // --- transfers ---
+    pub const TRANSFER_JOURNAL_LIMIT: &str = "transfer.journalLimit";
+    pub const TRANSFER_JOURNAL_UNAVAILABLE: &str = "transfer.journalUnavailable";
     pub const TRANSFER_CHECKSUM: &str = "transfer.checksum";
     pub const TRANSFER_NO_STAGING: &str = "transfer.noStaging";
     pub const TRANSFER_COMMIT: &str = "transfer.commit";
@@ -292,6 +294,8 @@ pub mod code {
         FS_IO,
         FS_INVALID_NAME,
         FS_TOO_LARGE,
+        TRANSFER_JOURNAL_LIMIT,
+        TRANSFER_JOURNAL_UNAVAILABLE,
         TRANSFER_CHECKSUM,
         TRANSFER_NO_STAGING,
         TRANSFER_COMMIT,
