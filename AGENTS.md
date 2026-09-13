@@ -56,7 +56,15 @@ Avoid:
 
 ## Development
 
-After completing each ticket, create a local Git commit containing only the changes for that ticket. Do not push commits.
+Each ticket must be implemented on its own Git branch, created from the current
+local `main` before starting work. Name it `codex/ticket-<number>-<short-description>`.
+Keep changes scoped to that ticket; use a separate branch for each additional ticket.
+
+After completing a ticket and passing `npm run check`, create a local Git commit
+containing only the changes for that ticket. Switch to `main`, merge the ticket
+branch into it, and remain on `main` until starting the next ticket. If resolving
+merge conflicts changes the code, run `npm run check` again on the merged result.
+Do not merge unfinished tickets. Do not push commits or branches.
 
 Check after changes — one command, the same one CI runs:
 
