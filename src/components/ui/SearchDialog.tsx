@@ -228,13 +228,13 @@ export function SearchDialog() {
           aria-describedby={undefined}
           className="fixed left-1/2 top-1/2 z-50 flex h-[86vh] w-[92vw] max-w-[1000px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-edge bg-panel shadow-2xl"
         >
-          <Dialog.Title className="flex items-center gap-2 border-b border-edge bg-header px-4 py-2 text-text">
+          <Dialog.Title className="flex shrink-0 items-center gap-2 border-b border-edge bg-header px-4 py-2 text-text">
             <SearchIcon size={16} className="text-dim" aria-hidden />
             <span className="text-[13px] font-medium">{t("search.title")}</span>
           </Dialog.Title>
 
           {/* Form */}
-          <div className="flex flex-col gap-3 border-b border-edge p-3">
+          <div className="flex min-h-0 flex-col gap-3 overflow-y-auto border-b border-edge p-3">
             {/* Mode switch */}
             <div className="inline-flex flex-wrap gap-1">
               {MODES.map(({ mode: m, key, Icon }) => (
@@ -377,7 +377,7 @@ export function SearchDialog() {
           {failure && <div role="alert" className="px-3 py-2 text-[12px] text-red-400">{failure}</div>}
 
           {/* Status line */}
-          <div className="flex items-center gap-3 border-b border-edge bg-panel-inactive px-3 py-1 text-[11px] text-dim">
+          <div className="flex shrink-0 items-center gap-3 border-b border-edge bg-panel-inactive px-3 py-1 text-[11px] text-dim">
             <span>
               {hits.length} {t("search.results")}
             </span>

@@ -25,7 +25,7 @@ export function SearchResults({ hits, onReveal }: {
   return <div ref={scrollRef} role="listbox" tabIndex={0}
     aria-label={t("search.results")}
     aria-activedescendant={items.some(v => v.index === active) ? `${id}-${active}` : undefined}
-    className="min-h-0 flex-1 overflow-auto"
+    className="min-h-[80px] flex-1 overflow-auto"
     onKeyDown={event => {
       let next = active;
       switch (event.key) {

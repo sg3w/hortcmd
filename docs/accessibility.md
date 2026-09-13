@@ -208,6 +208,23 @@ outside the window to x=692. The toolbar remains a single row, and the screensho
 confirmed its independent scrollbar and unchanged pane split. Zoom was reset to
 100% afterwards. This verifies this toolbar overflow path, not the entire matrix.
 
+Ticket 090's native search check combined 200% zoom with Large font and icon
+settings in the same 1100×720 window. Before the fix, the hit viewport was only
+39 native pixels high and clipped the first result's parent path. The query form
+now scrolls independently, reserving two complete result rows. The corrected
+viewport measured 161 pixels in DE and EN; a screenshot verified both rows,
+paths and the non-color selection checkmark. Tab reached all query controls and
+the results, including the Search/Suchen button after it scrolled into view.
+End and Enter revealed `english-move.txt` in both languages; an F2 inspection
+confirmed its name and was cancelled with Escape without renaming.
+
+The same setup checked the settings dialog at 200% (990×620, within the window).
+With both size controls explicitly verified Large, Tab reached Export, Import
+and Reset in DE and EN; the Close button remained visible and returned focus to
+Settings. Afterwards the isolated app was set to German, Medium font/icons and
+100% zoom, verified through native control values. Other workflows and the full
+screen-reader matrix remain pending.
+
 ## Translation ownership
 
 German and English UI wording belongs in the typed resources under
