@@ -225,6 +225,16 @@ Settings. Afterwards the isolated app was set to German, Medium font/icons and
 100% zoom, verified through native control values. Other workflows and the full
 screen-reader matrix remain pending.
 
+Ticket 091 checked native overflow menus at 200% in a narrower 700×720 window.
+The DE Commands submenu initially extended outside the window (x=396 against a
+window left edge of x=730). Adaptive overlapping now places it entirely inside,
+at (840,433), size 564×542; a screenshot verified readable labels. Further
+navigation through Special search and back with Left/Escape preserved focus.
+The EN View → Layout submenu also remained inside the viewport, including while
+the window widened to 760 pixels, and returned focus through the same keys.
+At 1100×720 and 100%, adjacent submenu columns still worked. The test restored
+German, 100% and the original window size without invoking a menu command.
+
 ## Translation ownership
 
 German and English UI wording belongs in the typed resources under

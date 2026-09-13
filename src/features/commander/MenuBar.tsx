@@ -49,9 +49,15 @@ import { preload } from "@/components/ui/LazyFeature";
 import { PRELOAD_ON_MENU } from "@/features/lazyFeatures";
 import { formatShortcut } from "@/lib/shortcut";
 import { cn } from "@/lib/cn";
+import { submenuPlacement } from "./menuPlacement";
 
 const contentCls =
-  "z-50 max-h-[80vh] min-w-[240px] overflow-y-auto overflow-x-hidden rounded-md border border-edge bg-panel p-1 shadow-xl";
+  "z-50 max-h-[80vh] overflow-y-auto overflow-x-hidden rounded-md border border-edge bg-panel p-1 shadow-xl";
+
+const menuWidthStyle = {
+  minWidth: "min(240px, calc(100vw - 16px))",
+  maxWidth: "min(400px, calc(100vw - 16px))",
+};
 
 const itemCls =
   "flex cursor-default items-center gap-2 rounded px-2 py-1 text-[12px] text-text outline-none data-[highlighted]:bg-accent-dim data-[disabled]:opacity-40";
@@ -254,7 +260,6 @@ function isEmptyNode(node: MenuNode): boolean {
 
 /** Renders a node list without hidden entries and dangling separators. */
 function Nodes({ nodes }: { nodes: MenuNode[] }): ReactNode {
-  const t = useT();
   const visible = nodes.filter((n) => n.kind === "sep" || !isEmptyNode(n));
   const cleaned = visible.filter((node, i) => {
     if (node.kind !== "sep") return true;
@@ -278,31 +283,47 @@ function Nodes({ nodes }: { nodes: MenuNode[] }): ReactNode {
           case "list":
             return <DynamicList key={`list${i}`} node={node} />;
           case "sub":
-            return (
-              <Menubar.Sub key={node.label}>
-                <Menubar.SubTrigger className={itemCls}>
-                  <Mark />
-                  <span>{t(node.label)}</span>
-                  <ChevronRight
-                    size={13}
-                    className="ml-auto shrink-0 text-dim"
-                    aria-hidden
-                  />
-                </Menubar.SubTrigger>
-                <Menubar.Portal>
-                  <Menubar.SubContent
-                    onKeyDownCapture={markDialogKey}
-                    className={contentCls}
-                  >
-                    <Nodes nodes={node.nodes} />
-                  </Menubar.SubContent>
-                </Menubar.Portal>
-              </Menubar.Sub>
-            );
+            return <Submenu key={node.label} node={node} />;
         }
       })}
     </>
   );
+}
+
+function Submenu({ node }: { node: Extract<MenuNode, { kind: "sub" }> }) {
+  const t = useT();
+  const trigger = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState({ sideOffset: 0, minWidth: 240, maxWidth: 400 });
+  useLayoutEffect(() => {
+    if (!open || !trigger.current) return;
+    const update = () => {
+      const rect = trigger.current?.getBoundingClientRect();
+      if (!rect) return;
+      const next = submenuPlacement(rect, window.innerWidth);
+      setPlacement(old => old.sideOffset === next.sideOffset && old.maxWidth === next.maxWidth
+        ? old : next);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(trigger.current);
+    window.addEventListener("resize", update);
+    return () => { observer.disconnect(); window.removeEventListener("resize", update); };
+  }, [open]);
+  return <Menubar.Sub open={open} onOpenChange={setOpen}>
+    <Menubar.SubTrigger ref={trigger} className={itemCls}>
+      <Mark />
+      <span>{t(node.label)}</span>
+      <ChevronRight size={13} className="ml-auto shrink-0 text-dim" aria-hidden />
+    </Menubar.SubTrigger>
+    <Menubar.Portal>
+      <Menubar.SubContent onKeyDownCapture={markDialogKey} className={contentCls}
+        collisionPadding={8} sideOffset={placement.sideOffset}
+        style={{ minWidth: placement.minWidth, maxWidth: placement.maxWidth }}>
+        <Nodes nodes={node.nodes} />
+      </Menubar.SubContent>
+    </Menubar.Portal>
+  </Menubar.Sub>;
 }
 
 interface CategoryProps {
@@ -333,6 +354,8 @@ function Category({ cat, className, triggerRef }: CategoryProps) {
         <Menubar.Content
           align="start"
           sideOffset={4}
+          collisionPadding={8}
+          style={menuWidthStyle}
           onKeyDownCapture={markDialogKey}
           className={contentCls}
         >
