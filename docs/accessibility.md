@@ -235,6 +235,22 @@ the window widened to 760 pixels, and returned focus through the same keys.
 At 1100×720 and 100%, adjacent submenu columns still worked. The test restored
 German, 100% and the original window size without invoking a menu command.
 
+At revision `0faa78e`, native DE/EN rename and trash-confirmation dialogs were
+checked at 200% in the 1100×720 window. F2 opened `english-move.txt` with only
+`english-move` selected, preserving the extension. The name input measured
+772×60 native pixels; both action buttons were inside the window. Tab reached
+Cancel/Abbrechen, and Enter cancelled. F8 then opened the trash confirmation;
+Shift-Tab reached Cancel/Abbrechen and Enter cancelled that as well. In German,
+these actions were invoked from the file grid and returned to an `AXRow`; in
+English they were invoked while the Settings toolbar button held focus and
+returned to Settings. The English trash-dialog screenshot confirmed the complete
+message, permanent-delete hint, action and Cancel button within the window.
+
+All three fixture filenames and SHA-256 content hashes matched before and after
+the checks. The app was returned to German and 100% with no dialog open. This
+establishes these zoomed dialog and cancellation paths; it does not establish a
+successful native trash operation or additional screen-reader speech coverage.
+
 ## Translation ownership
 
 German and English UI wording belongs in the typed resources under
