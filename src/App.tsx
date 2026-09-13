@@ -30,6 +30,7 @@ import { notify } from "@/store/noticeStore";
 import type { ThemeMode } from "@/lib/fileColors";
 import { useKeyboard } from "@/features/commander/useKeyboard";
 import { useNativeMenu } from "@/features/commander/nativeMenu";
+import { useNativeZoom } from "@/features/commander/useNativeZoom";
 import {
   confirmLeftovers,
   handleExtractDone,
@@ -69,6 +70,7 @@ export default function App() {
 
   useKeyboard();
   useNativeMenu();
+  useNativeZoom();
 
   const startSplitDrag = (e: MouseEvent) => {
     e.preventDefault();

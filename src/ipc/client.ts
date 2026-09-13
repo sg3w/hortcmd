@@ -36,3 +36,4 @@ export * from "./domains/transfers";
 export * from "./domains/mcp";
 
 export * from "./domains/refresh";
+export * from "./domains/window";

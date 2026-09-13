@@ -180,6 +180,25 @@ file was empty, and an exact service/account keychain lookup returned item-not-f
 run directory were removed. The app returned to German and the previous local
 fixture directory. No test credentials are included in these test notes.
 
+## Native page zoom (ticket 088)
+
+The native View menu provides Zoom in, Zoom out and Actual size (100%). Use Cmd
+on macOS or Ctrl on Windows/Linux with main-keyboard Plus/Equals, Minus or Zero.
+Zoom changes in 25-percentage-point steps between 50% and 300%; Zero restores
+100%. It works inside dialogs and terminals without sending the zoom key to a
+remote shell. Numeric-keypad selection shortcuts retain their existing meaning.
+Browser builds use their browser's own zoom controls. Font/icon preferences are
+independent of page zoom; page zoom starts at 100% on launch.
+
+The 2026-09-13 macOS test bundle with ticket 088 changes demonstrated actual
+native enlargement at a fixed 1100×720 window size: the Settings toolbar button
+grew from 25×25 to 50×50 at 200%. The View-menu command and physical Cmd-Plus on
+the German keyboard both changed zoom. Settings opened at 200%, and Cmd-Minus
+and Cmd-0 worked within it while General kept focus. Escape returned to Settings
+at 25×25 after reset. The test left the app at 100% with the dialog closed.
+This proves native page zoom and these interactions; the complete layout,
+screen-reader and Windows/Linux matrix below remains pending.
+
 ## Translation ownership
 
 German and English UI wording belongs in the typed resources under

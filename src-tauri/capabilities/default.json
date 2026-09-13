@@ -1,10 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Berechtigungen des Hauptfensters. Jeder Eintrag ist von einer Funktion belegt (TICKET-030): outer-position/inner-size/scale-factor lesen und set-position/set-size schreiben die gespeicherte Fenstergeometrie (lib/windowState.ts); close geht den regulären Schließweg (Alt+F4 / Beenden), destroy erzwingt das Schließen, wenn der Nutzer laufende Operationen verwirft (OperationDialogs.tsx).",
+  "description": "Berechtigungen des Hauptfensters. set-webview-zoom vergrößert den Seiteninhalt über Menü und Tastatur (useNativeZoom.ts, TICKET-088). Jeder Eintrag ist von einer Funktion belegt (TICKET-030): outer-position/inner-size/scale-factor lesen und set-position/set-size schreiben die gespeicherte Fenstergeometrie (lib/windowState.ts); close geht den regulären Schließweg (Alt+F4 / Beenden), destroy erzwingt das Schließen, wenn der Nutzer laufende Operationen verwirft (OperationDialogs.tsx).",
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:webview:allow-set-webview-zoom",
     "core:window:allow-outer-position",
     "core:window:allow-inner-size",
     "core:window:allow-scale-factor",

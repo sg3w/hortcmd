@@ -24,7 +24,8 @@ import { isMacOS } from "@/lib/platform";
 import { schemeOf } from "@/lib/path";
 import type { Capability } from "@/ipc/bindings";
 import { capState, guard, locationLive, pairState } from "./guard";
-import { openPath, openTerminal } from "@/ipc/client";
+import { hasTauri, openPath, openTerminal } from "@/ipc/client";
+import { changePageZoom } from "./useNativeZoom";
 import {
   panelOf,
   usePanes,
@@ -729,6 +730,24 @@ export const COMMANDS = {
     value: "details",
     run: () => usePanes.getState().setViewMode(activeSide(), "details"),
   },
+  "view.zoomIn": {
+    label: "zoom.in",
+    shortcut: { mods: ["Mod"], key: "+" },
+    run: () => void changePageZoom("in"),
+    state: () => ({ hidden: !hasTauri }),
+  },
+  "view.zoomOut": {
+    label: "zoom.out",
+    shortcut: { mods: ["Mod"], key: "-" },
+    run: () => void changePageZoom("out"),
+    state: () => ({ hidden: !hasTauri }),
+  },
+  "view.zoomReset": {
+    label: "zoom.reset",
+    shortcut: { mods: ["Mod"], key: "0" },
+    run: () => void changePageZoom("reset"),
+    state: () => ({ hidden: !hasTauri }),
+  },
   "view.list": {
     label: "view.list",
     value: "list",
@@ -1306,6 +1325,10 @@ export const MENUS: MenuCategory[] = [
     id: "view",
     label: "menu.view",
     nodes: [
+      item("view.zoomIn"),
+      item("view.zoomOut"),
+      item("view.zoomReset"),
+      sep(),
       {
         kind: "sub",
         label: "menu.view.mode",

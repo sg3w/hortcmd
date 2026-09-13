@@ -11,6 +11,10 @@ import { ns } from "./ns";
 export const chrome = ns(
   {
   "menu.files": "Dateien",
+  "zoom.in": "Vergrößern",
+  "zoom.out": "Verkleinern",
+  "zoom.reset": "Originalgröße (100 %)",
+  "zoom.failed": "Die Inhaltsvergrößerung konnte nicht geändert werden.",
   "pane.width": "Breite des linken Dateifensters",
   "command.input": "Kommandozeile",
   "command.unavailable": "Die Ausführung von Kommandos ist noch nicht verfügbar.",
@@ -219,6 +223,10 @@ export const chrome = ns(
   },
   {
   "menu.files": "Files",
+  "zoom.in": "Zoom in",
+  "zoom.out": "Zoom out",
+  "zoom.reset": "Actual size (100%)",
+  "zoom.failed": "The page zoom could not be changed.",
   "pane.width": "Left file pane width",
   "command.input": "Command line",
   "command.unavailable": "Command execution is not available yet.",
