@@ -60,6 +60,12 @@ do not replace the in-window menu with a full native macOS application menu.
 
 ## Tests
 
+The user moved native Windows/NVDA and Linux/Orca manual verification to
+[TICKET-250](250-windows-linux-screen-reader-verification.md) on 2026-09-13.
+Those checks remain unverified but no longer block this ticket. The macOS manual
+checks and the shared automated accessibility/localization requirements remain
+in scope here.
+
 Current evidence is recorded in `docs/accessibility.md`. The loaded shell,
 representative dialogs, menus, virtual lists/tree/tabs and terminal controls pass
 DE/EN semantic axe checks. This completes the automated-violation criterion,
@@ -76,8 +82,8 @@ not the manual screen-reader or actual-zoom requirements. Those remain open.
   native macOS text editing, and duplicate native/WebView shortcut dispatch.
 - Snapshot translation-key parity and render representative long strings in both
   languages.
-- Manually test current VoiceOver, NVDA, and Orca versions using a documented
-  smoke-test script.
+- Manually test VoiceOver using the documented smoke-test script. The NVDA and
+  Orca runs are tracked in TICKET-250 at the user's request.
 - Test 200% zoom, reduced motion, high contrast, and light/dark system changes.
 
 ## Definition of Done

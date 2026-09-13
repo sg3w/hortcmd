@@ -407,14 +407,19 @@ or actual screen-reader speech; that requires the manual terminal workflow below
 
 ## Manual verification matrix
 
+The user deferred Windows/NVDA and Linux/Orca manual verification to
+[ticket 250](../tickets/250-windows-linux-screen-reader-verification.md) on
+2026-09-13. These rows are unverified follow-up work, not acceptance blockers for
+043. The macOS row remains part of 043.
+
 Record OS, application revision, screen-reader version, date, language, input
 method and observed result for every run. Execute in both German and English:
 
 | Platform | Native surface | Screen reader | Status |
 | --- | --- | --- | --- |
 | macOS | Tauri WebView and minimal native app menu | VoiceOver | Partial: settings DE/EN output verified; remaining smoke script pending |
-| Windows | Tauri WebView | NVDA | Pending |
-| Linux | Tauri WebView | Orca | Pending |
+| Windows | Tauri WebView | NVDA | Deferred by user to ticket 250; unverified |
+| Linux | Tauri WebView | Orca | Deferred by user to ticket 250; unverified |
 
 1. Start with two disposable test folders and a few named files. Navigate both
    panes, mark multiple files, change sort and traverse tabs and the directory
