@@ -12,7 +12,7 @@
 // loading in `panesStore.ts` and tested directly.
 // ============================================================
 
-import type { DirEntry, GitStatus } from "@/ipc/bindings";
+import type { AppError, DirEntry, GitStatus } from "@/ipc/bindings";
 import { splitName } from "@/lib/format";
 import { isRoot } from "@/lib/path";
 import { useSettings } from "../settingsStore";
@@ -45,6 +45,12 @@ export interface Row extends DirEntry {
 }
 
 export interface TabState {
+  id: string;
+  request: number;
+  loading: boolean;
+  loadError: AppError | string | null;
+  freshness: "current" | "stale" | "offline" | "manual";
+  refreshError: AppError | null;
   path: string;
   /** While browsing an archive: path of the .zip file, otherwise null. */
   archive: string | null;
@@ -82,8 +88,16 @@ export interface SideState {
 
 export const COLLATOR = new Intl.Collator("de", { numeric: true, sensitivity: "base" });
 
+let nextTabId = 0;
+
 export function newTab(path = ""): TabState {
   return {
+    id: `tab-${++nextTabId}`,
+    request: 0,
+    loading: false,
+    loadError: null,
+    freshness: "current",
+    refreshError: null,
     path,
     archive: null,
     raw: [],

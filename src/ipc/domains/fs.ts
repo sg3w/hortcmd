@@ -102,12 +102,6 @@ export async function readPreview(
   return invoke<Preview>("read_preview", { path, maxBytes });
 }
 
-/** Defines which folders the watcher observes (the currently displayed ones). */
-export function setWatched(paths: string[]): void {
-  if (!hasTauri) return;
-  void invoke<void>("set_watched", { paths });
-}
-
 /**
  * Opens a file with the default program (F4). Rejects when the path cannot be
  * opened — a dangling symlink, for instance — so the caller can report it

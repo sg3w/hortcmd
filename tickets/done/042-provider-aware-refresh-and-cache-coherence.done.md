@@ -44,14 +44,14 @@ notifications.
 
 ## Acceptance Criteria
 
-- [ ] Remote addresses are never passed to the OS filesystem watcher.
-- [ ] Navigating rapidly cannot display a late result from an earlier location.
-- [ ] Two panes or tabs at the same location share backend work without losing
+- [x] Remote addresses are never passed to the OS filesystem watcher.
+- [x] Navigating rapidly cannot display a late result from an earlier location.
+- [x] Two panes or tabs at the same location share backend work without losing
       independent UI state.
-- [ ] Local external changes appear within the documented debounce window.
-- [ ] Remote refresh obeys capabilities, visibility, backoff, and reconnect state.
-- [ ] Watch and polling failures are visible and actionable without modal spam.
-- [ ] All subscriptions, timers, and in-flight requests are released when unused.
+- [x] Local external changes appear within the documented debounce window.
+- [x] Remote refresh obeys capabilities, visibility, backoff, and reconnect state.
+- [x] Watch and polling failures are visible and actionable without modal spam.
+- [x] All subscriptions, timers, and in-flight requests are released when unused.
 
 ## Tests
 
@@ -73,3 +73,29 @@ notifications.
 - UI state remains stable across background refreshes.
 - Provider freshness guarantees and limitations are documented.
 - Rename this file to `042-provider-aware-refresh-and-cache-coherence.done.md`.
+
+
+## Completion evidence — 2026-09-13
+
+- Rust subscriptions own canonical local watches and explicit remote polling;
+  local setup failures, overflow, disconnects and read failures are visible.
+- Stable tab IDs and request generations cover directory/archive navigation,
+  refresh, closed tabs and navigation during asynchronous session restoration.
+- Concurrent reads share the bounded Rust service; remote provider identity is
+  checked before publishing. Queued orphaned refreshes are cancelled; running
+  synchronous reads drain under the worker bound without updating closed tabs.
+- Tests cover out-of-order replies, independent selection/cursor, visibility and
+  teardown, backoff/reconnect, notification overflow, rename paths, stale work
+  completions and a real native filesystem event.
+- The native test runs in the existing Linux/macOS/Windows CI matrix. Executed
+  locally on macOS; no native Windows/Linux result is claimed here.
+- Docker harness retry after moving synchronous fixture connections off the async
+  test thread passed all 20 tests, including the new shared-directory lifecycle
+  test on seven real remote transports. All temporary services were removed.
+- Policy timings, resource limits, failure behavior and synchronous cancellation
+  limits are documented in `docs/directory-refresh.md`.
+- Final `npm run check`: 387 Rust tests passed, 25 external tests ignored,
+  378 frontend tests passed; formatting, strict Clippy, generated bindings,
+  boundaries, documentation, TypeScript, build and bundle budget passed.
+- Successful remote harness run: `c325cc` (20/20). The earlier fixture-only
+  failure in `4478f5` was not counted as a successful run.

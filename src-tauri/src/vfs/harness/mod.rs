@@ -32,6 +32,7 @@
 mod conformance;
 mod failure;
 mod mcp;
+mod refresh;
 mod transfers;
 
 use super::Provider;

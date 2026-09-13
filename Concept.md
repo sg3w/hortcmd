@@ -208,7 +208,7 @@ commands/fs/
 │                            (one visible level of two panes, provider-neutral; 059)
 ├── selection.rs             save_selection/load_selection: versioned JSON selection
 │                            files incl. format validation and limits (TICKET-059)
-└── watch.rs                 set_watched (directory watching, notify)
+└── watch.rs                 refresh subscriptions (directory watching, notify)
 ```
 
 ---
@@ -669,7 +669,10 @@ the running-transfer guard from TICKET-004 still applies.
 | `list_archive` | `archive, inner` | `DirListing` | ✅ |
 | `extract_entries` | `id, archive, base, names[], destDir` | – (events) | ✅ |
 | `create_archive` | `id, sources[], destZip` | – (events) | ✅ |
-| `set_watched` | `paths[]` | – (events) | ✅ |
+| `refresh_subscribe` | `subscriptions[]` (tab ID, generation, path) | – | ✅ |
+| `refresh_poll` | `visible` | `RefreshBatch` (status and due work) | ✅ |
+| `refresh_read` | `key, serial` | `DirListing` (cancellable shared read) | ✅ |
+| `refresh_finish` | `key, serial, error?` | – | ✅ |
 | `compare_levels` | `left[], right[]` (`LevelEntry`) | `LevelDiff[]` (TICKET-059) | ✅ |
 | `save_selection` | `path, location, entries[], overwrite` | `boolean` (false = exists) | ✅ |
 | `load_selection` | `path` | `SelectionFile` (validated) | ✅ |

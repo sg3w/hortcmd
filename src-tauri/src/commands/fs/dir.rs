@@ -3,7 +3,6 @@
 // ============================================================
 
 use crate::errors::AppResult;
-use crate::vfs;
 use serde::Serialize;
 use std::path::Path;
 use ts_rs::TS;
@@ -12,7 +11,7 @@ use ts_rs::TS;
 // hence "../../src/ipc/bindings/" for the frontend directory in the repo root.
 // u64 is deliberately declared as TS `number`: over Tauri's JSON IPC a
 // JS number arrives (not bigint), matching the frontend code.
-#[derive(Serialize, TS)]
+#[derive(Clone, Serialize, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct DirEntry {
     pub name: String,
@@ -32,7 +31,7 @@ pub struct DirEntry {
     pub executable: bool,
 }
 
-#[derive(Serialize, TS)]
+#[derive(Clone, Serialize, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct DirListing {
     // Canonical/absolute path of the read directory.
@@ -40,7 +39,7 @@ pub struct DirListing {
     pub entries: Vec<DirEntry>,
 }
 
-#[derive(Serialize, TS)]
+#[derive(Clone, Serialize, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct Drive {
     pub name: String,
@@ -55,9 +54,8 @@ pub struct Drive {
 /// the VFS registry, so the command works schema-agnostically; the
 /// `local` provider handles ordinary file-system paths unchanged.
 #[tauri::command]
-pub fn list_dir(path: String) -> AppResult<DirListing> {
-    let (provider, resolved) = vfs::resolve(&path)?;
-    provider.list(&resolved)
+pub async fn list_dir(path: String) -> AppResult<DirListing> {
+    super::listings::read(path).await
 }
 
 /// Lists drives or mount points along with their storage usage.

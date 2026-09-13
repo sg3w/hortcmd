@@ -10,14 +10,12 @@ import {
   hasTauri,
   homeDir,
   listDrives,
-  onFsChanged,
   onLeftovers,
   onFsCollision,
   onFsDone,
   onFsProgress,
   onGitStatusReady,
   onNetState,
-  setWatched,
 } from "@/ipc/client";
 import { panelOf, usePanes } from "@/store/panesStore";
 import { useNet } from "@/features/net/netStore";
@@ -50,9 +48,12 @@ import { TransferTray, TransferWindow } from "@/components/ui/TransferView";
 import { LazyDialogs } from "@/features/LazyDialogs";
 import { useFileColorVars } from "@/store/fileColorRules";
 
+import { useRefresh } from "@/features/panel/useRefresh";
+
 import { McpRuntime } from "@/features/settings/McpRuntime";
 
 export default function App() {
+  useRefresh();
   const [drives, setDrives] = useState<Drive[]>([]);
   const [ready, setReady] = useState(false);
   const [resolvedTheme, setResolvedTheme] = useState<ThemeMode>("dark");
@@ -183,52 +184,6 @@ export default function App() {
       window.clearTimeout(timer);
     };
   }, [ready]);
-
-  // Directory watcher: observe the displayed real folders and reload
-  // automatically on external changes (debounced, cursor-preserving).
-  useEffect(() => {
-    const timers = new Map<string, number>();
-
-    const watchedPaths = () => {
-      const s = usePanes.getState();
-      const paths = (["left", "right"] as const)
-        .map((side) => panelOf(s, side))
-        .filter((t) => !t.archive && t.path)
-        .map((t) => t.path);
-      return [...new Set(paths)];
-    };
-
-    let lastKey = "";
-    const syncWatched = () => {
-      const paths = watchedPaths();
-      const key = paths.join("|");
-      if (key !== lastKey) {
-        lastKey = key;
-        setWatched(paths);
-      }
-    };
-    syncWatched();
-    const unsub = usePanes.subscribe(syncWatched);
-
-    const offChanged = onFsChanged((dir) => {
-      const s = usePanes.getState();
-      (["left", "right"] as const).forEach((side) => {
-        const t = panelOf(s, side);
-        if (t.archive || t.path !== dir) return;
-        window.clearTimeout(timers.get(side));
-        timers.set(
-          side,
-          window.setTimeout(() => usePanes.getState().refresh(side), 250),
-        );
-      });
-    });
-
-    return () => {
-      unsub();
-      offChanged();
-      timers.forEach((id) => window.clearTimeout(id));
-    };
-  }, []);
 
   // The Git status is loaded asynchronously in the background in the backend; as soon as a
   // result arrives, apply it to all matching tabs.

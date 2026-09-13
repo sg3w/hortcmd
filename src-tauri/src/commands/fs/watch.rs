@@ -1,39 +1,33 @@
-// ============================================================
-// Directory watching: observes the currently displayed
-// folders and reports external changes via the "fs-changed" event.
-// ============================================================
+//! Thin IPC adapters for the directory refresh service.
+use super::refresh::subscriptions::{self, RefreshBatch, RefreshSubscription};
+use crate::errors::{code, AppError, AppResult};
 
-use notify::{recommended_watcher, RecommendedWatcher, RecursiveMode, Watcher};
-use std::path::Path;
-use std::sync::{Mutex, OnceLock};
-use tauri::{AppHandle, Emitter};
-
-// A single watcher; rebuilt on every set_watched
-// (the old one is automatically dropped/stopped on replacement).
-static WATCHER: OnceLock<Mutex<Option<RecommendedWatcher>>> = OnceLock::new();
-fn slot() -> &'static Mutex<Option<RecommendedWatcher>> {
-    WATCHER.get_or_init(|| Mutex::new(None))
+fn stopped(error: tokio::task::JoinError) -> AppError {
+    AppError::new(code::FS_IO)
+        .op("directory-refresh")
+        .detail(error)
 }
 
-/// Watches exactly the given folders (non-recursive). On a change,
-/// `fs-changed` is sent with the affected folder path.
 #[tauri::command]
-pub fn set_watched(app: AppHandle, paths: Vec<String>) {
-    let app2 = app.clone();
-    let mut watcher = match recommended_watcher(move |res: notify::Result<notify::Event>| {
-        if let Ok(event) = res {
-            for p in event.paths {
-                let dir = p.parent().unwrap_or(p.as_path());
-                let _ = app2.emit("fs-changed", dir.to_string_lossy().into_owned());
-            }
-        }
-    }) {
-        Ok(w) => w,
-        Err(_) => return,
-    };
+pub async fn refresh_subscribe(subscriptions: Vec<RefreshSubscription>) -> AppResult<()> {
+    tokio::task::spawn_blocking(move || subscriptions::subscribe(subscriptions))
+        .await
+        .map_err(stopped)?
+}
 
-    for p in &paths {
-        let _ = watcher.watch(Path::new(p), RecursiveMode::NonRecursive);
-    }
-    *slot().lock().unwrap() = Some(watcher);
+#[tauri::command]
+pub async fn refresh_poll(visible: bool) -> AppResult<RefreshBatch> {
+    tokio::task::spawn_blocking(move || subscriptions::poll(visible))
+        .await
+        .map_err(stopped)
+}
+
+#[tauri::command]
+pub async fn refresh_read(key: String, serial: u32) -> AppResult<super::dir::DirListing> {
+    subscriptions::read(key, serial).await
+}
+
+#[tauri::command]
+pub fn refresh_finish(key: String, serial: u32, error: Option<String>) {
+    subscriptions::finish(key, serial, error);
 }

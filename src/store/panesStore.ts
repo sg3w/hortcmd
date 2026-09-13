@@ -11,7 +11,10 @@
 // ============================================================
 
 import { create } from "zustand";
-import type { GitStatus } from "@/ipc/bindings";
+import { asAppError } from "@/lib/appError";
+import type { RefreshStatus } from "@/ipc/bindings/RefreshStatus";
+import type { RefreshSubscription } from "@/ipc/bindings/RefreshSubscription";
+import type { DirListing, GitStatus } from "@/ipc/bindings";
 import { homeDir, listArchive, listDir, requestGitStatus } from "@/ipc/client";
 import type { SavedSession, SavedSide } from "./sessionStore";
 import { globToRegExp } from "@/lib/glob";
@@ -170,6 +173,67 @@ export function panelOf(state: PanesStore, side: Side): TabState {
   return state[side].tabs[state[side].activeTab];
 }
 
+interface RequestTarget { side: Side; id: string; request: number }
+
+/** Response ownership belongs to a tab and request, never the active index. */
+function beginRequest(side: Side, navigation: boolean): RequestTarget | undefined {
+  const tab = panelOf(usePanes.getState(), side);
+  if (!navigation && tab.loading) return;
+  const target = { side, id: tab.id, request: tab.request + 1 };
+  usePanes.setState(withActiveTab(usePanes.getState(), side, t => ({
+    ...t, request: target.request, loading: navigation, loadError: null,
+  })));
+  return target;
+}
+
+function applyRequest(target: RequestTarget, fn: (tab: TabState) => TabState): boolean {
+  let applied = false;
+  usePanes.setState(state => {
+    const side = state[target.side];
+    const index = side.tabs.findIndex(t => t.id === target.id && t.request === target.request);
+    if (index < 0) return state;
+    const tabs = side.tabs.slice();
+    const updated = fn(tabs[index]);
+    applied = true;
+    if (updated === tabs[index]) return state;
+    tabs[index] = updated;
+    return { [target.side]: { ...side, tabs } };
+  });
+  return applied;
+}
+
+function requestFailed(target: RequestTarget, error: unknown) {
+  applyRequest(target, t => ({ ...t, loading: false, loadError: asAppError(error) ?? String(error) }));
+}
+
+/** Backend work carries the generation captured before its filesystem read. */
+export function applyRefreshResult(target: RefreshSubscription, listing: DirListing | null, error: unknown = null) {
+  for (const side of ["left", "right"] as const) {
+    applyRequest({ side, id: target.id, request: target.generation }, tab => {
+      if (tab.loading || tab.archive || tab.path !== target.path) return tab;
+      if (!listing) return { ...tab, loadError: asAppError(error) ?? String(error), freshness: "stale" };
+      const entries = rebuildEntries(listing.entries, listing.path, tab.sort, false, tab.filter);
+      const names = new Set(entries.map(entry => entry.name));
+      return { ...tab, raw: listing.entries, entries, loadError: null,
+        freshness: "current", refreshError: null, compareHidden: null,
+        cursor: cursorFor(entries, tab.entries[tab.cursor]?.name, tab.cursor),
+        selected: new Set([...tab.selected].filter(name => names.has(name))), shiftBase: null };
+    });
+  }
+}
+
+export function applyRefreshStatus(status: RefreshStatus) {
+  for (const target of status.targets) {
+    for (const side of ["left", "right"] as const) {
+      applyRequest({ side, id: target.id, request: target.generation }, tab => {
+        const freshness = !status.connected ? "offline" : status.mode === "manual" ? "manual" : status.error ? "stale" : "current";
+        if (tab.freshness === freshness && tab.refreshError?.id === status.error?.id) return tab;
+        return { ...tab, freshness, refreshError: status.error };
+      });
+    }
+  }
+}
+
 export const usePanes = create<PanesStore>((set, get) => ({
   active: "left",
   left: { tabs: [newTab()], activeTab: 0, viewMode: "details", gridCols: 1 },
@@ -194,18 +258,9 @@ export const usePanes = create<PanesStore>((set, get) => ({
 
   addTab: async (side, path) => {
     const s = get()[side];
-    const src = s.tabs[s.activeTab];
-    const target = path ?? src.path;
-    const res = await listDir(target);
-    const tab = newTab(res.path);
-    tab.raw = res.entries;
-    tab.entries = rebuildEntries(res.entries, res.path, tab.sort, false);
-    set({
-      active: side,
-      [side]: { ...s, tabs: [...s.tabs, tab], activeTab: s.tabs.length },
-    } as Pick<PanesStore, "active" | Side>);
-    pushRecent(res.path);
-    get().loadGit(side);
+    const target = path ?? s.tabs[s.activeTab].path;
+    set({ active: side, [side]: { ...s, tabs: [...s.tabs, newTab()], activeTab: s.tabs.length } });
+    await get().loadDir(side, target);
   },
 
   closeTab: (side, index) => {
@@ -236,9 +291,10 @@ export const usePanes = create<PanesStore>((set, get) => ({
     // way (TICKET-031), so the menus and the command bar have their
     // answer by the time the folder is on screen.
     primeCaps(path);
-    const res = await listDir(path);
-    set(
-      withActiveTab(get(), side, (t) => {
+    const target = beginRequest(side, true)!;
+    let res;
+    try { res = await listDir(path); } catch (error) { requestFailed(target, error); return; }
+    const applied = applyRequest(target, (t) => {
         let history = t.history;
         let historyIndex = t.historyIndex;
         // Put the new folder into the history (discard the forward branch);
@@ -250,6 +306,10 @@ export const usePanes = create<PanesStore>((set, get) => ({
         return {
           ...t,
           path: res.path,
+          loading: false,
+          loadError: null,
+          freshness: "current",
+          refreshError: null,
           archive: null,
           raw: res.entries,
           filter: "", // Navigation setzt den Schnellfilter zurück
@@ -266,9 +326,10 @@ export const usePanes = create<PanesStore>((set, get) => ({
           history,
           historyIndex,
         };
-      }),
-    );
+      });
+    if (!applied) return;
     if (record) pushRecent(res.path);
+    if (panelOf(get(), side).id !== target.id) return;
     get().clearCompareFilter();
     get().loadGit(side);
   },
@@ -294,15 +355,18 @@ export const usePanes = create<PanesStore>((set, get) => ({
   },
 
   loadArchive: async (side, archive, inner) => {
+    const target = beginRequest(side, true)!;
     let res;
     try {
       res = await listArchive(archive, inner, archivePassword(archive));
     } catch (e) {
+      if (!applyRequest(target, t => ({ ...t, loading: false, loadError: String(e) }))) return;
       const msg = String(e);
       if (isPasswordError(msg)) {
         // Encrypted archive: ask for the password and load again.
         promptArchivePassword(archive, msg.includes(PW_WRONG), () => {
-          void get().loadArchive(side, archive, inner);
+          const current = panelOf(get(), side);
+          if (current.id === target.id && current.request === target.request) void get().loadArchive(side, archive, inner);
         });
         return;
       }
@@ -314,9 +378,10 @@ export const usePanes = create<PanesStore>((set, get) => ({
       });
       return;
     }
-    set(
-      withActiveTab(get(), side, (t) => ({
+    const applied = applyRequest(target, (t) => ({
         ...t,
+        loading: false,
+        loadError: null,
         path: res.path,
         archive,
         raw: res.entries,
@@ -329,17 +394,18 @@ export const usePanes = create<PanesStore>((set, get) => ({
         snapshot: null,
         compareHidden: null,
         git: null,
-      })),
-    );
-    get().clearCompareFilter();
+      }));
+    if (applied && panelOf(get(), side).id === target.id) get().clearCompareFilter();
   },
 
   refresh: async (side, opts) => {
     const panel = get()[side].tabs[get()[side].activeTab];
     if (panel.archive) return; // Archive werden nicht extern überwacht
-    const res = await listDir(panel.path);
-    set(
-      withActiveTab(get(), side, (t) => {
+    const target = beginRequest(side, false);
+    if (!target) return;
+    let res;
+    try { res = await listDir(panel.path); } catch (error) { requestFailed(target, error); return; }
+    const applied = applyRequest(target, (t) => {
         // A refresh means the contents may have moved on, so a
         // comparison result from before it is dropped rather than left
         // hiding entries that might no longer be equal (TICKET-059).
@@ -371,13 +437,13 @@ export const usePanes = create<PanesStore>((set, get) => ({
           ...t,
           raw: res.entries,
           entries,
-          cursor: clamp(t.cursor, 0, Math.max(0, entries.length - 1)),
+          cursor: cursorFor(entries, t.entries[t.cursor]?.name, t.cursor),
           selected: new Set([...t.selected].filter((n) => names.has(n))),
           shiftBase: null,
           compareHidden: null,
         };
-      }),
-    );
+      });
+    if (!applied || panelOf(get(), side).id !== target.id) return;
     get().clearCompareFilter();
     get().loadGit(side);
   },
@@ -700,7 +766,7 @@ export const usePanes = create<PanesStore>((set, get) => ({
         return {
           ...t,
           entries,
-          cursor: clamp(t.cursor, 0, Math.max(0, entries.length - 1)),
+          cursor: cursorFor(entries, t.entries[t.cursor]?.name, t.cursor),
           selected: new Set<string>(),
           shiftBase: null,
         };
@@ -710,6 +776,7 @@ export const usePanes = create<PanesStore>((set, get) => ({
   },
 
   restoreSession: async (session) => {
+    const initial = get();
     // Build a loaded tab from a folder path (null on error).
     const buildTab = async (path: string): Promise<TabState | null> => {
       try {
@@ -747,7 +814,12 @@ export const usePanes = create<PanesStore>((set, get) => ({
       buildSide(session.left, home),
       buildSide(session.right, home),
     ]);
-    set({ left, right, active: session.active });
+    const current = get();
+    set({
+      left: current.left === initial.left ? left : current.left,
+      right: current.right === initial.right ? right : current.right,
+      active: current === initial ? session.active : current.active,
+    });
     get().loadGit("left");
     get().loadGit("right");
   },

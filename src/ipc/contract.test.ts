@@ -205,7 +205,7 @@ describe("where the two modes differ, on purpose", () => {
     const c = await client();
     await expect(c.netDisconnect("p1")).resolves.toBeUndefined();
     await expect(c.netCancelConnect("conn-1")).resolves.toBeUndefined();
-    expect(() => c.setWatched(["/a"])).not.toThrow();
+    await expect(c.refreshSubscribe([{id:"tab",generation:0,path:"/a"}])).resolves.toBeUndefined();
     expect(() => c.cancelTransfer("t1")).not.toThrow();
   });
 });

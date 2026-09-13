@@ -17,12 +17,16 @@ import { GitCompareArrows, Info, X } from "lucide-react";
 import { panelOf, usePanes, type Side } from "@/store/panesStore";
 import { fillVars, useNotices } from "@/store/noticeStore";
 import { useT } from "@/store/settingsStore";
+import { describeErrorFull } from "@/store/errorText";
 import { cn } from "@/lib/cn";
 
 /** How long a result message stays before it fades out by itself. */
 const NOTICE_MS = 8000;
 
 export function PaneNotice({ side }: { side: Side }) {
+  const freshness = usePanes(s => panelOf(s, side).freshness);
+  const loadError = usePanes(s => panelOf(s, side).loadError);
+  const refreshError = usePanes(s => panelOf(s, side).refreshError);
   const hidden = usePanes((s) => panelOf(s, side).compareHidden);
   const clearCompare = usePanes((s) => s.clearCompareFilter);
   const notice = useNotices((s) => s[side]);
@@ -37,10 +41,18 @@ export function PaneNotice({ side }: { side: Side }) {
     return () => window.clearTimeout(id);
   }, [notice?.seq, notice, side, clearNotice]);
 
-  if (!hidden && !notice) return null;
+  const stale = freshness !== "current" || loadError || refreshError;
+  if (!hidden && !notice && !stale) return null;
 
   return (
     <div className="flex-shrink-0 border-t border-edge">
+      {stale && <div role="status" className="flex items-center gap-2 bg-header px-2 py-1 text-[12px]">
+        <span className="min-w-0 flex-1 text-dim">
+          {t(freshness === "offline" ? "refresh.offline" : freshness === "manual" ? "refresh.manual" : "refresh.stale")}
+          {(loadError || refreshError) ? ` ${describeErrorFull(loadError || refreshError)}` : ""}
+        </span>
+        <button className="shrink-0 text-accent" onClick={() => void usePanes.getState().refresh(side)}>{t("tb.refresh")}</button>
+      </div>}
       {hidden && (
         <div className="flex items-center gap-2 bg-accent-dim px-2 py-1 text-[12px]">
           <GitCompareArrows size={13} className="shrink-0 text-accent" />

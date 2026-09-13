@@ -5,6 +5,7 @@ Two panes, a function-key bar (F3–F8), tabs, and the same interface for local
 folders and remote servers.
 
 Architecture and design details: see [Concept.md](Concept.md).
+Directory freshness and resource limits: [directory refresh](docs/directory-refresh.md).
 Contributing: see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## What it does
