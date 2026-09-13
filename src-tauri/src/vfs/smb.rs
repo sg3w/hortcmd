@@ -34,10 +34,13 @@ const DEFAULT_PORT: u16 = 445;
 
 /// Opens an SMB connection and returns the ready provider.
 pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Provider>> {
+    crate::net::security::check(profile)?;
     // The port belongs in the connection config — `UncPath` carries only
     // the server name, so a profile pointing at a non-standard port used
     // to be silently connected to 445 instead (ticket 038).
     let mut config = ClientConfig::default();
+    config.connection.encryption_mode = smb::connection::EncryptionMode::Required;
+    config.connection.allow_unsigned_guest_access = false;
     if profile.port != 0 && profile.port != DEFAULT_PORT {
         config.connection.port = Some(profile.port);
     }
@@ -52,7 +55,8 @@ pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Pro
         secret.unwrap_or_default().to_string()
     };
 
-    let provider = SmbProvider {
+    let mut provider = SmbProvider {
+        security: crate::net::security::TransportInfo::connected(profile, true),
         key: profile.connection_key(),
         server: profile.host.clone(),
         client,
@@ -77,11 +81,22 @@ pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Pro
         }
     }
 
+    if let Ok(connection) = provider.client.get_connection(&provider.server) {
+        if let Some(info) = connection.conn_info() {
+            provider.security.protocol = Some(format!("SMB {:?}", info.negotiation.dialect_rev));
+            provider.security.cipher = info
+                .negotiation
+                .encryption_cipher
+                .map(|cipher| format!("{cipher:?}"));
+        }
+    }
+    provider.security.signing = Some(true);
     Ok(Arc::new(provider))
 }
 
 /// VFS provider bound to one SMB server.
 pub struct SmbProvider {
+    security: crate::net::security::TransportInfo,
     key: String,
     server: String,
     client: Client,
@@ -274,6 +289,9 @@ impl SmbProvider {
 }
 
 impl Provider for SmbProvider {
+    fn transport_security(&self) -> Option<crate::net::security::TransportInfo> {
+        Some(self.security.clone())
+    }
     fn store_id(&self) -> String {
         format!("smb:{}", self.key)
     }

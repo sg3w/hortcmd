@@ -35,3 +35,9 @@ and Linux/Orca follow-up. The outstanding macOS evidence remains in 249.
 
 [251](251-windows-linux-transfer-recovery.md) tracks native Windows/Linux transfer
 recovery enablement and verification deferred from 044.
+
+[252](252-native-transport-security-verification.md) tracks the native transport
+security and live SMB validation matrix deferred from 047.
+
+[253](253-negotiated-tls-diagnostics.md) tracks additional negotiated TLS telemetry
+that the current client APIs do not expose.

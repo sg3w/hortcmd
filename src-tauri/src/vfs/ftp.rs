@@ -14,7 +14,7 @@
 //
 // Passive mode is suppaftp's default (ticket requirement); FTPS is
 // supported both explicitly (AUTH TLS after connect) and implicitly,
-// with certificate validation by the system TLS stack (native-tls).
+// with certificate validation by the platform verifier through Rustls.
 // ============================================================
 
 use super::{Provider, Stat};
@@ -27,9 +27,8 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
 use suppaftp::list::File as FtpFile;
-use suppaftp::native_tls::TlsConnector;
 use suppaftp::types::FileType;
-use suppaftp::{NativeTlsConnector, NativeTlsFtpStream, Status};
+use suppaftp::{RustlsConnector, RustlsFtpStream, Status};
 
 /// How TLS is applied to a connection.
 #[derive(Clone, Copy, PartialEq)]
@@ -44,6 +43,8 @@ enum Tls {
 
 /// Everything needed to open a further connection to the same server.
 struct Params {
+    profile: Profile,
+    fingerprint: Mutex<Option<String>>,
     host: String,
     port: u16,
     user: String,
@@ -53,32 +54,32 @@ struct Params {
 
 impl Params {
     /// Opens and logs in a fresh connection (passive mode by default).
-    fn open(&self) -> AppResult<NativeTlsFtpStream> {
+    fn open(&self) -> AppResult<RustlsFtpStream> {
+        crate::net::security::check(&self.profile)?;
         let addr = format!("{}:{}", self.host, self.port);
-        let connector = || -> AppResult<NativeTlsConnector> {
-            let mut builder = TlsConnector::builder();
-            // Validation is unchanged; the user's own CA is only *added*
-            // to the roots (ticket 038, `net::tls`).
-            for pem in crate::net::tls::extra_ca_pems()? {
-                let cert = suppaftp::native_tls::Certificate::from_pem(&pem).map_err(|e| {
-                    AppError::new(code::NET_TLS)
-                        .op("extra-ca")
-                        .detail(format!("{}", e))
-                })?;
-                builder.add_root_certificate(cert);
-            }
-            builder
-                .build()
-                .map(NativeTlsConnector::from)
-                .map_err(|e| AppError::from(format!("TLS-Initialisierung fehlgeschlagen: {}", e)))
+        let tls = if self.tls == Tls::None {
+            None
+        } else {
+            Some(crate::net::tls_config::config(&self.profile)?)
+        };
+        let connector = || -> AppResult<RustlsConnector> {
+            let (config, _) = tls.as_ref().ok_or_else(|| AppError::new(code::NET_TLS))?;
+            Ok(RustlsConnector::from(Arc::new(config.clone())))
         };
 
         let mut ftp = match self.tls {
             Tls::Implicit => {
                 let mut s =
-                    NativeTlsFtpStream::connect_secure_implicit(&addr, connector()?, &self.host)
+                    RustlsFtpStream::connect_secure_implicit(&addr, connector()?, &self.host)
                         .map_err(|e| {
-                            AppError::from(format!("Verbindung zu {} fehlgeschlagen: {}", addr, e))
+                            tls.as_ref()
+                                .map(|(_, evidence)| evidence.error(&e))
+                                .unwrap_or_else(|| {
+                                    AppError::from(format!(
+                                        "Verbindung zu {} fehlgeschlagen: {}",
+                                        addr, e
+                                    ))
+                                })
                         })?;
                 // `AUTH TLS` (explicit) ends with PBSZ 0 + PROT P inside
                 // suppaftp; the implicit path does not send them at all,
@@ -100,12 +101,18 @@ impl Params {
                 s
             }
             _ => {
-                let s = NativeTlsFtpStream::connect(&addr).map_err(|e| {
-                    AppError::from(format!("Verbindung zu {} fehlgeschlagen: {}", addr, e))
+                let s = RustlsFtpStream::connect(&addr).map_err(|e| {
+                    tls.as_ref()
+                        .map(|(_, evidence)| evidence.error(&e))
+                        .unwrap_or_else(|| {
+                            AppError::from(format!("Verbindung zu {} fehlgeschlagen: {}", addr, e))
+                        })
                 })?;
                 if self.tls == Tls::Explicit {
                     s.into_secure(connector()?, &self.host).map_err(|e| {
-                        AppError::from(format!("TLS (AUTH TLS) fehlgeschlagen: {}", e))
+                        tls.as_ref()
+                            .map(|(_, evidence)| evidence.error(&e))
+                            .unwrap_or_else(|| AppError::new(code::NET_TLS_PROTOCOL))
                     })?
                 } else {
                     s
@@ -113,8 +120,19 @@ impl Params {
             }
         };
 
-        ftp.login(&self.user, &self.password)
-            .map_err(|e| AppError::from(format!("Anmeldung fehlgeschlagen: {}", e)))?;
+        ftp.login(&self.user, &self.password).map_err(|e| {
+            tls.as_ref()
+                .and_then(|(_, evidence)| evidence.failure.lock().ok().and_then(|f| f.clone()))
+                .unwrap_or_else(|| AppError::from(format!("Anmeldung fehlgeschlagen: {}", e)))
+        })?;
+
+        if let Some((_, evidence)) = &tls {
+            if let (Ok(mut fingerprint), Ok(actual)) =
+                (self.fingerprint.lock(), evidence.fingerprint.lock())
+            {
+                *fingerprint = actual.clone();
+            }
+        }
 
         // Binary, always. FTP's default transfer type is ASCII (RFC 959),
         // and a server that honours it rewrites every 0x0A on the way
@@ -131,6 +149,7 @@ impl Params {
 
 /// Opens an FTP/FTPS connection and returns the ready provider.
 pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Provider>> {
+    crate::net::security::check(profile)?;
     // Anonymous FTP is the conventional fallback when no user is given.
     let (user, password) = if profile.auth == "anonymous" || profile.user.is_empty() {
         ("anonymous".to_string(), "anonymous@".to_string())
@@ -152,6 +171,8 @@ pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Pro
     };
 
     let params = Params {
+        profile: profile.clone(),
+        fingerprint: Mutex::new(None),
         host: profile.host.clone(),
         port: profile.port,
         user,
@@ -172,7 +193,7 @@ pub struct FtpProvider {
     key: String,
     params: Params,
     /// Shared control connection for short metadata operations.
-    ctrl: Mutex<NativeTlsFtpStream>,
+    ctrl: Mutex<RustlsFtpStream>,
 }
 
 /// POSIX path string for the FTP protocol.
@@ -262,6 +283,15 @@ impl FtpProvider {
 }
 
 impl Provider for FtpProvider {
+    fn transport_security(&self) -> Option<crate::net::security::TransportInfo> {
+        let mut info = crate::net::security::TransportInfo::connected(
+            &self.params.profile,
+            self.params.tls != Tls::None,
+        );
+        info.fingerprint = self.params.fingerprint.lock().ok().and_then(|f| f.clone());
+        Some(info)
+    }
+
     fn store_id(&self) -> String {
         // FTPS shares the store identity with FTP — same server, same files.
         format!("ftp:{}", self.key)
@@ -405,14 +435,14 @@ impl Provider for FtpProvider {
 
 // ---------- Transfer streams (own connection each) ----------
 
-// The concrete `DataStream<NativeTlsStream>` type is not nameable
+// The concrete `DataStream<RustlsStream>` type is not nameable
 // (suppaftp keeps the module private), so the data streams are boxed —
 // `finalize_retr_stream`/`finalize_put_stream` accept `impl Read`/
 // `impl Write`, which a box satisfies.
 
 /// Download stream; finalizes the FTP transfer when dropped.
 struct FtpReader {
-    ctrl: Option<NativeTlsFtpStream>,
+    ctrl: Option<RustlsFtpStream>,
     stream: Option<Box<dyn Read + Send>>,
 }
 
@@ -437,7 +467,7 @@ impl Drop for FtpReader {
 /// Upload stream. `flush` completes the transfer so errors surface to
 /// the caller; `drop` is only the safety net for un-flushed streams.
 struct FtpWriter {
-    ctrl: Option<NativeTlsFtpStream>,
+    ctrl: Option<RustlsFtpStream>,
     stream: Option<Box<dyn Write + Send>>,
 }
 

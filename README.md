@@ -241,34 +241,25 @@ versioned, migrated and validated on every load, with the original kept aside
 when it has to be repaired (Concept.md § Persisted state); the reset in
 Settings → General lists exactly what it clears before it does it.
 
-**Remote transport.** Certificates are validated by the platform TLS stack and
-there is no "continue anyway": an invalid or expired certificate fails the
-connection. There is also no certificate pinning and no trust-on-first-use for
-TLS — unlike SSH host keys, a certificate that a system-trusted CA vouches for
-is accepted without asking.
+**Remote transport.** New profiles use SFTP, FTPS, HTTPS WebDAV or SMB with
+required encryption and integrity protection. FTP and explicit HTTP WebDAV are
+blocked unless the advanced global setting and the profile's separate risk
+acknowledgment are both enabled. A bare WebDAV hostname always means HTTPS,
+including when a custom port is used. HTTP must be explicitly written in the host.
 
-A self-hosted server whose certificate comes from the operator's own CA is the
-one case the platform store cannot cover, and the answer is an *additional*
-anchor rather than a weakened check — the same shape as `CURL_CA_BUNDLE` or
-`NODE_EXTRA_CA_CERTS`:
+FTPS and HTTPS use Rustls with platform certificate validation, TLS 1.2 or newer,
+and no insecure fallback. Profile editing can preview and explicitly approve a
+private CA or pin one server certificate. Approval is scoped to that profile and
+endpoint; hostname and validity checks remain active. A changed server pin or
+changed approval file fails before authentication. Removing approval is a separate
+profile-editing action. `HORTCMD_EXTRA_CA` now exists only in the isolated Rust
+protocol-test harness; it adds no global roots in production.
 
-```bash
-HORTCMD_EXTRA_CA=/path/to/ca.pem
-```
-
-Every certificate in that file joins the roots for FTPS and WebDAV. Hostname,
-expiry and chain are still checked, an unknown issuer still fails, and a bundle
-that is named but unreadable is an error rather than a silent fallback to fewer
-anchors than you asked for.
-
-- **SFTP** — encrypted, with the host-key verification described above.
-- **FTPS** — explicit (`AUTH TLS`) or implicit; plain **FTP** sends credentials
-  and data unencrypted and is offered only because servers still require it.
-- **WebDAV** — HTTPS with validated certificates. Port 80 addresses are treated
-  as plain HTTP and are equally unencrypted.
-- **SMB** — hortcmd uses the `smb` crate's defaults and negotiates signing and
-  encryption with the server; it cannot currently *require* either. Treat an SMB
-  share on an untrusted network accordingly.
+Connection details and provider capabilities report the effective transport state,
+certificate fingerprint and available negotiation information. Unavailable cipher
+or protocol telemetry is labeled as unavailable. See
+[transport security](docs/transport-security.md) for the complete policy, migration
+notes, test evidence and native platform follow-ups.
 
 **Not implemented:**
 

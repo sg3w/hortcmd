@@ -61,6 +61,14 @@ export const errors = ns(
     "error.net.noProfile": "Verbindungsprofil nicht gefunden",
     "error.net.unsupportedProtocol": "Protokoll „{protocol}“ wird nicht unterstützt",
     "error.net.noShell": "Dieses Protokoll bietet keine Shell",
+    "error.net.certificateChanged": "Das freigegebene Zertifikat oder das Verbindungsprofil wurde geändert. Prüfe die Freigabe in der Profilbearbeitung.",
+    "error.net.certificateInvalid": "Die Datei enthält kein unterstütztes einzelnes Zertifikat.",
+    "error.net.certificateExpired": "Das Serverzertifikat ist abgelaufen.",
+    "error.net.certificateFuture": "Das Serverzertifikat ist noch nicht gültig.",
+    "error.net.certificateHostname": "Das Zertifikat gilt nicht für diesen Hostnamen.",
+    "error.net.certificateRevoked": "Das Serverzertifikat wurde widerrufen.",
+    "error.net.tlsProtocol": "Die sichere TLS-Aushandlung wurde abgelehnt. Es erfolgt kein Wechsel zu einer unsicheren Verbindung.",
+    "error.net.plaintextBlocked": "Unverschlüsselte Verbindung gesperrt. Erweiterte Freigabe und Bestätigung im Verbindungsprofil erforderlich.",
     "error.net.tls": "TLS-Verbindung abgelehnt (Zertifikat nicht vertrauenswürdig)",
 
     // --- credentials ---
@@ -155,6 +163,14 @@ export const errors = ns(
     "error.net.noProfile": "Connection profile not found",
     "error.net.unsupportedProtocol": "Protocol “{protocol}” is not supported",
     "error.net.noShell": "This protocol offers no shell",
+    "error.net.certificateChanged": "The approved certificate or connection profile changed. Review approval in the profile editor.",
+    "error.net.certificateInvalid": "The file does not contain a supported single certificate.",
+    "error.net.certificateExpired": "The server certificate has expired.",
+    "error.net.certificateFuture": "The server certificate is not valid yet.",
+    "error.net.certificateHostname": "The certificate does not match this hostname.",
+    "error.net.certificateRevoked": "The server certificate has been revoked.",
+    "error.net.tlsProtocol": "Secure TLS negotiation was refused. No fallback to an insecure connection is allowed.",
+    "error.net.plaintextBlocked": "Unencrypted connection blocked. Enable the advanced setting and acknowledge the risk in this profile.",
     "error.net.tls": "TLS connection refused (certificate not trusted)",
 
     // --- credentials ---

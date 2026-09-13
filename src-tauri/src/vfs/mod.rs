@@ -272,6 +272,10 @@ pub trait Provider: Send + Sync {
     /// A provider that cannot tell cheaply says `true` and reports a
     /// loss from its own operations instead; a definitive `false` makes
     /// the session disconnect once rather than staying marked live.
+    fn transport_security(&self) -> Option<crate::net::security::TransportInfo> {
+        None
+    }
+
     fn transport_alive(&self) -> bool {
         true
     }

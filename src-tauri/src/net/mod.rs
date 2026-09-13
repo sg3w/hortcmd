@@ -12,17 +12,23 @@
 //                 (connect/disconnect/reconnect), protocol-independent
 //   ssh         – authenticated SSH connection (SFTP + terminal ride on it)
 //   terminal    – interactive SSH shell sessions (ticket 026)
-//   tls         – the user-chosen extra trust anchor for FTPS/WebDAV
-//                 (HORTCMD_EXTRA_CA, ticket 038)
+//   security    – shared transport policy and protection metadata
+//   certificate – profile-scoped certificate preview and approval
+//   tls_config  – platform verification, certificate pins and TLS minimums
+//   tls         – extra roots for the isolated test harness only
 // ============================================================
 
+pub mod certificate;
 pub mod credentials;
 pub mod hostkey;
 pub mod lifecycle;
+pub mod security;
 pub mod session;
 pub mod ssh;
 pub mod terminal;
+#[cfg(test)]
 pub mod tls;
+pub mod tls_config;
 
 /// Small unique id (no extra dependency): time plus a process-wide
 /// counter. Used for terminal sessions and host-key prompt tokens.

@@ -39,6 +39,9 @@ import { usePanes } from "@/store/panesStore";
 import { useT } from "@/store/settingsStore";
 import { AppDialog } from "@/components/ui/AppDialog";
 import { cn } from "@/lib/cn";
+import { TransportDetails } from "./TransportDetails";
+import { CertificateTrustForm } from "./CertificateTrustForm";
+import { TransportSecurityForm } from "./TransportSecurityForm";
 
 /** Supported protocols with their default port. */
 const PROTOCOLS = ["sftp", "ftp", "ftps", "ftps-implicit", "webdav", "smb"] as const;
@@ -70,6 +73,7 @@ const AUTH_FOR: Record<ProtocolId, readonly AuthId[]> = {
 
 function emptyProfile(): Profile {
   return {
+    security: { plaintextAcknowledged: false, certificate: null },
     id: crypto.randomUUID(),
     name: "",
     protocol: "sftp",
@@ -232,6 +236,7 @@ function ConnectionRow({
             {"key" in line ? t(line.key) : line.text}
           </span>
         )}
+        {status?.transport && <TransportDetails info={status.transport} />}
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1">
         {action === "cancel" ? (
@@ -317,7 +322,7 @@ function ProfileForm({ profile }: { profile: Profile }) {
   }, [profile]);
 
   const set = <K extends keyof Profile>(key: K, value: Profile[K]) =>
-    setForm((f) => ({ ...f, [key]: value }));
+    setForm((f) => ({ ...f, [key]: value, ...(["host", "port", "user"].includes(key) ? { security: { ...f.security, plaintextAcknowledged: false, certificate: null } } : {}) }));
 
   /** Switching protocol adjusts the port and keeps auth valid. */
   const setProtocol = (proto: ProtocolId) =>
@@ -326,6 +331,7 @@ function ProfileForm({ profile }: { profile: Profile }) {
       return {
         ...f,
         protocol: proto,
+        security: { ...f.security, plaintextAcknowledged: false, certificate: null },
         // Only replace a port the user has not customised.
         port: DEFAULT_PORT[(f.protocol as ProtocolId) ?? "sftp"] === f.port
           ? DEFAULT_PORT[proto]
@@ -370,6 +376,8 @@ function ProfileForm({ profile }: { profile: Profile }) {
         </div>
       )}
 
+      <TransportSecurityForm value={form.security} onChange={value => set("security", value)} />
+      {["ftps", "ftps-implicit", "webdav"].includes(proto) && <CertificateTrustForm profile={form} onChange={value => set("security", value)} />}
       <Field label={t("net.name")}>
         <input
           value={form.name}

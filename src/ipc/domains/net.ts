@@ -133,3 +133,17 @@ export function setMenuLanguage(lang: string): void {
   if (!hasTauri) return;
   void invoke<void>("set_menu_language", { lang });
 }
+
+export async function netTransportPolicy(): Promise<import("../bindings/TransportPolicy").TransportPolicy> {
+  if (!hasTauri) return { allowPlaintext: false };
+  return invoke("net_transport_policy");
+}
+
+export async function netSetTransportPolicy(policy: import("../bindings/TransportPolicy").TransportPolicy): Promise<void> {
+  if (!hasTauri) return;
+  return invoke("net_set_transport_policy", { policy });
+}
+
+export async function netCertificatePreview(profile: Profile, path: string): Promise<import("../bindings/CertificatePreview").CertificatePreview> {
+  return invoke("net_certificate_preview", { profile, path });
+}

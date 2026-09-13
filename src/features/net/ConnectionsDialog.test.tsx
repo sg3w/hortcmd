@@ -14,11 +14,12 @@ vi.mock("@/ipc/invoke", async importOriginal => ({
 }));
 
 function setup(language: "de" | "en") {
-  let profile: Profile = { id: "p1", name: "Example", protocol: "sftp", host: "example.test",
+  let profile: Profile = { security: { plaintextAcknowledged: false, certificate: null }, id: "p1", name: "Example", protocol: "sftp", host: "example.test",
     port: 22, user: "demo", auth: "agent", key_path: null, start_path: "/" };
   let connections: ConnectionStatus[] = [];
   const address = "sftp://demo@example.test:22/";
   const runtime = useTauri({ commands: {
+    net_transport_policy: () => ({ allowPlaintext: false }),
     net_list_profiles: () => [profile], net_list_connections: () => connections,
     net_cred_status: () => ({ backend: "keychain", needs_unlock: false, unlocked: true }),
     net_save_profile: ({ profile: saved }) => { profile = saved as Profile; },

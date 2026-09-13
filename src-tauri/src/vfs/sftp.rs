@@ -42,6 +42,7 @@ pub fn connect(
     Ok(SftpProvider::shared(
         profile.connection_key(),
         Arc::new(conn),
+        crate::net::security::TransportInfo::connected(profile, true),
     ))
 }
 
@@ -70,6 +71,7 @@ async fn connect_async(
 
 /// VFS provider bound to one live SFTP connection.
 pub struct SftpProvider {
+    security: crate::net::security::TransportInfo,
     key: String,
     conn: Arc<SftpConnection>,
 }
@@ -78,8 +80,17 @@ impl SftpProvider {
     /// The provider behind one connection, as the shared trait object
     /// the registry stores. Named `shared` rather than `new` because it
     /// hands back an `Arc<dyn Provider>`, not a `Self`.
-    pub fn shared(key: String, conn: Arc<SftpConnection>) -> Arc<dyn Provider> {
-        Arc::new(SftpProvider { key, conn })
+    pub fn shared(
+        key: String,
+        conn: Arc<SftpConnection>,
+        mut security: crate::net::security::TransportInfo,
+    ) -> Arc<dyn Provider> {
+        security.protocol = Some("SSH-2.0".into());
+        Arc::new(SftpProvider {
+            key,
+            conn,
+            security,
+        })
     }
 
     fn sftp(&self) -> &SftpSession {
@@ -106,6 +117,9 @@ fn to_io<E: std::fmt::Display>(e: E) -> io::Error {
 }
 
 impl Provider for SftpProvider {
+    fn transport_security(&self) -> Option<crate::net::security::TransportInfo> {
+        Some(self.security.clone())
+    }
     fn store_id(&self) -> String {
         format!("sftp:{}", self.key)
     }

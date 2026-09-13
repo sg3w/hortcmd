@@ -495,6 +495,9 @@ function cargoTest(info, extra) {
       "--test-threads=1",
       ...extra,
     ];
+    // Explicit test-only opt-in for this isolated run's plaintext fixtures.
+    mkdirSync(join(info.dir, "config"), { recursive: true });
+    writeFileSync(join(info.dir, "config", "transport-policy.json"), JSON.stringify({ allowPlaintext: true }));
     const child = spawn("cargo", args, {
       cwd: REPO,
       stdio: "inherit",

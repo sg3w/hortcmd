@@ -186,6 +186,9 @@ impl Capability {
 #[derive(Serialize, Clone, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct LocationCapabilities {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub transport: Option<crate::net::security::TransportInfo>,
     /// Canonical scheme of the address (`local`, `sftp`, `ftp`, …).
     pub scheme: String,
     /// Cache identity: `"local"` for the local file system, otherwise
@@ -280,6 +283,7 @@ fn remote_core_caps() -> Vec<Capability> {
 pub fn for_parsed(addr: &Address) -> AppResult<LocationCapabilities> {
     if addr.scheme == Scheme::Local {
         return Ok(LocationCapabilities {
+            transport: None,
             scheme: Scheme::Local.as_str().to_string(),
             store_id: "local".to_string(),
             connected: true,
@@ -299,6 +303,7 @@ pub fn for_parsed(addr: &Address) -> AppResult<LocationCapabilities> {
         // Nothing connected: the location supports nothing at all. That
         // is the honest answer and the one the UI needs after a drop.
         return Ok(LocationCapabilities {
+            transport: None,
             scheme,
             store_id,
             connected: false,
@@ -311,6 +316,7 @@ pub fn for_parsed(addr: &Address) -> AppResult<LocationCapabilities> {
         caps.push(Capability::SshTerminal);
     }
     Ok(LocationCapabilities {
+        transport: provider.transport_security(),
         scheme,
         store_id,
         connected: true,

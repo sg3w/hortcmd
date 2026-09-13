@@ -48,15 +48,15 @@ SMB signing/encryption without weakening platform certificate validation.
 
 ## Acceptance Criteria
 
-- [ ] New remote profiles use encrypted, peer-verified transport by default.
-- [ ] Plain FTP and HTTP WebDAV cannot connect without both global enablement and a
+- [x] New remote profiles use encrypted, peer-verified transport by default.
+- [x] Plain FTP and HTTP WebDAV cannot connect without both global enablement and a
       clear per-profile acknowledgement.
-- [ ] No provider silently downgrades after a secure negotiation failure.
-- [ ] Invalid TLS certificates and changed pins fail before credentials or file
+- [x] No provider silently downgrades after a secure negotiation failure.
+- [x] Invalid TLS certificates and changed pins fail before credentials or file
       content are transmitted where the protocol permits.
-- [ ] SMB signing/encryption requirements and negotiated state are visible.
-- [ ] Certificate exceptions are scoped to one profile and are revocable.
-- [ ] Structured errors distinguish trust, hostname, expiry, protocol, and
+- [x] SMB signing/encryption requirements and negotiated state are visible.
+- [x] Certificate exceptions are scoped to one profile and are revocable.
+- [x] Structured errors distinguish trust, hostname, expiry, protocol, and
       plaintext-policy failures.
 
 ## Tests
@@ -80,3 +80,32 @@ SMB signing/encryption without weakening platform certificate validation.
 - Protocol integration tests cover negotiation and trust failures.
 - Connection details accurately expose effective transport protection.
 - Rename this file to `047-remote-transport-security-policy.done.md`.
+
+## Implementation evidence
+
+Central backend policy requires both persisted plaintext opt-ins, including direct
+provider callers. Bare WebDAV hosts use HTTPS; redirects are disabled. FTPS and
+WebDAV share a Rustls platform verifier with TLS 1.2/1.3 only, optional profile-bound
+CA approval/server pins, and no accept-all path. Certificate inspection displays
+public metadata before explicit approval; changed profile/file/server pins fail.
+SMB requires encryption and disallows unsigned guest sessions.
+
+Status/capability metadata and localized connection details expose effective
+protection and available negotiation information. Unavailable FTPS/WebDAV cipher
+and version fields are explicitly labeled, with API diagnostics follow-up in
+[TICKET-253](../253-negotiated-tls-diagnostics.md).
+
+Local TLS tests exercise the actual FTPS and WebDAV adapters, unknown/expired/
+future/wrong-host/rotated certificates, private CA removal and profile isolation.
+Rejected peers receive no seeded credential; AUTH TLS refusal never causes a plain
+login and HTTPS redirects never reach an HTTP target. Frontend tests cover separate
+plaintext gates, preview-before-approval and stale-preview rejection. The complete
+`npm run check` passed: 429 Rust tests (25 ignored protocol/keychain tests), 526
+frontend tests, strict Clippy, bindings, documentation, types and production build.
+
+Native Windows/Linux, live SMB server combinations and known-revocation/packet
+capture evidence are deferred by user instruction to
+[TICKET-252](../252-native-transport-security-verification.md). No such native
+matrix is claimed as executed here. Policy and migration details are documented in
+[transport security](../../docs/transport-security.md). TICKET-093 was implemented
+and merged separately to correct WebDAV navigation addresses needed by this policy.

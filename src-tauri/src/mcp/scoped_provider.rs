@@ -152,6 +152,9 @@ impl Provider for ScopedProvider {
     fn rename_replaces(&self) -> bool {
         self.inner.rename_replaces()
     }
+    fn transport_security(&self) -> Option<crate::net::security::TransportInfo> {
+        self.inner.transport_security()
+    }
     fn transport_alive(&self) -> bool {
         self.inner.transport_alive()
     }

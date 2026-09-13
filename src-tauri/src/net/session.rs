@@ -28,6 +28,8 @@ use ts_rs::TS;
 #[derive(Serialize, Deserialize, Clone, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct Profile {
+    #[serde(default)]
+    pub security: super::security::ProfileSecurity,
     pub id: String,
     pub name: String,
     /// Protocol scheme, e.g. `"sftp"` (others reserved).
@@ -93,6 +95,9 @@ impl Profile {
 #[derive(Serialize, Clone, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct ConnectionStatus {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub transport: Option<super::security::TransportInfo>,
     pub id: String,
     pub key: String,
     pub name: String,
@@ -231,8 +236,31 @@ fn is_live(profile: &Profile) -> bool {
 /// lifecycle adds the states it cannot express.
 fn status_of(profile: &Profile) -> ConnectionStatus {
     let live = is_live(profile);
-    let (phase, attempt, error) = lifecycle::reconcile(&profile.id, live);
+    let transport = if live {
+        registry()
+            .lock()
+            .ok()
+            .and_then(|r| {
+                r.live
+                    .get(&profile.store_id())
+                    .and_then(|p| p.transport_security())
+            })
+            .or_else(|| {
+                (profile.protocol == "sftp")
+                    .then(|| super::security::TransportInfo::connected(profile, true))
+            })
+    } else {
+        None
+    };
+    // A session approved for another saved profile is not this profile's session,
+    // even when both profiles happen to use the same VFS address.
+    let own_session = transport
+        .as_ref()
+        .is_none_or(|info| info.profile_id == profile.id);
+    let (phase, attempt, error) = lifecycle::reconcile(&profile.id, live && own_session);
+    let transport = if own_session { transport } else { None };
     ConnectionStatus {
+        transport,
         id: profile.id.clone(),
         key: profile.connection_key(),
         name: profile.name.clone(),
@@ -325,12 +353,18 @@ pub fn net_list_profiles() -> Vec<Profile> {
 /// configured credential store under the profile id (never into the JSON).
 #[tauri::command]
 pub fn net_save_profile(profile: Profile, secret: Option<String>) -> AppResult<()> {
+    super::certificate::approved_der(&profile)?;
+    lifecycle::cancel_for_profile(&profile.id);
     // Written before the registry lock: a locked KeePass file fails here,
     // and the profile list must not be touched when the secret is lost.
     if let Some(s) = &secret {
         credentials::store().set(&profile.id, s)?;
     }
     let mut reg = registry().lock().unwrap();
+    if let Some(existing) = reg.profiles.iter().find(|p| p.id == profile.id) {
+        let key = existing.store_id();
+        reg.live.remove(&key);
+    }
     match reg.profiles.iter_mut().find(|p| p.id == profile.id) {
         Some(existing) => *existing = profile,
         None => reg.profiles.push(profile),
@@ -389,6 +423,7 @@ enum Opened {
 /// and only `lifecycle::settle` may install it.
 fn run_attempt(attempt: &Attempt, profile: &Profile) -> Result<Opened, ConnFailure> {
     attempt.check()?;
+    super::security::check(profile).map_err(|e| ConnFailure::new(FailureKind::Protocol, e))?;
 
     // 1. The secret. A keychain prompt or a locked KeePass file is a
     //    failure of its own kind, not a protocol error — and it happens
@@ -445,6 +480,7 @@ fn run_attempt(attempt: &Attempt, profile: &Profile) -> Result<Opened, ConnFailu
 #[tauri::command]
 pub fn net_connect(app: AppHandle, id: String) -> AppResult<ConnectOutcome> {
     let profile = profile_by_id(&id)?;
+    super::security::check(&profile)?;
 
     let attempt = match lifecycle::begin(&id) {
         Start::Started(a) => a,
@@ -644,6 +680,7 @@ mod tests {
 
     fn profile() -> Profile {
         Profile {
+            security: Default::default(),
             id: "p1".into(),
             name: "Test".into(),
             protocol: "sftp".into(),

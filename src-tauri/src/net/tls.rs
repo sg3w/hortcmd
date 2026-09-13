@@ -1,26 +1,6 @@
-// ============================================================
-// An extra trust anchor for private infrastructure.
-//
-// hortcmd validates TLS certificates with the platform's own trust store
-// and offers no "continue anyway" — a certificate that does not verify
-// fails the connection (README § Security). That is the right default and
-// stays the default.
-//
-// It also leaves out a case that is ordinary rather than careless: a
-// self-hosted FTPS or WebDAV server whose certificate is issued by the
-// operator's own CA. The established answer is an *additional* trust
-// anchor the user chooses, not a weakened check — `CURL_CA_BUNDLE`,
-// `NODE_EXTRA_CA_CERTS` and `GIT_SSL_CAINFO` all work this way. So does
-// this:
-//
-//   HORTCMD_EXTRA_CA=/path/to/ca.pem
-//
-// Every certificate in that PEM file is added to the roots for FTPS and
-// WebDAV. Validation is otherwise untouched: hostname, expiry and chain
-// are still checked, and an unknown issuer still fails. The protocol
-// harness (TICKET-038) uses it to reach its own throwaway TLS servers
-// without installing anything into the machine's trust store.
-// ============================================================
+//! Extra roots for the isolated protocol test harness only.
+//! Production connections use profile-scoped approval in `certificate`/`tls_config`.
+//! HORTCMD_EXTRA_CA never adds global trust anchors to a production application.
 
 use crate::errors::{code, AppError, AppResult};
 use std::path::PathBuf;

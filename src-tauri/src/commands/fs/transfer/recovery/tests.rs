@@ -116,6 +116,7 @@ fn corrupt_future_or_oversized_records_fail_closed_without_replacing_evidence() 
 fn identity_and_secret_bearing_addresses_cannot_enter_remote_intent() {
     use crate::net::session::Profile;
     let profile = Profile {
+        security: Default::default(),
         id: "profile-id".into(),
         name: "Example".into(),
         protocol: "sftp".into(),

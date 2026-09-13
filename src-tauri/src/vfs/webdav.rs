@@ -13,7 +13,7 @@
 //
 // TLS: reqwest validates certificates by default — an invalid or
 // self-signed certificate makes the connection fail (ticket
-// requirement). `http` is only used when the profile's port is 80.
+// requirement). HTTP requires an explicit scheme and both plaintext opt-ins.
 // ============================================================
 
 use super::{Provider, Stat};
@@ -29,31 +29,26 @@ use std::sync::Arc;
 /// Opens a WebDAV connection and returns the ready provider.
 /// A reqwest client carrying the extra trust anchors, or `None` when
 /// none are configured and `reqwest_dav`'s own default client will do.
-fn http_agent() -> AppResult<Option<reqwest_dav::re_exports::reqwest::Client>> {
-    use reqwest_dav::re_exports::reqwest::{Certificate, Client};
-
-    let pems = crate::net::tls::extra_ca_pems()?;
-    if pems.is_empty() {
-        return Ok(None);
-    }
-    let mut builder = Client::builder();
-    for pem in pems {
-        let cert = Certificate::from_pem(&pem).map_err(|e| {
-            AppError::new(code::NET_TLS)
-                .op("extra-ca")
-                .detail(format!("{}", e))
-        })?;
-        builder = builder.add_root_certificate(cert);
-    }
-    builder
+fn http_agent(
+    profile: &Profile,
+) -> AppResult<(
+    reqwest_dav::re_exports::reqwest::Client,
+    crate::net::tls_config::TlsEvidence,
+)> {
+    use reqwest_dav::re_exports::reqwest::{redirect, Client};
+    let (config, evidence) = crate::net::tls_config::config(profile)?;
+    let agent = Client::builder()
+        .redirect(redirect::Policy::none())
+        .use_preconfigured_tls(config)
         .build()
-        .map(Some)
-        .map_err(|e| AppError::new(code::NET_TLS).op("extra-ca").detail(e))
+        .map_err(|error| AppError::new(code::NET_TLS).op("tls-client").detail(error))?;
+    Ok((agent, evidence))
 }
 
 /// The credentials are verified with a PROPFIND on the start path, so
 /// a wrong password or an unreachable host fails here, not later.
 pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Provider>> {
+    crate::net::security::check(profile)?;
     let auth = match profile.auth.as_str() {
         "anonymous" => Auth::Anonymous,
         // `digest` selects Digest; everything else uses Basic.
@@ -61,16 +56,7 @@ pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Pro
         _ => Auth::Basic(profile.user.clone(), secret.unwrap_or_default().to_string()),
     };
 
-    // The host may carry an explicit scheme (`http://dav.example`) — that
-    // wins, so a plain-HTTP server on a non-standard port is reachable.
-    // Otherwise: HTTP only on the classic port 80, HTTPS everywhere else.
-    let (url_scheme, bare_host) = match profile.host.split_once("://") {
-        Some((scheme, rest)) => (scheme, rest),
-        None => (
-            if profile.port == 80 { "http" } else { "https" },
-            profile.host.as_str(),
-        ),
-    };
+    let (url_scheme, bare_host) = crate::net::security::webdav_endpoint(profile)?;
     let host = format!(
         "{}://{}:{}",
         url_scheme,
@@ -78,17 +64,17 @@ pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Pro
         profile.port
     );
 
-    let mut builder = ClientBuilder::new().set_host(host.clone()).set_auth(auth);
-    // An operator's own CA, if one is configured — added to the roots,
-    // never replacing the validation (ticket 038, `net::tls`).
-    if let Some(agent) = http_agent()? {
-        builder = builder.set_agent(agent);
-    }
+    let (agent, evidence) = http_agent(profile)?;
+    let builder = ClientBuilder::new()
+        .set_host(host.clone())
+        .set_auth(auth)
+        .set_agent(agent);
     let client = builder.build().map_err(|e| {
         AppError::from(format!("WebDAV-Client konnte nicht erstellt werden: {}", e))
     })?;
 
-    let provider = WebdavProvider {
+    let mut provider = WebdavProvider {
+        security: crate::net::security::TransportInfo::connected(profile, url_scheme == "https"),
         key: profile.connection_key(),
         base: host,
         client,
@@ -100,15 +86,22 @@ pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Pro
     } else {
         &profile.start_path
     };
-    provider
-        .list(start)
-        .map_err(|e| AppError::from(format!("Verbindung fehlgeschlagen: {}", e)))?;
+    provider.list(start).map_err(|e| {
+        evidence
+            .failure
+            .lock()
+            .ok()
+            .and_then(|f| f.clone())
+            .unwrap_or_else(|| AppError::from(format!("Verbindung fehlgeschlagen: {}", e)))
+    })?;
 
+    provider.security.fingerprint = evidence.fingerprint.lock().ok().and_then(|f| f.clone());
     Ok(Arc::new(provider))
 }
 
 /// VFS provider bound to one WebDAV server.
 pub struct WebdavProvider {
+    security: crate::net::security::TransportInfo,
     key: String,
     /// Absolute server base (`scheme://host:port`) — needed for the
     /// `Destination` header of MOVE.
@@ -214,6 +207,9 @@ impl WebdavProvider {
 }
 
 impl Provider for WebdavProvider {
+    fn transport_security(&self) -> Option<crate::net::security::TransportInfo> {
+        Some(self.security.clone())
+    }
     fn store_id(&self) -> String {
         format!("webdav:{}", self.key)
     }

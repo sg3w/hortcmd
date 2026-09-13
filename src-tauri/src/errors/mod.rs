@@ -251,6 +251,14 @@ pub mod code {
     pub const NET_NO_SHELL: &str = "net.noShell";
     /// The TLS handshake itself failed — an untrusted or expired
     /// certificate, or an unreadable extra CA bundle (TICKET-038).
+    pub const NET_TLS_PROTOCOL: &str = "net.tlsProtocol";
+    pub const NET_CERTIFICATE_EXPIRED: &str = "net.certificateExpired";
+    pub const NET_CERTIFICATE_FUTURE: &str = "net.certificateFuture";
+    pub const NET_CERTIFICATE_HOSTNAME: &str = "net.certificateHostname";
+    pub const NET_CERTIFICATE_REVOKED: &str = "net.certificateRevoked";
+    pub const NET_CERTIFICATE_INVALID: &str = "net.certificateInvalid";
+    pub const NET_CERTIFICATE_CHANGED: &str = "net.certificateChanged";
+    pub const NET_PLAINTEXT_BLOCKED: &str = "net.plaintextBlocked";
     pub const NET_TLS: &str = "net.tls";
 
     // --- credentials ---
