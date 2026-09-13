@@ -10,7 +10,7 @@ hortcmd builds with NVDA and Orca in both German and English.
 
 On 2026-09-13 the user explicitly requested moving these platform checks to a
 follow-up ticket numbered 250 or higher. They therefore no longer block ticket
-043 or the current sequential implementation through 065. They remain unverified,
+043. The user subsequently requested stopping work after 043. They remain unverified,
 not passed. macOS/VoiceOver verification remains in 043.
 
 ## Requirements
