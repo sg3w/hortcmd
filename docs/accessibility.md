@@ -121,6 +121,18 @@ do not substitute for the remaining screen-reader, English-operation or zoom
 checks. The permission prompt names ChatGPT, the host of the launched test process;
 this does not establish the permission presentation of a separately installed app.
 
+The native German search test started from the same right-hand fixture directory
+with Alt+F7. Tab traversed the four search modes, Ordner and Name; entering
+`*.txt` in Name and pressing Enter ran the actual Rust search. The root field
+retained the fixture directory, and the accessible result list contained exactly
+`moved.txt` and `renamed.txt`, each with its full parent path and 45-byte size.
+From Name, seven Tab presses traversed Regex, Inhalt, Regex, Ignorieren,
+Groß/klein and Suchen before reaching the first result. End moved the native
+focused result to `renamed.txt`; Enter closed the search and returned focus to
+a file row. Opening F2 then exposed `renamed.txt`, confirming the revealed cursor
+target; that verification prompt was cancelled without editing the file. This
+proves the native search/keyboard/reveal path in German with VoiceOver off.
+
 ## Translation ownership
 
 German and English UI wording belongs in the typed resources under
