@@ -14,6 +14,8 @@
   --text: #dcddde;
   --text-dim: #9aa0a6;
   --accent: #3b82f6;
+  --accent-text: #bfdbfe;
+  --accent-surface: #1d4ed8;
   --accent-dim: #2c5aa0;
   --selection-text: #ffd166;
   --cursor-inactive: #4a4d54;
@@ -54,6 +56,8 @@
   --text: #1e1f22;
   --text-dim: #6b7178;
   --accent: #2563eb;
+  --accent-text: #1d4ed8;
+  --accent-surface: #1d4ed8;
   --accent-dim: #cdddfb;
   --selection-text: #7c4a03;
   --cursor-inactive: #b6bac1;
@@ -169,7 +173,7 @@
   margin: 0.2em 0;
 }
 .md-body a {
-  color: var(--accent);
+  color: var(--accent-text);
   text-decoration: underline;
 }
 .md-body code {

@@ -80,7 +80,7 @@ export default defineConfig({
   // real nodes, and the component tests need a document at all.
   test: {
     environment: "jsdom",
-    include: ["src/**/*.test.{ts,tsx}"],
+    include: ["src/**/*.test.{ts,tsx,mjs}"],
     // One setup for every file: a working localStorage, and a reset of
     // the DOM, timers, mocks, Tauri harness and Zustand stores between
     // tests (TICKET-033).

@@ -3,6 +3,9 @@ export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      // Text and filled controls have different contrast constraints.
+      textColor: { accent: "var(--accent-text)" },
+      backgroundColor: { accent: "var(--accent-surface)" },
       colors: {
         // TC-Theme-Tokens (siehe index.css :root)
         bg: "var(--bg)",
