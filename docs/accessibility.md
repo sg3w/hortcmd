@@ -110,8 +110,11 @@ navigation sent individual characters and checked the resulting filter/path.
   SHA-256 digest `1fd20dfd9c7ac5b8f330f552ba5d4be2a7db59d88f9eaff8f78b88d1dc52d004`.
 - F8 opened the trash confirmation. Escape returned native focus to a file row,
   and both destination files remained present. A subsequent Enter confirmation
-  for `moved.txt` reached a macOS Finder-automation permission prompt. That action
-  awaits user permission; successful trash disposal has not yet been verified.
+  for `moved.txt` reached a macOS Finder-automation permission prompt and later
+  ended in a localized Lese-/Schreibfehler dialog. Both destination files remained
+  intact. Enter acknowledged that error and restored native focus to a file row.
+  The underlying cause is not established; ticket 086 tracks the blanket trash
+  error mapping. Successful trash disposal has not yet been verified.
 
 These are native keyboard and filesystem observations with VoiceOver off. They
 do not substitute for the remaining screen-reader, English-operation or zoom
