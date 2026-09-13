@@ -107,7 +107,17 @@ pub fn rename_batch(dir: String, renames: Vec<(String, String)>) -> OpResult {
             }
         }
     };
-    let base = Path::new(&base_str);
+    rename_batch_on(&*provider, Path::new(&base_str), renames, |from, to| {
+        provider.rename(from, to)
+    })
+}
+
+fn rename_batch_on(
+    provider: &dyn Provider,
+    base: &Path,
+    renames: Vec<(String, String)>,
+    rename: impl Fn(&Path, &Path) -> std::io::Result<()>,
+) -> OpResult {
     let mut errors: Vec<ItemError> = Vec::new();
 
     // Source names (for the check "the target is itself being renamed").
@@ -156,27 +166,64 @@ pub fn rename_batch(dir: String, renames: Vec<(String, String)>) -> OpResult {
     // Phase 1: all sources to temporary names.
     let mut staged: Vec<(PathBuf, &str, &str)> = Vec::new(); // (temp, to, from)
     for (from, to) in &valid {
-        let tmp = unique_temp(&*provider, base);
-        match provider.rename(&base.join(from), &tmp) {
+        let tmp = unique_temp(provider, base);
+        match rename(&base.join(from), &tmp) {
             Ok(_) => staged.push((tmp, to, from)),
             Err(e) => errors.push(ItemError::new(*from, e.into())),
         }
     }
 
+    // If any source remains in place, publishing a chain could destroy it.
+    if staged.len() != valid.len() {
+        for (tmp, _, from) in staged {
+            restore_staged(provider, base, &tmp, from, &rename, &mut errors);
+        }
+        return OpResult { ok: 0, errors };
+    }
+
     // Phase 2: temporary names to the target names.
     let mut ok = 0u32;
     for (tmp, to, from) in staged {
-        match provider.rename(&tmp, &base.join(to)) {
+        let target = base.join(to);
+        let result = if provider.exists(&target) {
+            Err(AppError::new(code::FS_EXISTS).with("name", to))
+        } else {
+            rename(&tmp, &target).map_err(AppError::from)
+        };
+        match result {
             Ok(_) => ok += 1,
             Err(e) => {
-                // Rename back so no temporary name is left behind.
-                let _ = provider.rename(&tmp, &base.join(from));
-                errors.push(ItemError::new(from, AppError::from(e).with("name", to)));
+                errors.push(ItemError::new(from, e.with("name", to)));
+                restore_staged(provider, base, &tmp, from, &rename, &mut errors);
             }
         }
     }
 
     OpResult { ok, errors }
+}
+
+/// Keep the staged data and expose its location if restoring would replace a
+/// published result or if the provider rejects rollback.
+fn restore_staged(
+    provider: &dyn Provider,
+    base: &Path,
+    tmp: &Path,
+    from: &str,
+    rename: &impl Fn(&Path, &Path) -> std::io::Result<()>,
+    errors: &mut Vec<ItemError>,
+) {
+    let original = base.join(from);
+    let result = if provider.exists(&original) {
+        Err(AppError::new(code::FS_EXISTS).with("name", from))
+    } else {
+        rename(tmp, &original).map_err(AppError::from)
+    };
+    if let Err(error) = result {
+        errors.push(ItemError::new(
+            tmp.to_string_lossy().as_ref(),
+            error.with("operation", "batch-rollback"),
+        ));
+    }
 }
 
 /// Starts a copy operation in the background (returns immediately).
@@ -329,6 +376,112 @@ mod tests {
     }
     fn ren(a: &str, b: &str) -> (String, String) {
         (a.to_string(), b.to_string())
+    }
+
+    #[test]
+    fn failed_staging_preserves_every_source() {
+        let d = tmp_dir();
+        write(&d, "a.txt", "AAA");
+        write(&d, "b.txt", "BBB");
+        let result = super::rename_batch_on(
+            &crate::vfs::local::LocalProvider,
+            &d,
+            vec![ren("a.txt", "b.txt"), ren("b.txt", "c.txt")],
+            |from, to| {
+                if from.file_name().unwrap() == "b.txt" {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "injected staging failure",
+                    ));
+                }
+                fs::rename(from, to)
+            },
+        );
+        assert_eq!(read(&d, "b.txt"), "BBB");
+        assert_eq!(read(&d, "a.txt"), "AAA");
+        assert_eq!(result.ok, 0);
+        assert!(!result.errors.is_empty());
+        assert!(!exists(&d, "c.txt"));
+        fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn failed_swap_publication_keeps_both_contents() {
+        let d = tmp_dir();
+        write(&d, "a.txt", "AAA");
+        write(&d, "b.txt", "BBB");
+        let result = super::rename_batch_on(
+            &crate::vfs::local::LocalProvider,
+            &d,
+            vec![ren("a.txt", "b.txt"), ren("b.txt", "a.txt")],
+            |from, to| {
+                if to.file_name().unwrap() == "a.txt" {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "injected publication failure",
+                    ));
+                }
+                fs::rename(from, to)
+            },
+        );
+        assert_eq!(read(&d, "b.txt"), "AAA");
+        assert_eq!(result.ok, 1);
+        assert!(!result.errors.is_empty());
+        let retained = fs::read_dir(&d)
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .find(|p| {
+                p.file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .starts_with(".rcren-tmp-")
+            })
+            .unwrap();
+        assert_eq!(fs::read_to_string(&retained).unwrap(), "BBB");
+        assert!(result
+            .errors
+            .iter()
+            .any(|e| e.item == retained.to_string_lossy()));
+        fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn target_created_during_staging_is_not_overwritten() {
+        let d = tmp_dir();
+        write(&d, "a.txt", "AAA");
+        let result = super::rename_batch_on(
+            &crate::vfs::local::LocalProvider,
+            &d,
+            vec![ren("a.txt", "x.txt")],
+            |from, to| {
+                fs::rename(from, to)?;
+                if from.file_name().unwrap() == "a.txt" {
+                    write(&d, "x.txt", "external");
+                }
+                Ok(())
+            },
+        );
+        assert_eq!(read(&d, "x.txt"), "external");
+        assert_eq!(read(&d, "a.txt"), "AAA");
+        assert_eq!(result.ok, 0);
+        assert!(!result.errors.is_empty());
+        fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn unchanged_source_is_not_an_overwrite_permission() {
+        let d = tmp_dir();
+        write(&d, "a.txt", "AAA");
+        write(&d, "b.txt", "BBB");
+        let result = rename_batch(
+            d.to_string_lossy().into(),
+            vec![ren("a.txt", "a.txt"), ren("b.txt", "a.txt")],
+        );
+        assert_eq!(read(&d, "a.txt"), "AAA");
+        assert_eq!(read(&d, "b.txt"), "BBB");
+        assert_eq!(result.ok, 0);
+        assert!(!result.errors.is_empty());
+        fs::remove_dir_all(d).unwrap();
     }
 
     #[test]
