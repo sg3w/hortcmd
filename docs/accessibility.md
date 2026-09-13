@@ -29,6 +29,28 @@ accent text uses `#1d4ed8`; their default adjacent surfaces are regression-teste
 The browser confirmed the new fill in both themes. This verifies those token
 pairs, not every custom file color or every other UI color.
 
+## Native macOS evidence (2026-09-13)
+
+The implementation at `bf34c60` was built as an unsigned debug app on macOS
+26.6.2 (25G83), using the separate bundle identifier `com.hortcmd.a11ytest` and
+`HORTCMD_CONFIG_DIR=/tmp/hortcmd-043-native/config`. The bundled app started and
+exposed one window through System Events after accessibility access was granted.
+
+In the German settings workflow, the test focused the native accessibility
+element named Einstellungen and sent Enter. WebKit exposed the selected category
+as an `AXRadioButton` titled Allgemein with value true. Arrow Down moved focus and
+selection to Dateiansicht, also with value true. Escape closed the dialog and
+restored focus to the Einstellungen button. This verifies native dialog key
+handling and focus restoration; the initial focus was set through accessibility,
+so this is not evidence for a complete Tab traversal of the application.
+
+VoiceOver 10 was started through its first-run dialog. Reading its last phrase
+through AppleScript did not yield usable output, so no screen-reader speech
+result is claimed. VoiceOver was switched off again, its AppleScript-control
+option was verified off (the original value), and the utility window was closed.
+The manual matrix below remains pending; this native settings check does not
+cover other workflows, English, actual zoom, or Windows/Linux screen readers.
+
 ## Translation ownership
 
 German and English UI wording belongs in the typed resources under
