@@ -50,7 +50,7 @@ Availability column: `state()` of the command in `features/commander/commands.ts
 ## Markieren / Select
 
 Owned and completed by TICKET-059: the menu now carries all sixteen functions of
-the Total Commander model in four separator-delimited groups, and the previously
+the Norton Commander model in four separator-delimited groups, and the previously
 missing ones are implemented rather than merely listed.
 
 **Selection semantics.** A command whose label says *files* leaves folders as
@@ -83,7 +83,7 @@ delete (`panesStore.pruneSelection`).
 | Clear comparison filter | `panesStore.clearCompareFilter` | `mark.clearCompare` | — | **059** |
 | Mark entry under the cursor | `panesStore.toggleMark` | — | Insert / Space | 040 |
 
-**Deliberate deviations from Total Commander**, and why:
+**Deliberate deviations from Norton Commander**, and why:
 
 * **Extension grouping** uses the *last* extension, case-insensitively:
   `a.tar.gz` groups by `gz`, while `.env` and `README` group by "no extension".
@@ -202,7 +202,7 @@ No "save settings" command: every setting is persisted the moment it changes
 | Keyboard shortcuts | `uiStore.openShortcuts`, `ShortcutsDialog`, `commands.ts:shortcutsOf` | `help.keys` | Hilfe | 040 |
 | About hortcmd | `uiStore.openAbout`, `AboutDialog` | `help.about` | Hilfe | 040 |
 
-## Deliberately not adopted from the Total Commander template
+## Deliberately not adopted from the Norton Commander template
 
 Archive test, split/combine files, encode/decode, print, comments, save/load
 selection (→ TICKET-059), checksum files, Windows shares, toolbar editor, a

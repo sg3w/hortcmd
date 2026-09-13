@@ -7,7 +7,7 @@
 // reach the panes as a list of paths. The frontend only ever sees a
 // `SelectionFile` that has already passed every rule below.
 //
-// Deliberately not compatible with Total Commander's line-based
+// Deliberately not compatible with Norton Commander's line-based
 // `.lst` files: plain lines cannot carry names containing tabs or
 // line breaks without an escaping scheme of their own, and claiming
 // compatibility with an unspecified format would be a promise we

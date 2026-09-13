@@ -67,7 +67,7 @@ Prüfliste; der Bestandsabgleich entscheidet über Erweiterungen und Verfügbark
 | **Konfiguration** | Einstellungen, Erscheinungsbild, Sprache; vorhandene Einstellungsseiten für Programme, Terminal, Favoriten, Dateifarben, Transfers und gegebenenfalls Plugins über denselben Dialog. |
 | **Hilfe** | Vorhandene Tastaturübersicht und Über-Dialog aus 040; weitere Hilfsangebote nur mit funktionierendem Inhalt/Ziel. |
 
-### Anwendung der Total-Commander-Vorlage
+### Anwendung der Norton-Commander-Vorlage
 
 - Referenzen: Screenshots vom 11.09.2026 um 08:15:00 (Markieren), 08:15:34
   (Dateien), 08:15:50 (Netz), 08:16:02 (Ansicht), 08:16:06 (Konfigurieren).

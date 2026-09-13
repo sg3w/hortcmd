@@ -2,7 +2,7 @@
 
 ## Ziel und Umfang
 
-Das Menü **Markieren** nach dem bereitgestellten Total-Commander-Screenshot vom
+Das Menü **Markieren** nach dem bereitgestellten Norton-Commander-Screenshot vom
 11.09.2026, 08:15:00 aufbauen. **Fehlende Funktionen werden in diesem Ticket
 implementiert**, nicht nur als Menüeinträge vorbereitet. Vorhandene Funktionen
 wiederverwenden und erweitern. Der Screenshot dient als visuelle und funktionale

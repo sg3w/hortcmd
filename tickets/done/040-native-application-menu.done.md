@@ -31,7 +31,7 @@ Menüleiste. Siehe [Tauri: Window Menu](https://v2.tauri.app/learn/window-menu/)
 - `src/features/net/netStore.ts`: vorhandener Verbindungsmanager;
   SFTP/SSH, SMB, WebDAV und FTP/FTPS sind implementiert.
 
-Vorlage sind die fünf vom Nutzer bereitgestellten Total-Commander-Screenshots
+Vorlage sind die fünf vom Nutzer bereitgestellten Norton-Commander-Screenshots
 vom 11.09.2026 (08:15:00, 08:15:34, 08:15:50, 08:16:02, 08:16:06).
 Übernommen werden Kategorien, kompakte Dropdowns, Trenner, Untermenüs,
 Zustandsmarkierungen und rechts ausgerichtete Tastenkürzel. Die Bilder zeigen

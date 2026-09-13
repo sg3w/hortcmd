@@ -6,7 +6,7 @@ After file operations like copy, move, or paste, the scroll position of the file
 ## Background
 Currently, after a file operation at least one of the file panes jumps to the top of the list. As a result the user loses orientation, especially in large directories.
 
-The behavior should match that of a classic file manager like Total Commander.
+The behavior should match that of a classic file manager like Norton Commander.
 
 ## Requirements
 - The scroll position of the source pane stays unchanged.

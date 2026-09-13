@@ -1,7 +1,7 @@
 [package]
 name = "hortcmd"
 version = "0.1.0"
-description = "Dateicommander im Total-Commander-Stil"
+description = "Dateicommander im Norton-Commander-Stil"
 authors = ["you"]
 edition = "2021"
 # Rust 1.85.1 covers both smb 0.11.1 and the pinned keepass release.

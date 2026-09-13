@@ -153,7 +153,7 @@ export const settings = ns(
   "settings.colors.custom.remove": "Regel entfernen",
   "about.version": "Version",
   "about.tagline":
-    "Dateicommander im Total-Commander-Stil, gebaut mit Rust, Tauri und React.",
+    "Dateicommander im Norton-Commander-Stil, gebaut mit Rust, Tauri und React.",
   "about.license":
     "Veröffentlicht unter der MIT-Lizenz. © 2026 Jörg Hammel.",
   },
@@ -303,7 +303,7 @@ export const settings = ns(
   "settings.colors.custom.remove": "Remove rule",
   "about.version": "Version",
   "about.tagline":
-    "A Total Commander style file manager built with Rust, Tauri and React.",
+    "A Norton Commander style file manager built with Rust, Tauri and React.",
   "about.license": "Released under the MIT license. © 2026 Jörg Hammel.",
   },
 );

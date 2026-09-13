@@ -1,4 +1,4 @@
-// Function-key bar F3–F8 in Total Commander style.
+// Function-key bar F3–F8 in Norton Commander style.
 
 import {
   Copy,

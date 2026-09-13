@@ -2,7 +2,7 @@
 
 # hortcmd
 
-hortcmd is a cross-platform file manager in the style of Total Commander, built with **Rust**, **Tauri v2**, **React**, and **TypeScript**.
+hortcmd is a cross-platform file manager in the style of Norton Commander, built with **Rust**, **Tauri v2**, **React**, and **TypeScript**.
 
 ## Principles
 

@@ -1,6 +1,6 @@
 # hortcmd
 
-A file commander in the style of Total Commander, built with **Rust** + **Tauri v2**.
+A file commander in the style of Norton Commander, built with **Rust** + **Tauri v2**.
 Two panes, a function-key bar (F3–F8), tabs, and the same interface for local
 folders and remote servers.
 

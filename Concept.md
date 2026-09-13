@@ -1,6 +1,6 @@
 # hortcmd – Concept
 
-A file commander in the style of Total Commander, built with **Rust + Tauri v2**
+A file commander in the style of Norton Commander, built with **Rust + Tauri v2**
 (backend) and **React + TypeScript** (frontend).
 
 This document records the architecture, decisions, and the prioritized backlog.
@@ -10,7 +10,7 @@ It is the reference for further implementation.
 
 ## 1. Vision
 
-A dual-pane file manager with keyboard-centric operation modeled on Total Commander –
+A dual-pane file manager with keyboard-centric operation modeled on Norton Commander –
 but deliberately with macOS strengths (Quick Look, Finder tags, Spotlight) and developer
 features (Git, terminal, SFTP) as a differentiator.
 

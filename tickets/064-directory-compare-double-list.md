@@ -6,7 +6,7 @@ Den bestehenden Dialog „Verzeichnisse vergleichen / synchronisieren“ als
 **doppelte Liste** darstellen: links die Quelldatei, rechts ihr Gegenstück,
 mit gemeinsamem Vergleichsstatus in der Mitte. Zusammengehörige Dateien müssen
 immer auf derselben Zeile liegen. Vorlage ist der Nutzer-Screenshot
-„Bildschirmfoto 2026-09-11 um 16.43.54.png“ von Total Commander.
+„Bildschirmfoto 2026-09-11 um 16.43.54.png“ von Norton Commander.
 
 Der Screenshot dient als Layoutvorlage. Dessen zusätzliche Optionen wie
 „Asymmetrisch“, Inhaltsvergleich und Datum ignorieren gehören nicht automatisch

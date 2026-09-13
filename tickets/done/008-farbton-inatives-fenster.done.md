@@ -6,7 +6,7 @@ The currently selected file should stay clearly visible in the inactive file pan
 ## Background
 Currently the selection in the inactive file pane is hard to see or not visible at all. As a result the user quickly loses orientation during file operations, especially when working with two directories.
 
-The selected file in the inactive panel should be shown – similar to Total Commander – with a subtle green highlight. The highlight should be visually clearly distinct from the selection in the active panel.
+The selected file in the inactive panel should be shown – similar to Norton Commander – with a subtle green highlight. The highlight should be visually clearly distinct from the selection in the active panel.
 
 ## Requirements
 - The selected file in the inactive file pane gets a green highlight.

@@ -13,7 +13,7 @@ can have colorful icons." The existing `CommandBar.tsx` provides the pattern
 ## Requirements
 - Coordinate with [TICKET-040](040-native-application-menu.md): core commands use
   the in-window application menu; plugin commands retain this separate plugin
-  bar. Do not add a Total Commander-style Starter menu or plugin menu contribution
+  bar. Do not add a Norton Commander-style Starter menu or plugin menu contribution
   API as part of either ticket without a separate feature specification.
 - New **plugin command bar** as a second bar (below the main CommandBar), only
   visible when activated plugins contribute buttons.

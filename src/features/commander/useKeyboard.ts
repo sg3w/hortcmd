@@ -33,7 +33,7 @@ const PAGE = 20; // Zeilen pro Seiten-Sprung
  * not by `key`: the keypad reports the same `key` as the main block, so
  * only `code` tells "Num +" and "+" apart. The plain keys of the main
  * block keep working unchanged; the keypad merely adds the modifier
- * combinations Total Commander users expect. Every one of them is also
+ * combinations Norton Commander users expect. Every one of them is also
  * reachable from the "Mark" menu, so a keyboard without a keypad loses
  * nothing.
  */
