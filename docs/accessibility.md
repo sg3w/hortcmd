@@ -133,6 +133,23 @@ a file row. Opening F2 then exposed `renamed.txt`, confirming the revealed curso
 target; that verification prompt was cancelled without editing the file. This
 proves the native search/keyboard/reveal path in German with VoiceOver off.
 
+English native checks repeated the file and search flows in those same disposable
+folders. The Rename dialog selected only `moved` in `moved.txt`; replacing it with
+`english` retained the extension. F5 copied `english.txt` from right to left with
+identical hashes. Renaming the source to `english-move.txt` and using F6 removed
+that source while preserving its bytes at the left-hand destination. The remaining
+right-hand `renamed.txt` stayed present after F8/Escape; the dialog read Move to
+trash and its message explicitly distinguished permanent deletion with Shift.
+
+Alt+F7 opened Search on the left-hand fixture folder. Entering `*.txt` and pressing
+Enter produced an accessible hits list containing `english.txt` and
+`english-move.txt`, each 45 bytes with the correct parent path. From Name, Tab
+traversed Regex, Content, Regex, Ignore, Case and Search to the first result. End
+selected `english-move.txt`; Enter returned focus to a file row, and an immediately
+cancelled F2 prompt verified that exact revealed filename. The app was restored
+to German afterward, confirmed by the Einstellungen focus name. These tests ran
+with VoiceOver off and did not retry the previously unsuccessful trash operation.
+
 ## Translation ownership
 
 German and English UI wording belongs in the typed resources under
