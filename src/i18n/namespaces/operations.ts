@@ -11,6 +11,7 @@ import { ns } from "./ns";
 export const operations = ns(
   {
   "fb.title": "Auswählen",
+  "fb.path": "Ordnerpfad",
   "fb.select": "Auswählen",
   "fb.cancel": "Abbrechen",
   "fb.up": "Übergeordneter Ordner",
@@ -42,6 +43,8 @@ export const operations = ns(
   "op.currentFile": "Aktuelle Datei",
   "op.overall": "Gesamt",
   "op.done": "Abgeschlossen",
+  "op.announceState": "{operation}: {state}. {name}",
+  "op.announceProgress": "{operation}: {percent} Prozent. {name}",
   "op.cancelled": "Abgebrochen",
   "op.pause": "Pausieren",
   "op.resume": "Fortsetzen",
@@ -83,6 +86,7 @@ export const operations = ns(
   },
   {
   "fb.title": "Select",
+  "fb.path": "Folder path",
   "fb.select": "Select",
   "fb.cancel": "Cancel",
   "fb.up": "Parent folder",
@@ -114,6 +118,8 @@ export const operations = ns(
   "op.currentFile": "Current file",
   "op.overall": "Overall",
   "op.done": "Completed",
+  "op.announceState": "{operation}: {state}. {name}",
+  "op.announceProgress": "{operation}: {percent} percent. {name}",
   "op.cancelled": "Cancelled",
   "op.pause": "Pause",
   "op.resume": "Resume",

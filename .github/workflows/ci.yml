@@ -99,6 +99,8 @@ jobs:
         run: npm run check:boundaries
       - name: Documentation links, commands and the provider matrix
         run: npm run check:docs
+      - name: Localized UI text
+        run: npm run check:ui-text
       - name: TypeScript
         run: npm run typecheck
       - name: Frontend tests

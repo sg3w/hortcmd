@@ -17,14 +17,15 @@
     "check:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
     "check:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets --all-features -- -D warnings",
     "check:rust": "cargo test --manifest-path src-tauri/Cargo.toml --locked",
-    "check": "npm run check:fmt && npm run check:clippy && npm run check:rust && npm run check:bindings && npm run check:errorcodes && npm run check:boundaries && npm run check:docs && npm run typecheck && npm test && npm run build && npm run check:bundle",
+    "check": "npm run check:fmt && npm run check:clippy && npm run check:rust && npm run check:bindings && npm run check:errorcodes && npm run check:boundaries && npm run check:docs && npm run check:ui-text && npm run typecheck && npm test && npm run build && npm run check:bundle",
     "tauri": "tauri",
     "check:bundle": "node scripts/bundle-report.mjs",
     "bundle:report": "node scripts/bundle-report.mjs --build",
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "gen:errorcodes": "node scripts/gen-error-codes.mjs",
     "check:errorcodes": "node scripts/gen-error-codes.mjs --check",
-    "check:docs": "node scripts/check-docs.mjs"
+    "check:docs": "node scripts/check-docs.mjs",
+    "check:ui-text": "node --test scripts/check-ui-text.test.mjs && node scripts/check-ui-text.mjs"
   },
   "dependencies": {
     "@radix-ui/react-context-menu": "^2.3.3",
@@ -57,6 +58,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.5.2",
+    "axe-core": "^4.13.0",
     "jsdom": "^29.1.1",
     "postcss": "^8.5.28",
     "tailwindcss": "^3.4.19",

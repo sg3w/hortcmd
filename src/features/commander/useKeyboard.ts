@@ -234,6 +234,7 @@ export function useKeyboard(): void {
         case "Tab":
           e.preventDefault();
           s.setActive(side === "left" ? "right" : "left");
+          document.querySelector<HTMLElement>(`#${side === "left" ? "right" : "left"}-files [role="grid"]`)?.focus();
           return;
         case "ArrowDown":
           e.preventDefault();

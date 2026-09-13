@@ -13,7 +13,7 @@
 // ============================================================
 
 import { useEffect } from "react";
-import { GitCompareArrows, Info, X } from "lucide-react";
+import { AlertTriangle, GitCompareArrows, Info, X } from "lucide-react";
 import { panelOf, usePanes, type Side } from "@/store/panesStore";
 import { fillVars, useNotices } from "@/store/noticeStore";
 import { useT } from "@/store/settingsStore";
@@ -36,16 +36,15 @@ export function PaneNotice({ side }: { side: Side }) {
   // Bound to `seq`, so re-running the same command restarts the timer
   // instead of letting the first one cut the second message short.
   useEffect(() => {
-    if (!notice) return;
+    if (!notice || notice.tone === "error") return;
     const id = window.setTimeout(() => clearNotice(side), NOTICE_MS);
     return () => window.clearTimeout(id);
   }, [notice?.seq, notice, side, clearNotice]);
 
   const stale = freshness !== "current" || loadError || refreshError;
-  if (!hidden && !notice && !stale) return null;
 
   return (
-    <div className="flex-shrink-0 border-t border-edge">
+    <div className={cn("flex-shrink-0", (hidden || notice || stale) && "border-t border-edge")}>
       {stale && <div role="status" className="flex items-center gap-2 bg-header px-2 py-1 text-[12px]">
         <span className="min-w-0 flex-1 text-dim">
           {t(freshness === "offline" ? "refresh.offline" : freshness === "manual" ? "refresh.manual" : "refresh.stale")}
@@ -69,15 +68,12 @@ export function PaneNotice({ side }: { side: Side }) {
           </button>
         </div>
       )}
+      <div role="status" aria-live="polite" aria-atomic="true">
       {notice && (
-        <div className="flex items-center gap-2 bg-header px-2 py-1 text-[12px]">
-          <Info
-            size={13}
-            className={cn(
-              "shrink-0",
-              notice.tone === "error" ? "text-red-400" : "text-accent",
-            )}
-          />
+        <div key={notice.seq} className="flex items-center gap-2 bg-header px-2 py-1 text-[12px]">
+          {notice.tone === "error"
+            ? <AlertTriangle size={13} aria-hidden className="shrink-0 text-red-400" />
+            : <Info size={13} aria-hidden className="shrink-0 text-accent" />}
           <span
             className={cn(
               "min-w-0 flex-1 truncate",
@@ -95,6 +91,7 @@ export function PaneNotice({ side }: { side: Side }) {
           </button>
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -64,7 +64,7 @@ export function DriveSelect({ side, drives }: Props) {
       >
         <Select.Trigger
           className="flex min-w-[150px] items-center gap-1.5 rounded border border-edge bg-panel px-2 py-0.5 font-mono text-text outline-none hover:border-accent data-[state=open]:border-accent"
-          aria-label="Speicherort"
+          aria-label={t("drive.label")}
         >
           <HardDrive size={13} className="shrink-0 text-accent" />
           <Select.Value placeholder={t("drive.placeholder")} />

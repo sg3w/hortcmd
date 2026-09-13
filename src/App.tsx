@@ -44,6 +44,7 @@ import { Panel } from "@/features/panel/Panel";
 // must never wait on a fetch, and the transfer surface reports on work
 // that is already running (TICKET-034).
 import { OperationDialogs } from "@/components/ui/OperationDialogs";
+import { ConnectionAnnouncements } from "@/features/net/ConnectionAnnouncements";
 import { TransferTray, TransferWindow } from "@/components/ui/TransferView";
 import { LazyDialogs } from "@/features/LazyDialogs";
 import { useFileColorVars } from "@/store/fileColorRules";
@@ -229,7 +230,7 @@ export default function App() {
 
   if (!ready) {
     return (
-      <div className="flex h-full items-center justify-center text-dim">Lade …</div>
+      <div className="flex h-full items-center justify-center text-dim">{t("lazy.loading")}</div>
     );
   }
 
@@ -250,6 +251,25 @@ export default function App() {
           <Panel side="left" drives={drives} />
         </div>
         <div
+          role="separator"
+          tabIndex={0}
+          aria-label={t("pane.width")}
+          aria-orientation="vertical"
+          aria-valuemin={15}
+          aria-valuemax={85}
+          aria-valuenow={Math.round(paneSplit * 100)}
+          onKeyDown={(event) => {
+            let next = paneSplit;
+            switch (event.key) {
+              case "ArrowLeft": next -= 0.05; break;
+              case "ArrowRight": next += 0.05; break;
+              case "Home": next = 0.15; break;
+              case "End": next = 0.85; break;
+              default: return;
+            }
+            event.preventDefault();
+            setPaneSplit(next);
+          }}
           onMouseDown={startSplitDrag}
           className="relative w-1 flex-shrink-0 cursor-col-resize bg-edge hover:bg-accent"
         >
@@ -277,6 +297,9 @@ export default function App() {
       <div className="flex flex-shrink-0 items-center gap-1.5 border-t border-edge bg-panel px-2 py-1">
         <span className="font-mono text-[12px] text-exec">{activePath || "~"}</span>
         <input
+          aria-label={t("command.input")}
+          title={t("command.unavailable")}
+          disabled
           type="text"
           spellCheck={false}
           autoComplete="off"
@@ -291,6 +314,7 @@ export default function App() {
       <McpRuntime />
       <OperationDialogs />
       <TransferWindow />
+      <ConnectionAnnouncements />
       <LazyDialogs />
     </div>
   );

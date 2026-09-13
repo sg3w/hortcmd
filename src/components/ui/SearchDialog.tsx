@@ -5,9 +5,8 @@
 // virtualized. A double-click reveals the hit in the active window.
 // ============================================================
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   AlertTriangle,
   FileText,
@@ -30,14 +29,13 @@ import {
 import { useSearchDialog, searchRoot, revealPath } from "@/store/searchStore";
 import { describeErrorFull } from "@/store/errorText";
 import { useT } from "@/store/settingsStore";
-import { formatSize } from "@/lib/format";
-import { parentPath } from "@/lib/path";
 import type { TransKey } from "@/i18n/dictionaries";
 import { Check } from "@/components/ui/dialogControls";
 import { cn } from "@/lib/cn";
 import { consumeDialogKey, markDialogKey } from "@/lib/keys";
 
-const ROW_H = 40;
+import { SearchResults } from "./SearchResults";
+import { useDialogFocusReturn } from "./useDialogFocusReturn";
 
 const MODES: { mode: SearchMode; key: TransKey; Icon: typeof Files }[] = [
   { mode: "files", key: "search.mode.files", Icon: FileText },
@@ -70,6 +68,8 @@ const STATUS_WARNING: Partial<Record<SearchStatus, TransKey>> = {
 };
 
 export function SearchDialog() {
+  const returnFocus = useDialogFocusReturn();
+  const fieldId = useId();
   const side = useSearchDialog((s) => s.side);
   const close = useSearchDialog((s) => s.close);
   // Mode the caller asked for — the Befehle menu opens the dialog straight
@@ -102,7 +102,6 @@ export function SearchDialog() {
   const activeToken = useRef<string | null>(null);
   const startedToken = useRef<string | null>(null);
 
-  const scrollRef = useRef<HTMLDivElement>(null);
 
   // Adopt the start folder and the requested mode on first open.
   const open = side !== null;
@@ -113,13 +112,6 @@ export function SearchDialog() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
-
-  const rowVirtualizer = useVirtualizer({
-    count: hits.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_H,
-    overscan: 15,
-  });
 
   /** Stops the run in the backend (new search, dialog closed, Stop). */
   const stopRunning = useCallback(() => {
@@ -211,6 +203,17 @@ export function SearchDialog() {
   };
 
   const warning = status ? STATUS_WARNING[status] : undefined;
+  // Keep streamed result counts silent until the run settles. This region stays
+  // mounted so repeated runs are announced after the intervening running state.
+  let announcement = "";
+  if (blocked) announcement = blocked;
+  else if (running) announcement = t("search.running");
+  else if (status) {
+    announcement = warning
+      ? `${t(warning)}: ${hits.length} ${t("search.results")}`
+      : t("search.complete").replace("{n}", String(hits.length));
+    if (status === "partial") announcement += ` (${skipped})`;
+  }
 
   const showFileOpts = mode === "files";
   const showLargeOpts = mode === "large_files";
@@ -220,6 +223,7 @@ export function SearchDialog() {
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/50" />
         <Dialog.Content
+          onCloseAutoFocus={returnFocus}
           onKeyDownCapture={markDialogKey}
           aria-describedby={undefined}
           className="fixed left-1/2 top-1/2 z-50 flex h-[86vh] w-[92vw] max-w-[1000px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-edge bg-panel shadow-2xl"
@@ -236,6 +240,7 @@ export function SearchDialog() {
               {MODES.map(({ mode: m, key, Icon }) => (
                 <button
                   key={m}
+                  aria-pressed={mode === m}
                   onClick={() => setMode(m)}
                   className={cn(
                     "flex items-center gap-1.5 rounded border px-2.5 py-1 text-[12px]",
@@ -262,11 +267,12 @@ export function SearchDialog() {
 
             {showFileOpts && (
               <div className="flex flex-col gap-2">
-                <label className="flex items-center gap-2 text-[12px]">
-                  <span className="w-20 shrink-0 text-dim">
+                <div className="flex items-center gap-2 text-[12px]">
+                  <label htmlFor={`${fieldId}-name`} className="w-20 shrink-0 text-dim">
                     {t("search.name")}
-                  </span>
+                  </label>
                   <input
+                    id={`${fieldId}-name`}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder={t("search.name.ph")}
@@ -282,12 +288,13 @@ export function SearchDialog() {
                     onChange={() => setNameRegex((v) => !v)}
                     label={t("search.regex")}
                   />
-                </label>
-                <label className="flex items-center gap-2 text-[12px]">
-                  <span className="w-20 shrink-0 text-dim">
+                </div>
+                <div className="flex items-center gap-2 text-[12px]">
+                  <label htmlFor={`${fieldId}-content`} className="w-20 shrink-0 text-dim">
                     {t("search.content")}
-                  </span>
+                  </label>
                   <input
+                    id={`${fieldId}-content`}
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
                     placeholder={t("search.content.ph")}
@@ -303,7 +310,7 @@ export function SearchDialog() {
                     onChange={() => setContentRegex((v) => !v)}
                     label={t("search.regex")}
                   />
-                </label>
+                </div>
               </div>
             )}
 
@@ -365,6 +372,8 @@ export function SearchDialog() {
             </div>
           </div>
 
+          <div role="status" aria-atomic="true" className="sr-only">{announcement}</div>
+
           {failure && <div role="alert" className="px-3 py-2 text-[12px] text-red-400">{failure}</div>}
 
           {/* Status line */}
@@ -392,54 +401,11 @@ export function SearchDialog() {
           </div>
 
           {/* Result list */}
-          <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
-            {ran && !running && !failure && hits.length === 0 ? (
-              <div className="p-4 text-[13px] text-dim">{t("search.empty")}</div>
-            ) : (
-              <div
-                className="relative w-full"
-                style={{ height: rowVirtualizer.getTotalSize() }}
-              >
-                {rowVirtualizer.getVirtualItems().map((v) => {
-                  const h = hits[v.index];
-                  return (
-                    <div
-                      key={v.key}
-                      onDoubleClick={() => onReveal(h)}
-                      title={h.path}
-                      className={cn(
-                        "absolute left-0 top-0 flex w-full cursor-default flex-col justify-center border-b border-edge/50 px-3",
-                        h.group % 2 === 1 && "bg-accent-dim/30",
-                      )}
-                      style={{
-                        height: ROW_H,
-                        transform: `translateY(${v.start}px)`,
-                      }}
-                    >
-                      <div className="flex items-baseline gap-2">
-                        <span className="truncate text-[12px] text-text">
-                          {h.name}
-                        </span>
-                        {!h.is_dir && (
-                          <span className="shrink-0 font-mono text-[11px] text-dim">
-                            {formatSize(h.size)}
-                          </span>
-                        )}
-                        {h.detail && (
-                          <span className="truncate font-mono text-[11px] text-emerald-400">
-                            {h.detail}
-                          </span>
-                        )}
-                      </div>
-                      <span className="truncate text-[10px] text-dim">
-                        {parentPath(h.path)}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          {ran && !running && !failure && hits.length === 0 ? (
+            <div className="p-4 text-[13px] text-dim">{t("search.empty")}</div>
+          ) : (
+            <SearchResults key={runToken.current} hits={hits} onReveal={onReveal} />
+          )}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

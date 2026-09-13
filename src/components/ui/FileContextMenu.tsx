@@ -1,3 +1,4 @@
+import { formatShortcut } from "@/lib/shortcut";
 // ============================================================
 // Right-click context menu over the file list (Radix UI).
 // First items: copy, cut, paste.
@@ -204,8 +205,8 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
         <ContextMenu.Content className="z-50 min-w-[210px] rounded-md border border-edge bg-panel p-1 shadow-xl">
-          {item("clip-copy", "ctx.copy", Copy, { shortcut: "⌘C" })}
-          {item("clip-cut", "ctx.cut", Scissors, { shortcut: "⌘X" })}
+          {item("clip-copy", "ctx.copy", Copy, { shortcut: formatShortcut({key:"C",mods:["Mod"]}) })}
+          {item("clip-cut", "ctx.cut", Scissors, { shortcut: formatShortcut({key:"X",mods:["Mod"]}) })}
           <ContextMenu.Item
             className={itemCls}
             disabled={!hasClip || !pasteOk}
@@ -214,7 +215,7 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
           >
             <ClipboardPaste size={14} className="shrink-0 text-dim" aria-hidden />
             <span>{t("ctx.paste")}</span>
-            <span className="ml-auto pl-6 text-dim">⌘V</span>
+            <span className="ml-auto pl-6 text-dim">{formatShortcut({key:"V",mods:["Mod"]})}</span>
           </ContextMenu.Item>
           <ContextMenu.Separator className="my-1 h-px bg-edge" />
           {item("open-tab", "ctx.openNewTab", FolderSymlink)}
@@ -235,7 +236,7 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
             >
               <ScanEye size={14} className="shrink-0 text-dim" aria-hidden />
               <span>{t("ctx.quicklook")}</span>
-              <span className="ml-auto pl-6 text-dim">Space</span>
+              <span className="ml-auto pl-6 text-dim">{t("key.space")}</span>
             </ContextMenu.Item>
           )}
           {item("edit", "ctx.edit", Pencil, {

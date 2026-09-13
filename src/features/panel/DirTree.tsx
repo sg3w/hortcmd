@@ -11,7 +11,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronRight, Folder, FolderOpen } from "lucide-react";
 import { panelOf, usePanes, type Side } from "@/store/panesStore";
 import { listDir } from "@/ipc/client";
-import { useSettings } from "@/store/settingsStore";
+import { useSettings, useT } from "@/store/settingsStore";
 import { ancestorChain, baseName, joinPath, rootOf } from "@/lib/path";
 import { cn } from "@/lib/cn";
 
@@ -22,9 +22,12 @@ const COLLATOR = new Intl.Collator("de", { numeric: true, sensitivity: "base" })
 interface TreeNode {
   path: string;
   depth: number;
+  position: number;
+  siblings: number;
 }
 
 export function DirTree({ side }: { side: Side }) {
+  const t = useT();
   const path = usePanes((s) => panelOf(s, side).path);
   const active = usePanes((s) => s.active === side);
   const loadDir = usePanes((s) => s.loadDir);
@@ -87,13 +90,14 @@ export function DirTree({ side }: { side: Side }) {
 
   // Flatten the visible nodes (only expanded branches).
   const nodes: TreeNode[] = [];
-  const walk = (p: string, depth: number) => {
-    nodes.push({ path: p, depth });
+  const walk = (p: string, depth: number, position: number, siblings: number) => {
+    nodes.push({ path: p, depth, position, siblings });
     if (expandedRef.current.has(p)) {
-      for (const k of childrenRef.current.get(p) ?? []) walk(k, depth + 1);
+      const children = childrenRef.current.get(p) ?? [];
+      children.forEach((child, index) => walk(child, depth + 1, index + 1, children.length));
     }
   };
-  walk(rootOf(path), 0);
+  walk(rootOf(path), 0, 1, 1);
 
   const virtualizer = useVirtualizer({
     count: nodes.length,
@@ -134,13 +138,22 @@ export function DirTree({ side }: { side: Side }) {
       case "ArrowRight":
         e.preventDefault();
         e.stopPropagation();
-        if (!expandedRef.current.has(selected)) void toggle(selected);
-        else move(idx + 1);
+        if (!expandedRef.current.has(selected) && childrenRef.current.get(selected)?.length !== 0) void toggle(selected);
+        else if (nodes[idx + 1]?.depth === nodes[idx].depth + 1) move(idx + 1);
         break;
       case "ArrowLeft":
         e.preventDefault();
         e.stopPropagation();
-        if (expandedRef.current.has(selected)) void toggle(selected);
+        if (expandedRef.current.has(selected) && childrenRef.current.get(selected)?.length !== 0) void toggle(selected);
+        else {
+          for (let parent = idx - 1; parent >= 0; parent--) {
+            if (nodes[parent].depth < nodes[idx].depth) { move(parent); break; }
+          }
+        }
+        break;
+      case "Home": case "End":
+        e.preventDefault(); e.stopPropagation();
+        move(e.key === "Home" ? 0 : nodes.length - 1);
         break;
       case "Enter":
         e.preventDefault();
@@ -155,6 +168,10 @@ export function DirTree({ side }: { side: Side }) {
       <div
         ref={scrollRef}
         tabIndex={0}
+        role="tree"
+        aria-label={t(side === "left" ? "tree.left" : "tree.right")}
+        aria-activedescendant={virtualizer.getVirtualItems().some(item => item.index === selIndex) ? `${side}-tree-${encodeURIComponent(selected)}` : undefined}
+        onFocus={() => setActive(side)}
         onMouseDown={() => setActive(side)}
         onKeyDown={onKeyDown}
         className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-0.5 outline-none"
@@ -172,6 +189,14 @@ export function DirTree({ side }: { side: Side }) {
             return (
               <div
                 key={node.path}
+                id={`${side}-tree-${encodeURIComponent(node.path)}`}
+                role="treeitem"
+                aria-label={label}
+                aria-level={node.depth + 1}
+                aria-posinset={node.position}
+                aria-setsize={node.siblings}
+                aria-selected={isSelected}
+                aria-expanded={showChevron ? isExpanded : undefined}
                 onMouseDown={() => setSelected(node.path)}
                 onDoubleClick={() => openInList(node.path)}
                 title={node.path}
@@ -189,6 +214,7 @@ export function DirTree({ side }: { side: Side }) {
                 }}
               >
                 <button
+                  tabIndex={-1}
                   onMouseDown={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
@@ -201,7 +227,8 @@ export function DirTree({ side }: { side: Side }) {
                     "flex h-4 w-4 shrink-0 items-center justify-center text-dim",
                     !showChevron && "invisible",
                   )}
-                  aria-label={isExpanded ? "Zuklappen" : "Aufklappen"}
+                  aria-label={`${t(isExpanded ? "tree.collapse" : "tree.expand")} ${label}`}
+                  aria-expanded={isExpanded}
                 >
                   <ChevronRight
                     size={12}

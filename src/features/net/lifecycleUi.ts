@@ -32,7 +32,7 @@ const PHASE_LABEL: Record<Phase, TransKey> = {
   connecting: "net.connecting",
   disconnecting: "net.disconnecting",
   failed: "net.failed",
-  disconnected: "net.connect",
+  disconnected: "net.disconnected",
 };
 
 /** The label for a phase — also what the status dot's tooltip reads. */

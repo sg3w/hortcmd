@@ -110,7 +110,7 @@ export function ConnectionsDialog() {
     >
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
         {error && (
-          <div className="rounded border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-[12px] text-red-400">
+          <div role="alert" className="rounded border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-[12px] text-red-400">
             {error}
           </div>
         )}
@@ -206,7 +206,7 @@ function ConnectionRow({
   };
 
   return (
-    <div className="flex items-center gap-2 rounded border border-edge bg-panel-inactive px-2.5 py-1.5">
+    <div role="group" aria-label={profile.name || profile.host} className="flex items-center gap-2 rounded border border-edge bg-panel-inactive px-2.5 py-1.5">
       <span
         className={cn(
           "h-2 w-2 shrink-0 rounded-full",
@@ -271,6 +271,7 @@ function ConnectionRow({
         {profile.protocol === "sftp" && (
           <button
             onClick={() => startForget(profile)}
+            aria-label={t("hostkey.forget")}
             disabled={secondaryDisabled}
             title={secondaryDisabled ? t("net.busy") : t("hostkey.forget")}
             className="rounded border border-edge p-1 text-dim hover:border-accent hover:text-text disabled:opacity-30 disabled:hover:border-edge"
@@ -280,6 +281,7 @@ function ConnectionRow({
         )}
         <button
           onClick={() => startEdit(profile)}
+          aria-label={t("net.edit")}
           disabled={secondaryDisabled}
           title={secondaryDisabled ? t("net.busy") : t("net.edit")}
           className="rounded border border-edge p-1 text-dim hover:border-accent hover:text-text disabled:opacity-30 disabled:hover:border-edge"
@@ -288,6 +290,7 @@ function ConnectionRow({
         </button>
         <button
           onClick={() => void remove(profile.id)}
+          aria-label={t("net.delete")}
           disabled={secondaryDisabled}
           title={secondaryDisabled ? t("net.busy") : t("net.delete")}
           className="rounded border border-edge p-1 text-dim hover:border-red-500 hover:text-red-400 disabled:opacity-30 disabled:hover:border-edge"

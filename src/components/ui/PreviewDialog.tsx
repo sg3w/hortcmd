@@ -4,6 +4,7 @@
 //   CSV table · plain text · hex – switchable in the header.
 // ============================================================
 
+import { useDialogFocusReturn } from "./useDialogFocusReturn";
 import { useEffect, useMemo, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { FileText, Image as ImageIcon, Binary, Info, X } from "lucide-react";
@@ -25,6 +26,7 @@ import { cn } from "@/lib/cn";
 import { markDialogKey } from "@/lib/keys";
 
 export function PreviewDialog() {
+  const returnFocus = useDialogFocusReturn();
   const preview = useOps((s) => s.preview);
   const setPreview = useOps((s) => s.setPreview);
   const t = useT();
@@ -59,6 +61,8 @@ export function PreviewDialog() {
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[64] bg-black/60" />
         <Dialog.Content
+          onCloseAutoFocus={returnFocus}
+          aria-describedby={undefined}
           onKeyDownCapture={markDialogKey}
           className="fixed left-1/2 top-1/2 z-[65] flex h-[80vh] w-[72vw] max-w-[1000px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-edge bg-panel shadow-2xl"
         >
@@ -75,6 +79,7 @@ export function PreviewDialog() {
                 {modes.map((m) => (
                   <button
                     key={m}
+                    aria-pressed={mode === m}
                     onClick={() => setMode(m)}
                     className={cn(
                       "px-2.5 py-0.5 text-[12px]",
@@ -90,6 +95,7 @@ export function PreviewDialog() {
             )}
             {isImage && (
               <button
+                aria-expanded={showExif}
                 onClick={() => setShowExif((v) => !v)}
                 className={cn(
                   "ml-auto flex items-center gap-1 rounded border border-edge px-2 py-0.5 text-[12px]",
@@ -103,7 +109,7 @@ export function PreviewDialog() {
               </button>
             )}
 
-            <Dialog.Close className="ml-2 shrink-0 rounded p-1 text-dim hover:bg-accent-dim hover:text-text">
+            <Dialog.Close aria-label={t("op.close")} className="ml-2 shrink-0 rounded p-1 text-dim hover:bg-accent-dim hover:text-text">
               <X size={15} />
             </Dialog.Close>
           </Dialog.Title>

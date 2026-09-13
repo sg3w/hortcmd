@@ -12,7 +12,7 @@
 // lazy boundary without props (ticket 034).
 // ============================================================
 
-import { useCallback, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useId, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import {
   AppWindow,
   Files as FilesIcon,
@@ -44,6 +44,8 @@ const MAX_FRAC = 0.5; // 1:1
 
 export function SettingsDialog() {
   const t = useT();
+  const id = useId();
+  const tabs = useRef(new Map<Category, HTMLButtonElement>());
   // Open state and the selected page both live in `uiStore`, so the
   // Konfiguration menu can open the dialog directly on one of them
   // (TICKET-058) — and so this component is self-contained, like every
@@ -103,23 +105,40 @@ export function SettingsDialog() {
       minSize={{ w: 560, h: 400 }}
     >
       <div ref={bodyRef} className="flex min-h-0 flex-1">
-            {/* Category tree */}
-            <div
+            {/* Categories use automatic tab activation. */}
+            <div role="tablist" aria-orientation="vertical" aria-label={t("settings.title")}
               className="shrink-0 overflow-y-auto border-r border-edge bg-panel-inactive p-2"
               style={{ width: `${leftFrac * 100}%` }}
             >
               {cats.map((c) => (
                 <button
                   key={c.id}
+                  ref={node => { if (node) tabs.current.set(c.id, node); else tabs.current.delete(c.id); }}
+                  role="tab" id={`${id}-${c.id}`} aria-controls={`${id}-panel`}
+                  aria-selected={category === c.id} tabIndex={category === c.id ? 0 : -1}
+                  onKeyDown={event => {
+                    const current = cats.findIndex(cat => cat.id === c.id);
+                    let next: number;
+                    switch (event.key) {
+                      case "ArrowDown": next = (current + 1) % cats.length; break;
+                      case "ArrowUp": next = (current + cats.length - 1) % cats.length; break;
+                      case "Home": next = 0; break;
+                      case "End": next = cats.length - 1; break;
+                      default: return;
+                    }
+                    event.preventDefault();
+                    setCategory(cats[next].id);
+                    tabs.current.get(cats[next].id)?.focus();
+                  }}
                   onClick={() => setCategory(c.id)}
                   className={cn(
                     "mb-0.5 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[13px]",
                     category === c.id
-                      ? "bg-accent-dim text-text"
+                      ? "bg-accent-dim text-text outline outline-1 -outline-offset-1 outline-accent"
                       : "text-dim hover:bg-header hover:text-text",
                   )}
                 >
-                  <c.Icon size={15} className="shrink-0" />
+                  <c.Icon aria-hidden size={15} className="shrink-0" />
                   <span className="truncate">{c.label}</span>
                 </button>
               ))}
@@ -127,6 +146,22 @@ export function SettingsDialog() {
 
             {/* Drag handle */}
             <div
+              role="separator" tabIndex={0} aria-orientation="vertical"
+              aria-label={t("settings.categoryWidth")} aria-controls={`${id}-panel`}
+              aria-valuemin={MIN_FRAC * 100} aria-valuemax={MAX_FRAC * 100}
+              aria-valuenow={Math.round(leftFrac * 100)}
+              onKeyDown={event => {
+                let next = leftFrac;
+                switch (event.key) {
+                  case "ArrowLeft": next -= 0.05; break;
+                  case "ArrowRight": next += 0.05; break;
+                  case "Home": next = MIN_FRAC; break;
+                  case "End": next = MAX_FRAC; break;
+                  default: return;
+                }
+                event.preventDefault();
+                setLeftFrac(Math.max(MIN_FRAC, Math.min(MAX_FRAC, next)));
+              }}
               onMouseDown={startResize}
               className="flex w-1.5 shrink-0 cursor-col-resize items-center justify-center bg-edge hover:bg-accent"
             >
@@ -134,7 +169,7 @@ export function SettingsDialog() {
             </div>
 
             {/* Form */}
-            <div className="min-w-0 flex-1 overflow-y-auto p-4">
+            <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-${category}`} className="min-w-0 flex-1 overflow-y-auto p-4">
               {category === "general" && <GeneralForm />}
               {category === "view" && <ViewForm />}
               {category === "colors" && <ColorsForm />}

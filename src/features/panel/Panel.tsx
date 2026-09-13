@@ -24,6 +24,7 @@ interface Props {
 }
 
 export function Panel({ side, drives }: Props) {
+  const tabId = usePanes(s => s[side].tabs[s[side].activeTab].id);
   const active = usePanes((s) => s.active === side);
   const showTree = usePanes((s) => s[side].viewMode === "tree");
   const open = (index: number) => openEntry(side, index);
@@ -66,6 +67,7 @@ export function Panel({ side, drives }: Props) {
       )}
     >
       <TabBar side={side} />
+      <div role="tabpanel" id={`${side}-files`} aria-labelledby={`${side}-tab-${tabId}`} className="flex min-h-0 flex-1 flex-col">
       <DriveSelect side={side} drives={drives} />
       <PathBar side={side} />
       {showTree ? (
@@ -88,6 +90,7 @@ export function Panel({ side, drives }: Props) {
       <FilterBar side={side} />
       <PaneNotice side={side} />
       <StatusBar side={side} />
+      </div>
     </section>
   );
 }

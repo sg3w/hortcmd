@@ -76,7 +76,10 @@ async function listen(name: string, cb: Listener) {
 function wireModules(): void {
   if (wired) return;
   wired = true;
-  vi.mock("@tauri-apps/api/core", () => ({ invoke }));
+  vi.mock("@tauri-apps/api/core", () => ({ invoke, Channel: class<T> {
+    // Commands can stream typed batches through the same callback as Tauri.
+    onmessage: (message: T) => void = () => {};
+  } }));
   vi.mock("@tauri-apps/api/event", () => ({ listen }));
 }
 

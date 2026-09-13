@@ -55,8 +55,17 @@ export function TabBar({ side }: { side: Side }) {
       ?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [tabs.length, activeTab]);
 
+  const focusActive = () => queueMicrotask(() => {
+    const state = usePanes.getState()[side];
+    document.getElementById(`${side}-tab-${state.tabs[state.activeTab].id}`)?.focus();
+  });
+  const close = (index: number) => { closeTab(side, index); focusActive(); };
+
   const scrollStrip = (delta: number) =>
-    stripRef.current?.scrollBy({ left: delta, behavior: "smooth" });
+    stripRef.current?.scrollBy({
+      left: delta,
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+    });
 
   return (
     <div
@@ -75,6 +84,9 @@ export function TabBar({ side }: { side: Side }) {
         </button>
       )}
 
+      {/* Keep close buttons outside the tablist's accessibility ownership. */}
+      <div role="tablist" aria-label={t(side === "left" ? "tab.left" : "tab.right")}
+        aria-owns={tabs.map(tab => `${side}-tab-${tab.id}`).join(" ")} />
       <div
         ref={stripRef}
         onScroll={updateScroll}
@@ -86,9 +98,8 @@ export function TabBar({ side }: { side: Side }) {
           const label = tab.archive ? basename(tab.archive) : basename(tab.path);
           return (
             <div
-              key={i}
+              key={tab.id}
               data-active={isActive}
-              onMouseDown={() => selectTab(side, i)}
               title={tab.archive ?? tab.path}
               className={cn(
                 "group flex max-w-[160px] shrink-0 cursor-default items-center gap-1 rounded-t border border-b-0 px-2 py-0.5 text-[12px]",
@@ -99,6 +110,30 @@ export function TabBar({ side }: { side: Side }) {
                   : "border-transparent bg-panel-inactive text-dim hover:text-text",
               )}
             >
+              <button
+                id={`${side}-tab-${tab.id}`}
+                role="tab"
+                aria-selected={isActive}
+                aria-controls={`${side}-files`}
+                aria-keyshortcuts="Delete"
+                tabIndex={isActive ? 0 : -1}
+                onClick={() => selectTab(side, i)}
+                onKeyDown={event => {
+                  let next = i;
+                  switch (event.key) {
+                    case "ArrowLeft": next = (i + tabs.length - 1) % tabs.length; break;
+                    case "ArrowRight": next = (i + 1) % tabs.length; break;
+                    case "Home": next = 0; break;
+                    case "End": next = tabs.length - 1; break;
+                    case "Delete": event.preventDefault(); event.stopPropagation(); close(i); return;
+                    case "Enter": case " ": break;
+                    default: return;
+                  }
+                  event.preventDefault(); event.stopPropagation();
+                  selectTab(side, next); focusActive();
+                }}
+                className="flex min-w-0 items-center gap-1"
+              >
               {tab.archive && (
                 <Package
                   size={11}
@@ -109,15 +144,14 @@ export function TabBar({ side }: { side: Side }) {
                 />
               )}
               <span className="truncate">{label}</span>
+              </button>
               {tabs.length > 1 && (
                 <button
-                  title={t("tab.close")}
-                  onMouseDown={(e) => {
-                    e.stopPropagation();
-                    closeTab(side, i);
-                  }}
+                  aria-label={`${t("tab.close")}: ${label}`}
+                  tabIndex={-1}
+                  onClick={() => close(i)}
                   className={cn(
-                    "rounded p-0.5 opacity-0 group-hover:opacity-100",
+                    "rounded p-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
                     isActive && paneActive
                       ? "text-white/80 hover:bg-white/20"
                       : "text-dim hover:bg-accent-dim hover:text-text",
@@ -143,7 +177,7 @@ export function TabBar({ side }: { side: Side }) {
 
       <button
         title={t("tab.new")}
-        onMouseDown={() => addTab(side)}
+        onClick={() => void addTab(side).then(focusActive)}
         className="flex shrink-0 items-center rounded px-1.5 text-dim hover:bg-accent-dim hover:text-text"
       >
         <Plus size={13} />

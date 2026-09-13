@@ -23,7 +23,8 @@ import {
   sshSend,
 } from "@/ipc/client";
 import { AppDialog } from "@/components/ui/AppDialog";
-import { useT } from "@/store/settingsStore";
+import { useSettings, useT, translate } from "@/store/settingsStore";
+import { describeErrorFull } from "@/store/errorText";
 import { useTerminals, type TermSession } from "@/features/net/terminalStore";
 
 /** Decodes a base64 output chunk into the raw bytes xterm expects
@@ -53,6 +54,7 @@ function terminalTheme() {
 }
 
 export function SshTerminalWindow() {
+  const closeRef = useRef<HTMLButtonElement>(null);
   const session = useTerminals((s) => s.session);
   const close = useTerminals((s) => s.close);
   const t = useT();
@@ -83,8 +85,10 @@ export function SshTerminalWindow() {
       minSize={{ w: 420, h: 240 }}
       footer={
         <div className="flex flex-shrink-0 items-center gap-2 border-t border-edge bg-header px-3 py-1.5">
-          <span className="truncate text-[11px] text-dim">{status}</span>
+          <span role="status" className="min-w-0 text-[11px] text-dim">{status}</span>
           <button
+            ref={closeRef}
+            aria-keyshortcuts="Control+Shift+F6"
             onClick={close}
             className="ml-auto rounded border border-edge bg-panel px-3 py-0.5 text-[12px] text-text hover:border-accent"
           >
@@ -93,7 +97,15 @@ export function SshTerminalWindow() {
         </div>
       }
     >
-      <div className="relative min-h-0 flex-1 bg-panel">
+      <div className="relative min-h-0 flex-1 bg-panel"
+        onKeyDownCapture={event => {
+          if (event.ctrlKey && event.shiftKey && event.key === "F6") {
+            event.preventDefault();
+            event.stopPropagation();
+            closeRef.current?.focus();
+          }
+        }}>
+
         {/* Keyed by uid so a new session always starts with a fresh
             terminal instead of inheriting the previous scrollback. */}
         {session && <TerminalPane key={session.uid} session={session} />}
@@ -103,6 +115,7 @@ export function SshTerminalWindow() {
 }
 
 function TerminalPane({ session }: { session: TermSession }) {
+  const language = useSettings(s => s.language);
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -114,7 +127,10 @@ function TerminalPane({ session }: { session: TermSession }) {
     const host = hostRef.current;
     if (!host) return;
 
+    Terminal.strings.promptLabel = translate("term.input");
+    Terminal.strings.tooMuchOutput = translate("term.tooMuchOutput");
     const term = new Terminal({
+      screenReaderMode: true,
       fontFamily: cssVar("--font-mono", "monospace"),
       fontSize: 12,
       cursorBlink: true,
@@ -142,8 +158,9 @@ function TerminalPane({ session }: { session: TermSession }) {
         term.focus();
       } catch (e) {
         if (disposed) return;
-        term.write(`\r\n\x1b[31m${String(e)}\x1b[0m\r\n`);
-        useTerminals.getState().fail(session.uid, String(e));
+        const message = describeErrorFull(e);
+        term.write(`\r\n\x1b[31m${message}\x1b[0m\r\n`);
+        useTerminals.getState().fail(session.uid, message);
       }
     })();
 
@@ -160,6 +177,24 @@ function TerminalPane({ session }: { session: TermSession }) {
       fitRef.current = null;
     };
   }, [session.uid, session.address]);
+
+  // xterm creates its own input; update its accessible name without reopening
+  // the shell when the application language changes.
+  useEffect(() => {
+    Terminal.strings.promptLabel = translate("term.input");
+    Terminal.strings.tooMuchOutput = translate("term.tooMuchOutput");
+    termRef.current?.textarea?.setAttribute("aria-label", translate("term.input"));
+  }, [language]);
+
+  useEffect(() => {
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => {
+      if (termRef.current) termRef.current.options.cursorBlink = !motion.matches;
+    };
+    update();
+    motion.addEventListener("change", update);
+    return () => motion.removeEventListener("change", update);
+  }, [session.uid]);
 
   // Shell output and session end for exactly this session.
   useEffect(() => {

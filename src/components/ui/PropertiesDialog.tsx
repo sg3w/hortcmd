@@ -7,6 +7,7 @@
 // All logic runs in the backend; here only display/input.
 // ============================================================
 
+import { useDialogFocusReturn } from "./useDialogFocusReturn";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Copy, HardDrive, Info, Loader2, ShieldCheck, X } from "lucide-react";
@@ -140,6 +141,7 @@ function useVolume(path: string | null): VolumeInfo | null | undefined {
 }
 
 export function PropertiesDialog() {
+  const returnFocus = useDialogFocusReturn();
   const path = usePropsDialog((s) => s.path);
   const gitStatus = usePropsDialog((s) => s.gitStatus);
   const close = usePropsDialog((s) => s.close);
@@ -319,6 +321,7 @@ export function PropertiesDialog() {
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/50" />
         <Dialog.Content
+          onCloseAutoFocus={returnFocus}
           onKeyDownCapture={markDialogKey}
           aria-describedby={undefined}
           className="fixed left-1/2 top-1/2 z-50 flex max-h-[92vh] w-[560px] max-w-[96vw] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-edge bg-panel shadow-2xl"
@@ -795,6 +798,7 @@ function TagEditor({
   onChange: (next: Tag[]) => void;
   addLabel: string;
 }) {
+  const translate = useT();
   const [name, setName] = useState("");
   const [color, setColor] = useState(0);
 
@@ -827,7 +831,7 @@ function TagEditor({
               <button
                 onClick={() => remove(t.name)}
                 className="rounded-full p-0.5 text-dim hover:bg-red-500/20 hover:text-red-400"
-                aria-label={`${t.name} entfernen`}
+                aria-label={translate("props.tags.remove").replace("{name}", t.name)}
               >
                 <X size={12} aria-hidden />
               </button>
@@ -845,6 +849,7 @@ function TagEditor({
             add();
           }}
           placeholder={addLabel}
+          aria-label={addLabel}
           className="w-40 rounded border border-edge bg-panel px-2 py-1 text-[12px] text-text outline-none focus:border-accent"
         />
         <div className="flex items-center gap-1">
@@ -852,7 +857,8 @@ function TagEditor({
             <button
               key={c}
               onClick={() => setColor(c)}
-              title={`Farbe ${c}`}
+              aria-label={translate("props.tags.color").replace("{n}", String(c))}
+              aria-pressed={color === c}
               className={cn(
                 "rounded-full p-0.5",
                 color === c && "ring-2 ring-accent",
@@ -864,6 +870,7 @@ function TagEditor({
         </div>
         <button
           onClick={add}
+          aria-label={addLabel}
           disabled={!name.trim()}
           className="rounded border border-edge bg-panel px-3 py-1 text-[12px] text-text hover:border-accent disabled:opacity-40"
         >

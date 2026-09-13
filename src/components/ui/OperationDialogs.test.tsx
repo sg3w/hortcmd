@@ -1,6 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
+import axe from "axe-core";
+import { translate, useSettings } from "@/store/settingsStore";
 import { useDemo } from "@/test/tauri";
 import { useOps } from "@/store/opsStore";
 import { OperationDialogs } from "./OperationDialogs";
@@ -19,6 +21,37 @@ it("preserves a follow-up prompt opened by confirmation", async () => {
   expect(useOps.getState().prompt?.initial).toBe("retry");
 });
 
+
+it.each(["de", "en"] as const)("names operation inputs and submits them by keyboard in %s", async language => {
+  useSettings.setState({ language });
+  const submitted = vi.fn();
+  const user = userEvent.setup();
+  useOps.getState().requestPrompt({ title: translate("op.rename.title"), label: translate("op.rename.label"),
+    initial: "old.txt", onSubmit: submitted });
+  render(<OperationDialogs />);
+  const input = screen.getByRole("textbox", { name: translate("op.rename.label") });
+  await waitFor(() => expect(input).toHaveFocus());
+  await user.clear(input);
+  await user.type(input, "renamed.txt");
+  const result = await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } });
+  expect(result.violations.filter(v => v.impact === "serious" || v.impact === "critical")).toEqual([]);
+  await user.keyboard("{Enter}");
+  expect(submitted).toHaveBeenCalledWith("renamed.txt", false);
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+it.each(["de", "en"] as const)("describes confirmation messages and exposes indeterminate progress in %s", async language => {
+  useSettings.setState({ language });
+  useOps.getState().requestConfirm({ title: translate("op.delete.title"), message: translate("op.delete.confirm").replace("{n}", "2"), onConfirm: vi.fn() });
+  render(<OperationDialogs />);
+  expect(screen.getByRole("dialog")).toHaveAccessibleDescription(translate("op.delete.confirm").replace("{n}", "2"));
+  const result = await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } });
+  expect(result.violations.filter(v => v.impact === "serious" || v.impact === "critical")).toEqual([]);
+  act(() => { useOps.getState().closeDialogs(); useOps.getState().setBusy(true); });
+  expect(screen.getByRole("progressbar", { name: translate("op.progress") })).not.toHaveAttribute("aria-valuenow");
+  expect(screen.getByRole("status")).toHaveTextContent(translate("op.progress"));
+});
+
 it("returns focus to the invoking control after a prompt and follow-up confirmation", async () => {
   const user = userEvent.setup();
   render(<><button onClick={() => useOps.getState().requestPrompt({
@@ -28,7 +61,7 @@ it("returns focus to the invoking control after a prompt and follow-up confirmat
   })}>Start</button><OperationDialogs /></>);
   const trigger = screen.getByRole("button", { name: "Start" });
   await user.click(trigger);
-  await waitFor(() => expect(screen.getByRole("textbox")).toHaveFocus());
+  await waitFor(() => expect(screen.getByRole("textbox", { name: "Name" })).toHaveFocus());
   await user.keyboard("{Enter}");
   await screen.findByRole("dialog", { name: "Result" });
   await user.click(screen.getByRole("button", { name: "OK" }));

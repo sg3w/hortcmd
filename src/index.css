@@ -244,3 +244,37 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-dim);
 }
+
+/* Keyboard focus must remain visible even on controls using outline-none. */
+:is(button, input, select, textarea, a, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (forced-colors: active) {
+  :root, :root[data-theme] {
+    --bg: Canvas;
+    --panel-bg: Canvas;
+    --panel-bg-inactive: Canvas;
+    --header-bg: Canvas;
+    --text: CanvasText;
+    --text-dim: CanvasText;
+    --border: ButtonText;
+    --accent: Highlight;
+    --accent-text: LinkText;
+    --accent-surface: Highlight;
+    --accent-dim: Canvas;
+  }
+  :is(button, input, select, textarea, a, [tabindex]):focus-visible {
+    outline-color: Highlight;
+  }
+}

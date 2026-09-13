@@ -49,7 +49,7 @@ do not replace the in-window menu with a full native macOS application menu.
 
 - [ ] Core copy, move, rename, delete, search, settings, connections, and terminal
       workflows are keyboard-complete in German and English.
-- [ ] Automated checks report no serious or critical accessibility violations in
+- [x] Automated checks report no serious or critical accessibility violations in
       representative screens.
 - [ ] Every interactive control has a localized name, role, state, and focus style.
 - [ ] Dynamic operation and connection state is announced without excessive noise.
@@ -59,6 +59,11 @@ do not replace the in-window menu with a full native macOS application menu.
 - [ ] Status is not communicated by color alone.
 
 ## Tests
+
+Current evidence is recorded in `docs/accessibility.md`. The loaded shell,
+representative dialogs, menus, virtual lists/tree/tabs and terminal controls pass
+DE/EN semantic axe checks. This completes the automated-violation criterion,
+not the manual screen-reader or actual-zoom requirements. Those remain open.
 
 - Add axe-based component tests for the application shell and representative
   dialogs, menus, tree, table, tab, progress, and terminal controls.

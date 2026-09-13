@@ -7,9 +7,11 @@ import { useEffect, useRef } from "react";
 import { ChevronRight, GitBranch, Package } from "lucide-react";
 import { panelOf, usePanes, type Side } from "@/store/panesStore";
 import { ancestorChain, baseName } from "@/lib/path";
+import { useT } from "@/store/settingsStore";
 import { cn } from "@/lib/cn";
 
 export function PathBar({ side }: { side: Side }) {
+  const t = useT();
   const path = usePanes((s) => panelOf(s, side).path);
   const archive = usePanes((s) => panelOf(s, side).archive);
   const git = usePanes((s) => panelOf(s, side).git);
@@ -82,7 +84,7 @@ export function PathBar({ side }: { side: Side }) {
 
       {git?.is_repo && (
         <span
-          title={git.branch ? `Git: ${git.branch}` : "Git-Repository"}
+          title={git.branch ? t("git.branchLabel").replace("{name}", git.branch) : t("git.repository")}
           className="flex shrink-0 items-center gap-1 rounded bg-accent-dim px-1.5 py-0.5 text-[11px] text-accent"
         >
           <GitBranch size={11} className="shrink-0" />

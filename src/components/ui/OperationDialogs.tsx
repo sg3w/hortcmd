@@ -4,7 +4,7 @@
 // progress overlay (fed from fs-progress events).
 // ============================================================
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AlertTriangle, FileWarning, FolderPlus, XCircle } from "lucide-react";
 import { useOps } from "@/store/opsStore";
@@ -62,9 +62,9 @@ function CollisionDialog() {
             <FileWarning size={16} className="text-amber-400" />
             {t("op.collision.title")}
           </Dialog.Title>
-          <div className="px-4 py-3 text-[13px] text-text">
+          <Dialog.Description className="px-4 py-3 text-[13px] text-text">
             {t("op.collision.exists").replace("{name}", name)}
-          </div>
+          </Dialog.Description>
           <label className="flex cursor-pointer items-center gap-2 px-4 pb-2 text-[12px] text-dim">
             <input
               type="checkbox"
@@ -137,9 +137,9 @@ function ConfirmDialog() {
             )}
             {confirm?.title}
           </Dialog.Title>
-          <div className="max-h-[240px] overflow-y-auto whitespace-pre-line px-4 py-3 text-[13px] text-text">
+          <Dialog.Description className="max-h-[240px] overflow-y-auto whitespace-pre-line px-4 py-3 text-[13px] text-text">
             {confirm?.message}
-          </div>
+          </Dialog.Description>
           <div className="flex justify-end gap-2 border-t border-edge px-4 py-2.5">
             <button
               onClick={closeDialogs}
@@ -174,6 +174,7 @@ function ConfirmDialog() {
 
 function PromptDialog() {
   const returnFocus = useDialogFocusReturn();
+  const inputId = useId();
   const prompt = useOps((s) => s.prompt);
   const closeDialogs = useOps((s) => s.closeDialogs);
   const t = useT();
@@ -213,6 +214,7 @@ function PromptDialog() {
         <Dialog.Overlay className="fixed inset-0 z-[60] bg-black/50" />
         <Dialog.Content
           onCloseAutoFocus={returnFocus}
+          aria-describedby={undefined}
           onKeyDownCapture={markDialogKey}
           className="fixed left-1/2 top-1/2 z-[61] w-[420px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-panel shadow-2xl"
         >
@@ -221,10 +223,11 @@ function PromptDialog() {
             {prompt?.title}
           </Dialog.Title>
           <div className="px-4 py-3">
-            <label className="mb-1 block text-[12px] text-dim">
+            <label htmlFor={inputId} className="mb-1 block text-[12px] text-dim">
               {prompt?.label}
             </label>
             <input
+              id={inputId}
               ref={inputRef}
               type={prompt?.password ? "password" : "text"}
               value={value}
@@ -290,8 +293,8 @@ function ProgressOverlay() {
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40">
       <div className="w-[280px] max-w-[92vw] rounded-lg border border-edge bg-panel p-4 shadow-2xl">
-        <div className="mb-3 text-[13px] text-text">{t("op.progress")}</div>
-        <div className="h-1.5 overflow-hidden rounded bg-panel-inactive">
+        <div role="status" className="mb-3 text-[13px] text-text">{t("op.progress")}</div>
+        <div role="progressbar" aria-label={t("op.progress")} className="h-1.5 overflow-hidden rounded bg-panel-inactive">
           <div className="h-full w-1/3 animate-pulse rounded bg-accent" />
         </div>
       </div>
@@ -337,9 +340,9 @@ function ForceCloseDialog() {
             <AlertTriangle size={16} className="text-amber-400" />
             {t("op.forceClose.title")}
           </Dialog.Title>
-          <div className="px-4 py-3 text-[13px] text-text">
+          <Dialog.Description className="px-4 py-3 text-[13px] text-text">
             {t("op.forceClose.message")}
-          </div>
+          </Dialog.Description>
           <div className="flex flex-wrap justify-end gap-2 border-t border-edge px-4 py-2.5">
             <button
               onClick={() => setForceClose(false)}

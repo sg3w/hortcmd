@@ -26,8 +26,9 @@ import { useTransfers, type Transfer } from "@/store/transfersStore";
 import { cancelTransfer, pauseTransfer } from "@/ipc/client";
 import { dequeueTransfer } from "@/features/commander/fileOps";
 import { useT } from "@/store/settingsStore";
-import type { TransKey } from "@/i18n/dictionaries";
 import { formatSize } from "@/lib/format";
+import { TransferAnnouncements } from "./TransferAnnouncements";
+import { OP_LABEL, percent as pct, transferState } from "./transferPresentation";
 import { describeItemErrors } from "@/store/errorText";
 
 const OP_ICON: Record<Transfer["op"], LucideIcon> = {
@@ -37,34 +38,21 @@ const OP_ICON: Record<Transfer["op"], LucideIcon> = {
   pack: Package,
 };
 
-const OP_LABEL: Record<Transfer["op"], TransKey> = {
-  copy: "fn.copy",
-  move: "fn.move",
-  extract: "op.extract",
-  pack: "op.pack",
-};
-
-function pct(done: number, total: number): number {
-  return total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
-}
-
-function opLabel(op: Transfer["op"]): TransKey {
-  return OP_LABEL[op];
-}
-
 // ---------- Window (foreground) ----------
 
 export function TransferWindow() {
   const transfers = useTransfers((s) => s.transfers);
   const visible = transfers.filter((t) => !t.minimized);
-  if (visible.length === 0) return null;
 
   return (
+    <>
+    <TransferAnnouncements />
     <div className="fixed bottom-16 right-4 z-50 flex flex-col gap-2">
       {visible.map((t) => (
         <TransferCard key={t.id} t={t} />
       ))}
     </div>
+    </>
   );
 }
 
@@ -85,13 +73,7 @@ function TransferCard({ t }: { t: Transfer }) {
   // Cancel: only remove waiting operations from the queue (no backend op).
   const onCancel = () => (t.queued ? dequeueTransfer(t.id) : cancelTransfer(t.id));
 
-  const statusText = t.cancelled
-    ? tr("op.cancelled")
-    : t.queued
-      ? tr("op.queued")
-      : t.paused
-        ? tr("op.paused")
-        : tr(opLabel(t.op));
+  const statusText = `${tr(OP_LABEL[t.op])}: ${tr(transferState(t))}`;
 
   return (
     <div className="w-[380px] max-w-[92vw] rounded-lg border border-edge bg-panel shadow-2xl">
@@ -124,6 +106,7 @@ function TransferCard({ t }: { t: Transfer }) {
               {!t.queued && (
                 <button
                   title={t.paused ? tr("op.resume") : tr("op.pause")}
+                  aria-pressed={t.paused}
                   onClick={togglePause}
                   className="rounded p-1 text-dim hover:bg-accent-dim hover:text-text"
                 >
@@ -200,7 +183,8 @@ function Bar({
         <span className="text-dim">{label}</span>
         <span className="font-mono text-dim">{value}%</span>
       </div>
-      <div className="h-2 overflow-hidden rounded bg-panel-inactive">
+      <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={value}
+        className="h-2 overflow-hidden rounded bg-panel-inactive">
         <div
           className={accent ? "h-full bg-accent" : "h-full bg-emerald-400"}
           style={{ width: `${value}%`, transition: "width 80ms linear" }}
@@ -216,6 +200,7 @@ function Bar({
 // ---------- Tray (minimized, in the status bar) ----------
 
 export function TransferTray() {
+  const tr = useT();
   const transfers = useTransfers((s) => s.transfers);
   const minimize = useTransfers((s) => s.minimize);
   const minimized = transfers.filter((t) => t.minimized);
@@ -230,6 +215,7 @@ export function TransferTray() {
             key={t.id}
             onClick={() => minimize(t.id, false)}
             title={basename(t.fileName)}
+            aria-label={`${tr(OP_LABEL[t.op])}: ${tr(transferState(t))}, ${basename(t.fileName)}, ${pct(t.bytesDone, t.bytesTotal)}%`}
             className="flex items-center gap-1.5 rounded border border-edge bg-panel px-2 py-0.5 hover:border-accent"
           >
             <Icon size={12} className="shrink-0 text-accent" />

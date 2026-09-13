@@ -93,6 +93,7 @@ export function GeneralForm() {
 
       <Field icon={Terminal} label={t("settings.terminal")}>
         <input
+          aria-label={t("settings.terminal")}
           value={terminalProgram}
           onChange={(e) => setTerminalProgram(e.target.value)}
           placeholder={t("settings.terminal.placeholder")}

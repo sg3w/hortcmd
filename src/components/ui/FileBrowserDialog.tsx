@@ -4,7 +4,8 @@
 // chosen path through onPick.
 // ============================================================
 
-import { useCallback, useEffect, useState } from "react";
+import { useDialogFocusReturn } from "./useDialogFocusReturn";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { ArrowUp, FolderSearch, House } from "lucide-react";
 import type { DirEntry, Drive } from "@/ipc/bindings";
@@ -13,6 +14,7 @@ import {
   useFileBrowser,
   type SelectMode,
 } from "@/store/fileBrowserStore";
+import { describeErrorFull } from "@/store/errorText";
 import { useT } from "@/store/settingsStore";
 import { formatSize } from "@/lib/format";
 import { RowIcon } from "@/lib/fileIcon";
@@ -34,6 +36,10 @@ function isSelectable(entry: DirEntry, mode: SelectMode): boolean {
 }
 
 export function FileBrowserDialog() {
+  const returnFocus = useDialogFocusReturn();
+  const id = useId();
+  const listRef = useRef<HTMLDivElement>(null);
+  const [cursor, setCursor] = useState(0);
   const request = useFileBrowser((s) => s.request);
   const close = useFileBrowser((s) => s.close);
   const t = useT();
@@ -57,10 +63,11 @@ export function FileBrowserDialog() {
       setPath(res.path);
       setPathInput(res.path);
       setEntries(sorted);
+      setCursor(0);
       setSelected(null);
       setError(null);
     } catch (e) {
-      setError(String(e));
+      setError(describeErrorFull(e));
     }
   }, []);
 
@@ -126,6 +133,7 @@ export function FileBrowserDialog() {
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[70] bg-black/50" />
         <Dialog.Content
+          onCloseAutoFocus={returnFocus}
           onKeyDownCapture={markDialogKey}
           className="fixed left-1/2 top-1/2 z-[71] flex h-[460px] w-[560px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-edge bg-panel shadow-2xl"
           aria-describedby={undefined}
@@ -168,6 +176,7 @@ export function FileBrowserDialog() {
               </select>
             )}
             <input
+              aria-label={t("fb.path")}
               value={pathInput}
               onChange={(e) => setPathInput(e.target.value)}
               onKeyDown={(e) => {
@@ -183,22 +192,45 @@ export function FileBrowserDialog() {
           </div>
 
           {/* Entries */}
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {error ? (
-              <p className="px-3 py-2 text-[12px] text-red-400">{error}</p>
-            ) : (
-              rows.map((entry) => {
+          {error && <p role="alert" className="px-3 py-2 text-[12px] text-red-400">{error}</p>}
+          <div ref={listRef} role="listbox" aria-label={t("fb.title")} tabIndex={0}
+            aria-activedescendant={!error && rows[cursor] ? `${id}-${cursor}` : undefined}
+            className="min-h-0 flex-1 overflow-y-auto"
+            onKeyDown={event => {
+              if (error || !rows.length) return;
+              let next = cursor;
+              switch (event.key) {
+                case "ArrowDown": next++; break;
+                case "ArrowUp": next--; break;
+                case "Home": next = 0; break;
+                case "End": next = rows.length - 1; break;
+                case "Enter": consumeDialogKey(event); activate(rows[cursor]); return;
+                case " ": break;
+                default: return;
+              }
+              consumeDialogKey(event);
+              next = Math.max(0, Math.min(rows.length - 1, next));
+              setCursor(next);
+              const entry = rows[next];
+              setSelected(entry.name !== ".." && isSelectable(entry, mode) ? entry.name : null);
+              document.getElementById(`${id}-${next}`)?.scrollIntoView?.({ block: "nearest" });
+            }}>
+            {!error && (
+              rows.map((entry, index) => {
                 const selectable = entry.name !== ".." && isSelectable(entry, mode);
                 const isSel = selected === entry.name;
                 return (
                   <div
-                    key={entry.name}
-                    onClick={() =>
-                      setSelected(selectable ? entry.name : null)
-                    }
+                    key={entry.name} id={`${id}-${index}`} role="option" aria-selected={isSel}
+                    onClick={() => {
+                      setCursor(index);
+                      setSelected(selectable ? entry.name : null);
+                      listRef.current?.focus();
+                    }}
                     onDoubleClick={() => activate(entry)}
                     className={cn(
                       "flex cursor-default items-center gap-2 px-3 py-1 text-[12px]",
+                      index === cursor && "outline outline-1 -outline-offset-1 outline-accent",
                       isSel ? "bg-accent-dim text-text" : "text-text hover:bg-row-alt",
                       !selectable && entry.name !== ".." && "text-dim",
                     )}

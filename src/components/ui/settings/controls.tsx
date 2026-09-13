@@ -9,7 +9,7 @@
 
 import { consumeDialogKey } from "@/lib/keys";
 import { normalizeExt } from "@/store/settingsStore";
-import { useState } from "react";
+import { useId, useState } from "react";
 import {
   X,
   type LucideIcon,
@@ -31,11 +31,14 @@ export function Toggle({
   label: string;
   hint?: string;
 }) {
+  const hintId = useId();
   return (
     <label className="flex cursor-pointer items-start gap-3">
       <button
         role="switch"
         aria-checked={checked}
+        aria-label={label}
+        aria-describedby={hint ? hintId : undefined}
         onClick={() => onChange(!checked)}
         className={cn(
           "mt-0.5 flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition",
@@ -48,7 +51,7 @@ export function Toggle({
         <Icon size={15} className="text-dim" />
         <span className="flex flex-col">
           <span className="text-[13px] text-text">{label}</span>
-          {hint && <span className="text-[11px] text-dim">{hint}</span>}
+          {hint && <span id={hintId} className="text-[11px] text-dim">{hint}</span>}
         </span>
       </span>
     </label>
@@ -145,13 +148,13 @@ export function Field({
   children: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-2">
-      <span className="flex items-center gap-2 text-[13px] text-text">
+    <fieldset className="flex min-w-0 flex-col gap-2">
+      <legend className="flex items-center gap-2 text-[13px] text-text">
         <Icon size={15} className="text-dim" />
         {label}
-      </span>
+      </legend>
       {children}
-    </div>
+    </fieldset>
   );
 }
 
@@ -169,6 +172,7 @@ export function Segmented<T extends string>({
       {options.map((o) => (
         <button
           key={o.value}
+          aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
           className={cn(
             "flex items-center gap-1.5 px-3 py-1 text-[12px]",

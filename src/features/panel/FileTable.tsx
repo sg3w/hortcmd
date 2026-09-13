@@ -24,7 +24,7 @@ import {
   type Cell,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { panelOf, usePanes, type Row, type Side } from "@/store/panesStore";
 import {
   DEFAULT_COLUMN_WIDTHS,
@@ -41,6 +41,7 @@ import {
 import { buildColumns, SORTABLE } from "./columns";
 import { cn } from "@/lib/cn";
 import { useFileColorRules } from "@/store/fileColorRules";
+import { MIN_COLUMN_WIDTH, MAX_COLUMN_WIDTH } from "@/store/settingsSchema";
 
 /** Font and icon size (px) per scaling step. */
 const FONT_PX = { sm: 11, md: 12, lg: 14 } as const;
@@ -205,11 +206,22 @@ export function FileTable({ side, onOpen, onContext }: Props) {
     <div
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-auto"
       onContextMenu={onContextMenu}
+      role="grid"
+      tabIndex={0}
+      aria-label={t(side === "left" ? "files.left" : "files.right")}
+      aria-multiselectable="true"
+      aria-rowcount={rowCount + (viewMode === "details" ? 1 : 0)}
+      aria-colcount={viewMode === "details" ? columns.length : perRow}
+      aria-activedescendant={virtualizer.getVirtualItems().some(item => item.index === Math.floor(cursor / perRow)) && entries[cursor]
+        ? `${side}-entry-${cursor}` : undefined}
+      onFocus={() => setActive(side)}
     >
       {/* Spaltenkopf nur in der Detailansicht */}
       {viewMode === "details" && (
         <div
           className="grid flex-shrink-0 border-b border-edge bg-header text-dim"
+          role="row"
+          aria-rowindex={1}
           style={{ gridTemplateColumns: template, minWidth }}
         >
           {table.getFlatHeaders().map((header) => {
@@ -222,7 +234,8 @@ export function FileTable({ side, onOpen, onContext }: Props) {
             return (
               <div
                 key={header.id}
-                onClick={() => sortable && setSort(side, sortable)}
+                role="columnheader"
+                aria-sort={sortable ? (isSorted ? (sort.asc ? "ascending" : "descending") : "none") : undefined}
                 className={cn(
                   "relative flex cursor-pointer items-center gap-1 border-r border-edge px-2 py-[3px] last:border-r-0",
                   alignRight && "justify-end",
@@ -230,6 +243,22 @@ export function FileTable({ side, onOpen, onContext }: Props) {
               >
                 {resizable && (
                   <div
+                    role="separator"
+                    tabIndex={0}
+                    aria-orientation="vertical"
+                    aria-label={`${t("col.resize")}: ${t(`col.${id}` as TransKey)}`}
+                    aria-valuemin={MIN_COLUMN_WIDTH}
+                    aria-valuemax={MAX_COLUMN_WIDTH}
+                    aria-valuenow={columnWidths[id] ?? DEFAULT_COLUMN_WIDTHS[id]}
+                    onKeyDown={event => {
+                      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                      const width = columnWidths[id] ?? DEFAULT_COLUMN_WIDTHS[id];
+                      setColumnWidth(id, event.key === "Home" ? MIN_COLUMN_WIDTH
+                        : event.key === "End" ? MAX_COLUMN_WIDTH
+                        : width + (event.key === "ArrowRight" ? 10 : -10));
+                    }}
                     onMouseDown={(e) => startColResize(e, id)}
                     onClick={(e) => e.stopPropagation()}
                     onDoubleClick={(e) => e.stopPropagation()}
@@ -237,9 +266,14 @@ export function FileTable({ side, onOpen, onContext }: Props) {
                     className="absolute left-0 top-0 z-10 h-full w-1.5 -translate-x-1/2 cursor-col-resize hover:bg-accent"
                   />
                 )}
-                <span className="truncate">
+                <button
+                  type="button"
+                  disabled={!sortable}
+                  onClick={() => sortable && setSort(side, sortable)}
+                  className="truncate text-inherit"
+                >
                   {t(`col.${id}` as TransKey)}
-                </span>
+                </button>
                 {isSorted &&
                   (sort.asc ? (
                     <ChevronUp size={12} className="shrink-0 text-accent" />
@@ -256,8 +290,7 @@ export function FileTable({ side, onOpen, onContext }: Props) {
       <div
         ref={scrollRef}
         style={{ minWidth: viewMode === "details" ? minWidth : undefined }}
-        tabIndex={0}
-        onMouseDown={() => setActive(side)}
+        onMouseDown={() => { setActive(side); scrollRef.current?.parentElement?.focus(); }}
         className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden outline-none"
       >
         <div
@@ -276,6 +309,7 @@ export function FileTable({ side, onOpen, onContext }: Props) {
               return (
                 <DetailRow
                   key={row.id}
+                  id={`${side}-entry-${start}`}
                   index={start}
                   cursor={cursor}
                   active={active}
@@ -298,6 +332,8 @@ export function FileTable({ side, onOpen, onContext }: Props) {
             return (
               <div
                 key={vItem.index}
+                role="row"
+                aria-rowindex={vItem.index + 1}
                 className="absolute left-0 grid w-full"
                 style={{
                   ...rowStyle,
@@ -307,6 +343,8 @@ export function FileTable({ side, onOpen, onContext }: Props) {
                 {items.map((row, k) => (
                   <GridCell
                     key={row.id}
+                    id={`${side}-entry-${start + k}`}
+                    column={k + 1}
                     index={start + k}
                     cursor={cursor}
                     active={active}
@@ -349,6 +387,7 @@ function stateClass(isCursor: boolean, isSelected: boolean, active: boolean) {
 }
 
 interface ItemProps {
+  id: string;
   index: number;
   cursor: number;
   active: boolean;
@@ -380,6 +419,7 @@ function rowColor(
 
 /** One detail row with TanStack cells. */
 function DetailRow({
+  id,
   index,
   cursor,
   active,
@@ -403,6 +443,10 @@ function DetailRow({
   const rule = rowColor(rules, row, gitStatus, isSelected);
   return (
     <div
+      id={id}
+      role="row"
+      aria-rowindex={index + 2}
+      aria-selected={isSelected}
       data-index={index}
       onMouseDown={(e) => onMouseDown(e, index)}
       onDoubleClick={() => onOpen(index)}
@@ -428,13 +472,16 @@ function DetailRow({
         return (
           <div
             key={cell.id}
+            role="gridcell"
             className={cn(
               "truncate px-2",
+              id === "name" && "relative pr-5",
               (id === "size" || id === "date") && "text-right text-dim",
               id === "perms" && "text-dim",
             )}
           >
             {flexRender(cell.column.columnDef.cell, cell.getContext())}
+            {id === "name" && isSelected && <Check size={12} aria-hidden className="absolute right-1 top-1/2 -translate-y-1/2" />}
           </div>
         );
       })}
@@ -444,6 +491,8 @@ function DetailRow({
 
 /** One tile in the list or thumbnail view. */
 function GridCell({
+  id,
+  column,
   index,
   cursor,
   active,
@@ -456,19 +505,23 @@ function GridCell({
   iconSize,
   onMouseDown,
   onOpen,
-}: ItemProps & { thumbnail: boolean; fontSize: number; iconSize: number }) {
+}: ItemProps & { column: number; thumbnail: boolean; fontSize: number; iconSize: number }) {
   const isCursor = index === cursor;
   const isSelected = selected.has(row.name);
   const rule = rowColor(rules, row, gitStatus, isSelected);
   return (
     <div
+      id={id}
+      role="gridcell"
+      aria-colindex={column}
+      aria-selected={isSelected}
       data-index={index}
       onMouseDown={(e) => onMouseDown(e, index)}
       onDoubleClick={() => onOpen(index)}
       title={row.name}
       style={{ fontSize, color: rule && fileColorRef(rule.id) }}
       className={cn(
-        "flex min-w-0 cursor-default items-center gap-2 rounded px-2 hover:bg-row-alt",
+        "relative flex min-w-0 cursor-default items-center gap-2 rounded px-2 pr-5 hover:bg-row-alt",
         thumbnail && "h-full flex-col justify-center gap-1 py-1 text-center",
         row.is_dir && !row.parent && "font-semibold",
         !rule && row.is_dir && !row.parent && "text-dir",
@@ -477,6 +530,7 @@ function GridCell({
         stateClass(isCursor, isSelected, active),
       )}
     >
+      {isSelected && <Check size={12} aria-hidden className="absolute right-1 top-1" />}
       <RowIcon row={row} size={thumbnail ? 40 : iconSize} />
       <span className={cn("truncate", thumbnail && "w-full leading-tight")}>
         {row.name}

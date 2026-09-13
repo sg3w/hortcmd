@@ -1,0 +1,62 @@
+[
+  {
+    "file": "src/components/ui/AboutDialog.tsx",
+    "text": "hortcmd",
+    "reason": "Product name, identical in both languages."
+  },
+  {
+    "file": "src/components/ui/SearchDialog.tsx",
+    "text": "MB",
+    "reason": "File-size unit, not a translatable label."
+  },
+  {
+    "file": "src/components/ui/PropertiesDialog.tsx",
+    "text": "B)",
+    "reason": "Byte unit and punctuation following a dynamic byte count."
+  },
+  {
+    "file": "src/components/ui/settings/operations.tsx",
+    "text": "KB/s",
+    "reason": "Transfer-rate unit, not prose."
+  },
+  {
+    "file": "src/components/ui/settings/operations.tsx",
+    "text": "KB",
+    "reason": "Buffer-size unit, not prose."
+  },
+  {
+    "file": "src/features/panel/PathBar.tsx",
+    "text": "git",
+    "reason": "Protocol/tool name used when the repository has no branch name."
+  },
+  {
+    "file": "src/features/net/ConnectionsDialog.tsx",
+    "text": "~/Documents/passwords.kdbx",
+    "reason": "Illustrative filesystem path, not a localized instruction."
+  },
+  {
+    "file": "src/components/ui/PropertiesDialog.tsx",
+    "text": "setuid",
+    "reason": "Canonical Unix permission-bit name, identical in both languages."
+  },
+  {
+    "file": "src/components/ui/PropertiesDialog.tsx",
+    "text": "setgid",
+    "reason": "Canonical Unix permission-bit name, identical in both languages."
+  },
+  {
+    "file": "src/components/ui/PropertiesDialog.tsx",
+    "text": "sticky",
+    "reason": "Canonical Unix permission-bit name, identical in both languages."
+  },
+  {
+    "file": "src/components/ui/settings/general.tsx",
+    "text": "Deutsch",
+    "reason": "Language autonym: recognizable in the language being selected."
+  },
+  {
+    "file": "src/components/ui/settings/general.tsx",
+    "text": "English",
+    "reason": "Language autonym: recognizable in the language being selected."
+  }
+]
