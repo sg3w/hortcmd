@@ -61,3 +61,19 @@ cargo test --manifest-path src-tauri/Cargo.toml --locked commands::fs::archive::
 ```
 
 The complete project gate remains `npm run check`.
+
+## ZIP creation
+
+The shared pack service also uses private staging and publishes only after ZIP
+finalization and file synchronization succeed (TICKET-070). Cancellation is
+checked inside the file loop. An error or cancellation preserves the previous
+destination; empty directories are included and unreadable entries are errors.
+Symbolic links, special files, duplicate/ambiguous archive names, and a destination
+inside a selected source are refused. Entry count, size, depth and name limits
+from the configuration above also apply to creation; expansion ratio is relevant
+only to extraction. MCP supplies an additional path check for collection, reads
+and publication. GUI and MCP call the same packing service.
+
+Packing tests cover a valid ZIP with empty directories, cancellation after data
+has been written, duplicate names and a directory-link cycle. As with extraction,
+process-crash recovery is separate from rollback on reported errors.

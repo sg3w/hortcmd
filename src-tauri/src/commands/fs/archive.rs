@@ -8,6 +8,7 @@
 // ============================================================
 
 pub(crate) mod extract;
+pub(crate) mod pack;
 #[cfg(windows)]
 mod private_windows;
 pub(crate) mod safety;
@@ -16,16 +17,13 @@ mod staging;
 use crate::errors::{code, AppError, AppResult, ErrorAction};
 use extract::ExtractJob;
 use std::collections::{BTreeSet, HashSet};
-use std::fs;
 use std::fs::File;
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::io::Read;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Instant;
 use tauri::{AppHandle, Emitter};
-use zip::write::SimpleFileOptions;
-use zip::{ZipArchive, ZipWriter};
+use zip::ZipArchive;
 
 use super::attrs;
 use super::dir::{DirEntry, DirListing};
@@ -297,21 +295,7 @@ fn run_extract(
 
 // ---------- Packing (ZIP) ----------
 
-/// Collects all files under `path` with their ZIP entry name.
-fn collect_files(path: &Path, entry_name: &str, out: &mut Vec<(PathBuf, String)>) {
-    if path.is_dir() {
-        if let Ok(rd) = fs::read_dir(path) {
-            for entry in rd.flatten() {
-                let child = entry.file_name().to_string_lossy().into_owned();
-                collect_files(&entry.path(), &format!("{}/{}", entry_name, child), out);
-            }
-        }
-    } else {
-        out.push((path.to_path_buf(), entry_name.to_string()));
-    }
-}
-
-/// Packs multiple sources into a new ZIP archive.
+/// GUI adapter for the shared, failure-safe ZIP service.
 fn run_pack(
     app: AppHandle,
     id: String,
@@ -320,74 +304,24 @@ fn run_pack(
     cancel: Arc<AtomicBool>,
     pause: Arc<AtomicBool>,
 ) {
-    for src in &sources {
-        if let Err(e) = caps::require_pair(
-            src,
-            Capability::ArchivePackFrom,
-            &dest_zip,
-            Capability::ArchivePackTo,
-        ) {
-            return fail_op(&app, id, "pack", e);
-        }
-    }
-    let mut files: Vec<(PathBuf, String)> = Vec::new();
-    for s in &sources {
-        let src = Path::new(s);
-        let base = src
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "datei".into());
-        collect_files(src, &base, &mut files);
-    }
-    let files_total = files.len() as u32;
-    let bytes_total = files
-        .iter()
-        .map(|(p, _)| fs::metadata(p).map(|m| m.len()).unwrap_or(0))
-        .sum();
-
     let mut prog = Prog {
         sink: Arc::new(app.clone()),
         id: id.clone(),
         op: "pack".into(),
-        files_total,
-        bytes_total,
+        files_total: 0,
+        bytes_total: 0,
         files_done: 0,
         bytes_done: 0,
         last: Instant::now(),
-        cancel: cancel.clone(),
-        pause: pause.clone(),
+        cancel,
+        pause,
     };
-    prog.emit("", 0, 0, true);
-
-    let mut ok = 0u32;
-    let mut errors = Vec::new();
-    let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
-
-    match File::create(&dest_zip) {
-        Ok(out) => {
-            let mut zip = ZipWriter::new(out);
-            for (path, entry_name) in files {
-                if prog.cancelled() {
-                    break;
-                }
-                match pack_one(&mut zip, &path, &entry_name, opts, &mut prog) {
-                    Ok(_) => ok += 1,
-                    Err(e) => errors.push(ItemError::new(&entry_name, e)),
-                }
-            }
-            if let Err(e) = zip.finish() {
-                errors.push(ItemError::new("", e.into()));
-            }
-        }
-        Err(e) => errors.push(ItemError::new(&dest_zip, e.into())),
-    }
-
-    // On abort, remove the incomplete archive.
-    if prog.cancelled() {
-        let _ = fs::remove_file(&dest_zip);
-    }
-
-    let cancelled = prog.cancelled();
+    let (ok, errors) = match safety::Limits::load()
+        .and_then(|limits| pack::run(&sources, &dest_zip, &mut prog, limits, &|_| Ok(())))
+    {
+        Ok(count) => (count, Vec::new()),
+        Err(error) => (0, vec![ItemError::new(&dest_zip, error)]),
+    };
     let _ = app.emit(
         "fs-done",
         OpDone {
@@ -395,53 +329,7 @@ fn run_pack(
             op: "pack".into(),
             ok,
             errors,
-            cancelled,
-            // Archives have no staging choice of their own.
-            mode: String::new(),
-        },
-    );
-}
-
-fn pack_one(
-    zip: &mut ZipWriter<File>,
-    path: &Path,
-    entry_name: &str,
-    opts: SimpleFileOptions,
-    prog: &mut Prog,
-) -> AppResult<()> {
-    zip.start_file(entry_name, opts).map_err(AppError::from)?;
-    let file_total = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
-    let mut f = File::open(path).map_err(AppError::from)?;
-    let mut buf = vec![0u8; 64 * 1024];
-    let mut file_done = 0u64;
-    let name = path.to_string_lossy().into_owned();
-    loop {
-        let n = f.read(&mut buf).map_err(AppError::from)?;
-        if n == 0 {
-            break;
-        }
-        zip.write_all(&buf[..n]).map_err(AppError::from)?;
-        file_done += n as u64;
-        prog.bytes_done += n as u64;
-        prog.emit(&name, file_done, file_total, false);
-    }
-    prog.files_done += 1;
-    prog.emit(&name, file_total, file_total, true);
-    Ok(())
-}
-
-/// Reports a refusal that happened before any work started, through the
-/// same `fs-done` event the frontend already listens on — a blocked
-/// operation must not leave the transfer window waiting forever.
-fn fail_op(app: &AppHandle, id: String, op: &str, err: AppError) {
-    let _ = app.emit(
-        "fs-done",
-        OpDone {
-            id,
-            op: op.to_string(),
-            ok: 0,
-            errors: vec![ItemError::new("", err)],
-            cancelled: false,
+            cancelled: prog.cancelled(),
             mode: String::new(),
         },
     );
@@ -487,7 +375,10 @@ mod tests {
     use super::extract::{extract_7z, extract_tar, extract_zip, match_target, write_entry};
     use super::*;
     use std::collections::HashSet;
+    use std::fs;
     use std::io::Write;
+    use std::path::{Path, PathBuf};
+    use zip::{write::SimpleFileOptions, ZipWriter};
 
     /// One format under test: its file name and the builder for it.
     type ArchiveCase = (&'static str, fn(&Path));
@@ -654,6 +545,110 @@ mod tests {
             cancel: Arc::new(AtomicBool::new(false)),
             pause: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    #[test]
+    fn shared_packing_preserves_empty_directories_and_finishes_a_valid_zip() {
+        let root = tmp_dir("pack-roundtrip");
+        let source = root.join("source");
+        fs::create_dir_all(source.join("empty")).unwrap();
+        fs::write(source.join("payload"), b"archive contents").unwrap();
+        let target = root.join("result.zip");
+        fs::write(&target, b"old archive").unwrap();
+        assert_eq!(
+            pack::run(
+                &[source.to_string_lossy().into_owned()],
+                target.to_str().unwrap(),
+                &mut progress(),
+                safety::Limits::default(),
+                &|_| Ok(())
+            )
+            .unwrap(),
+            1
+        );
+        let mut zip = ZipArchive::new(File::open(&target).unwrap()).unwrap();
+        assert!(zip.by_name("source/empty/").unwrap().is_dir());
+        let mut content = String::new();
+        zip.by_name("source/payload")
+            .unwrap()
+            .read_to_string(&mut content)
+            .unwrap();
+        assert_eq!(content, "archive contents");
+        drop(zip);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn cancelling_inside_a_packed_file_preserves_the_previous_archive() {
+        let root = tmp_dir("pack-cancel");
+        let source = root.join("payload");
+        fs::write(&source, vec![7u8; 512 * 1024]).unwrap();
+        let target = root.join("result.zip");
+        fs::write(&target, b"old archive").unwrap();
+        let mut prog = progress();
+        let cancel = prog.cancel.clone();
+        let checks = std::cell::Cell::new(0);
+        let result = pack::run(
+            &[source.to_string_lossy().into_owned()],
+            target.to_str().unwrap(),
+            &mut prog,
+            safety::Limits::default(),
+            &|path| {
+                if path.file_name().is_some_and(|name| name == "payload") {
+                    checks.set(checks.get() + 1);
+                    if checks.get() == 4 {
+                        cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                }
+                Ok(())
+            },
+        );
+        assert!(result.is_err());
+        assert!(prog.bytes_done > 0 && prog.bytes_done < 512 * 1024);
+        assert_eq!(fs::read(&target).unwrap(), b"old archive");
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 2);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn duplicate_packed_names_leave_the_destination_intact() {
+        let root = tmp_dir("pack-duplicates");
+        let source = root.join("payload");
+        fs::write(&source, b"payload").unwrap();
+        let target = root.join("result.zip");
+        fs::write(&target, b"old archive").unwrap();
+        let source = source.to_string_lossy().into_owned();
+        assert!(pack::run(
+            &[source.clone(), source],
+            target.to_str().unwrap(),
+            &mut progress(),
+            safety::Limits::default(),
+            &|_| Ok(())
+        )
+        .is_err());
+        assert_eq!(fs::read(&target).unwrap(), b"old archive");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn packing_refuses_directory_links_without_losing_the_old_archive() {
+        let root = tmp_dir("pack-links");
+        let source = root.join("source");
+        fs::create_dir(&source).unwrap();
+        std::os::unix::fs::symlink(&source, source.join("cycle")).unwrap();
+        let target = root.join("result.zip");
+        fs::write(&target, b"old archive").unwrap();
+        assert!(pack::run(
+            &[source.to_string_lossy().into_owned()],
+            target.to_str().unwrap(),
+            &mut progress(),
+            safety::Limits::default(),
+            &|_| Ok(())
+        )
+        .is_err());
+        assert_eq!(fs::read(&target).unwrap(), b"old archive");
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
