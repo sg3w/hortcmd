@@ -246,6 +246,9 @@ pub struct Step {
 }
 
 impl Handle {
+    pub fn id(&self) -> &str {
+        &self.id
+    }
     pub fn track(&self, item: Item) -> AppResult<Step> {
         let mut index = 0;
         self.journal.update(&self.id, |r| {
@@ -263,6 +266,7 @@ impl Handle {
         })
     }
     pub fn finish(&self, reason: Option<&str>) -> AppResult<()> {
+        crate::commands::fs::undo::seal(&self.id)?;
         self.journal.update(&self.id, |r| {
             r.terminal = true;
             r.reason = reason.map(str::to_owned);

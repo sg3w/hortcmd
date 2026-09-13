@@ -4,6 +4,8 @@
 // progress overlay (fed from fs-progress events).
 // ============================================================
 
+import { joinPath } from "@/lib/path";
+import { useUndoClassification } from "./useUndoClassification";
 import { useEffect, useId, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AlertTriangle, FileWarning, FolderPlus, XCircle } from "lucide-react";
@@ -111,6 +113,7 @@ function basename(path: string): string {
 function ConfirmDialog() {
   const returnFocus = useDialogFocusReturn();
   const confirm = useOps((s) => s.confirm);
+  const undoClass = useUndoClassification(confirm?.undo);
   const closeDialogs = useOps((s) => s.closeDialogs);
   const t = useT();
 
@@ -139,6 +142,7 @@ function ConfirmDialog() {
           </Dialog.Title>
           <Dialog.Description className="max-h-[240px] overflow-y-auto whitespace-pre-line px-4 py-3 text-[13px] text-text">
             {confirm?.message}
+            {undoClass !== undefined && <span className="mt-3 block">{t(undoClass === null ? "undo.checking" : undoClass === "irreversible" ? "undo.irreversible" : "undo.conditional")}</span>}
           </Dialog.Description>
           <div className="flex justify-end gap-2 border-t border-edge px-4 py-2.5">
             <button
@@ -149,6 +153,7 @@ function ConfirmDialog() {
             </button>
             <button
               autoFocus
+              disabled={undoClass === null}
               onClick={() => {
                 const onConfirm = confirm?.onConfirm;
                 closeDialogs();
@@ -180,6 +185,10 @@ function PromptDialog() {
   const t = useT();
   const [value, setValue] = useState("");
   const [checked, setChecked] = useState(false);
+  const undoTarget = prompt?.undo ? joinPath(prompt.undo.base, value.trim()) : "";
+  const undoClass = useUndoClassification(prompt?.undo ? {
+    kind: prompt.undo.kind, sources: [prompt.undo.kind === "mkdir" ? undoTarget : prompt.undo.source], target: undoTarget, directory: false,
+  } : undefined);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -199,6 +208,7 @@ function PromptDialog() {
   }, [prompt]);
 
   const submit = () => {
+    if (undoClass === null) return;
     // Close first, then execute: this way onSubmit can itself open a follow-up
     // dialog (e.g. an error message) without being overwritten immediately.
     const fn = prompt?.onSubmit;
@@ -226,6 +236,7 @@ function PromptDialog() {
             <label htmlFor={inputId} className="mb-1 block text-[12px] text-dim">
               {prompt?.label}
             </label>
+            {undoClass !== undefined ? <p className="mb-2 text-sm text-dim">{t(undoClass === null ? "undo.checking" : undoClass === "irreversible" ? "undo.irreversible" : "undo.conditional")}</p> : prompt?.hint && <p className="mb-2 text-sm text-dim">{prompt.hint}</p>}
             <input
               id={inputId}
               ref={inputRef}
@@ -269,7 +280,7 @@ function PromptDialog() {
             </button>
             <button
               onClick={submit}
-              disabled={!value.trim()}
+              disabled={undoClass === null || !value.trim()}
               className="rounded bg-accent px-3 py-1 text-[13px] text-white hover:brightness-110 disabled:opacity-40"
             >
               {prompt?.confirmLabel ?? t("op.create")}

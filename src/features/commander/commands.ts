@@ -47,6 +47,7 @@ import { openExport } from "@/store/exportStore";
 import { openFileCompare } from "@/store/fileCompareStore";
 import { openProps } from "@/store/propsStore";
 import { openRename } from "@/store/renameStore";
+import { openUndo } from "@/store/undoStore";
 import { openRecovery } from "@/store/recoveryStore";
 import { openSearch } from "@/store/searchStore";
 import { openAbout, openSettings, openShortcuts } from "@/store/uiStore";
@@ -468,6 +469,7 @@ export const COMMANDS = {
 
   // ----- Markieren (TICKET-059) -----
   // Group 1 – what is marked.
+  "file.undo": { label: "undo.title", dialog: true, shortcut: { key: "Z", mods: ["Mod", "Alt"] }, run: openUndo },
   "cmd.recovery": { label: "recovery.title", dialog: true, run: openRecovery },
   "mark.selectGroup": {
     label: "menu.mark.selectGroup",
@@ -1171,6 +1173,7 @@ export const MENUS: MenuCategory[] = [
     id: "files",
     label: "menu.files",
     nodes: [
+      item("file.undo"),
       item("file.open"),
       item("file.view"),
       item("file.edit"),

@@ -19,6 +19,7 @@
 
 import { LazyFeature } from "@/components/ui/LazyFeature";
 import { LAZY } from "./lazyFeatures";
+import { useUndo } from "@/store/undoStore";
 import { useRecovery } from "@/store/recoveryStore";
 import { useT } from "@/store/settingsStore";
 import { useUi } from "@/store/uiStore";
@@ -37,6 +38,7 @@ import { useTerminals } from "@/features/net/terminalStore";
 export function LazyDialogs() {
   const t = useT();
 
+  const undoOpen = useUndo(s => s.open);
   const recoveryOpen = useRecovery(s => s.open);
   const settingsOpen = useUi((s) => s.settingsOpen);
   const shortcutsOpen = useUi((s) => s.shortcutsOpen);
@@ -55,6 +57,7 @@ export function LazyDialogs() {
 
   return (
     <>
+      <LazyFeature open={undoOpen} load={LAZY.undo} label={t("undo.title")} />
       <LazyFeature open={recoveryOpen} load={LAZY.recovery} label={t("recovery.title")} />
       <LazyFeature
         open={settingsOpen}

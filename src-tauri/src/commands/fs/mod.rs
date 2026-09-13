@@ -29,6 +29,7 @@ pub mod selection;
 pub mod size;
 pub mod tags;
 pub mod transfer;
+pub mod undo;
 pub mod volume;
 pub mod walk;
 pub mod watch;

@@ -3,11 +3,13 @@
 // as well as confirmation and input dialogs.
 // ============================================================
 
+import type { UndoRequest } from "@/ipc/domains/undo";
 import { create } from "zustand";
 import type { LucideIcon } from "lucide-react";
 import type { CollisionReq, Preview } from "@/ipc/bindings";
 
 export interface ConfirmRequest {
+  undo?: UndoRequest;
   title: string;
   message: string;
   danger?: boolean;
@@ -19,9 +21,11 @@ export interface ConfirmRequest {
 }
 
 export interface PromptRequest {
+  undo?: { kind: "rename" | "mkdir"; source: string; base: string };
   title: string;
   label: string;
   initial: string;
+  hint?: string;
   confirmLabel?: string;
   /** Icon in the dialog header (default: folder plus). */
   icon?: LucideIcon;

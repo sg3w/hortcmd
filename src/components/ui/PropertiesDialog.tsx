@@ -335,6 +335,7 @@ export function PropertiesDialog() {
           </Dialog.Title>
 
           <div className="flex min-h-0 flex-col gap-4 overflow-auto p-4">
+            <p className="text-sm text-dim">{t("undo.conditional")}</p>
             {!data && !error && (
               <div className="flex items-center gap-2 text-[13px] text-dim">
                 <Loader2 size={14} className="animate-spin" aria-hidden />

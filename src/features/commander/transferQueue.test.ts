@@ -65,8 +65,17 @@ const { useTransfers } = await import("@/store/transfersStore");
 const { useSettings } = await import("@/store/settingsStore");
 const { usePanes } = await import("@/store/panesStore");
 const { loadCaps } = await import("@/store/capsStore");
-const { runCopy, startNextQueued } = await import("./fileOps");
+const { runCopy: requestCopy, startNextQueued } = await import("./fileOps");
 const { file } = await import("@/test/fixtures");
+
+const { useOps } = await import("@/store/opsStore");
+function runCopy(side: "left" | "right"): void {
+  requestCopy(side);
+  const confirm = useOps.getState().confirm;
+  expect(confirm).not.toBeNull();
+  useOps.getState().closeDialogs();
+  confirm?.onConfirm();
+}
 
 /** Puts both panes on a folder with one selected file. */
 function place(): void {

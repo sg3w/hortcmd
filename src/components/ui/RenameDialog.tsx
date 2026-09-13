@@ -145,6 +145,7 @@ export function RenameDialog() {
       minSize={{ w: MIN_W, h: MIN_H }}
     >
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4">
+            <p className="text-sm text-dim">{t("undo.conditional")}</p>
             {/* Configuration – compact, wraps when needed. */}
             <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
               <Section label={t("export.scope")}>

@@ -48,7 +48,12 @@ pub fn set_tags(path: String, tags: Vec<Tag>) -> AppResult<()> {
     caps::require(&path, Capability::FinderTags)?;
     #[cfg(target_os = "macos")]
     {
-        macos::write_tags(&path, &tags)
+        let undo = super::undo::prepare("tags", &path, &path)?;
+        macos::write_tags(&path, &tags)?;
+        if let Some(undo) = undo {
+            undo.finish()?;
+        }
+        Ok(())
     }
     #[cfg(not(target_os = "macos"))]
     {

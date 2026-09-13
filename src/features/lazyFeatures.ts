@@ -28,6 +28,7 @@ const asDefault =
     load().then((m) => ({ default: m[name] as ComponentType }));
 
 export const LAZY = {
+  undo: () => import("@/components/ui/UndoDialog").then(m => ({ default: m.UndoDialog })),
   recovery: () => import("@/components/ui/RecoveryDialog").then(m => ({ default: m.RecoveryDialog })),
   /** Markdown, syntax highlighting, EXIF, hex view (F3). */
   preview: asDefault(() => import("@/components/ui/PreviewDialog"), "PreviewDialog"),

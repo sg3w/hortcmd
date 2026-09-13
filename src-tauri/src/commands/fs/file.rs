@@ -26,9 +26,13 @@ use tauri::AppHandle;
 pub fn make_dir(path: String) -> AppResult<String> {
     caps::require(&path, Capability::Create)?;
     let (provider, resolved) = vfs::resolve(&path)?;
+    let undo = super::undo::prepare("mkdir", &path, &path)?;
     provider
         .create_dir_all(Path::new(&resolved))
         .map_err(AppError::from)?;
+    if let Some(undo) = undo {
+        undo.finish()?;
+    }
     Ok(path)
 }
 
@@ -65,7 +69,12 @@ pub fn rename_entry(from: String, to: String) -> AppResult<()> {
     if provider.exists(to_p) {
         return Err(AppError::from("Zielname existiert bereits"));
     }
-    provider.rename(from_p, to_p).map_err(AppError::from)
+    let undo = super::undo::prepare("rename", &from, &to)?;
+    provider.rename(from_p, to_p).map_err(AppError::from)?;
+    if let Some(undo) = undo {
+        undo.finish()?;
+    }
+    Ok(())
 }
 
 /// Distinguishes the temporary names a batch rename uses within one
@@ -163,6 +172,33 @@ fn rename_batch_on(
         valid.push((from.as_str(), to.as_str()));
     }
 
+    let mut undo = HashMap::new();
+    let group = format!(
+        "rename-{}-{}",
+        std::process::id(),
+        TEMP_SEQ.fetch_add(1, Ordering::Relaxed)
+    );
+    if provider.store_id() == "local" {
+        for (from, to) in &valid {
+            match super::undo::prepare_group(
+                "rename",
+                &base.join(from).to_string_lossy(),
+                &base.join(to).to_string_lossy(),
+                &group,
+                true,
+            ) {
+                Ok(Some(pending)) => {
+                    undo.insert(*from, pending);
+                }
+                Ok(None) => (),
+                Err(error) => {
+                    errors.push(ItemError::new(*from, error));
+                    return OpResult { ok: 0, errors };
+                }
+            }
+        }
+    }
+
     // Phase 1: all sources to temporary names.
     let mut staged: Vec<(PathBuf, &str, &str)> = Vec::new(); // (temp, to, from)
     for (from, to) in &valid {
@@ -191,7 +227,14 @@ fn rename_batch_on(
             rename(&tmp, &target).map_err(AppError::from)
         };
         match result {
-            Ok(_) => ok += 1,
+            Ok(_) => {
+                ok += 1;
+                if let Some(pending) = undo.remove(from) {
+                    if let Err(error) = pending.finish() {
+                        errors.push(ItemError::new(from, error));
+                    }
+                }
+            }
             Err(e) => {
                 errors.push(ItemError::new(from, e.with("name", to)));
                 restore_staged(provider, base, &tmp, from, &rename, &mut errors);
@@ -199,6 +242,11 @@ fn rename_batch_on(
         }
     }
 
+    if provider.store_id() == "local" {
+        if let Err(error) = super::undo::seal(&group) {
+            errors.push(ItemError::new(base.to_string_lossy().as_ref(), error));
+        }
+    }
     OpResult { ok, errors }
 }
 

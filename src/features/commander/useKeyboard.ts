@@ -21,6 +21,7 @@ import { runCompare } from "./compareLevel";
 import { guard } from "./guard";
 import { openEntry } from "./navigate";
 import { openProps } from "@/store/propsStore";
+import { openUndo } from "@/store/undoStore";
 import { openSearch } from "@/store/searchStore";
 import { openSettings } from "@/store/uiStore";
 import { joinPath } from "@/lib/path";
@@ -135,6 +136,7 @@ export function useKeyboard(): void {
       const s = usePanes.getState();
       const side = s.active;
       const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.altKey && e.key.toLowerCase() === "z") { e.preventDefault(); openUndo(); return; }
       // Column count of the current view (detail = 1, grid > 1).
       const cols = Math.max(1, s[side].gridCols);
 

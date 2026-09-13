@@ -201,7 +201,12 @@ pub fn set_permissions(path: String, mode: u32) -> AppResult<()> {
     {
         use std::os::unix::fs::PermissionsExt;
         let perms = fs::Permissions::from_mode(mode & 0o7777);
-        fs::set_permissions(&path, perms).map_err(AppError::from)
+        let undo = super::undo::prepare("permissions", &path, &path)?;
+        fs::set_permissions(&path, perms).map_err(AppError::from)?;
+        if let Some(undo) = undo {
+            undo.finish()?;
+        }
+        Ok(())
     }
     #[cfg(not(unix))]
     {
@@ -228,7 +233,12 @@ pub fn set_owner(path: String, owner: Option<String>, group: Option<String>) -> 
             Some(g) => Some(resolve_gid(&g)?),
             None => None,
         };
-        std::os::unix::fs::chown(&path, uid, gid).map_err(AppError::from)
+        let undo = super::undo::prepare("owner", &path, &path)?;
+        std::os::unix::fs::chown(&path, uid, gid).map_err(AppError::from)?;
+        if let Some(undo) = undo {
+            undo.finish()?;
+        }
+        Ok(())
     }
     #[cfg(not(unix))]
     {

@@ -144,6 +144,16 @@ function hasActiveTransfer(exceptId?: string): boolean {
 
 function beginTransfer(op: "copy" | "move", sources: string[], dest: string): void {
   if (!sources.length) return;
+  useOps.getState().requestConfirm({
+    title: translate(op === "copy" ? "fn.copy" : "fn.move"),
+    message: `${sources.join("\n")} → ${dest}`,
+    undo: { kind: op, sources, target: dest, directory: true },
+    onConfirm: () => beginApprovedTransfer(op, sources, dest),
+  });
+}
+
+function beginApprovedTransfer(op: "copy" | "move", sources: string[], dest: string): void {
+  if (!sources.length) return;
   const st = useSettings.getState();
   const limit = Math.max(0, Math.round(st.speedLimit)) * 1024; // KB/s → Bytes/s
   const verify = st.verifyCopies;
@@ -510,7 +520,7 @@ export function runDelete(side: Side, opts?: { permanent?: boolean }): void {
       message:
         translate("op.trash.confirm").replace("{n}", n) +
         "\n\n" +
-        translate("op.trash.hint"),
+        translate("op.trash.hint") + "\n\n" + translate("undo.trash"),
       icon: Trash2,
       confirmLabel: translate("op.trash.button"),
       onConfirm: () =>
@@ -525,7 +535,7 @@ export function runDelete(side: Side, opts?: { permanent?: boolean }): void {
 
   useOps.getState().requestConfirm({
     title: translate("op.delete.title"),
-    message: translate("op.delete.confirm").replace("{n}", n),
+    message: translate("op.delete.confirm").replace("{n}", n) + "\n\n" + translate("undo.irreversible"),
     danger: true,
     confirmLabel: translate("op.delete.button"),
     onConfirm: () =>
@@ -555,6 +565,7 @@ export function runRename(side: Side): void {
   useOps.getState().requestPrompt({
     title: translate("op.rename.title"),
     label: translate("op.rename.label"),
+    undo: { kind: "rename", source: joinPath(base, oldName), base },
     initial: oldName,
     confirmLabel: translate("op.rename.confirm"),
     icon: PenLine,
@@ -593,6 +604,7 @@ export function runMkdir(side: Side): void {
   useOps.getState().requestPrompt({
     title: translate("op.mkdir.title"),
     label: translate("op.mkdir.label"),
+    undo: { kind: "mkdir", source: "", base: panelOf(usePanes.getState(), side).path },
     initial: "",
     onSubmit: (name) => {
       const trimmed = name.trim();

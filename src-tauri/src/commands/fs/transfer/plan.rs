@@ -112,6 +112,7 @@ pub(crate) struct Plan {
     pub(crate) backup: Option<PathBuf>,
     pub(crate) native_move: bool,
     pub(crate) owned_root: Option<PathBuf>,
+    undo: std::sync::Mutex<Option<crate::commands::fs::undo::Pending>>,
 }
 
 impl Plan {
@@ -126,6 +127,7 @@ impl Plan {
             backup: None,
             native_move: false,
             owned_root: None,
+            undo: std::sync::Mutex::new(None),
         }
     }
 
@@ -141,6 +143,7 @@ impl Plan {
             backup: None,
             native_move: false,
             owned_root: None,
+            undo: std::sync::Mutex::new(None),
         }
     }
 
@@ -151,6 +154,22 @@ impl Plan {
         dstp: &dyn Provider,
     ) -> crate::errors::AppResult<()> {
         let intent = handle.intent()?;
+        if dstp.store_id() == "local" && !self.replace {
+            let kind = if self.native_move {
+                "move"
+            } else if matches!(intent.kind, super::recovery::types::RecoveryKind::Copy) {
+                "copy"
+            } else {
+                "unsupported"
+            };
+            self.undo = std::sync::Mutex::new(crate::commands::fs::undo::prepare_group(
+                kind,
+                &source.to_string_lossy(),
+                &self.target.to_string_lossy(),
+                handle.id(),
+                false,
+            )?);
+        }
         if self.native_move {
             if self.replace && dstp.store_id() == "local" {
                 self.owned_root = Some(working_name(
@@ -318,6 +337,14 @@ pub(crate) fn publish(dstp: &dyn Provider, plan: &Plan) -> std::io::Result<()> {
         } else {
             commit(dstp, &plan.write_to, &plan.target, plan.replace)?;
         }
+    }
+    if let Some(undo) = plan
+        .undo
+        .lock()
+        .map_err(|_| std::io::Error::other("undo lock"))?
+        .take()
+    {
+        undo.finish().map_err(std::io::Error::other)?;
     }
     recovery::fault("swapped");
     if local && plan.recovery.is_some() {

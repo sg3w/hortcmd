@@ -52,15 +52,15 @@ from TICKET-036.
 
 ## Acceptance Criteria
 
-- [ ] The UI identifies whether an operation is reversible before execution.
-- [ ] Undo never modifies an item that no longer matches the recorded result.
-- [ ] Rename, eligible move/copy, empty-directory creation, and metadata changes
+- [x] The UI identifies whether an operation is reversible before execution.
+- [x] Undo never modifies an item that no longer matches the recorded result.
+- [x] Rename, eligible move/copy, empty-directory creation, and metadata changes
       have tested inverse plans.
-- [ ] Permanent and unsupported actions never create misleading undo entries.
-- [ ] Multi-item partial failures identify exactly what was and was not restored.
-- [ ] Undo history survives restart according to a documented bounded retention
+- [x] Permanent and unsupported actions never create misleading undo entries.
+- [x] Multi-item partial failures identify exactly what was and was not restored.
+- [x] Undo history survives restart according to a documented bounded retention
       policy and contains no secrets.
-- [ ] Remote support follows provider capabilities and reconnect trust rules.
+- [x] Remote support follows provider capabilities and reconnect trust rules.
 
 ## Tests
 
@@ -81,3 +81,22 @@ from TICKET-036.
 - Concurrent changes and collisions cannot be overwritten by undo.
 - Undo behavior is durable, tested across providers, and documented.
 - Rename this file to `048-reversible-file-operations-and-undo.done.md`.
+
+## Implementation scope and evidence
+
+Implemented for local macOS with a durable private `UndoPlan`, live assessment,
+identity/content checks, exclusive inverse rename, grouped swaps and precise
+partial outcomes, copy quarantine, empty-directory removal and metadata restore.
+Original running groups stay locked until completion. Interrupted records never
+authorize replay. DE/EN menu, shortcut, confirmations and preview are integrated.
+
+Remote providers, archives, overwrite without retained backups and permanent
+delete are explicitly irreversible. Current macOS trash has no stable restore
+token; use system trash restoration. Windows/Linux adapters were moved to
+[TICKET-254](254-file-undo-windows-linux-adapters.md) per the current user scope.
+Copy undo retains bytes at its displayed quarantine path to protect open writers;
+this is intentional and documented in [File undo](../docs/file-undo.md).
+
+Validation: local inverse/restart/retention/corruption/identity/collision tests,
+grouped successful and partial undo, metadata and unchanged-copy verification,
+DE/EN UI review, keyboard focus isolation, and the complete `npm run check` gate.

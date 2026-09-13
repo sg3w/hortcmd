@@ -24,7 +24,7 @@ function Host() {
 function setup(language: "de" | "en") {
   const runtime = useTauri({ commands: {
     recovery_queue_transfer: () => {},
-    copy_entries: () => {}, move_entries: () => {}, rename_entry: () => {},
+    undo_classify: () => "conditional", copy_entries: () => {}, move_entries: () => {}, rename_entry: () => {},
     trash_entries: () => ({ ok: 1, errors: [] }),
     list_dir: ({ path }) => ({ path, entries: [file("renamed.txt")] }),
     request_git_status: () => {},
@@ -70,6 +70,9 @@ for (const [key, command] of [["F5", "copy_entries"], ["F6", "move_entries"]] as
   it.each(["de", "en"] as const)(`${key} dispatches the selected file to the opposite pane in %s`, async language => {
     const { runtime, user } = setup(language);
       await user.keyboard(`{${key}}`);
+    expect(runtime.calls.some(c => c.cmd === command)).toBe(false);
+    await waitFor(() => expect(screen.getByRole("button", { name: translate("op.confirm") })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: translate("op.confirm") }));
     await waitFor(() => expect(runtime.calls.filter(c => c.cmd === command)).toHaveLength(1));
     expect(runtime.calls.find(c => c.cmd === command)?.args).toMatchObject({
       sources: ["/src/marked.txt"], destDir: "/dst",
@@ -123,6 +126,9 @@ for (const [key, command] of [["F5", "copy_entries"], ["F6", "move_entries"]] as
     usePanes.setState(s => ({ left: { ...s.left, tabs: [{ ...s.left.tabs[0], raw: entries, entries, selected: new Set<string>() }] } }));
     usePanes.getState().selectAllFiles("left");
     await user.keyboard(`{${key}}`);
+    expect(runtime.calls.some(c => c.cmd === command)).toBe(false);
+    await waitFor(() => expect(screen.getByRole("button", { name: translate("op.confirm") })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: translate("op.confirm") }));
     await waitFor(() => expect(runtime.calls.find(c => c.cmd === command)?.args).toMatchObject({
       sources: ["/src/folder", "/src/marked.txt"], destDir: "/dst",
     }));
