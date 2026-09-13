@@ -40,18 +40,18 @@ pub(crate) fn flatten_tree(
     dst: &Path,
     idx: usize,
     tasks: &mut Vec<CopyTask>,
-) {
-    if srcp.is_dir(src) {
-        let _ = dstp.create_dir_all(dst);
-        if let Ok(children) = srcp.read_dir(src) {
-            for child in children {
+) -> std::io::Result<()> {
+    if srcp.stat(src)?.is_dir {
+        dstp.create_dir_all(dst)?;
+        {
+            for child in srcp.read_dir(src)? {
                 let name = child.file_name().unwrap_or_default();
-                flatten_tree(srcp, dstp, &child, &dst.join(name), idx, tasks);
+                flatten_tree(srcp, dstp, &child, &dst.join(name), idx, tasks)?;
             }
         }
     } else {
         if let Some(parent) = dst.parent() {
-            let _ = dstp.create_dir_all(parent);
+            dstp.create_dir_all(parent)?;
         }
         tasks.push(CopyTask {
             idx,
@@ -59,6 +59,7 @@ pub(crate) fn flatten_tree(
             dst: dst.to_path_buf(),
         });
     }
+    Ok(())
 }
 
 /// Copies a file block by block with shared bookkeeping (parallel path).
@@ -153,7 +154,13 @@ pub(crate) fn run_parallel_copy(
     // tree or disturb a pre-existing destination.
     let mut tasks = Vec::new();
     for (i, (src, plan)) in jobs.iter().enumerate() {
-        flatten_tree(&*srcp, &*dstp, src, &plan.write_to, i, &mut tasks);
+        if let Err(error) = flatten_tree(&*srcp, &*dstp, src, &plan.write_to, i, &mut tasks) {
+            let mut errors = vec![ItemError::new(src.display().to_string(), error.into())];
+            for (_, plan) in &jobs {
+                discard_staging(&*dstp, plan, &mut errors);
+            }
+            return (0, errors);
+        }
     }
 
     let sp = Arc::new(SharedProg {

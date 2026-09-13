@@ -919,7 +919,8 @@ fn flattening_assigns_every_file_to_its_top_level_source() {
         Path::new("/dst"),
         7,
         &mut tasks,
-    );
+    )
+    .unwrap();
     assert_eq!(tasks.len(), 2);
     // The index identifies which top-level source a file came from,
     // which is what lets one failing job be discarded on its own.
@@ -1068,7 +1069,7 @@ fn flatten_tree_collects_files_and_makes_dirs() {
     let dst = root.join("dst");
 
     let mut tasks: Vec<CopyTask> = Vec::new();
-    flatten_tree(&LocalProvider, &LocalProvider, &src, &dst, 0, &mut tasks);
+    flatten_tree(&LocalProvider, &LocalProvider, &src, &dst, 0, &mut tasks).unwrap();
 
     assert_eq!(tasks.len(), 2, "zwei Dateien erwartet");
     assert!(dst.join("sub").is_dir(), "Zielordner angelegt");
@@ -1096,4 +1097,31 @@ fn hash_file_matches_known_vector() {
         hex,
         "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
     );
+}
+
+#[test]
+fn failed_parallel_directory_preparation_does_not_schedule_file_writes() {
+    let root = tmp_dir();
+    let source = root.join("source");
+    fs::create_dir(&source).unwrap();
+    fs::write(source.join("a.txt"), b"source").unwrap();
+    let blocked = root.join("blocked");
+    fs::write(&blocked, b"existing destination").unwrap();
+    let mut tasks = Vec::new();
+    let result = flatten_tree(
+        &LocalProvider,
+        &LocalProvider,
+        &source,
+        &blocked.join("sub"),
+        0,
+        &mut tasks,
+    );
+    assert!(result.is_err());
+    assert!(
+        tasks.is_empty(),
+        "unusable destination must not reach workers"
+    );
+    assert_eq!(fs::read(&blocked).unwrap(), b"existing destination");
+    assert_eq!(fs::read(source.join("a.txt")).unwrap(), b"source");
+    fs::remove_dir_all(root).unwrap();
 }
