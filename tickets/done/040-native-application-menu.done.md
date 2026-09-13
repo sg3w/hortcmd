@@ -205,7 +205,7 @@ in der separaten Plugin-Toolbar aus TICKET-204; keine vorweggenommene Menü-API.
 | --- | --- |
 | 016 | Toolbar-Einstieg zum Verbindungsmanager und Bereinigung des Laufwerkswählers; Netz-Menü verbindlich hier in 040. |
 | 031 | Gemeinsame Provider-Fähigkeiten und Sperren auch für das Hauptmenü. |
-| 043 | Übergreifende Accessibility/Übersetzung; 040 liefert bereits vollständige Menübedienbarkeit. |
+| 249 | Übergreifende Accessibility/Übersetzung; 040 liefert bereits vollständige Menübedienbarkeit. |
 | 048 | Später Datei-Undo unter Dateien mit konkretem Aktionsnamen; derzeit kein Datei-Undo-Platzhalter. |
 | 056 | Später Speicherbelegungsanalyse unter Befehle; vorhandene Ordnergröße bleibt unter Eigenschaften. |
 | 204 / 207 | Separate Plugin-Toolbar und Plugin-Verwaltung; kein Starter-Menü in 040. |

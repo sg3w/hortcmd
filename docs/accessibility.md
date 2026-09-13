@@ -1,12 +1,13 @@
 # Accessibility and localization
 
-Ticket 043 is in progress. The rules below describe the implemented translation
+Ticket 249 is in progress. The rules below describe the implemented translation
 check; the broader keyboard, screen-reader, zoom and live-region verification is
 still being completed.
 
 ## Handoff status (2026-09-13)
 
-The user requested stopping after ticket 043; do not begin 044–065. Windows/NVDA
+The user stopped sequential work and moved the open ticket from 043 to 249;
+do not begin 044–065. Windows/NVDA
 and Linux/Orca verification is explicitly deferred to ticket 250. The remaining
 macOS screen-reader smoke script, native reduced-motion/high-contrast checks,
 and successful native trash verification are still open. Earlier native keyboard,
@@ -19,7 +20,7 @@ could be captured by that route. This is a test-access limitation, not evidence
 of an application accessibility failure or a passing speech test. The protected
 VoiceOver AppleScript-control option was not changed. Caption display was disabled
 and both VoiceOver and its utility were quit; their absence was verified. Ticket
-043 must remain open until the outstanding manual evidence is obtained.
+249 must remain open until the outstanding manual evidence is obtained.
 
 The final local `npm run check` passed: formatting, strict Clippy, 387 Rust tests
 (25 ignored), generated bindings and repository gates, TypeScript, 491 frontend
@@ -446,7 +447,7 @@ or actual screen-reader speech; that requires the manual terminal workflow below
 The user deferred Windows/NVDA and Linux/Orca manual verification to
 [ticket 250](../tickets/250-windows-linux-screen-reader-verification.md) on
 2026-09-13. These rows are unverified follow-up work, not acceptance blockers for
-043. The macOS row remains part of 043.
+249. The macOS row remains part of 249.
 
 Record OS, application revision, screen-reader version, date, language, input
 method and observed result for every run. Execute in both German and English:

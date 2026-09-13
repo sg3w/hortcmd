@@ -23,6 +23,6 @@ Vitest release will reject this pattern.
 
 ## Priority
 
-Follow-up after the requested 043–065 sequence. Current Vitest 4 executes the
+Follow-up after the originally requested 041–065 sequence. Current Vitest 4 executes the
 mocks correctly; this does not prevent accessibility work. Found while testing
-043 after dependency update 073.
+249 after dependency update 073.

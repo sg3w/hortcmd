@@ -2,7 +2,7 @@
 
 ## Problem
 
-Found during ticket 043's connection-dialog inspection. `ProfileForm.submit`
+Found during ticket 249's connection-dialog inspection. `ProfileForm.submit`
 trims passwords and key passphrases before calling `save`. Credentials with
 leading or trailing spaces therefore differ from what the user entered;
 whitespace-only secrets become `null` (keep the old credential).

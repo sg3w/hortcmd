@@ -2,7 +2,7 @@
 
 ## Findings
 
-Browser verification for 043 at 640 by 360 CSS pixels found two concrete faults:
+Browser verification for 249 at 640 by 360 CSS pixels found two concrete faults:
 
 - The global Tab handler consumed keyboard focus traversal even on controls,
   changing the active pane while leaving focus behind. Enter/Space on controls
@@ -10,7 +10,7 @@ Browser verification for 043 at 640 by 360 CSS pixels found two concrete faults:
 - The function bar lost its rightmost actions beyond the viewport. Fixed detail
   columns overflowed their pane without a horizontal scrolling surface.
 
-Interpose these fixes during 043 before completing accessibility verification.
+Interpose these fixes during 249 before completing accessibility verification.
 
 ## Changes
 

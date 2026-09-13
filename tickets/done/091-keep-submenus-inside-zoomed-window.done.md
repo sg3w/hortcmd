@@ -19,7 +19,7 @@ side flipping cannot fit two menu columns when neither side has enough room.
 
 ## Scheduling
 
-Urgent during 043's required native menu and zoom verification.
+Urgent during 249's required native menu and zoom verification.
 
 ## Implementation and verification
 
@@ -51,4 +51,4 @@ the isolated 043 configuration. At 200% zoom in a 700×720 window starting at
   returned to Commands.
 
 The app was left in German at 100%, with the original 1100×720 size and no open
-menu or dialog. Ticket 043's other native and screen-reader checks remain open.
+menu or dialog. Ticket 249's other native and screen-reader checks remain open.

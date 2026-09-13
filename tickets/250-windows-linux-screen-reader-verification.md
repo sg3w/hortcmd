@@ -3,15 +3,15 @@
 ## Goal
 
 Complete the Windows and Linux manual accessibility matrix originally specified
-by [TICKET-043](043-accessibility-and-localization-quality.md), using real native
+by [TICKET-249](249-accessibility-and-localization-quality.md), using real native
 hortcmd builds with NVDA and Orca in both German and English.
 
 ## Scope and scheduling
 
 On 2026-09-13 the user explicitly requested moving these platform checks to a
 follow-up ticket numbered 250 or higher. They therefore no longer block ticket
-043. The user subsequently requested stopping work after 043. They remain unverified,
-not passed. macOS/VoiceOver verification remains in 043.
+249 (formerly 043). The user has stopped sequential ticket work. These checks
+remain unverified, not passed. macOS/VoiceOver verification remains in 249.
 
 ## Requirements
 

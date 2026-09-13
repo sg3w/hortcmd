@@ -4,7 +4,7 @@
 
 `TransferCard` joins `ItemError` objects directly. A failed copy/move therefore
 shows `[object Object]` instead of the item name and the localized failure.
-Found during ticket 043's operation-announcement audit. Interposed immediately
+Found during ticket 249's operation-announcement audit. Interposed immediately
 because users need readable errors before retrying failed file operations.
 
 ## Implementation

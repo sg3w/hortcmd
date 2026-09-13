@@ -2,7 +2,7 @@
 
 ## Evidence
 
-Browser inspection during ticket 043 found selected settings buttons using
+Browser inspection during ticket 249 found selected settings buttons using
 12 px white text (`#ffffff`) on the dark theme's accent (`#3b82f6`). The WCAG
 relative-luminance contrast ratio is 3.6779:1, below 4.5:1 for normal text.
 The same accent is used as foreground and focus color on the panel (`#2b2d31`),
@@ -25,7 +25,7 @@ Use separate semantic colors instead of moving the shared color back and forth.
 
 ## Scheduling
 
-Interpose before closing ticket 043: its default-contrast requirement cannot be
+Interpose before closing ticket 249: its default-contrast requirement cannot be
 accepted while the measured failure remains.
 
 ## Completed implementation and verification

@@ -2,7 +2,7 @@
 
 ## Problem
 
-Ticket 043's native macOS check at 200% page zoom, Large font and icon settings,
+Ticket 249's native macOS check at 200% page zoom, Large font and icon settings,
 and a 1100×720 window found a search-results viewport only 39 native pixels high.
 Each result occupies 80 native pixels at this zoom. The filename was partly
 visible, but the parent path and selection cue were clipped. The form consumed
@@ -18,7 +18,7 @@ nearly all available height and could not scroll independently.
 
 ## Scheduling
 
-Urgent during ticket 043's required zoom and search workflow verification.
+Urgent during ticket 249's required zoom and search workflow verification.
 
 ## Implementation and verification
 
@@ -51,4 +51,4 @@ The setup also verified Large as selected for both size controls. In the 200%
 settings dialog, DE/EN Tab traversal reached Export, Import and Reset, and Close
 remained inside the dialog and returned focus to Settings. After testing, the
 isolated app was set to German, Medium font/icons (selected values verified) and
-100% zoom, with no dialog open. The broader 043 manual matrix remains open.
+100% zoom, with no dialog open. The broader 249 manual matrix remains open.

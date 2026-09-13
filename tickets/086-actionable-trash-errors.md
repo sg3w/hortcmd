@@ -2,7 +2,7 @@
 
 ## Problem
 
-Found during native macOS verification of ticket 043. A trash confirmation for
+Found during native macOS verification of ticket 249. A trash confirmation for
 a disposable test file reached a Finder-automation permission prompt, then ended
 with the localized generic message `Lese-/Schreibfehler`. The file remained intact.
 The available observation does not establish whether permission denial, another
@@ -30,4 +30,4 @@ trash failures even when the underlying error supplies a more specific cause.
 
 Follow the requested sequence through 065. The observed failure preserves the
 source file and is displayed to the user; no data-loss workaround is required.
-Successful native trash disposal remains an unverified part of ticket 043.
+Successful native trash disposal remains an unverified part of ticket 249.

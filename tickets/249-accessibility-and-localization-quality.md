@@ -1,4 +1,10 @@
-# TICKET-043: Establish accessibility and localization quality gates
+# TICKET-249: Establish accessibility and localization quality gates
+
+## Renumbering
+
+Renumbered from 043 to 249 at the user's request on 2026-09-13. The ticket
+remains open; existing implementation and verification evidence is preserved.
+Historical commits and test configuration paths retain the original number.
 
 ## Goal
 
@@ -93,4 +99,4 @@ not the manual screen-reader or actual-zoom requirements. Those remain open.
 - German and English resources have complete parity.
 - Hard-coded accessible labels and user-facing strings are removed or justified.
 - Accessibility regressions fail CI through the foundation from TICKET-033.
-- Rename this file to `043-accessibility-and-localization-quality.done.md`.
+- Rename this file to `249-accessibility-and-localization-quality.done.md`.

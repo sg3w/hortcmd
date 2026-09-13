@@ -2,9 +2,9 @@
 
 ## Problem
 
-Ticket 043's shell inventory found an unnamed command-line input in App.tsx with
+Ticket 249's shell inventory found an unnamed command-line input in App.tsx with
 no state, submission handler or backend command. Text can be entered but Enter
-does nothing. Until execution exists, ticket 043 names and disables the field
+does nothing. Until execution exists, ticket 249 names and disables the field
 with an explicit unavailable explanation so it does not advertise working input.
 
 ## Requirements
@@ -21,4 +21,4 @@ with an explicit unavailable explanation so it does not advertise working input.
 ## Scheduling
 
 After the requested sequence through 065. This is an unfinished feature, separate
-from the core file-operation keyboard workflows of ticket 043.
+from the core file-operation keyboard workflows of ticket 249.

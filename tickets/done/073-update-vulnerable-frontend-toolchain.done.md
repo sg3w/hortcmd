@@ -1,7 +1,7 @@
 # TICKET-073: Update dependencies reported by the npm security audit
 
 ## Finding
-Installing the axe development dependency during 043 exposed ten audit findings
+Installing the axe development dependency during 249 exposed ten audit findings
 in the existing dependency tree (2026-09-13). The critical report concerns Vitest
 UI server file access/execution (GHSA-5xrq-8626-4rwp); the ordinary `vitest run`
 command does not start that UI server. Vite has development-server path handling
@@ -18,7 +18,7 @@ configuration. Verify each advisory against the actual configuration during fixe
 - Document any residual advisory with actual reachability and mitigation.
 
 ## Scheduling
-Before starting interactive development-server/UI-server verification for 043.
+Before starting interactive development-server/UI-server verification for 249.
 Headless component tests and source work can proceed without those servers.
 This is a concrete dependency finding; 050 still owns ongoing governance.
 
@@ -38,10 +38,10 @@ the Rust MSRV are unchanged.
 - The complete `npm run check` passed on the official Node 20.19.0 runtime,
   including preview sanitization tests, production build and bundle limits.
   Its archive checksum was verified against the official nodejs.org manifest.
-- The exact staged 073 tree was exported without any unfinished 043 changes.
+- The exact staged 073 tree was exported without any unfinished 249 changes.
   Its fresh `npm ci --engine-strict --ignore-scripts` on Node 20.19 passed with
   zero audit findings; all 378 baseline frontend tests, TypeScript, build and
   bundle checks passed independently.
-- The working-tree full check also passed with the additional 043 tests present:
+- The working-tree full check also passed with the additional 249 tests present:
   387 Rust tests passed, 25 ignored, 382 frontend tests passed. No source or test
-  changes from 043 are included in this dependency commit.
+  changes from 249 are included in this dependency commit.

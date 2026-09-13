@@ -2,7 +2,7 @@
 
 ## Problem
 
-Found in the browser while verifying ticket 043 at 640 × 360. Clicking the
+Found in the browser while verifying ticket 249 at 640 × 360. Clicking the
 settings toolbar button opens an empty form. `ToolButton` forwards React's click
 event to `openSettings`, whose optional argument is a settings category. The event
 is stored as that category; no page matches it. DOM inspection confirmed every

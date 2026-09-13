@@ -72,7 +72,7 @@ look current.
   access to the underlying sorted list.
 - Use labels, patterns, and values in addition to color. Respect high-contrast,
   reduced-motion, keyboard, screen-reader, and 200% zoom requirements from
-  TICKET-043.
+  TICKET-249.
 - Show scan status, elapsed time, current path, counts, applied limits, truncation,
   stale data, and partial-error summaries continuously.
 - File mutations launched from the visualizer must use normal capabilities,

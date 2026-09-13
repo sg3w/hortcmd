@@ -158,7 +158,7 @@ zusätzlich **Vergleichsfilter aufheben** anbieten; auch direkt am Filterindikat
 - Alle Aktionen ohne Nummernblock per Menü vollständig erreichbar. Plattformgerechte
   Kürzel anzeigen; native Textbearbeitung, Dialoge und SSH-Terminal haben Vorrang.
 - Labels, leere Zustände, Ergebnisse und Fehlermeldungen de/en; Tastaturnavigation,
-  Fokuswiederherstellung, Checkboxen und deaktivierte Gründe nach 040/043.
+  Fokuswiederherstellung, Checkboxen und deaktivierte Gründe nach 040/249.
 
 ## Akzeptanzkriterien und Tests
 

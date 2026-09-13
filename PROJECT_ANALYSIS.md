@@ -146,7 +146,7 @@ instead of failing after invocation.
 | P1 | Persisted frontend data is not versioned or validated | Upgrades or corrupt localStorage can load invalid settings and undermine safe defaults. | [TICKET-039](tickets/039-versioned-persisted-state.md) |
 | P1 | Directory freshness is local-only and race-prone | Remote paths are sent to a local watcher and late asynchronous results can make panes stale. | [TICKET-042](tickets/042-provider-aware-refresh-and-cache-coherence.md) |
 | P1 | Remote tests depend on manual infrastructure | Wire-protocol, security, and disconnection regressions are skipped in ordinary validation. | [TICKET-038](tickets/038-protocol-integration-test-harness.md) |
-| P2 | Accessibility and localization are not enforced | Hard-coded labels and complex keyboard/focus behavior can exclude users or regress silently. | [TICKET-043](tickets/043-accessibility-and-localization-quality.md) |
+| P2 | Accessibility and localization are not enforced | Hard-coded labels and complex keyboard/focus behavior can exclude users or regress silently. | [TICKET-249](tickets/249-accessibility-and-localization-quality.md) |
 | P2 | Production diagnostics are fragmented | Cross-layer failures are difficult to investigate safely without leaking sensitive data. | [TICKET-045](tickets/045-redacted-diagnostics-and-support-bundle.md) |
 | P2 | The eager frontend bundle is oversized | Heavy optional features increase startup parsing and obscure performance regressions. | [TICKET-034](tickets/034-frontend-bundle-splitting.md) |
 | P2 | Several modules combine unrelated responsibilities | Large transfer, IPC, settings, pane, and translation files raise review and regression cost. | [TICKET-035](tickets/035-modularize-high-complexity-subsystems.md) |
@@ -199,7 +199,7 @@ For the second wave:
    harness (TICKET-038).
 4. Build restart recovery (TICKET-044) on the safe commit model from TICKET-029
    and the versioned storage rules from TICKET-039.
-5. Establish accessibility/localization checks (TICKET-043), then split bundles
+5. Establish accessibility/localization checks (TICKET-249), then split bundles
    (TICKET-034) and modules (TICKET-035) under the tests from TICKET-033.
 6. Update the enduring architecture and contributor documentation (TICKET-037)
    as each contract lands, with a final consistency pass at the end.
@@ -227,7 +227,7 @@ may reuse the cache only after TICKET-053 establishes identity and freshness rul
 The earlier lower-priority observations are now represented by TICKET-034 through
 TICKET-038. The expanded review also records versioned persistence (TICKET-039),
 provider-aware refresh (TICKET-042), accessibility/localization quality
-(TICKET-043), restart-safe operation recovery (TICKET-044), and redacted
+(TICKET-249), restart-safe operation recovery (TICKET-044), and redacted
 diagnostics (TICKET-045). Frontend regression coverage remains part of
 TICKET-033, with the concrete Enter-key defect still independently tracked by
 TICKET-014.
