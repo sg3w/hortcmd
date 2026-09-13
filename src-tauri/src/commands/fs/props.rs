@@ -141,6 +141,10 @@ fn read_acl(_path: &Path) -> Vec<String> {
 /// Reads all properties of an entry together.
 #[tauri::command]
 pub fn file_props(path: String) -> AppResult<FileProps> {
+    read_file_props(path)
+}
+
+pub(crate) fn read_file_props(path: String) -> AppResult<FileProps> {
     // Ownership, xattrs and ACLs are read with platform APIs that only
     // understand a local path (TICKET-031).
     caps::require(&path, Capability::Stat)?;
@@ -259,9 +263,14 @@ fn resolve_gid(value: &str) -> AppResult<u32> {
 /// Runs synchronously; correspondingly slow for very large files.
 #[tauri::command]
 pub fn file_checksums(path: String) -> AppResult<Checksums> {
+    read_file_checksums(path)
+}
+
+pub(crate) fn read_file_checksums(path: String) -> AppResult<Checksums> {
     use md5::Digest as _; // shared Digest trait (also for sha1/sha2)
 
-    let mut file = fs::File::open(&path).map_err(AppError::from)?;
+    let (provider, resolved) = crate::vfs::resolve(&path)?;
+    let mut file = provider.open_read(Path::new(&resolved))?;
     let mut md5 = md5::Md5::new();
     let mut sha1 = sha1::Sha1::new();
     let mut sha256 = sha2::Sha256::new();

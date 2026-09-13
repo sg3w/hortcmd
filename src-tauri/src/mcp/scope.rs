@@ -96,19 +96,6 @@ fn segments_contain(parent: &[String], child: &[String], case_sensitive: bool) -
     })
 }
 
-/// Whether the local file system tells `a` and `b` apart by case.
-///
-/// Asked of the platform rather than assumed: macOS is usually
-/// case-insensitive and can be formatted either way, Linux is usually
-/// case-sensitive and can mount either, and guessing wrong opens a hole
-/// in one direction and closes a legitimate path in the other.
-fn local_is_case_sensitive() -> bool {
-    // The conservative answer per platform. A case-*insensitive* check
-    // on a case-sensitive volume can only ever refuse more than needed,
-    // which is the direction to be wrong in.
-    !cfg!(any(target_os = "macos", target_os = "windows"))
-}
-
 /// The identity of the store an address names — scheme plus connection.
 ///
 /// Two addresses with the same path on different stores are different
@@ -135,29 +122,21 @@ pub fn contains(root: &str, candidate: &str) -> AppResult<bool> {
         return Ok(false);
     }
 
-    let case_sensitive = match root_addr.scheme {
-        Scheme::Local => local_is_case_sensitive(),
-        // Remote stores are compared exactly: the server decides how it
-        // folds case, and assuming it folds at all would let
-        // `/Data/x` admit `/data/x` on a server that keeps them apart.
-        _ => true,
-    };
-
-    let root_segments = lexical_segments(&root_addr.path);
-    let cand_segments = lexical_segments(&cand_addr.path);
-    if !segments_contain(&root_segments, &cand_segments, case_sensitive) {
-        return Ok(false);
-    }
-
-    // For a local path the string is not the last word: a symlink inside
-    // the root can point anywhere. Ask the operating system.
+    // Compare local paths in the filesystem's canonical namespace. A lexical
+    // precheck would reject legitimate aliases such as /var and /private/var.
     if root_addr.scheme == Scheme::Local {
         return Ok(real_path_contains(&root_addr.path, &cand_addr.path));
     }
+    let root_segments = lexical_segments(&root_addr.path);
+    let cand_segments = lexical_segments(&cand_addr.path);
+    if !segments_contain(&root_segments, &cand_segments, true) {
+        return Ok(false);
+    }
+
     Ok(true)
 }
 
-/// The lexical answer, confirmed against the resolved paths.
+/// Containment in the filesystem-resolved namespace.
 ///
 /// Only *narrows*: a target that does not exist yet — the destination of
 /// a copy, a folder about to be created — has no canonical form, and
@@ -195,6 +174,11 @@ fn nearest_existing(path: &Path) -> Option<PathBuf> {
             }
             return Some(out);
         }
+        // A dangling link is not a missing directory. It may resolve outside
+        // the root as soon as its target appears.
+        if std::fs::symlink_metadata(current).is_ok() {
+            return None;
+        }
         let name = current.file_name()?;
         tail.push(name);
         current = current.parent()?;
@@ -206,7 +190,9 @@ fn nearest_existing(path: &Path) -> Option<PathBuf> {
 
 /// Component-wise containment for two already-resolved paths.
 fn path_contains(root: &Path, candidate: &Path) -> bool {
-    let case_sensitive = local_is_case_sensitive();
+    // canonicalize returns the actual filesystem spelling. Folding it again
+    // would admit distinct siblings on case-sensitive macOS volumes.
+    let case_sensitive = true;
     let normal = |p: &Path| -> Vec<String> {
         p.components()
             .filter_map(|c| match c {
@@ -233,10 +219,53 @@ pub fn require_in_scope(roots: &[String], candidate: &str) -> AppResult<()> {
     }
     for root in roots {
         if contains(root, candidate).unwrap_or(false) {
+            let address = vfs::parse_address(candidate)?;
+            if address.scheme != Scheme::Local {
+                let (provider, path) = vfs::resolve(candidate)?;
+                verify_remote_path(provider.as_ref(), &path)?;
+            }
             return Ok(());
         }
     }
     Err(denied(candidate, "outside the allowed roots"))
+}
+
+/// FTP and SMB expose links in directory metadata. Verify each component
+/// from the namespace root; never follow a link even if its lexical path is
+/// allowed. WebDAV collections are scoped in the server's URL namespace.
+fn verify_remote_path(provider: &dyn vfs::Provider, path: &str) -> AppResult<()> {
+    if path.split(['/', '\\']).any(|part| part == "..") {
+        return Err(denied(path, "remote parent traversal is ambiguous"));
+    }
+    let mut parent = String::from("/");
+    let mut segments = lexical_segments(path).into_iter();
+    if provider.store_id().starts_with("smb:") {
+        // The first component selects an SMB share, not a filesystem entry.
+        // Do not require optional srvsvc share enumeration to access an
+        // explicitly allowed share. Descendants still undergo link checks.
+        if let Some(share) = segments.next() {
+            parent = format!("/{share}");
+        }
+    }
+    for segment in segments {
+        let listing = provider.list(&parent)?;
+        let child = if parent == "/" {
+            format!("/{segment}")
+        } else {
+            format!("{parent}/{segment}")
+        };
+        match listing.entries.iter().find(|e| e.name == segment) {
+            Some(entry) if entry.is_symlink => {
+                return Err(denied(path, "remote symbolic links are not allowed"))
+            }
+            Some(_) => parent = child,
+            None if provider.exists(Path::new(&child)) => {
+                return Err(denied(path, "remote spelling is not canonical"))
+            }
+            None => return Ok(()), // a new destination beneath a checked parent
+        }
+    }
+    Ok(())
 }
 
 fn denied(candidate: &str, why: &str) -> AppError {
@@ -361,7 +390,11 @@ mod tests {
     #[test]
     fn the_allowlist_admits_any_root_that_contains_the_path() {
         let roots = vec!["/home/u/docs".to_string(), "sftp://u@h/data".to_string()];
-        assert!(require_in_scope(&roots, "sftp://u@h/data/a/b.txt").is_ok());
+        assert!(contains(&roots[1], "sftp://u@h/data/a/b.txt").unwrap());
+        assert!(
+            require_in_scope(&roots, "sftp://u@h/data/a/b.txt").is_err(),
+            "closed remote must be refused"
+        );
         assert!(require_in_scope(&roots, "sftp://u@h/other").is_err());
     }
 
@@ -411,6 +444,26 @@ mod tests {
         assert!(!contains(&root_str, &outside.to_string_lossy()).unwrap());
 
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dangling_symlink_destinations_are_refused() {
+        let base = temp_tree("dangling");
+        let root = base.join("root");
+        std::fs::create_dir(&root).unwrap();
+        std::os::unix::fs::symlink(base.join("outside"), root.join("escape")).unwrap();
+        assert!(!contains(
+            &root.to_string_lossy(),
+            &root.join("escape/file").to_string_lossy()
+        )
+        .unwrap());
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn resolved_paths_preserve_case() {
+        assert!(!path_contains(Path::new("/Root"), Path::new("/root/file")));
     }
 
     #[test]

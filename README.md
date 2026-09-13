@@ -30,10 +30,10 @@ Implemented and in use:
   status and Finder tags.
 - **German and English**, switchable at runtime, including error messages.
 
-Planned, with tickets but no implementation: a **plugin system**
-([TICKET-201](tickets/201-plugin-api-contract.md)–208) and an **MCP server**
-([TICKET-041](tickets/041-mcp-interface.md)). Nothing in the
-application exposes either today.
+The **MCP server** is implemented under [TICKET-041](tickets/done/041-mcp-interface.done.md),
+with final integration acceptance still in progress. It is disabled by default;
+see [MCP setup and verification](docs/mcp.md). The **plugin system**
+([TICKET-201](tickets/201-plugin-api-contract.md)–208) remains planned.
 
 ## Tech stack
 
@@ -269,15 +269,15 @@ anchors than you asked for.
   encryption with the server; it cannot currently *require* either. Treat an SMB
   share on an untrusted network accordingly.
 
-**Not implemented.** Two things are described in the tickets and sometimes
-assumed to exist. Neither does, and neither has a sandbox design yet:
+**Not implemented:**
 
 - **Plugins** ([TICKET-201](tickets/201-plugin-api-contract.md) …
   [TICKET-208](tickets/208-reference-demo-plugin.md)) —
   there is no plugin host, no loader, and no extension point. Nothing in this
   repository executes third-party code.
-- **The MCP server** ([TICKET-041](tickets/041-mcp-interface.md)) — hortcmd exposes
-  no MCP endpoint and listens on no port.
+The optional MCP endpoint binds only to loopback and requires its keychain-backed
+bearer token, enabled capability tiers and allowed roots. Writes require in-app
+approval by default. See [MCP security and configuration](docs/mcp.md).
 
 Reporting a vulnerability: open an issue if it is low-risk, otherwise contact
 the maintainer directly rather than filing publicly.

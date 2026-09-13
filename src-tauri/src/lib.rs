@@ -65,11 +65,17 @@ pub fn run() {
                 })
                 .build()?;
             menu::install(app.handle())?;
+            mcp::confirm::attach(app.handle().clone());
+            if let Err(error) = mcp::server::configure(&mcp::config()) {
+                eprintln!("MCP startup failed: {}", error.code);
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             vfs::caps::location_capabilities,
             mcp::commands::mcp_status,
+            mcp::commands::mcp_publish_panes,
+            mcp::commands::mcp_answer,
             mcp::commands::mcp_set_config,
             mcp::commands::mcp_token,
             mcp::commands::mcp_regenerate_token,

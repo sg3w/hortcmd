@@ -22,7 +22,8 @@ export type SettingsCategory =
   | "files"
   | "operations"
   | "programs"
-  | "favorites";
+  | "favorites"
+  | "mcp";
 
 interface UiStore {
   settingsOpen: boolean;

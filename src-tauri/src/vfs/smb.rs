@@ -260,11 +260,7 @@ impl SmbProvider {
                     executable: false,
                     name,
                     is_dir,
-                    // Always false (TICKET-018): SMB signals a link as a
-                    // reparse point, which this client does not surface,
-                    // and the server resolves it server-side anyway — so
-                    // `is_dir` already describes the target.
-                    is_symlink: false,
+                    is_symlink: info.file_attributes.reparse_point(),
                     size: if is_dir { 0 } else { info.end_of_file },
                     modified: unix_secs(info.last_write_time),
                     mode: None,

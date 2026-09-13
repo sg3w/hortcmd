@@ -101,12 +101,12 @@ fn status_of(l: Option<&Meta>, r: Option<&Meta>) -> &'static str {
 /// subfolders. `count` counts the already-sent entries; on
 /// reaching `MAX_ENTRIES` it aborts. Returns `true` = limit
 /// reached (result truncated).
-fn walk_compare(
+pub(crate) fn walk_compare(
     lroot: &Path,
     rroot: &Path,
     rel: &str,
     recursive: bool,
-    channel: &Channel<Vec<DiffEntry>>,
+    channel: &dyn Fn(Vec<DiffEntry>),
     count: &mut usize,
 ) -> bool {
     let ljoin = if rel.is_empty() {
@@ -157,7 +157,7 @@ fn walk_compare(
         *count += 1;
     }
     if !batch.is_empty() {
-        let _ = channel.send(batch);
+        channel(batch);
     }
     if limit_hit || *count >= MAX_ENTRIES {
         return true;
@@ -211,7 +211,16 @@ pub async fn compare_dirs(
     }
     tauri::async_runtime::spawn_blocking(move || {
         let mut count = 0usize;
-        walk_compare(&lp, &rp, "", recursive, &on_batch, &mut count)
+        walk_compare(
+            &lp,
+            &rp,
+            "",
+            recursive,
+            &|batch| {
+                let _ = on_batch.send(batch);
+            },
+            &mut count,
+        )
     })
     .await
     .map_err(AppError::from)

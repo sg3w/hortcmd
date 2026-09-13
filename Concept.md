@@ -794,9 +794,10 @@ is organized into the following categories. Legend: **✅ present · ⏳ planned
   *(requires the plugin system)*
 
 ### MCP interface
-- Server on/off ⏳ · port ⏳ · token (keychain) ⏳ · capability tiers
-  (read/write/delete) ⏳ · allowed roots ⏳ · confirmation for write/delete ⏳ ·
-  max read size ⏳ · audit log ⏳ *(TICKET-041)*
+- Implemented: server on/off, port, token (keychain), independent capability tiers,
+  allowed roots (manual, home, panes, connected remotes), write/delete confirmation,
+  maximum read size and audit log. Final integration acceptance remains in
+  TICKET-041; [setup and verification](docs/mcp.md) describes both client transports.
 
 ### Keyboard
 - Edit shortcuts ⏳ · profiles (TC mode / Finder mode) ⏳

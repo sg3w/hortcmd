@@ -90,7 +90,7 @@ fn classify(code: &str, sub: bool) -> &'static str {
 /// Determines the Git status for the entries of the folder `path` (blocking,
 /// since via the `git` CLI). Runs only on a background thread now, see
 /// [`git_status_watch`].
-fn compute_git_status(path: &str) -> GitStatus {
+pub(crate) fn compute_git_status(path: &str) -> GitStatus {
     let dir = Path::new(path);
 
     // Determine the repo root; fails → no repo (or no git).

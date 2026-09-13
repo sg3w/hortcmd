@@ -27,11 +27,23 @@ const TOKEN_ID: &str = "__mcp_token__";
 /// 32 bytes, hex — long enough that guessing is not a strategy, and
 /// printable so it can be pasted into a client's configuration.
 const TOKEN_BYTES: usize = 32;
+static TOKEN_LOADED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+static TOKEN_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+pub fn generation() -> u64 {
+    TOKEN_GENERATION.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+pub fn token_loaded() -> bool {
+    TOKEN_LOADED.load(std::sync::atomic::Ordering::Relaxed)
+}
 
 /// The current token, generating one on first use.
 pub fn token() -> AppResult<String> {
     if let Some(existing) = credentials::store().get(TOKEN_ID)? {
         if !existing.is_empty() {
+            TOKEN_LOADED.store(true, std::sync::atomic::Ordering::Relaxed);
             return Ok(existing);
         }
     }
@@ -40,14 +52,11 @@ pub fn token() -> AppResult<String> {
 
 /// Replaces the token, which invalidates the old one immediately.
 pub fn regenerate() -> AppResult<String> {
-    let token = random_hex(TOKEN_BYTES);
+    let token = random_hex(TOKEN_BYTES)?;
     credentials::store().set(TOKEN_ID, &token)?;
+    TOKEN_GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    TOKEN_LOADED.store(true, std::sync::atomic::Ordering::Relaxed);
     Ok(token)
-}
-
-/// Removes the token — used when the interface is switched off for good.
-pub fn forget() -> AppResult<()> {
-    credentials::store().delete(TOKEN_ID)
 }
 
 /// Hex from the operating system's randomness.
@@ -55,10 +64,14 @@ pub fn forget() -> AppResult<()> {
 /// `getrandom` is already in the tree (via the TLS stack); this is the
 /// one place in the application that needs unpredictability, and it must
 /// not come from a time-seeded PRNG.
-fn random_hex(bytes: usize) -> String {
+pub fn random_hex(bytes: usize) -> AppResult<String> {
     let mut buf = vec![0u8; bytes];
-    getrandom::fill(&mut buf).expect("the operating system's randomness");
-    buf.iter().map(|b| format!("{:02x}", b)).collect()
+    getrandom::fill(&mut buf).map_err(|e| {
+        AppError::new(code::INTERNAL_UNEXPECTED)
+            .op("mcp-random")
+            .detail(e)
+    })?;
+    Ok(buf.iter().map(|b| format!("{:02x}", b)).collect())
 }
 
 /// Constant-time comparison.
@@ -98,29 +111,25 @@ pub fn bearer_of(header: &str) -> Option<&str> {
 /// included — is refused. The point is not to identify the caller but to
 /// make sure a browser cannot reach the interface with a document's
 /// same-origin privileges.
+#[cfg(test)]
 pub fn is_loopback_authority(value: &str) -> bool {
-    // `Origin` arrives as a URL, `Host` as `host:port`; both reduce to
-    // the authority.
-    let authority = match value.split_once("://") {
-        Some((scheme, rest)) => {
-            if !matches!(scheme, "http" | "https") {
-                return false;
-            }
-            rest
-        }
-        None => value,
-    };
-    // A path after the authority is not part of either header, and a
-    // value carrying one is malformed rather than interesting.
-    if authority.contains('/') {
-        return false;
+    let authority = value
+        .strip_prefix("http://")
+        .or_else(|| value.strip_prefix("https://"))
+        .unwrap_or(value);
+    loopback_port(authority).is_some()
+}
+
+pub fn loopback_port(value: &str) -> Option<u16> {
+    let authority: hyper::http::uri::Authority = value.parse().ok()?;
+    if !matches!(authority.host(), "127.0.0.1" | "localhost" | "[::1]") {
+        return None;
     }
-    let host = match authority.rsplit_once(':') {
-        // An IPv6 literal keeps its brackets: `[::1]:8712`.
-        Some((h, port)) if !h.ends_with(']') || port.chars().all(|c| c.is_ascii_digit()) => h,
-        _ => authority,
-    };
-    matches!(host, "127.0.0.1" | "localhost" | "[::1]" | "::1")
+    match authority.port() {
+        Some(port) => port.as_str().parse::<u16>().ok().filter(|p| *p > 0),
+        None if value == authority.host() => Some(80),
+        None => None,
+    }
 }
 
 /// The decision for one request, before any tool runs.
@@ -141,7 +150,7 @@ pub fn admit(
     // Host first: a request that should never have reached us is not
     // worth comparing a token for.
     match host {
-        Some(h) if is_loopback_authority(h) => {}
+        Some(h) if loopback_port(h).is_some() => {}
         Some(_) => return Admission::Refused("host is not loopback"),
         // HTTP/1.1 requires Host; its absence is malformed.
         None => return Admission::Refused("no Host header"),
@@ -150,7 +159,10 @@ pub fn admit(
     // foreign one is a browser trying something.
     if let Some(o) = origin {
         // "null" is what a sandboxed document sends, and is not loopback.
-        if !is_loopback_authority(o) {
+        if o.strip_prefix("http://")
+            .and_then(loopback_port)
+            .is_none_or(|port| Some(port) != host.and_then(loopback_port))
+        {
             return Admission::Refused("origin is not loopback");
         }
     }
@@ -219,6 +231,12 @@ mod tests {
             "http://127.0.0.1:8712/path",
             "0.0.0.0:8712",
             "192.168.1.10:8712",
+            "localhost:garbage",
+            "localhost:99999",
+            "localhost:",
+            "localhost:0",
+            "localhost:8712?query",
+            "localhost:8712#fragment",
         ] {
             assert!(!is_loopback_authority(bad), "should refuse {}", bad);
         }
@@ -285,8 +303,8 @@ mod tests {
 
     #[test]
     fn a_generated_token_is_long_random_hex() {
-        let a = random_hex(TOKEN_BYTES);
-        let b = random_hex(TOKEN_BYTES);
+        let a = random_hex(TOKEN_BYTES).unwrap();
+        let b = random_hex(TOKEN_BYTES).unwrap();
         assert_eq!(a.len(), TOKEN_BYTES * 2);
         assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
         assert_ne!(a, b, "two tokens must not be the same");

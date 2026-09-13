@@ -119,27 +119,27 @@ Three tiers, each separately switchable, `read` is the only default:
   later, a plugin exposing MCP tools is a follow-up, not this ticket.
 
 ## Acceptance criteria
-- [ ] The MCP server can be enabled/disabled at runtime; it is **off** after a fresh
+- [x] The MCP server can be enabled/disabled at runtime; it is **off** after a fresh
       install and binds `127.0.0.1` exclusively.
-- [ ] A standard MCP client connects (directly or through the stdio bridge),
+- [x] A standard MCP client connects (directly or through the stdio bridge),
       completes the handshake and lists tools and resources.
-- [ ] Without a valid token every request is rejected; the token lives in the OS
+- [x] Without a valid token every request is rejected; the token lives in the OS
       keychain and can be regenerated, which invalidates the old one.
-- [ ] Requests with a foreign `Origin`/`Host` are rejected.
-- [ ] `list_dir`/`read_file` work for a local path **and** for an address of an
+- [x] Requests with a foreign `Origin`/`Host` are rejected.
+- [x] `list_dir`/`read_file` work for a local path **and** for an address of an
       active remote connection, with no additional credential prompt.
-- [ ] A path outside the configured roots is refused — including via `..`, a symlink
+- [x] A path outside the configured roots is refused — including via `..`, a symlink
       pointing out, and a differently-cased spelling on a case-insensitive volume.
-- [ ] With only the `read` tier enabled, every write/delete tool is refused and the
+- [x] With only the `read` tier enabled, every write/delete tool is refused and the
       refusal is distinguishable from "not found".
-- [ ] A write/delete call raises the in-app confirmation and is executed only after
+- [x] A write/delete call raises the in-app confirmation and is executed only after
       approval; declining returns a clean error and changes nothing on disk.
-- [ ] `read_file` on an oversized file returns a size error instead of the content.
-- [ ] A running copy/search reports progress and can be cancelled by the client.
-- [ ] `hortcmd://panes/active` reflects the pane the user is actually on, including
+- [x] `read_file` on an oversized file returns a size error instead of the content.
+- [x] A running copy/search reports progress and can be cancelled by the client.
+- [x] `hortcmd://panes/active` reflects the pane the user is actually on, including
       the current selection; no resource or tool response contains secrets.
-- [ ] The audit log records allowed, denied and confirmed calls.
-- [ ] With the interface disabled, the app behaves exactly as before (no port bound,
+- [x] The audit log records allowed, denied and confirmed calls.
+- [x] With the interface disabled, the app behaves exactly as before (no port bound,
       no extra thread, no measurable startup cost).
 
 ## Tests
@@ -157,10 +157,40 @@ Three tiers, each separately switchable, `read` is the only default:
   the confirmation dialog.
 
 ## Definition of Done
-- [ ] Code compiles (`cargo check`, `npm run typecheck`, `npm run build`)
-- [ ] Tests pass
-- [ ] `npm run gen:types` regenerates the bindings without errors
-- [ ] Existing functionality unchanged
-- [ ] Documentation updated (Concept.md; a short "connecting an MCP client" section
+- [x] Code compiles (`cargo check`, `npm run typecheck`, `npm run build`)
+- [x] Tests pass
+- [x] `npm run gen:types` regenerates the bindings without errors
+- [x] Existing functionality unchanged
+- [x] Documentation updated (Concept.md; a short "connecting an MCP client" section
       in README.md incl. the security model and the default-deny defaults)
-- [ ] Rename the ticket to *.done.md
+- [x] Rename the ticket to *.done.md
+
+## Integration evidence — 2026-09-13
+- Official `@modelcontextprotocol/sdk` 1.30.0 connected over Streamable HTTP and
+  through the compiled `hortcmd-mcp` stdio bridge. Handshake, list/call tools,
+  structured write refusal and list/read resources passed. Wrong-token and
+  unreachable-app startup errors also passed. Reproduction: `docs/mcp.md`.
+- `harness_mcp_reads_live_remote_and_refuses_closed_connection` passed against
+  SFTP, FTP, explicit/implicit FTPS, SMB, WebDAV HTTP/HTTPS in run 6f9f5b. It
+  registers actual providers, lists/reads through MCP, rejects an out-of-scope
+  request and refuses reads after unregistering the connection.
+- This exposed and corrected 066's SMB share-root check: the share selector is
+  a namespace boundary, so optional srvsvc enumeration is not required; link
+  validation still applies below it.
+- The broader run subsequently hit an intermittent WebDAV→SMB large-copy failure
+  tracked in 071. It is not recorded as a passing complete protocol suite.
+- `npm run check` passed after these code changes: 366 Rust tests passed,
+  24 ignored external tests, 371 frontend tests passed, all remaining gates passed.
+- Official SDK verification now also cancels real copy and move requests on the
+  first progress notification over both transports, waits for the terminal error,
+  and verifies preservation of the source and existing destination.
+- Token-generation admission prevents requests authenticated before rotation from
+  recreating a session after revocation; a deterministic transport regression
+  passes. Local canonical aliases are accepted without weakening containment.
+- Confirmation queue, approval/decline, session revocation and listener cleanup
+  have automated Rust/React coverage. An interactive native MCP-host/window smoke
+  test was not performed; the real standard client is the official SDK.
+- Reported staging leftovers after cancellation are tracked separately in 072.
+- Follow-up: after the 071 compatibility backport, remote run 599e21 passed all
+  19 harness tests, including the three previously failing SMB paths. The harness
+  completed teardown successfully. Rust 1.85.1 remained supported.

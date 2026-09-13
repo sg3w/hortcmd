@@ -31,6 +31,7 @@
 
 mod conformance;
 mod failure;
+mod mcp;
 mod transfers;
 
 use super::Provider;

@@ -83,12 +83,12 @@ pub fn record(
         client: if client.is_empty() {
             "unknown".to_string()
         } else {
-            client.to_string()
+            crate::errors::redact(client)
         },
-        tool: tool.to_string(),
-        target: target.map(str::to_string),
+        tool: crate::errors::redact(tool),
+        target: target.map(crate::errors::redact),
         outcome,
-        detail,
+        detail: detail.map(|s| crate::errors::redact(&s)),
     };
     push(&mut log().lock().expect("mcp audit"), entry);
 }

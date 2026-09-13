@@ -17,15 +17,10 @@
 //   tools     – one module per tier, calling the same VFS the app does
 //   audit     – a ring buffer of what was allowed, denied and confirmed
 //
-// **Why no SDK.** The official `rmcp` crate declares `rust-version =
-// 1.88`; this project's MSRV is 1.85 and has a CI job that holds it
-// (the pure-Rust SMB client needs 1.85, and raising the floor for a
-// convenience is the wrong trade). Versions of `rmcp` below 3.0 declare
-// no MSRV at all, which in a repository that *tests* its MSRV is worse
-// than a documented mismatch. MCP's streamable-HTTP transport is
-// JSON-RPC 2.0 over POST with an optional SSE stream, so the framing is
-// small and the parts that matter here — the token check, the Origin
-// check, tier gating, confirmation — are ours either way.
+// The transport uses Hyper, already present through the HTTP client stack.
+// Interoperability is checked with the official TypeScript SDK through both
+// Streamable HTTP and the stdio bridge (scripts/mcp-client-check.mjs).
+// Rust 1.85.1 compatibility is verified separately by the MSRV CI job.
 //
 // **Default-deny throughout.** Off after a fresh install. No root means
 // nothing is reachable. Only the read tier is on when it is switched on.
@@ -38,7 +33,17 @@
 pub mod audit;
 pub mod auth;
 pub mod commands;
+pub mod confirm;
+pub mod execution;
+pub mod panes;
+pub mod protocol;
+mod schema;
 pub mod scope;
+mod scoped_provider;
+pub mod server;
+pub mod session;
+pub mod tools;
+mod transfers;
 
 use crate::config;
 use crate::errors::{code, AppError, AppResult};
@@ -77,6 +82,9 @@ pub struct McpConfig {
     /// The port on 127.0.0.1. 0 asks the operating system for one.
     #[ts(type = "number")]
     pub port: u16,
+    /// Whether read tools and resources are accessible.
+    #[serde(default = "default_read")]
+    pub allow_read: bool,
     /// Whether the write tier is allowed at all.
     pub allow_write: bool,
     /// Whether the delete tier is allowed at all (trash only by default).
@@ -89,9 +97,16 @@ pub struct McpConfig {
     pub roots: Vec<String>,
     /// Add the panes' current folders to the roots while they are open.
     pub roots_follow_panes: bool,
+    /// Include the roots of currently connected remote locations.
+    #[serde(default)]
+    pub roots_follow_remotes: bool,
     /// The largest file `read_file` will return, in bytes.
     #[ts(type = "number")]
     pub max_read_bytes: u64,
+}
+
+fn default_read() -> bool {
+    true
 }
 
 impl Default for McpConfig {
@@ -102,12 +117,14 @@ impl Default for McpConfig {
             // arrive switched on.
             enabled: false,
             port: 8712,
+            allow_read: true,
             allow_write: false,
             allow_delete: false,
             allow_permanent_delete: false,
             confirm_writes: true,
             roots: Vec::new(),
             roots_follow_panes: false,
+            roots_follow_remotes: false,
             // The preview cap, for the same reason: a client must not be
             // able to pull a 10 GB file into its context.
             max_read_bytes: 2 * 1024 * 1024,
@@ -123,7 +140,7 @@ impl McpConfig {
     /// it was.
     pub fn allows(&self, tier: McpTier) -> bool {
         match tier {
-            McpTier::Read => true,
+            McpTier::Read => self.allow_read,
             McpTier::Write => self.allow_write,
             McpTier::Delete => self.allow_delete,
         }

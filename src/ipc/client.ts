@@ -32,3 +32,5 @@ export * from "./domains/net";
 export * from "./domains/props";
 export * from "./domains/search";
 export * from "./domains/transfers";
+
+export * from "./domains/mcp";

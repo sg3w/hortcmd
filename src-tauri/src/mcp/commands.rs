@@ -31,26 +31,23 @@ pub struct McpStatus {
     pub bound_port: Option<u16>,
     /// The address a client is configured with, once it is listening.
     pub endpoint: Option<String>,
-    /// Whether a token exists yet — without revealing it.
+    /// Whether a token has been loaded in this process, without querying the keychain.
     pub has_token: bool,
+    pub clients: u32,
 }
 
 /// The current configuration and listener state.
 #[tauri::command]
 pub fn mcp_status() -> McpStatus {
     let config = super::config();
-    let has_token = matches!(
-        crate::net::credentials::CredentialStore::get(
-            crate::net::credentials::store(),
-            "__mcp_token__"
-        ),
-        Ok(Some(ref t)) if !t.is_empty()
-    );
+    let has_token = auth::token_loaded();
+    let (port, clients) = super::server::status();
     McpStatus {
-        running: false,
-        bound_port: None,
-        endpoint: None,
+        running: port.is_some(),
+        bound_port: port,
+        endpoint: port.map(|p| format!("http://127.0.0.1:{p}/mcp")),
         has_token,
+        clients: clients as u32,
         config,
     }
 }
@@ -63,7 +60,20 @@ pub fn mcp_status() -> McpStatus {
 /// is in force rather than what was asked for.
 #[tauri::command]
 pub fn mcp_set_config(config: McpConfig) -> AppResult<McpConfig> {
-    super::set_config(config)
+    static CONFIGURE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = CONFIGURE.lock().unwrap_or_else(|e| e.into_inner());
+    let previous = super::config();
+    super::server::configure(&config)?;
+    match super::set_config(config) {
+        Ok(config) => {
+            super::server::revoke_sessions();
+            Ok(config)
+        }
+        Err(error) => {
+            let _ = super::server::configure(&previous);
+            Err(error)
+        }
+    }
 }
 
 /// The bearer token, generating one on first use.
@@ -75,7 +85,9 @@ pub fn mcp_token() -> AppResult<String> {
 /// A new token. The old one stops working immediately.
 #[tauri::command]
 pub fn mcp_regenerate_token() -> AppResult<String> {
-    auth::regenerate()
+    let token = auth::regenerate()?;
+    super::server::revoke_sessions();
+    Ok(token)
 }
 
 /// The audit log, newest first.
@@ -88,4 +100,15 @@ pub fn mcp_audit() -> Vec<audit::McpAuditEntry> {
 #[tauri::command]
 pub fn mcp_clear_audit() {
     audit::clear();
+}
+
+#[tauri::command]
+pub fn mcp_publish_panes(panes: super::panes::McpPanes) -> AppResult<()> {
+    super::panes::publish(serde_json::to_value(panes).map_err(crate::errors::AppError::from)?);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn mcp_answer(id: String, approved: bool, remember: bool) {
+    super::confirm::answer(&id, approved, remember);
 }

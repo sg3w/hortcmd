@@ -74,7 +74,7 @@ fn info_of(disk: &sysinfo::Disk) -> VolumeInfo {
 
 /// Finds the volume carrying `path`: the deepest matching mount point
 /// wins ("/Volumes/Data" beats "/").
-fn find(path: &Path) -> Option<VolumeInfo> {
+pub(crate) fn find(path: &Path) -> Option<VolumeInfo> {
     let disks = sysinfo::Disks::new_with_refreshed_list();
     disks
         .iter()

@@ -118,7 +118,7 @@ const KIND: &str = "search";
 /// The memory/work bounds of a search run. Kept in one place so they
 /// are documented together – and so the tests can shrink them instead
 /// of building fixtures with 50 000 files.
-struct Limits {
+pub(crate) struct Limits {
     /// Matches after which the scan stops ("truncated").
     max_hits: usize,
     /// Matches per channel message – small enough that the first
@@ -133,7 +133,7 @@ struct Limits {
 }
 
 impl Limits {
-    const DEFAULT: Limits = Limits {
+    pub(crate) const DEFAULT: Limits = Limits {
         max_hits: 50_000,
         batch: 200,
         dup_candidates: 300_000,
@@ -219,11 +219,29 @@ fn hit(path: &Path, size: u64, modified: u64, detail: String, group: u32) -> Sea
     }
 }
 
-/// Collects matches into bounded batches and pushes them over the
-/// channel. Enforces the hit limit and notices a closed channel, so the
-/// walk can stop instead of scanning on into the void.
+/// Where a batch of matches goes.
+///
+/// Behind a trait for the same reason progress reports are (TICKET-035):
+/// a `Channel` only exists inside a running application, and the search
+/// is worth running from the MCP interface too (TICKET-041). Production
+/// behaviour is unchanged — the implementation below sends exactly the
+/// event it always did.
+pub(crate) trait HitSink {
+    /// `false` when the receiver is gone, which stops the walk.
+    fn send(&self, batch: Vec<SearchHit>) -> bool;
+}
+
+impl HitSink for Channel<Vec<SearchHit>> {
+    fn send(&self, batch: Vec<SearchHit>) -> bool {
+        Channel::send(self, batch).is_ok()
+    }
+}
+
+/// Collects matches into bounded batches and pushes them to the sink.
+/// Enforces the hit limit and notices a closed receiver, so the walk can
+/// stop instead of scanning on into the void.
 struct Sink<'a> {
-    channel: &'a Channel<Vec<SearchHit>>,
+    channel: &'a dyn HitSink,
     limits: &'a Limits,
     batch: Vec<SearchHit>,
     sent: usize,
@@ -232,7 +250,7 @@ struct Sink<'a> {
 }
 
 impl<'a> Sink<'a> {
-    fn new(channel: &'a Channel<Vec<SearchHit>>, limits: &'a Limits) -> Self {
+    fn new(channel: &'a dyn HitSink, limits: &'a Limits) -> Self {
         Self {
             channel,
             limits,
@@ -270,8 +288,8 @@ impl<'a> Sink<'a> {
         }
         let batch = std::mem::take(&mut self.batch);
         self.sent += batch.len();
-        // A closed channel means the dialog is gone – treat it like a cancel.
-        if self.channel.send(batch).is_err() {
+        // A closed receiver means the dialog is gone – treat it like a cancel.
+        if !self.channel.send(batch) {
             self.disconnected = true;
         }
     }
@@ -370,12 +388,12 @@ fn walk_opts(opts: &SearchOptions, dirs_only: bool) -> WalkOptions {
     }
 }
 
-fn run_search(
+pub(crate) fn run_search(
     root: PathBuf,
     opts: SearchOptions,
     cancel_flag: Arc<AtomicBool>,
     limits: &Limits,
-    channel: &Channel<Vec<SearchHit>>,
+    channel: &dyn HitSink,
 ) -> AppResult<SearchSummary> {
     let name_match = NameMatch::build(&opts)?;
     let needle = Needle::build(&opts)?;

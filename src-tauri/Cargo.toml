@@ -8,6 +8,12 @@ edition = "2021"
 # .cargo/config.toml prefers compatible dependency versions (TICKET-068).
 rust-version = "1.85.1"
 
+default-run = "hortcmd"
+
+[[bin]]
+name = "hortcmd-mcp"
+path = "src/bin/hortcmd-mcp.rs"
+
 [lib]
 name = "hortcmd_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
@@ -21,6 +27,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 unicode-normalization = "0.1"
 cap-std = "4.0.3"
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
 # Randomness for the MCP bearer token (TICKET-041) — already in the
 # tree via the TLS stack, named here because this is a security use.
 getrandom = "0.3"

@@ -234,6 +234,14 @@ pub fn list_archive(
     inner: String,
     password: Option<String>,
 ) -> AppResult<DirListing> {
+    read_archive(archive, inner, password)
+}
+
+pub(crate) fn read_archive(
+    archive: String,
+    inner: String,
+    password: Option<String>,
+) -> AppResult<DirListing> {
     // Every reader below opens the archive with `std::fs` (TICKET-031);
     // browsing an archive that lives on a remote share needs the
     // archive commands routed through the VFS first.

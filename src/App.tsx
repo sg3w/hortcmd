@@ -50,6 +50,8 @@ import { TransferTray, TransferWindow } from "@/components/ui/TransferView";
 import { LazyDialogs } from "@/features/LazyDialogs";
 import { useFileColorVars } from "@/store/fileColorRules";
 
+import { McpRuntime } from "@/features/settings/McpRuntime";
+
 export default function App() {
   const [drives, setDrives] = useState<Drive[]>([]);
   const [ready, setReady] = useState(false);
@@ -331,6 +333,7 @@ export default function App() {
 
       <FunctionBar />
 
+      <McpRuntime />
       <OperationDialogs />
       <TransferWindow />
       <LazyDialogs />

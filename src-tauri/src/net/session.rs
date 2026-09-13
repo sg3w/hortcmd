@@ -187,6 +187,11 @@ pub(crate) fn register_live(provider: Arc<dyn Provider>) {
         .insert(provider.store_id(), provider);
 }
 
+#[cfg(test)]
+pub(crate) fn unregister_live(store: &str) {
+    registry().lock().unwrap().live.remove(store);
+}
+
 /// Shared multi-thread Tokio runtime driving the async protocol clients
 /// (SFTP via russh, WebDAV via reqwest). Static, so sessions and their
 /// spawned tasks stay alive; the synchronous provider/transfer threads
@@ -633,6 +638,10 @@ pub fn net_disconnect(app: AppHandle, id: String) -> AppResult<()> {
 /// refresh instead of being reset to "disconnected".
 #[tauri::command]
 pub fn net_list_connections() -> Vec<ConnectionStatus> {
+    connection_states()
+}
+
+pub(crate) fn connection_states() -> Vec<ConnectionStatus> {
     all_states()
 }
 

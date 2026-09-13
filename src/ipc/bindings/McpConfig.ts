@@ -16,6 +16,10 @@ enabled: boolean,
  */
 port: number, 
 /**
+ * Whether read tools and resources are accessible.
+ */
+allowRead: boolean, 
+/**
  * Whether the write tier is allowed at all.
  */
 allowWrite: boolean, 
@@ -39,6 +43,10 @@ roots: Array<string>,
  * Add the panes' current folders to the roots while they are open.
  */
 rootsFollowPanes: boolean, 
+/**
+ * Include the roots of currently connected remote locations.
+ */
+rootsFollowRemotes: boolean, 
 /**
  * The largest file `read_file` will return, in bytes.
  */
