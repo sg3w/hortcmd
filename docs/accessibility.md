@@ -94,6 +94,30 @@ These checks cover native menu navigation, one toolbar Tab transition, macOS tex
 selection/replacement, prompt cancellation and focus restoration. They do not
 establish completion of other filesystem-operation or screen-reader workflows.
 
+Native German file-operation checks used a fresh directory under `/private/tmp`,
+with separate `left` and `right` folders and one `original.txt` fixture. Both panes
+were navigated through their native breadcrumb controls and keyboard filtering;
+their full displayed paths were checked before operations. Long synthetic text
+bursts were not reliable in the large temporary directory, so the verified
+navigation sent individual characters and checked the resulting filter/path.
+
+- F2 exposed `original.txt` with only `original` selected. Replacing that selection
+  produced `renamed.txt`; Enter renamed the actual file without changing its bytes.
+- F5 copied `renamed.txt` into the opposite test pane. Both files existed and had
+  the same SHA-256 digest.
+- The source was renamed to `moved.txt` through F2, then moved with F6. The source
+  directory was empty afterward; both destination files retained the fixture's
+  SHA-256 digest `1fd20dfd9c7ac5b8f330f552ba5d4be2a7db59d88f9eaff8f78b88d1dc52d004`.
+- F8 opened the trash confirmation. Escape returned native focus to a file row,
+  and both destination files remained present. A subsequent Enter confirmation
+  for `moved.txt` reached a macOS Finder-automation permission prompt. That action
+  awaits user permission; successful trash disposal has not yet been verified.
+
+These are native keyboard and filesystem observations with VoiceOver off. They
+do not substitute for the remaining screen-reader, English-operation or zoom
+checks. The permission prompt names ChatGPT, the host of the launched test process;
+this does not establish the permission presentation of a separately installed app.
+
 ## Translation ownership
 
 German and English UI wording belongs in the typed resources under
