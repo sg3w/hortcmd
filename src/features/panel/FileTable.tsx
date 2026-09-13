@@ -90,7 +90,7 @@ export function FileTable({ side, onOpen, onContext }: Props) {
   // Color rules (built-in + user-defined), sorted by priority.
   const colorRules = useFileColorRules();
 
-  const { columns, template } = useMemo(
+  const { columns, template, minWidth } = useMemo(
     () =>
       buildColumns({
         showExt: showExtColumn,
@@ -203,14 +203,14 @@ export function FileTable({ side, onOpen, onContext }: Props) {
 
   return (
     <div
-      className="flex min-h-0 min-w-0 flex-1 flex-col"
+      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-auto"
       onContextMenu={onContextMenu}
     >
       {/* Spaltenkopf nur in der Detailansicht */}
       {viewMode === "details" && (
         <div
           className="grid flex-shrink-0 border-b border-edge bg-header text-dim"
-          style={{ gridTemplateColumns: template }}
+          style={{ gridTemplateColumns: template, minWidth }}
         >
           {table.getFlatHeaders().map((header) => {
             const id = header.column.id;
@@ -255,6 +255,7 @@ export function FileTable({ side, onOpen, onContext }: Props) {
       {/* Virtualisierte Zeilenliste */}
       <div
         ref={scrollRef}
+        style={{ minWidth: viewMode === "details" ? minWidth : undefined }}
         tabIndex={0}
         onMouseDown={() => setActive(side)}
         className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden outline-none"

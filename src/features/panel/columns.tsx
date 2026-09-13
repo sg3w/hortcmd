@@ -30,6 +30,7 @@ function widthPx(id: string, widths: Record<string, number>): string {
 export function buildColumns(opts: ColumnOptions): {
   columns: ColumnDef<Row, string>[];
   template: string;
+  minWidth: number;
 } {
   const columns: ColumnDef<Row, string>[] = [];
   // Name fills the rest; the other columns have fixed, adjustable widths.
@@ -100,7 +101,9 @@ export function buildColumns(opts: ColumnOptions): {
   );
   parts.push(widthPx("date", opts.widths));
 
-  return { columns, template: parts.join(" ") };
+  const minWidth = 80 + columns.slice(1).reduce((sum, column) =>
+    sum + (opts.widths[column.id!] ?? DEFAULT_COLUMN_WIDTHS[column.id!]), 0);
+  return { columns, template: parts.join(" "), minWidth };
 }
 
 /** Only these columns are sortable; the ids correspond to SortKey. */

@@ -92,12 +92,14 @@ export function useKeyboard(): void {
       // `Escape` unmounts while this very event is still being dispatched —
       // afterwards neither `document.activeElement` nor the DOM tell us where
       // the keystroke came from.
-      if (isDialogKey(e)) return;
+      if (isDialogKey(e) || e.defaultPrevented) return;
 
       // Don't intercept anything in text fields (command line). Read the
       // event target rather than `document.activeElement` for the same reason:
       // focus has moved on once the field is gone.
       const el = e.target instanceof Element ? e.target : document.activeElement;
+      if ((e.key === "Enter" || e.key === " ") && el instanceof Element &&
+          el.closest('button,select,[role="button"],[role="combobox"],[role="tab"]')) return;
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
         return;
       }
@@ -125,6 +127,10 @@ export function useKeyboard(): void {
       if (document.querySelector('[role="menu"][data-state="open"]')) {
         return;
       }
+
+      // Tab follows the browser's focus order once a control owns focus.
+      // The legacy pane switch applies only to an unfocused workspace.
+      if (e.key === "Tab" && el && el !== document.body && el !== document.documentElement) return;
 
       const s = usePanes.getState();
       const side = s.active;

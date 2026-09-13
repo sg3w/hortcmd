@@ -29,7 +29,7 @@ export function FunctionBar() {
   const active = usePanes((s) => s.active);
   const t = useT();
   return (
-    <footer className="flex flex-shrink-0 gap-0.5 border-t border-edge bg-header px-1.5 py-1">
+    <footer className="flex flex-wrap flex-shrink-0 gap-0.5 border-t border-edge bg-header px-1.5 py-1">
       {KEYS.map((k) => (
         <button
           key={k.num}

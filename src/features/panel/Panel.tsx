@@ -59,6 +59,7 @@ export function Panel({ side, drives }: Props) {
 
   return (
     <section
+      onFocus={() => usePanes.getState().setActive(side)}
       className={cn(
         "flex min-w-0 flex-1 flex-col bg-panel-inactive",
         active && "bg-panel",

@@ -199,3 +199,30 @@ describe("text fields and menus own their keystrokes", () => {
     expect(usePanes.getState().left.tabs[0].filter).toBe("");
   });
 });
+
+
+describe("focused controls", () => {
+  it.each(["Enter", " "])("leaves %s to a button without opening or marking a file", key => {
+    const { getByRole } = render(<button>Action</button>);
+    const event = press({ key }, getByRole("button"));
+    expect(event.defaultPrevented).toBe(false);
+    expect(opened).toEqual([]);
+    expect(usePanes.getState().left.tabs[0].selected.size).toBe(0);
+  });
+
+  it("does not process events already consumed by a component", () => {
+    const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    event.preventDefault();
+    window.dispatchEvent(event);
+    expect(opened).toEqual([]);
+  });
+});
+
+
+it("preserves native Tab order on focused controls and file grids", () => {
+  const { getByRole } = render(<><button>Action</button><div role="grid" tabIndex={0} /></>);
+  for (const element of [getByRole("button"), getByRole("grid")]) {
+    expect(press({ key: "Tab" }, element).defaultPrevented).toBe(false);
+    expect(usePanes.getState().active).toBe("left");
+  }
+});
