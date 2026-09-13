@@ -100,3 +100,7 @@ walkdir = "2"
 [features]
 # Standardfeatures für ein reguläres Tauri-Build.
 custom-protocol = ["tauri/custom-protocol"]
+
+# TICKET-071: backport async SMB read replies while retaining Rust 1.85.1.
+[patch.crates-io]
+smb = { path = "../vendor/smb" }

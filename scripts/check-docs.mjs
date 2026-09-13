@@ -29,7 +29,8 @@ const note = (file, message) => problems.push(`${file}\n    ${message}`);
 
 function markdownFiles(dir = ".", out = []) {
   for (const name of readdirSync(dir)) {
-    if (["node_modules", "target", "dist", ".git"].includes(name)) continue;
+    // Vendored upstream docs retain their original links; our provenance is in docs/.
+    if (["node_modules", "target", "dist", ".git", "vendor"].includes(name)) continue;
     const p = dir === "." ? name : join(dir, name);
     if (statSync(p).isDirectory()) markdownFiles(p, out);
     else if (p.endsWith(".md")) out.push(p);
