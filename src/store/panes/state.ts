@@ -49,7 +49,7 @@ export interface TabState {
   request: number;
   loading: boolean;
   loadError: AppError | string | null;
-  freshness: "current" | "stale" | "offline" | "manual";
+  freshness: "current" | "refreshing" | "stale" | "offline" | "manual";
   refreshError: AppError | null;
   path: string;
   /** While browsing an archive: path of the .zip file, otherwise null. */

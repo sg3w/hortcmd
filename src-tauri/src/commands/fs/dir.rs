@@ -54,8 +54,12 @@ pub struct Drive {
 /// the VFS registry, so the command works schema-agnostically; the
 /// `local` provider handles ordinary file-system paths unchanged.
 #[tauri::command]
-pub async fn list_dir(path: String) -> AppResult<DirListing> {
-    super::listings::read(path).await
+pub async fn list_dir(path: String, fresh: Option<bool>) -> AppResult<DirListing> {
+    if fresh.unwrap_or(false) {
+        super::listings::read_fresh(path).await
+    } else {
+        super::listings::read(path).await
+    }
 }
 
 /// Lists drives or mount points along with their storage usage.

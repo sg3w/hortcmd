@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { hasTauri, refreshRead, refreshFinish, refreshPoll, refreshSubscribe } from "@/ipc/client";
-import { applyRefreshResult, applyRefreshStatus, usePanes } from "@/store/panesStore";
+import { beginRefresh, applyRefreshResult, applyRefreshStatus, usePanes } from "@/store/panesStore";
 import { useNet } from "@/features/net/netStore";
 
 /** UI ownership and visibility only; policy, paths and scheduling live in Rust. */
@@ -34,6 +34,7 @@ export function useRefresh() {
         if (disposed) return;
         batch.status.forEach(applyRefreshStatus);
         for (const work of batch.work) {
+          work.targets.forEach(beginRefresh);
           void (async () => {
             let failure: string | null = null;
             try {

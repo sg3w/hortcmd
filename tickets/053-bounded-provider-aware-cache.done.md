@@ -46,15 +46,15 @@ those identity and freshness contracts exist.
 
 ## Acceptance Criteria
 
-- [ ] Repeated reads of the same unchanged location avoid duplicate provider work.
-- [ ] Cache entries cannot be reused across connection generations, principals, or
+- [x] Repeated reads of the same unchanged location avoid duplicate provider work.
+- [x] Cache entries cannot be reused across connection generations, principals, or
       trust identities.
-- [ ] Known mutations and refresh events invalidate or update all affected views.
-- [ ] Memory, item count, age, and per-provider consumption are bounded.
-- [ ] Stale/offline content is visibly distinct and never used for destructive
+- [x] Known mutations and refresh events invalidate or update all affected views.
+- [x] Memory, item count, age, and per-provider consumption are bounded.
+- [x] Stale/offline content is visibly distinct and never used for destructive
       authorization or commit decisions.
-- [ ] Profile deletion removes associated cached metadata.
-- [ ] Cache metrics contain no raw sensitive paths or server identities by default.
+- [x] Profile deletion removes associated cached metadata.
+- [x] Cache metrics contain no raw sensitive paths or server identities by default.
 
 ## Tests
 
@@ -79,3 +79,13 @@ those identity and freshness contracts exist.
 - Stale data cannot silently drive destructive decisions.
 - Privacy and profile-deletion behavior are tested.
 - Rename this file to `053-bounded-provider-aware-cache.done.md`.
+
+## Implementation
+
+Implemented memory-only listing and local presentation metadata caches, security-bound
+keys, bounded fair eviction, shared cancellation and conservative mutation/session/
+watch invalidation. Details and measured avoided provider work are in
+[provider-cache.md](../docs/provider-cache.md).
+
+Validation: `npm run check`; isolated real-provider regression plus cache identity,
+budget, expiry, race and cancellation tests; frontend refreshing/stale-state coverage.

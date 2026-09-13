@@ -17,9 +17,9 @@ import { hasTauri, invoke } from "../invoke";
 import * as demo from "../demo";
 import { gitReadySubs } from "../events";
 
-export async function listDir(path: string): Promise<DirListing> {
+export async function listDir(path: string, fresh = false): Promise<DirListing> {
   if (!hasTauri) return demo.demoListDir(path);
-  return invoke<DirListing>("list_dir", { path });
+  return invoke<DirListing>("list_dir", { path, ...(fresh ? { fresh } : {}) });
 }
 
 export async function listDrives(): Promise<Drive[]> {

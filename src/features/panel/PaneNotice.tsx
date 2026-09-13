@@ -47,7 +47,7 @@ export function PaneNotice({ side }: { side: Side }) {
     <div className={cn("flex-shrink-0", (hidden || notice || stale) && "border-t border-edge")}>
       {stale && <div role="status" className="flex items-center gap-2 bg-header px-2 py-1 text-[12px]">
         <span className="min-w-0 flex-1 text-dim">
-          {t(freshness === "offline" ? "refresh.offline" : freshness === "manual" ? "refresh.manual" : "refresh.stale")}
+          {t(freshness === "refreshing" ? "refresh.refreshing" : freshness === "offline" ? "refresh.offline" : freshness === "manual" ? "refresh.manual" : "refresh.stale")}
           {(loadError || refreshError) ? ` ${describeErrorFull(loadError || refreshError)}` : ""}
         </span>
         <button className="shrink-0 text-accent" onClick={() => void usePanes.getState().refresh(side)}>{t("tb.refresh")}</button>

@@ -90,6 +90,7 @@ pub fn run() {
             commands::fs::file::make_dir,
             commands::fs::file::write_text_file,
             commands::fs::file::rename_entry,
+            commands::fs::cache::cache_metrics,
             commands::fs::transfer::preflight::transfer_preflight,
             commands::fs::transfer::preflight::cancel_preflight,
             commands::fs::undo::undo_preview,

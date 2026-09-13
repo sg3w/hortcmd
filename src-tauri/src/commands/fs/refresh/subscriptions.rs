@@ -161,6 +161,7 @@ impl Manager {
                                     }) {
                                         return;
                                     }
+                                    crate::commands::fs::cache::invalidate();
                                     let mut events =
                                         events.lock().unwrap_or_else(|e| e.into_inner());
                                     if events.queue.len() >= 128
@@ -200,6 +201,9 @@ impl Manager {
 
     fn poll(&mut self, visible: bool, now: Instant) -> RefreshBatch {
         let events = std::mem::take(&mut *self.events.lock().unwrap_or_else(|e| e.into_inner()));
+        if events.overflow || !events.queue.is_empty() {
+            crate::commands::fs::cache::invalidate();
+        }
         let mut status = Vec::new();
         let mut work = Vec::new();
         for (key, entry) in &mut self.entries {
@@ -294,7 +298,7 @@ pub async fn read(key: String, serial: u32) -> AppResult<crate::commands::fs::di
     };
     tokio::select! {
         _ = cancel.changed() => Err(AppError::new(code::CANCELLED)),
-        result = crate::commands::fs::listings::read(path) => result,
+        result = crate::commands::fs::listings::read_fresh(path) => result,
     }
 }
 

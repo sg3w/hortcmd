@@ -45,6 +45,7 @@ pub fn get_tags(path: String) -> AppResult<Vec<Tag>> {
 /// Writes the Finder tags of an entry (an empty list removes the attribute).
 #[tauri::command]
 pub fn set_tags(path: String, tags: Vec<Tag>) -> AppResult<()> {
+    let _cache_mutation = crate::commands::fs::cache::Mutation::begin();
     caps::require(&path, Capability::FinderTags)?;
     #[cfg(target_os = "macos")]
     {

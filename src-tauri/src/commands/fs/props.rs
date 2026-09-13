@@ -150,7 +150,7 @@ pub(crate) fn read_file_props(path: String) -> AppResult<FileProps> {
     caps::require(&path, Capability::Stat)?;
     let p = Path::new(&path);
     // symlink_metadata: describe the link itself, not the target.
-    let meta = fs::symlink_metadata(p).map_err(AppError::from)?;
+    let meta = super::cache::display_metadata(p).map_err(AppError::from)?;
 
     #[cfg(unix)]
     let mode = {
@@ -196,6 +196,7 @@ pub(crate) fn read_file_props(path: String) -> AppResult<FileProps> {
 /// (0..=0o7777, incl. setuid/setgid/sticky).
 #[tauri::command]
 pub fn set_permissions(path: String, mode: u32) -> AppResult<()> {
+    let _cache_mutation = crate::commands::fs::cache::Mutation::begin();
     caps::require(&path, Capability::Permissions)?;
     #[cfg(unix)]
     {
@@ -222,6 +223,7 @@ pub fn set_permissions(path: String, mode: u32) -> AppResult<()> {
 /// respective value unchanged. Usually requires root privileges.
 #[tauri::command]
 pub fn set_owner(path: String, owner: Option<String>, group: Option<String>) -> AppResult<()> {
+    let _cache_mutation = crate::commands::fs::cache::Mutation::begin();
     caps::require(&path, Capability::Permissions)?;
     #[cfg(unix)]
     {

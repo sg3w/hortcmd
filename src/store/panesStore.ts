@@ -180,7 +180,7 @@ function beginRequest(side: Side, navigation: boolean): RequestTarget | undefine
   if (!navigation && tab.loading) return;
   const target = { side, id: tab.id, request: tab.request + 1 };
   usePanes.setState(withActiveTab(usePanes.getState(), side, t => ({
-    ...t, request: target.request, loading: navigation, loadError: null,
+    ...t, request: target.request, loading: navigation, loadError: null, freshness: "refreshing",
   })));
   return target;
 }
@@ -202,10 +202,16 @@ function applyRequest(target: RequestTarget, fn: (tab: TabState) => TabState): b
 }
 
 function requestFailed(target: RequestTarget, error: unknown) {
-  applyRequest(target, t => ({ ...t, loading: false, loadError: asAppError(error) ?? String(error) }));
+  applyRequest(target, t => ({ ...t, loading: false, loadError: asAppError(error) ?? String(error), freshness: "stale" }));
 }
 
 /** Backend work carries the generation captured before its filesystem read. */
+export function beginRefresh(target: RefreshSubscription) {
+  for (const side of ["left", "right"] as const) {
+    applyRequest({ side, id: target.id, request: target.generation }, tab => tab.path === target.path && !tab.loading ? { ...tab, freshness: "refreshing" } : tab);
+  }
+}
+
 export function applyRefreshResult(target: RefreshSubscription, listing: DirListing | null, error: unknown = null) {
   for (const side of ["left", "right"] as const) {
     applyRequest({ side, id: target.id, request: target.generation }, tab => {
@@ -225,7 +231,7 @@ export function applyRefreshStatus(status: RefreshStatus) {
   for (const target of status.targets) {
     for (const side of ["left", "right"] as const) {
       applyRequest({ side, id: target.id, request: target.generation }, tab => {
-        const freshness = !status.connected ? "offline" : status.mode === "manual" ? "manual" : status.error ? "stale" : "current";
+        const freshness = !status.connected ? "offline" : status.mode === "manual" ? "manual" : status.error ? "stale" : tab.freshness === "refreshing" ? "refreshing" : "current";
         if (tab.freshness === freshness && tab.refreshError?.id === status.error?.id) return tab;
         return { ...tab, freshness, refreshError: status.error };
       });
@@ -403,7 +409,7 @@ export const usePanes = create<PanesStore>((set, get) => ({
     const target = beginRequest(side, false);
     if (!target) return;
     let res;
-    try { res = await listDir(panel.path); } catch (error) { requestFailed(target, error); return; }
+    try { res = await listDir(panel.path, true); } catch (error) { requestFailed(target, error); return; }
     const applied = applyRequest(target, (t) => {
         // A refresh means the contents may have moved on, so a
         // comparison result from before it is dropped rather than left
@@ -422,7 +428,7 @@ export const usePanes = create<PanesStore>((set, get) => ({
           });
           if (added.length > 0) {
             return {
-              ...t,
+              ...t, freshness: "current", loadError: null, refreshError: null,
               raw: res.entries,
               entries,
               cursor: entries.indexOf(added[0]),
@@ -433,7 +439,7 @@ export const usePanes = create<PanesStore>((set, get) => ({
           }
         }
         return {
-          ...t,
+          ...t, freshness: "current", loadError: null, refreshError: null,
           raw: res.entries,
           entries,
           cursor: cursorFor(entries, t.entries[t.cursor]?.name, t.cursor),

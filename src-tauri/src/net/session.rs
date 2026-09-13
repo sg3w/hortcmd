@@ -322,6 +322,7 @@ pub fn emit_states(app: &AppHandle) {
 pub fn report_connection_lost(store_id: &str, reason: &str) {
     let (removed, profile_id) = {
         let mut reg = registry().lock().unwrap();
+        crate::commands::fs::cache::invalidate();
         let removed = reg.live.remove(store_id).is_some();
         let profile_id = reg
             .profiles
@@ -353,6 +354,7 @@ pub fn net_list_profiles() -> Vec<Profile> {
 /// configured credential store under the profile id (never into the JSON).
 #[tauri::command]
 pub fn net_save_profile(profile: Profile, secret: Option<String>) -> AppResult<()> {
+    crate::commands::fs::cache::invalidate();
     super::certificate::approved_der(&profile)?;
     lifecycle::cancel_for_profile(&profile.id);
     // Written before the registry lock: a locked KeePass file fails here,
@@ -363,6 +365,7 @@ pub fn net_save_profile(profile: Profile, secret: Option<String>) -> AppResult<(
     let mut reg = registry().lock().unwrap();
     if let Some(existing) = reg.profiles.iter().find(|p| p.id == profile.id) {
         let key = existing.store_id();
+        crate::commands::fs::cache::invalidate();
         reg.live.remove(&key);
     }
     match reg.profiles.iter_mut().find(|p| p.id == profile.id) {
@@ -375,12 +378,14 @@ pub fn net_save_profile(profile: Profile, secret: Option<String>) -> AppResult<(
 /// Deletes a profile and its stored secret (disconnecting if live).
 #[tauri::command]
 pub fn net_delete_profile(id: String) -> AppResult<()> {
+    crate::commands::fs::cache::invalidate();
     // A profile that is still connecting loses its attempt with it.
     lifecycle::cancel_for_profile(&id);
     let mut reg = registry().lock().unwrap();
     let mut closed = None;
     if let Some(pos) = reg.profiles.iter().position(|p| p.id == id) {
         let store_id = reg.profiles[pos].store_id();
+        crate::commands::fs::cache::invalidate();
         reg.live.remove(&store_id);
         reg.profiles.remove(pos);
         closed = Some(store_id);
@@ -618,6 +623,7 @@ pub fn net_trust_host_key(app: AppHandle, id: String, token: String) -> AppResul
 /// reported on, never rewritten.
 #[tauri::command]
 pub fn net_forget_host_key(id: String) -> AppResult<ForgetResult> {
+    crate::commands::fs::cache::invalidate();
     let profile = profile_by_id(&id)?;
     hostkey::forget(&HostId::new(&profile.host, profile.port))
 }
@@ -627,6 +633,7 @@ pub fn net_forget_host_key(id: String) -> AppResult<ForgetResult> {
 /// no channel outlives the connection it rides on.
 #[tauri::command]
 pub fn net_disconnect(app: AppHandle, id: String) -> AppResult<()> {
+    crate::commands::fs::cache::invalidate();
     // A second disconnect while the first is still tearing down would
     // race it; the request is simply dropped (ticket 032).
     if lifecycle::snapshot(&id).0 == Phase::Disconnecting {
@@ -647,6 +654,7 @@ pub fn net_disconnect(app: AppHandle, id: String) -> AppResult<()> {
             .find(|p| p.id == id)
             .map(|profile| profile.store_id());
         if let Some(store_id) = &store_id {
+            crate::commands::fs::cache::invalidate();
             reg.live.remove(store_id);
         }
         store_id

@@ -49,6 +49,7 @@ pub(crate) fn run_transfer(
     threads: u32,
     safe: bool,
 ) {
+    let _cache_mutation = crate::commands::fs::cache::Mutation::begin();
     let tune = CopyTuning {
         limit,
         verify,

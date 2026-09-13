@@ -42,6 +42,7 @@ pub(crate) fn run_with_recovery(
     check: &dyn Fn(&Path) -> AppResult<()>,
     recovery: Option<&crate::commands::fs::transfer::recovery::Handle>,
 ) -> AppResult<u32> {
+    let _cache_mutation = crate::commands::fs::cache::Mutation::begin();
     if sources.is_empty() {
         return Err(AppError::new(code::VALIDATION_BAD_INPUT)
             .detail("at least one archive source is required"));

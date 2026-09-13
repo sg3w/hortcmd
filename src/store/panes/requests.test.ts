@@ -9,12 +9,13 @@ function deferred() {
   const promise = new Promise<DirListing>((yes, no) => { resolve = yes; reject = no; });
   return { promise, resolve, reject };
 }
+let calls: ReturnType<typeof useTauri>["calls"];
 let pending: Map<string, ReturnType<typeof deferred>>;
 let panes: typeof import("../panesStore");
 beforeEach(async () => {
   vi.resetModules();
   pending = new Map();
-  useTauri({ commands: {
+  ({ calls } = useTauri({ commands: {
     list_dir: ({ path }) => {
       const request = deferred();
       pending.set(String(path), request);
@@ -22,7 +23,7 @@ beforeEach(async () => {
     },
     home_dir: () => "/home",
     location_capabilities: () => ({scheme:"local", store_id:"local", connected:true, caps:[]}),
-  }});
+  }}));
   panes = await import("../panesStore");
 });
 async function request(path: string) {
@@ -69,9 +70,13 @@ it("ignores a failed older request and retains existing rows on current refresh 
   expect(panelOf(usePanes.getState(), "left").loadError).toBeNull();
   pending.delete("/current");
   const refresh = usePanes.getState().refresh("left");
-  (await request("/current")).reject(new Error("offline")); await refresh;
+  const current = await request("/current");
+  expect(panelOf(usePanes.getState(), "left").freshness).toBe("refreshing");
+  expect(calls[calls.length - 1]).toMatchObject({ cmd: "list_dir", args: { fresh: true } });
+  current.reject(new Error("offline")); await refresh;
   const tab = panelOf(usePanes.getState(), "left");
   expect(tab.loadError).toContain("offline");
+  expect(tab.freshness).toBe("stale");
   expect(tab.raw[0].name).toBe("current.txt");
 });
 

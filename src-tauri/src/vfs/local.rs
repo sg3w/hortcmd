@@ -33,6 +33,16 @@ impl Provider for LocalProvider {
     /// symlink cycle (`a/link -> a`) impossible to walk into indefinitely,
     /// because every hop lands on the same canonical path.
     fn list(&self, path: &str) -> AppResult<DirListing> {
+        self.list_cancellable(path, &std::sync::atomic::AtomicBool::new(false))
+    }
+    fn list_cancellable(
+        &self,
+        path: &str,
+        cancel: &std::sync::atomic::AtomicBool,
+    ) -> AppResult<DirListing> {
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err(AppError::new(crate::errors::code::CANCELLED));
+        }
         let p = PathBuf::from(path);
         let canonical = fs::canonicalize(&p).unwrap_or(p);
 
@@ -41,6 +51,9 @@ impl Provider for LocalProvider {
 
         let mut entries = Vec::new();
         for item in read.flatten() {
+            if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                return Err(AppError::new(crate::errors::code::CANCELLED));
+            }
             let meta = match item.metadata() {
                 Ok(m) => m,
                 Err(_) => continue,

@@ -14,6 +14,7 @@
 
 pub mod archive;
 pub mod attrs;
+pub mod cache;
 pub mod cancel;
 pub mod compare;
 pub mod dir;

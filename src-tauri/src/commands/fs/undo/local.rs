@@ -354,6 +354,7 @@ impl History {
             .collect())
     }
     pub(super) fn execute(&self, id: &str) -> AppResult<Vec<UndoEntry>> {
+        let _cache_mutation = crate::commands::fs::cache::Mutation::begin();
         let mut records = self.records.lock().map_err(|_| unavailable())?;
         let index = records
             .iter()
@@ -526,6 +527,7 @@ fn rename_exclusive(from: &Path, to: &Path) -> io::Result<()> {
     }
 }
 fn inverse(record: &mut UndoPlan) -> io::Result<()> {
+    let _cache_mutation = crate::commands::fs::cache::Mutation::begin();
     let expected = record.after.as_ref().ok_or_else(conflict)?;
     if snapshot(&record.target)? != *expected {
         return Err(conflict());

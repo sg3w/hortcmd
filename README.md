@@ -517,3 +517,5 @@ passing) and `msrv` (Rust 1.85.1 with `--locked`). Workflow permissions are
 `contents: read`, and no job receives secrets.
 
 Desktop transfer recovery on macOS is documented in [Transfer recovery](docs/transfer-recovery.md), including recovery choices, journal bounds and deferred platform checks.
+
+Directory navigation uses a [bounded memory cache](docs/provider-cache.md) with explicit freshness and invalidation.

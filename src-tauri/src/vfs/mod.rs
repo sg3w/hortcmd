@@ -234,6 +234,23 @@ pub trait Provider: Send + Sync {
     /// Full directory listing (drives the `list_dir` command).
     fn list(&self, path: &str) -> AppResult<DirListing>;
 
+    /// Cooperative cancellation for presentation reads. Protocol adapters whose
+    /// API cannot interrupt a request still decline its abandoned result.
+    fn list_cancellable(
+        &self,
+        path: &str,
+        cancel: &std::sync::atomic::AtomicBool,
+    ) -> AppResult<DirListing> {
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err(crate::errors::AppError::new(crate::errors::code::CANCELLED));
+        }
+        let result = self.list(path)?;
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err(crate::errors::AppError::new(crate::errors::code::CANCELLED));
+        }
+        Ok(result)
+    }
+
     /// Cheap metadata (following symlinks) for the transfer totals.
     fn stat(&self, path: &Path) -> io::Result<Stat>;
 

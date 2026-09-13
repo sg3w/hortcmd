@@ -387,6 +387,7 @@ pub(crate) fn run_with_recovery(
     limits: safety::Limits,
     recovery: Option<&crate::commands::fs::transfer::recovery::Handle>,
 ) -> AppResult<(u32, Vec<ItemError>)> {
+    let _cache_mutation = crate::commands::fs::cache::Mutation::begin();
     use crate::vfs::caps::{self, Capability};
     let ExtractJob {
         archive,

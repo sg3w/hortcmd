@@ -24,6 +24,7 @@ use tauri::AppHandle;
 /// Creates a directory (recursively).
 #[tauri::command]
 pub fn make_dir(path: String) -> AppResult<String> {
+    let _cache_mutation = crate::commands::fs::cache::Mutation::begin();
     caps::require(&path, Capability::Create)?;
     let (provider, resolved) = vfs::resolve(&path)?;
     let undo = super::undo::prepare("mkdir", &path, &path)?;
@@ -42,6 +43,7 @@ pub fn make_dir(path: String) -> AppResult<String> {
 /// `Ok(true)` = written, `Err` = a real I/O error.
 #[tauri::command]
 pub fn write_text_file(path: String, contents: String, overwrite: bool) -> AppResult<bool> {
+    let _cache_mutation = crate::commands::fs::cache::Mutation::begin();
     caps::require(&path, Capability::Create)?;
     let (provider, resolved) = vfs::resolve(&path)?;
     let p = Path::new(&resolved);
@@ -58,6 +60,7 @@ pub fn write_text_file(path: String, contents: String, overwrite: bool) -> AppRe
 /// Refuses to overwrite an already existing target name.
 #[tauri::command]
 pub fn rename_entry(from: String, to: String) -> AppResult<()> {
+    let _cache_mutation = crate::commands::fs::cache::Mutation::begin();
     caps::require_pair(&from, Capability::Move, &to, Capability::CopyTo)?;
     let (provider, from_r) = vfs::resolve(&from)?;
     let (_, to_r) = vfs::resolve(&to)?;
@@ -101,6 +104,7 @@ fn unique_temp(provider: &dyn Provider, base: &Path) -> PathBuf {
 /// then to the target names) so that chains and name swaps work too.
 #[tauri::command]
 pub fn rename_batch(dir: String, renames: Vec<(String, String)>) -> OpResult {
+    let _cache_mutation = crate::commands::fs::cache::Mutation::begin();
     if let Err(e) = caps::require(&dir, Capability::Move) {
         return OpResult {
             ok: 0,
@@ -351,6 +355,7 @@ pub fn move_entries(
 /// Moves several entries to the system trash (restorable).
 #[tauri::command]
 pub fn trash_entries(paths: Vec<String>) -> OpResult {
+    let _cache_mutation = crate::commands::fs::cache::Mutation::begin();
     let mut ok = 0u32;
     let mut errors = Vec::new();
 
@@ -373,6 +378,7 @@ pub fn trash_entries(paths: Vec<String>) -> OpResult {
 /// Deletes several entries (synchronously; files or directories recursively).
 #[tauri::command]
 pub fn delete_entries(paths: Vec<String>) -> OpResult {
+    let _cache_mutation = crate::commands::fs::cache::Mutation::begin();
     let mut ok = 0u32;
     let mut errors = Vec::new();
 
