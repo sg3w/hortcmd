@@ -44,12 +44,24 @@ restored focus to the Einstellungen button. This verifies native dialog key
 handling and focus restoration; the initial focus was set through accessibility,
 so this is not evidence for a complete Tab traversal of the application.
 
-VoiceOver 10 was started through its first-run dialog. Reading its last phrase
-through AppleScript did not yield usable output, so no screen-reader speech
-result is claimed. VoiceOver was switched off again, its AppleScript-control
-option was verified off (the original value), and the utility window was closed.
-The manual matrix below remains pending; this native settings check does not
-cover other workflows, English, actual zoom, or Windows/Linux screen readers.
+VoiceOver 10 was started through its first-run dialog. An initial attempt to read
+its last phrase failed. A subsequent run explicitly enabled its supported
+AppleScript-control option and verified that option through a fresh utility
+window reference before starting the screen reader. VoiceOver then returned
+these actual output phrases for the native German settings workflow:
+
+- Enter: `Einstellungen web dialog mit 5 Objekten Dateiansicht ausgewählt tab, 2 von 8 Einstellungen tab group`
+- Arrow Up: `Allgemein ausgewählt tab, 1 von 8`
+- Escape: `Einstellungen button`
+
+The category persisted from the earlier test, so this run started on Dateiansicht.
+The phrases establish VoiceOver's dialog, selection/position and returned-focus
+announcements for this workflow. They are screen-reader output text, not a
+recording or an assessment of audio intelligibility. VoiceOver was switched off
+again, its AppleScript-control option was verified off (the original value), and
+the utility window was closed. The complete manual matrix below remains pending;
+this check does not cover other workflows, English, actual zoom, or Windows/Linux
+screen readers.
 
 ## Translation ownership
 
