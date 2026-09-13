@@ -194,7 +194,7 @@ export function CommandBar() {
       <ToolButton
         title={t("tb.settings")}
         Icon={Settings}
-        onClick={openSettings}
+        onClick={() => openSettings()}
       />
     </div>
   );
