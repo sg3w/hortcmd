@@ -11,6 +11,7 @@ import { useOps } from "@/store/opsStore";
 import { useTransfers } from "@/store/transfersStore";
 import { cancelTransfer, resolveCollision } from "@/ipc/client";
 import { useT } from "@/store/settingsStore";
+import { useDialogFocusReturn } from "./useDialogFocusReturn";
 import { cn } from "@/lib/cn";
 import { consumeDialogKey, markDialogKey } from "@/lib/keys";
 
@@ -29,6 +30,7 @@ export function OperationDialogs() {
 // ---------- Name collision ----------
 
 function CollisionDialog() {
+  const returnFocus = useDialogFocusReturn();
   const head = useOps((s) => s.collisions[0] ?? null);
   const shiftCollision = useOps((s) => s.shiftCollision);
   const t = useT();
@@ -52,6 +54,7 @@ function CollisionDialog() {
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[62] bg-black/50" />
         <Dialog.Content
+          onCloseAutoFocus={returnFocus}
           onKeyDownCapture={markDialogKey}
           className="fixed left-1/2 top-1/2 z-[63] w-[440px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-panel shadow-2xl"
         >
@@ -106,6 +109,7 @@ function basename(path: string): string {
 // ---------- Confirmation ----------
 
 function ConfirmDialog() {
+  const returnFocus = useDialogFocusReturn();
   const confirm = useOps((s) => s.confirm);
   const closeDialogs = useOps((s) => s.closeDialogs);
   const t = useT();
@@ -120,6 +124,7 @@ function ConfirmDialog() {
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[60] bg-black/50" />
         <Dialog.Content
+          onCloseAutoFocus={returnFocus}
           onKeyDownCapture={markDialogKey}
           className="fixed left-1/2 top-1/2 z-[61] w-[420px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-panel shadow-2xl"
         >
@@ -168,6 +173,7 @@ function ConfirmDialog() {
 // ---------- Input (new folder) ----------
 
 function PromptDialog() {
+  const returnFocus = useDialogFocusReturn();
   const prompt = useOps((s) => s.prompt);
   const closeDialogs = useOps((s) => s.closeDialogs);
   const t = useT();
@@ -206,6 +212,7 @@ function PromptDialog() {
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[60] bg-black/50" />
         <Dialog.Content
+          onCloseAutoFocus={returnFocus}
           onKeyDownCapture={markDialogKey}
           className="fixed left-1/2 top-1/2 z-[61] w-[420px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-panel shadow-2xl"
         >
@@ -295,6 +302,7 @@ function ProgressOverlay() {
 // ---------- Closing the window while transfers are running (TICKET-004) ----------
 
 function ForceCloseDialog() {
+  const returnFocus = useDialogFocusReturn();
   const open = useOps((s) => s.forceClose);
   const setForceClose = useOps((s) => s.setForceClose);
   const t = useT();
@@ -321,6 +329,7 @@ function ForceCloseDialog() {
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[80] bg-black/50" />
         <Dialog.Content
+          onCloseAutoFocus={returnFocus}
           onKeyDownCapture={markDialogKey}
           className="fixed left-1/2 top-1/2 z-[81] w-[420px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-panel shadow-2xl"
         >

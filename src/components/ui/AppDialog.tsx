@@ -15,6 +15,7 @@
 // app currently needs.
 // ============================================================
 
+import { useDialogFocusReturn } from "./useDialogFocusReturn";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -82,6 +83,7 @@ export function AppDialog({
   keepEscape,
   children,
 }: Props) {
+  const returnFocus = useDialogFocusReturn();
   const min = minSize ?? defaultSize;
   // Deliberately no reactive store hook (`useDialogSizeStore(selector)`) here:
   // with several `AppDialog` instances mounted at the same time (all dialogs
@@ -146,6 +148,7 @@ export function AppDialog({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/50" />
         <Dialog.Content
+          onCloseAutoFocus={returnFocus}
           onKeyDownCapture={markDialogKey}
           onEscapeKeyDown={keepEscape ? (e) => e.preventDefault() : undefined}
           style={{ width: size.w, height: size.h }}
