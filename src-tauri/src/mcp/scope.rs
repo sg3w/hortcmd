@@ -461,6 +461,33 @@ mod tests {
         std::fs::remove_dir_all(base).unwrap();
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn canonical_aliases_admit_the_same_root_but_never_a_sibling() {
+        let base = temp_tree("canonical-alias");
+        let root = base.join("root");
+        let alias = base.join("alias");
+        std::fs::create_dir(&root).unwrap();
+        std::fs::create_dir(base.join("outside")).unwrap();
+        std::os::unix::fs::symlink(&root, &alias).unwrap();
+        assert!(contains(
+            &alias.to_string_lossy(),
+            &root.join("new-file").to_string_lossy()
+        )
+        .unwrap());
+        assert!(contains(
+            &root.to_string_lossy(),
+            &alias.join("new-file").to_string_lossy()
+        )
+        .unwrap());
+        assert!(!contains(
+            &alias.to_string_lossy(),
+            &base.join("outside/new-file").to_string_lossy()
+        )
+        .unwrap());
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
     #[test]
     fn resolved_paths_preserve_case() {
         assert!(!path_contains(Path::new("/Root"), Path::new("/root/file")));
