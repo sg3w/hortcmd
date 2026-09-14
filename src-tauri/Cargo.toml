@@ -103,6 +103,9 @@ exacl = "0.12"       # ACL (Access Control Lists) lesen
 # macOS-spezifisch: Finder-Tags liegen als Binär-plist im xattr
 # `com.apple.metadata:_kMDItemUserTags`.
 [target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.4"
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSString", "NSDictionary", "NSData", "NSGeometry"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSWorkspace", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSGraphicsContext", "NSGraphics"] }
 libc = "0.2"        # Cached mount-table metadata (getfsstat/MNT_NOWAIT)
 plist = "1"          # Binär-plist lesen/schreiben (Finder-Tags)
 

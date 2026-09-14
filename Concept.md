@@ -1755,3 +1755,19 @@ per relative path. Sticky addresses are copyable. Filters discard hidden selecti
 copy actions are directional, capability-checked and followed by a new comparison.
 Missing metadata is not equality; read failures propagate and self-copy is rejected.
 See [directory-comparison.md](docs/directory-comparison.md) for behavior and validation.
+
+### Native file icons (TICKET-065)
+
+System icons are the persisted default; simple Lucide symbols remain selectable
+and appear immediately while loading. A common row component covers the file
+views, tree and picker, with one accessible symlink arrow. The macOS adapter uses
+NSWorkspace on a bounded background worker and sends small PNGs through Tauri.
+Remote/archive/link entries use local type icons without resolving their contents.
+
+The frontend batches visible requests, discards obsolete consumers and keeps a
+256-entry/4 MiB LRU, with 60-second positive and 5-second negative TTLs. Native
+96-icon measurements: 3.209 s cold, 23.50 ms with warm OS caches. A separate 5,000-row
+browser fixture rendered the list in 266.9 ms and the first PNG in 348.1 ms with
+40ms simulated transport; this is not a native end-to-end claim. Windows/Linux
+adapters are deferred to TICKET-265; native GUI/multi-monitor verification to
+TICKET-266. Details and limitations: [native file icons](docs/native-file-icons.md).

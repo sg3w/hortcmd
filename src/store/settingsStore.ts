@@ -58,6 +58,7 @@ interface SettingsStore extends PersistedSettings {
   setSizeFormat: (v: SizeFormat) => void;
   setDateFormat: (v: DateFormat) => void;
   setFontScale: (v: Scale) => void;
+  setFileIcons: (v: "system" | "simple") => void;
   setIconScale: (v: Scale) => void;
   setColumnWidth: (id: string, width: number) => void;
 
@@ -108,6 +109,7 @@ export const useSettings = create<SettingsStore>()(
       dateFormat: "medium",
       fontScale: "md",
       iconScale: "md",
+      fileIcons: "system",
       columnWidths: { ...DEFAULT_COLUMN_WIDTHS },
       fileColors: {},
       customColorRules: [],
@@ -146,6 +148,7 @@ export const useSettings = create<SettingsStore>()(
       setSizeFormat: (sizeFormat) => set({ sizeFormat }),
       setDateFormat: (dateFormat) => set({ dateFormat }),
       setFontScale: (fontScale) => set({ fontScale }),
+      setFileIcons: (fileIcons) => set({ fileIcons }),
       setIconScale: (iconScale) => set({ iconScale }),
       setColumnWidth: (id, width) =>
         set((s) => ({

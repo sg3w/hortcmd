@@ -84,6 +84,7 @@ pub fn run() {
             mcp::commands::mcp_audit,
             mcp::commands::mcp_clear_audit,
             commands::fs::dir::list_dir,
+            commands::fs::icons::file_icons,
             commands::fs::dir::list_drives,
             commands::fs::dir::home_dir,
             commands::fs::size::dir_size,

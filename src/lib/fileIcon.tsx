@@ -39,11 +39,3 @@ export function iconFor(row: Row): IconSpec {
   if (TEXT.has(ext)) return { Icon: FileText, className: "text-sky-300" };
   return { Icon: File, className: "text-dim" };
 }
-
-/** Ready-rendered row icon; size adjustable for the list/thumbnail view. */
-export function RowIcon({ row, size = 14 }: { row: Row; size?: number }) {
-  const { Icon, className } = iconFor(row);
-  return (
-    <Icon size={size} className={`inline-block shrink-0 ${className}`} aria-hidden />
-  );
-}

@@ -18,7 +18,7 @@ import {
 import { describeErrorFull } from "@/store/errorText";
 import { useT } from "@/store/settingsStore";
 import { formatSize } from "@/lib/format";
-import { RowIcon } from "@/lib/fileIcon";
+import { RowIcon } from "@/components/ui/RowIcon";
 import { isRoot, joinPath, parentPath } from "@/lib/path";
 import { cn } from "@/lib/cn";
 import { consumeDialogKey, markDialogKey } from "@/lib/keys";
@@ -252,7 +252,7 @@ export function FileBrowserDialog() {
                       !selectable && entry.name !== ".." && "text-dim",
                     )}
                   >
-                    <RowIcon row={entry} size={15} />
+                    <RowIcon row={entry} directory={path} size={15} />
                     <span className="truncate">{entry.name}</span>
                     {!entry.is_dir && (
                       <span className="ml-auto shrink-0 font-mono text-[10px] text-dim">

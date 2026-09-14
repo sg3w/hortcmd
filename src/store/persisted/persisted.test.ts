@@ -477,3 +477,9 @@ describe("preferences export and import", () => {
     expect(result).not.toHaveProperty("settings");
   });
 });
+
+it("defaults native icons for older settings and validates the persisted mode", () => {
+  expect(load({}).value.fileIcons).toBe("system");
+  expect(load({ fileIcons: "simple" }).value.fileIcons).toBe("simple");
+  expect(load({ fileIcons: "bogus" }).value.fileIcons).toBe("system");
+});

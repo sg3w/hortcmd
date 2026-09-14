@@ -189,6 +189,7 @@ export function validateSettings(
     sizeFormat: oneOf(s.sizeFormat, SIZE_FORMATS, "auto", "sizeFormat", r),
     dateFormat: oneOf(s.dateFormat, DATE_FORMATS, "medium", "dateFormat", r),
     fontScale: oneOf(s.fontScale, SCALES, "md", "fontScale", r),
+    fileIcons: oneOf(s.fileIcons, ["system", "simple"] as const, "system", "fileIcons", r),
     iconScale: oneOf(s.iconScale, SCALES, "md", "iconScale", r),
     columnWidths: {
       ...DEFAULT_COLUMN_WIDTHS,

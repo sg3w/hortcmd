@@ -6,7 +6,7 @@ import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import type { Row, SortKey } from "@/store/panesStore";
 import type { DateFormat, SizeFormat } from "@/store/settingsStore";
 import { formatDate, formatMode, formatSize, splitName } from "@/lib/format";
-import { RowIcon } from "@/lib/fileIcon";
+import { RowIcon } from "@/components/ui/RowIcon";
 import { DEFAULT_COLUMN_WIDTHS, translate } from "@/store/settingsStore";
 
 const col = createColumnHelper<Row>();

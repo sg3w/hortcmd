@@ -8,11 +8,14 @@
 
 import { useEffect, useReducer, useRef, useState, type KeyboardEvent } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ChevronRight, Folder, FolderOpen } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { panelOf, usePanes, type Side } from "@/store/panesStore";
 import { listDir } from "@/ipc/client";
 import { useSettings, useT } from "@/store/settingsStore";
 import { ancestorChain, baseName, joinPath, rootOf } from "@/lib/path";
+import { RowIcon } from "@/components/ui/RowIcon";
+import type { DirEntry } from "@/ipc/bindings";
+import { parentPath } from "@/lib/path";
 import { cn } from "@/lib/cn";
 
 const NODE_HEIGHT = 22;
@@ -35,6 +38,7 @@ export function DirTree({ side }: { side: Side }) {
 
   // Tree state in refs (stable across asynchronous loads); `force`
   // triggers the re-render.
+  const metadata = useRef(new Map<string, DirEntry>());
   const childrenRef = useRef<Map<string, string[]>>(new Map());
   const expandedRef = useRef<Set<string>>(new Set());
   const loadingRef = useRef<Set<string>>(new Set());
@@ -48,6 +52,7 @@ export function DirTree({ side }: { side: Side }) {
     loadingRef.current.add(p);
     try {
       const res = await listDir(p);
+      for (const entry of res.entries.filter(e => e.is_dir)) metadata.current.set(joinPath(res.path, entry.name), entry);
       const hideSystem = useSettings.getState().hideSystemFiles;
       const dirs = res.entries
         .filter((e) => e.is_dir && (!hideSystem || !e.name.startsWith(".")))
@@ -235,11 +240,10 @@ export function DirTree({ side }: { side: Side }) {
                     className={cn("transition-transform", isExpanded && "rotate-90")}
                   />
                 </button>
-                {isExpanded ? (
-                  <FolderOpen size={13} className="shrink-0 text-accent" aria-hidden />
-                ) : (
-                  <Folder size={13} className="shrink-0 text-accent" aria-hidden />
-                )}
+                <RowIcon size={13} directory={parentPath(node.path)} row={metadata.current.get(node.path) ?? {
+                  name: label, is_dir: true, is_symlink: false, size: 0, modified: 0,
+                  hidden: false, readonly: false, executable: false, mode: null,
+                }} />
                 <span className="truncate">{label}</span>
               </div>
             );

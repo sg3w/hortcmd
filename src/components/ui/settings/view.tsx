@@ -19,6 +19,8 @@ import {
 
 export function ViewForm() {
   const t = useT();
+  const fileIcons = useSettings((s) => s.fileIcons);
+  const setFileIcons = useSettings((s) => s.setFileIcons);
   const foldersFirst = useSettings((s) => s.foldersFirst);
   const setFoldersFirst = useSettings((s) => s.setFoldersFirst);
   const showExt = useSettings((s) => s.showExtColumn);
@@ -33,6 +35,14 @@ export function ViewForm() {
 
   return (
     <div className="flex flex-col gap-5">
+      <Field icon={FileType} label={t("settings.fileIcons")}>
+        <Segmented<"system" | "simple"> value={fileIcons} onChange={setFileIcons}
+          options={[
+            { value: "system", label: t("settings.fileIcons.system") },
+            { value: "simple", label: t("settings.fileIcons.simple") },
+          ]} />
+        <p className="text-xs text-dim">{t("settings.fileIcons.hint")}</p>
+      </Field>
       <Toggle
         checked={foldersFirst}
         onChange={(v) => {

@@ -32,7 +32,7 @@ import {
   useT,
 } from "@/store/settingsStore";
 import type { TransKey } from "@/i18n/dictionaries";
-import { RowIcon } from "@/lib/fileIcon";
+import { RowIcon, FileIconContext } from "@/components/ui/RowIcon";
 import {
   fileColorRef,
   resolveFileColor,
@@ -59,6 +59,7 @@ interface Props {
 }
 
 export function FileTable({ side, onOpen, onContext }: Props) {
+  const iconDirectory = usePanes((s) => panelOf(s, side).archive ? null : panelOf(s, side).path);
   const entries = usePanes((s) => panelOf(s, side).entries);
   const cursor = usePanes((s) => panelOf(s, side).cursor);
   const selected = usePanes((s) => panelOf(s, side).selected);
@@ -203,6 +204,7 @@ export function FileTable({ side, onOpen, onContext }: Props) {
   }, [cursor, perRow, virtualizer]);
 
   return (
+    <FileIconContext.Provider value={iconDirectory}>
     <div
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-auto"
       onContextMenu={onContextMenu}
@@ -365,6 +367,7 @@ export function FileTable({ side, onOpen, onContext }: Props) {
         </div>
       </div>
     </div>
+    </FileIconContext.Provider>
   );
 }
 

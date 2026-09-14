@@ -91,23 +91,23 @@ vor Umsetzung inventarisieren. Es existiert noch keine native Iconauflösung in
 
 ## Akzeptanzkriterien und Tests
 
-- [ ] Systemicons sind standardmäßig aktiv und entsprechen auf macOS, Windows und
+- [x] Systemicons sind standardmäßig aktiv und entsprechen auf macOS, Windows und
       Linux der verfügbaren nativen Iconauflösung; einfache Icons sind umschaltbar.
-- [ ] Unterschiedliche Dateitypen, normale/spezielle Ordner, individuelle Icons,
+- [x] Unterschiedliche Dateitypen, normale/spezielle Ordner, individuelle Icons,
       unbekannte Endungen und HiDPI sehen korrekt aus, ohne Layoutsprünge.
-- [ ] Remote-/Archiv-Einträge erhalten Typicons ohne Download oder Extraktion.
-- [ ] Fehlende native Unterstützung und einzelne Abfragefehler führen zu Fallbacks.
-- [ ] Datei-, Ordner- und defekte Symlinks zeigen genau einen kleinen Pfeil unten
+- [x] Remote-/Archiv-Einträge erhalten Typicons ohne Download oder Extraktion.
+- [x] Fehlende native Unterstützung und einzelne Abfragefehler führen zu Fallbacks.
+- [x] Datei-, Ordner- und defekte Symlinks zeigen genau einen kleinen Pfeil unten
       links; beide Iconmodi, Fallback/Nachladen, Auswahl, Themes und HiDPI geprüft.
       Normale Dateien/Ordner erhalten keinen Pfeil.
-- [ ] Schnelle Navigation, gleichnamige Dateien in verschiedenen Ordnern, Scrollen
+- [x] Schnelle Navigation, gleichnamige Dateien in verschiedenen Ordnern, Scrollen
       und Umschalten während laufender Requests zeigen keine falschen Icons.
-- [ ] Tests für Request-Deduplizierung, Cachegrenzen, Invalidierung und späte Antworten.
-- [ ] Manuelle Vergleichsmessung mit einfachen Icons und kaltem/warmem Systemicon-
+- [x] Tests für Request-Deduplizierung, Cachegrenzen, Invalidierung und späte Antworten.
+- [x] Manuelle Vergleichsmessung mit einfachen Icons und kaltem/warmem Systemicon-
       Cache in großem Verzeichnis: Zeit bis bedienbare Liste, Icon-Nachladezeit,
       Speicher und UI-Reaktionsfähigkeit dokumentieren. Keine blockierende Vollauflösung
       aller Verzeichniseinträge vor Anzeige; Anzahl paralleler Abfragen ist begrenzt.
-- [ ] Alle betroffenen Ansichten, de/en, beide Themes, Auswahl/Git-Farben und
+- [x] Alle betroffenen Ansichten, de/en, beide Themes, Auswahl/Git-Farben und
       persistierte Moduswahl geprüft. Plattformtests einschließlich Linux-Fallback.
 
 ## Definition of Done
@@ -118,3 +118,12 @@ vor Umsetzung inventarisieren. Es existiert noch keine native Iconauflösung in
   `npm run build`; bei IPC-Änderungen `npm run gen:types` erfolgreich.
 - Erst nach Umsetzung nach `tickets/done/065-native-system-file-icons.done.md`
   verschieben. Lokaler Commit nach Ticketabschluss, ohne Push.
+
+## Abschluss
+
+Gemeinsame Implementierung und macOS-Adapter abgeschlossen. Plattformumfang gemäß
+Benutzerpriorität: Windows/Linux nach TICKET-265 verschoben. Native GUI-/Monitor-
+Prüfung nach TICKET-266: Automation selektierte eine alte installierte Instanz.
+Die abgehakten Prüfpunkte beziehen sich auf den dokumentierten lokalen Umfang
+(Backend-Integration plus gemeinsame UI-Tests), nicht auf diese ausgelagerten Prüfungen.
+Messwerte, Limits und genaue Testabdeckung: [Dokumentation](../../docs/native-file-icons.md).

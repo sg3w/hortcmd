@@ -47,3 +47,5 @@ pub mod staging_test_support {
 }
 
 pub mod search_index;
+
+pub mod icons;

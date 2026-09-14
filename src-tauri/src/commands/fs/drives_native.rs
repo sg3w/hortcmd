@@ -7,6 +7,15 @@ pub(super) struct Mount {
     pub remote: bool,
 }
 pub(super) fn mounts() -> Option<Vec<Mount>> {
+    read_mounts(true)
+}
+
+/// Icons must also avoid hidden network mounts (not shown in the drive picker).
+pub(super) fn icon_mounts() -> Option<Vec<Mount>> {
+    read_mounts(false)
+}
+
+fn read_mounts(browsable_only: bool) -> Option<Vec<Mount>> {
     // getfsstat fills fixed-size statfs structures; bounds are checked before allocation.
     let count = unsafe { libc::getfsstat(std::ptr::null_mut(), 0, libc::MNT_NOWAIT) };
     if !(1..16384).contains(&count) {
@@ -21,7 +30,7 @@ pub(super) fn mounts() -> Option<Vec<Mount>> {
     }
     let mut result = Vec::new();
     for entry in &raw[..count as usize] {
-        if entry.f_flags & libc::MNT_DONTBROWSE as u32 != 0 {
+        if browsable_only && entry.f_flags & libc::MNT_DONTBROWSE as u32 != 0 {
             continue;
         }
         // Kernel paths are bounded and NUL-terminated, but still validate termination.

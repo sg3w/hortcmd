@@ -112,6 +112,7 @@ export interface PersistedSettings {
   fontScale: Scale;
   /** Icon size of the file list. */
   iconScale: Scale;
+  fileIcons: "system" | "simple";
   /** Drag-adjusted column widths (px) per column id. */
   columnWidths: Record<string, number>;
 
