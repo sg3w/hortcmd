@@ -28,3 +28,14 @@ loophole.
 
 Follow the requested sequence through 065 first. File-operation callbacks already
 reject empty names, so this finding does not require interrupting that sequence.
+
+## Completion
+- Prompt submission and button state share the same validation result, including
+  pending Undo classification. Invalid input stays open and focused for keyboard
+  submission and clicks on the disabled button.
+- Reviewed all five callers: rename, mkdir and pack keep the default non-blank
+  policy; selection explicitly allows blank patterns (mapped to `*`); archive
+  passwords require at least one character and retain all whitespace unchanged.
+- Added keyboard/button regression tests for empty and whitespace-only names,
+  valid names, selection/deselection patterns and exact password preservation.
+- Validation: all 22 OperationDialogs tests and `npm run check`.

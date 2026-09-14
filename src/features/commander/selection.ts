@@ -47,6 +47,7 @@ export function promptSelect(side: Side, add: boolean): void {
     title: translate(add ? "sel.select.title" : "sel.unselect.title"),
     label: translate("sel.pattern"),
     initial,
+    validation: "any",
     confirmLabel: translate("op.confirm"),
     onSubmit: (pattern) =>
       usePanes

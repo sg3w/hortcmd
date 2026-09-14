@@ -36,6 +36,9 @@ export interface PromptRequest {
   selectRange?: [number, number];
   /** Mask the input (password field). */
   password?: boolean;
+  /** Submission policy; defaults to nonBlank for names. Validation never changes
+   * the value passed to onSubmit. Use nonEmpty for passwords, any for patterns. */
+  validation?: "nonBlank" | "nonEmpty" | "any";
   /** Optional extra switch below the field (e.g. "include folders",
    *  TICKET-059). Its state is handed to `onSubmit` as `checked`. */
   checkbox?: { label: string; initial: boolean };

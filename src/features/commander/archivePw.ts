@@ -52,6 +52,7 @@ export function promptArchivePassword(
       : translate("archive.password.label"),
     initial: "",
     password: true,
+    validation: "nonEmpty",
     icon: KeyRound,
     confirmLabel: translate("op.confirm"),
     onSubmit: (value) => {

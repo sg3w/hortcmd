@@ -210,8 +210,14 @@ function PromptDialog() {
     }
   }, [prompt]);
 
+  const valid = prompt?.validation === "any" ||
+    (prompt?.validation === "nonEmpty" ? value.length > 0 : value.trim().length > 0);
+  const canSubmit = !!prompt && undoClass !== null && valid;
   const submit = () => {
-    if (undoClass === null) return;
+    if (!canSubmit) {
+      inputRef.current?.focus();
+      return;
+    }
     // Close first, then execute: this way onSubmit can itself open a follow-up
     // dialog (e.g. an error message) without being overwritten immediately.
     const fn = prompt?.onSubmit;
@@ -283,7 +289,13 @@ function PromptDialog() {
             </button>
             <button
               onClick={submit}
-              disabled={undoClass === null || !value.trim()}
+              disabled={!canSubmit}
+              onPointerDown={(e) => {
+                if (!canSubmit) {
+                  e.preventDefault();
+                  inputRef.current?.focus();
+                }
+              }}
               className="rounded bg-accent px-3 py-1 text-[13px] text-white hover:brightness-110 disabled:opacity-40"
             >
               {prompt?.confirmLabel ?? t("op.create")}

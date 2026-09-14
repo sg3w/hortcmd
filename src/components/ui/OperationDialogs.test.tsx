@@ -1,10 +1,13 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import axe from "axe-core";
 import { translate, useSettings } from "@/store/settingsStore";
 import { useDemo } from "@/test/tauri";
 import { useOps } from "@/store/opsStore";
+import { promptArchivePassword, archivePassword } from "@/features/commander/archivePw";
+import { promptSelect } from "@/features/commander/selection";
+import { usePanes } from "@/store/panesStore";
 import { OperationDialogs } from "./OperationDialogs";
 
 beforeEach(() => useDemo());
@@ -67,3 +70,71 @@ it("returns focus to the invoking control after a prompt and follow-up confirmat
   await user.click(screen.getByRole("button", { name: "OK" }));
   await waitFor(() => expect(trigger).toHaveFocus());
 });
+
+for (const method of ["Enter", "button"] as const) {
+  it.each(["", "   ", " new.txt "])(`validates name %j via ${method} without changing the submitted value`, async value => {
+    const submitted = vi.fn();
+    const user = userEvent.setup();
+    useOps.getState().requestPrompt({ title: "Name", label: "Value", initial: "", confirmLabel: "Submit", onSubmit: submitted });
+    render(<OperationDialogs />);
+    const input = screen.getByLabelText("Value");
+    await waitFor(() => expect(input).toHaveFocus());
+    fireEvent.change(input, { target: { value } });
+    const button = screen.getByRole("button", { name: "Submit" });
+    const valid = !!value.trim();
+    if (valid) expect(button).toBeEnabled();
+    else expect(button).toBeDisabled();
+    if (method === "Enter") await user.keyboard("{Enter}");
+    else await user.click(button);
+    if (valid) {
+      expect(submitted).toHaveBeenCalledExactlyOnceWith(value, false);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    } else {
+      expect(submitted).not.toHaveBeenCalled();
+      expect(screen.getByRole("dialog")).toBeVisible();
+      expect(input).toHaveFocus();
+    }
+  });
+
+  it.each(["", "   ", "  päss\t "])(`applies the archive password policy to %j via ${method}`, async value => {
+    const submitted = vi.fn();
+    const user = userEvent.setup();
+    const archive = `/test/${method}-${value.length}.7z`;
+    promptArchivePassword(archive, false, submitted);
+    render(<OperationDialogs />);
+    const input = screen.getByLabelText(translate("archive.password.label"));
+    await waitFor(() => expect(input).toHaveFocus());
+    expect(input).toHaveAttribute("type", "password");
+    fireEvent.change(input, { target: { value } });
+    const button = screen.getByRole("button", { name: translate("op.confirm") });
+    if (value.length) expect(button).toBeEnabled();
+    else expect(button).toBeDisabled();
+    if (method === "Enter") await user.keyboard("{Enter}");
+    else await user.click(button);
+    if (value.length) {
+      expect(submitted).toHaveBeenCalledExactlyOnceWith(value);
+      expect(archivePassword(archive)).toBe(value);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    } else {
+      expect(submitted).not.toHaveBeenCalled();
+      expect(screen.getByRole("dialog")).toBeVisible();
+      expect(input).toHaveFocus();
+    }
+  });
+
+  it.each([true, false])(`explicitly accepts an empty selection pattern via ${method} (add=%s)`, async add => {
+    const select = vi.spyOn(usePanes.getState(), "selectPattern").mockImplementation(() => {});
+    const user = userEvent.setup();
+    promptSelect("left", add);
+    render(<OperationDialogs />);
+    const input = screen.getByLabelText(translate("sel.pattern"));
+    await waitFor(() => expect(input).toHaveFocus());
+    fireEvent.change(input, { target: { value: add ? "" : "   " } });
+    const button = screen.getByRole("button", { name: translate("op.confirm") });
+    expect(button).toBeEnabled();
+    if (method === "Enter") await user.keyboard("{Enter}");
+    else await user.click(button);
+    expect(select).toHaveBeenCalledExactlyOnceWith("left", "*", add);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+}
