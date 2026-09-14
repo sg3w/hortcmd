@@ -50,14 +50,22 @@ type Meta = (u64, u64); // (size, mtime in Unix seconds)
 
 /// Reads one directory level: files (name → meta) and subfolder names.
 /// Symlinks are skipped; sorted collections for a stable order.
-fn read_level(dir: &Path) -> (BTreeMap<String, Meta>, BTreeSet<String>) {
+fn read_level(
+    dir: &Path,
+    missing_ok: bool,
+) -> AppResult<(BTreeMap<String, Meta>, BTreeSet<String>)> {
     let mut files = BTreeMap::new();
     let mut subdirs = BTreeSet::new();
-    let Ok(rd) = fs::read_dir(dir) else {
-        return (files, subdirs);
+    let rd = match fs::read_dir(dir) {
+        Ok(rd) => rd,
+        Err(e) if missing_ok && e.kind() == std::io::ErrorKind::NotFound => {
+            return Ok((files, subdirs))
+        }
+        Err(e) => return Err(e.into()),
     };
-    for entry in rd.flatten() {
-        let Ok(meta) = entry.metadata() else { continue };
+    for entry in rd {
+        let entry = entry?;
+        let meta = entry.metadata()?;
         if meta.file_type().is_symlink() {
             continue;
         }
@@ -74,7 +82,7 @@ fn read_level(dir: &Path) -> (BTreeMap<String, Meta>, BTreeSet<String>) {
             files.insert(name, (meta.len(), mtime));
         }
     }
-    (files, subdirs)
+    Ok((files, subdirs))
 }
 
 fn status_of(l: Option<&Meta>, r: Option<&Meta>) -> &'static str {
@@ -82,7 +90,9 @@ fn status_of(l: Option<&Meta>, r: Option<&Meta>) -> &'static str {
         (Some(_), None) => "left_only",
         (None, Some(_)) => "right_only",
         (Some((ls, lm)), Some((rs, rm))) => {
-            if ls == rs && lm == rm {
+            if *lm == 0 || *rm == 0 {
+                "different"
+            } else if ls == rs && lm == rm {
                 "same"
             } else if lm > rm {
                 "newer_left"
@@ -92,7 +102,7 @@ fn status_of(l: Option<&Meta>, r: Option<&Meta>) -> &'static str {
                 "different"
             }
         }
-        (None, None) => "same",
+        (None, None) => "different",
     }
 }
 
@@ -108,7 +118,7 @@ pub(crate) fn walk_compare(
     recursive: bool,
     channel: &dyn Fn(Vec<DiffEntry>),
     count: &mut usize,
-) -> bool {
+) -> AppResult<bool> {
     let ljoin = if rel.is_empty() {
         lroot.to_path_buf()
     } else {
@@ -119,8 +129,8 @@ pub(crate) fn walk_compare(
     } else {
         rroot.join(rel)
     };
-    let (lfiles, lsubs) = read_level(&ljoin);
-    let (rfiles, rsubs) = read_level(&rjoin);
+    let (lfiles, lsubs) = read_level(&ljoin, !rel.is_empty())?;
+    let (rfiles, rsubs) = read_level(&rjoin, !rel.is_empty())?;
 
     // Compare the files of this level (names of both sides, sorted).
     let mut names: BTreeSet<&String> = BTreeSet::new();
@@ -160,7 +170,7 @@ pub(crate) fn walk_compare(
         channel(batch);
     }
     if limit_hit || *count >= MAX_ENTRIES {
-        return true;
+        return Ok(true);
     }
 
     if recursive {
@@ -173,12 +183,12 @@ pub(crate) fn walk_compare(
             } else {
                 format!("{}/{}", rel, sub)
             };
-            if walk_compare(lroot, rroot, &child_rel, recursive, channel, count) {
-                return true;
+            if walk_compare(lroot, rroot, &child_rel, recursive, channel, count)? {
+                return Ok(true);
             }
         }
     }
-    false
+    Ok(false)
 }
 
 /// Compares two directory trees and streams the results per
@@ -223,7 +233,7 @@ pub async fn compare_dirs(
         )
     })
     .await
-    .map_err(AppError::from)
+    .map_err(AppError::from)?
 }
 
 /// Copies files from source → target (blocking).
@@ -238,6 +248,26 @@ fn sync_copy_impl(items: Vec<(String, String)>) -> OpResult {
             caps::require_pair(src, Capability::CompareDirs, dst, Capability::CompareDirs)
         {
             errors.push(ItemError::new(src, e.with("name", dst)));
+            continue;
+        }
+        // Refuse aliases too: fs::copy on the same file may truncate the source.
+        let same = fs::canonicalize(src)
+            .ok()
+            .zip(fs::canonicalize(dst).ok())
+            .is_some_and(|(a, b)| a == b);
+        #[cfg(unix)]
+        let same = same || {
+            use std::os::unix::fs::MetadataExt;
+            fs::metadata(src)
+                .ok()
+                .zip(fs::metadata(dst).ok())
+                .is_some_and(|(a, b)| a.dev() == b.dev() && a.ino() == b.ino())
+        };
+        if same {
+            errors.push(ItemError::new(
+                src,
+                AppError::from("Source and destination are the same file"),
+            ));
             continue;
         }
         let dpath = Path::new(dst);
@@ -488,5 +518,57 @@ mod level_tests {
         let diffs = compare_levels_impl(vec![f("Datei", 1, 1)], vec![f("datei", 1, 1)]);
         assert_eq!(status(&diffs, "Datei"), "left_only");
         assert_eq!(status(&diffs, "datei"), "right_only");
+    }
+}
+
+#[cfg(test)]
+mod paired_safety_tests {
+    use super::*;
+    struct Temp(PathBuf);
+    impl Drop for Temp {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+    fn temp() -> Temp {
+        let path = std::env::temp_dir().join(format!(
+            "hortcmd-compare-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir(&path).unwrap();
+        Temp(path)
+    }
+    #[test]
+    fn missing_metadata_and_read_errors_are_not_equal() {
+        assert_eq!(status_of(Some(&(10, 0)), Some(&(10, 0))), "different");
+        let t = temp();
+        let file = t.0.join("file");
+        fs::write(&file, b"data").unwrap();
+        assert!(read_level(&file, false).is_err());
+        assert!(read_level(&t.0.join("missing"), false).is_err());
+        assert!(read_level(&t.0.join("missing"), true).is_ok());
+    }
+    #[test]
+    fn self_copy_preserves_source_contents() {
+        let t = temp();
+        let file = t.0.join("file");
+        fs::write(&file, b"keep me").unwrap();
+        let source = file.to_string_lossy().into_owned();
+        let result = sync_copy_impl(vec![(source.clone(), source.clone())]);
+        assert_eq!(result.ok, 0);
+        assert_eq!(result.errors.len(), 1);
+        assert_eq!(fs::read(&file).unwrap(), b"keep me");
+        #[cfg(unix)]
+        {
+            let alias = t.0.join("alias");
+            fs::hard_link(&file, &alias).unwrap();
+            let result = sync_copy_impl(vec![(source, alias.to_string_lossy().into_owned())]);
+            assert_eq!(result.ok, 0);
+            assert_eq!(fs::read(&file).unwrap(), b"keep me");
+        }
     }
 }

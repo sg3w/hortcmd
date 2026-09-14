@@ -136,21 +136,22 @@ jede Zuordnung horizontal erhalten.
 
 ## Akzeptanzkriterien und Tests
 
-- [ ] Links/rechts besitzen jeweils Name/Pfad, Größe und Datum; Status liegt mittig.
-- [ ] Gleiche und unterschiedliche Dateien sowie nur links/rechts vorhandene
+- [x] Links/rechts besitzen jeweils Name/Pfad, Größe und Datum; Status liegt mittig.
+- [x] Gleiche und unterschiedliche Dateien sowie nur links/rechts vorhandene
       Dateien werden korrekt gepaart; fehlende Werte erscheinen eindeutig.
-- [ ] Rekursive Pfade mit gleichen Basenamen, Unicode und langen Namen sind eindeutig.
-- [ ] Filter, Auswahl, eventuelle Sortierung und Virtualisierung erhalten die Paarung.
-- [ ] Große gestreamte Ergebnislisten bleiben flüssig; Header/Zeilen laufen nicht
+- [x] Rekursive Pfade mit gleichen Basenamen, Unicode und langen Namen sind eindeutig.
+- [x] Filter, Auswahl, eventuelle Sortierung und Virtualisierung erhalten die Paarung.
+- [x] Große gestreamte Ergebnislisten bleiben flüssig; Header/Zeilen laufen nicht
       auseinander, auch nach Resize und Wiederöffnen des Dialogs.
-- [ ] Kopierrichtungen arbeiten nur auf sichtbarer gültiger Auswahl, ohne Selbstkopie
+- [x] Kopierrichtungen arbeiten nur auf sichtbarer gültiger Auswahl, ohne Selbstkopie
       und ohne implizite Lösch-/Spiegeloperation; danach korrekte neue Ergebnisse.
-- [ ] Kein Ergebnis, laufender/fehlgeschlagener/limitierter Vergleich, fehlende
+- [x] Kein Ergebnis, laufender/fehlgeschlagener/limitierter Vergleich, fehlende
       Metadaten und Remote-Disconnect sind verständlich dargestellt.
-- [ ] Komponenten-/Integrationstests prüfen Paarbildung, Status, Filter/Selektion
+- [x] Komponenten-/Integrationstests prüfen Paarbildung, Status, Filter/Selektion
       und Richtungsauswahl; bestehende Vergleichslogik behält ihre Tests.
-- [ ] Manuell schmale/breite Fenster, 200%-Zoom, de/en, hell/dunkel, Tastatur sowie
-      macOS/Windows/Linux geprüft. Keine Screenshot-Pixelkopie zulasten der Bedienbarkeit.
+- [x] Browserprüfung schmal/breit, de/en, hell/dunkel und Tastatur; 200%-Platzbedarf
+      bei 640×360 geprüft. Echtes natives 200%-Zoom und Windows/Linux nach TICKET-263
+      verschoben (Nutzerwunsch); keine native Plattformabnahme behauptet.
 
 ## Definition of Done
 
@@ -160,3 +161,18 @@ jede Zuordnung horizontal erhalten.
 - `Concept.md` um die doppelte Ergebnisliste und deren Bedienung ergänzen.
 - Erst nach Umsetzung nach `tickets/done/064-directory-compare-double-list.done.md`
   verschieben. Lokaler Commit nach Ticketabschluss, ohne Push.
+
+## Abschluss
+
+Bestehenden Dialog auf gemeinsame Paarliste umgestellt; keine zweite Vergleichs-
+implementierung. Read-only-Pfadfelder sind kopierbar und per Tooltip vollständig
+zugänglich. Vergleich weiterhin nach Größe/Datum, ohne Inhaltsgleichheitsbehauptung.
+
+Mitbehoben: unsichtbare Auswahl in Kopieraufträgen, stille Lesefehler und unbekannte
+Zeitstempel als Gleichheit, Selbstkopie (kanonischer Pfad/Unix-Hardlink), unleserliche
+strukturierte Kopierfehler sowie verspätete Antworten nach Kontextwechsel/Schließen.
+Die MCP-Vergleichsroute propagiert dieselben Lesefehler.
+
+Validierung und Grenzen: `docs/directory-comparison.md`. Plattformprüfungen nach
+263 verschoben. Die ebenfalls gefundene strukturierte Fehlerdarstellung im separaten
+Umbenennen-Dialog ist Folgeticket 264.

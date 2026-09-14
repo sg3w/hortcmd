@@ -346,7 +346,7 @@ fn compare_dirs(args: &Args) -> AppResult<Value> {
         args.bool("recursive", false),
         &|batch| entries.borrow_mut().extend(batch),
         &mut 0,
-    );
+    )?;
     Ok(json!({ "entries": entries.into_inner(), "truncated": truncated }))
 }
 

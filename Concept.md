@@ -1746,3 +1746,12 @@ Source focus, other tabs and target view/sort remain independent; normal target
 selection clearing, error display and local/remote history apply. No filesystem
 copy or new tab is created. Existing archive-history limitations are tracked in
 TICKET-262.
+
+### Paired comparison grid (TICKET-064)
+
+The existing directory comparison dialog uses one virtualized eight-column grid
+with left/right path, size and date, a central accessible status, and one selection
+per relative path. Sticky addresses are copyable. Filters discard hidden selection;
+copy actions are directional, capability-checked and followed by a new comparison.
+Missing metadata is not equality; read failures propagate and self-copy is rejected.
+See [directory-comparison.md](docs/directory-comparison.md) for behavior and validation.
