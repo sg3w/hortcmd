@@ -101,6 +101,13 @@ providers, reads through MCP, checks scope refusal and unregisters the connectio
 to verify that subsequent reads are denied. Final completion evidence is recorded
 in TICKET-041; an ignored test without its external fixture is not verification.
 
-Cancelled transfers can leave a reported hidden staging file when the revoked
-request can no longer remove it. Cleanup without relaxing scope enforcement is
-tracked in TICKET-072.
+Cancelled copy and move requests retry cleanup of their registered staging entry
+once readers and writers have closed (TICKET-072). This cleanup ignores cancellation
+only; it still checks the current enabled state, write permission and roots. An
+unregistered path or an entry not created by that transfer cannot use this exception.
+Publication and source deletion remain cancellation-gated. If cleanup is denied or
+fails, the error result includes a separate cleanup item with the staging address.
+
+Staging allocation still uses the providers' existing create operations. Atomic
+reservation and protection against external replacement races are tracked in
+TICKET-270.

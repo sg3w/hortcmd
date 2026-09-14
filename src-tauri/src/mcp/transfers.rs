@@ -48,7 +48,7 @@ fn transfer(args: &Args, moving: bool) -> AppResult<Value> {
     let from = args.str("from")?;
     let to = args.str("to")?;
     let (source, src) = ScopedProvider::resolve(&from, args.config)?;
-    let (destination, dst) = ScopedProvider::resolve(&to, args.config)?;
+    let (mut destination, dst) = ScopedProvider::resolve(&to, args.config)?;
     if source.store_id() == destination.store_id()
         && (dst.starts_with(&src) || src.starts_with(&dst))
     {
@@ -69,13 +69,28 @@ fn transfer(args: &Args, moving: bool) -> AppResult<Value> {
     }
     let plan = Plan::staged(&destination, dst, exists);
     let mut prog = progress(if moving { "move" } else { "copy" });
+    transfer_planned(&source, &mut destination, &src, &plan, &mut prog, moving)?;
+    Ok(
+        json!({ "from": from, "to": to, "files": prog.files_done, "bytes": prog.bytes_done, "moved": moving }),
+    )
+}
+
+fn transfer_planned(
+    source: &ScopedProvider,
+    destination: &mut ScopedProvider,
+    src: &std::path::Path,
+    plan: &Plan,
+    prog: &mut Prog,
+    moving: bool,
+) -> AppResult<()> {
+    destination.track_stage(&plan.write_to)?;
     let mut errors = Vec::new();
     if let Err(e) = transfer_one(
-        &source,
-        &destination,
-        &src,
-        &plan,
-        &mut prog,
+        source,
+        destination,
+        src,
+        plan,
+        prog,
         CopyTuning {
             limit: 0,
             verify: true,
@@ -86,15 +101,23 @@ fn transfer(args: &Args, moving: bool) -> AppResult<Value> {
     ) {
         errors.insert(
             0,
-            crate::commands::fs::transfer::events::ItemError::new(&from, e.into()),
+            crate::commands::fs::transfer::events::ItemError::new(source.address(src)?, e.into()),
         );
+        // The shared engine's ordinary cleanup is cancellation-gated. Retry
+        // only our registered staging entry, with live authorization intact.
+        if let Err(cleanup) = destination.cleanup_stage(&plan.write_to) {
+            errors.push(crate::commands::fs::transfer::events::ItemError::new(
+                destination.address(&plan.write_to)?,
+                AppError::from(cleanup)
+                    .op("cleanup")
+                    .action(crate::errors::ErrorAction::Report),
+            ));
+        }
     }
     if !errors.is_empty() {
         return Err(AppError::new(code::FS_IO).detail(serde_json::to_string(&errors)?));
     }
-    Ok(
-        json!({ "from": from, "to": to, "files": prog.files_done, "bytes": prog.bytes_done, "moved": moving }),
-    )
+    Ok(())
 }
 
 pub fn extract(args: &Args) -> AppResult<Value> {
@@ -179,6 +202,139 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+
+    thread_local! {
+        static LIVE_CONFIG: std::cell::RefCell<McpConfig> = std::cell::RefCell::new(McpConfig::default());
+    }
+
+    fn live_config() -> McpConfig {
+        LIVE_CONFIG.with(|config| config.borrow().clone())
+    }
+
+    struct CancelOnProgress {
+        cancel: Arc<AtomicBool>,
+        revoke: Option<&'static str>,
+        after_copy: bool,
+    }
+    impl ProgressSink for CancelOnProgress {
+        fn progress(&self, report: OpProgress) {
+            if !self.after_copy || report.files_done > 0 {
+                if let Some(revoke) = self.revoke {
+                    LIVE_CONFIG.with(|config| {
+                        let mut config = config.borrow_mut();
+                        match revoke {
+                            "roots" => config.roots.clear(),
+                            "write" => config.allow_write = false,
+                            "enabled" => config.enabled = false,
+                            _ => unreachable!(),
+                        }
+                    });
+                }
+                self.cancel
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+    }
+
+    #[test]
+    fn cancelled_copy_and_move_clean_only_their_stage_and_report_revoked_cleanup() {
+        for moving in [false, true] {
+            for tree in [false, true] {
+                for after_copy in [false, true] {
+                    for revoke in [None, Some("roots"), Some("write"), Some("enabled")] {
+                        let f = Fixture::new();
+                        let src = f.0.join("source");
+                        let dst = f.0.join("destination");
+                        if tree {
+                            std::fs::create_dir(&src).unwrap();
+                        }
+                        let payload = if tree { src.join("file") } else { src.clone() };
+                        std::fs::write(&payload, b"source payload").unwrap();
+                        std::fs::write(&dst, b"old destination").unwrap();
+                        let other = f.0.join(".hortcmd-stage-unrelated");
+                        std::fs::write(&other, b"unrelated").unwrap();
+                        let config = f.config();
+                        LIVE_CONFIG.with(|current| *current.borrow_mut() = config.clone());
+                        let cancel = Arc::new(AtomicBool::new(false));
+                        let (output, _receiver) = tokio::sync::mpsc::channel(8);
+                        execution::run(
+                            execution::Execution {
+                                cancel: cancel.clone(),
+                                config: live_config,
+                                progress_token: None,
+                                output,
+                            },
+                            || {
+                                let (source, src) =
+                                    ScopedProvider::resolve(src.to_str().unwrap(), &config)
+                                        .unwrap();
+                                let (mut destination, dst) =
+                                    ScopedProvider::resolve(dst.to_str().unwrap(), &config)
+                                        .unwrap();
+                                let plan = Plan::staged(&destination, dst.clone(), true);
+                                let mut prog = progress(if moving { "move" } else { "copy" });
+                                prog.sink = Arc::new(CancelOnProgress {
+                                    cancel,
+                                    revoke,
+                                    after_copy,
+                                });
+                                let error = transfer_planned(
+                                    &source,
+                                    &mut destination,
+                                    &src,
+                                    &plan,
+                                    &mut prog,
+                                    moving,
+                                )
+                                .unwrap_err();
+                                assert_eq!(plan.write_to.exists(), revoke.is_some(), "moving={moving} tree={tree} after_copy={after_copy} revoke={revoke:?}");
+                                if revoke.is_some() {
+                                    let detail = serde_json::to_string(&error).unwrap();
+                                    assert!(
+                                        detail.contains(plan.write_to.to_str().unwrap()),
+                                        "{detail}"
+                                    );
+                                    assert!(detail.contains("cleanup"), "{detail}");
+                                }
+                                assert!(source.remove_file(&payload).is_err());
+                                assert!(destination.rename(&other, &dst).is_err());
+                                assert_eq!(
+                                    destination.cleanup_stage(&other).unwrap_err().kind(),
+                                    std::io::ErrorKind::PermissionDenied
+                                );
+                            },
+                        );
+                        assert_eq!(std::fs::read(&payload).unwrap(), b"source payload");
+                        assert_eq!(std::fs::read(&dst).unwrap(), b"old destination");
+                        assert_eq!(std::fs::read(&other).unwrap(), b"unrelated");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn stage_registration_refuses_existing_paths_and_cleanup_requires_creation() {
+        let f = Fixture::new();
+        let existing = f.0.join(".hortcmd-stage-existing");
+        std::fs::write(&existing, b"keep").unwrap();
+        let (mut provider, _) =
+            ScopedProvider::resolve(existing.to_str().unwrap(), &f.config()).unwrap();
+        assert_eq!(
+            provider.track_stage(&existing).unwrap_err().kind(),
+            std::io::ErrorKind::AlreadyExists
+        );
+        let stage = f.0.join(".hortcmd-stage-new");
+        provider.track_stage(&stage).unwrap();
+        // A path appearing without a successful creation by this adapter is not owned.
+        std::fs::write(&stage, b"not ours").unwrap();
+        assert_eq!(
+            provider.cleanup_stage(&stage).unwrap_err().kind(),
+            std::io::ErrorKind::PermissionDenied
+        );
+        assert_eq!(std::fs::read(&stage).unwrap(), b"not ours");
+        assert_eq!(std::fs::read(&existing).unwrap(), b"keep");
     }
 
     #[test]
