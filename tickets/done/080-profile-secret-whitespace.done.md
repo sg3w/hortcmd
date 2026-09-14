@@ -26,3 +26,17 @@ storage or authentication code.
 
 After the requested sequence through 065; existing stored credentials are not
 rewritten merely by opening the dialog. This does not block accessibility work.
+
+## Completion
+- ProfileForm now sends `null` only for a truly empty field (untouched or cleared).
+  Every nonempty value replaces the stored credential without trimming, including
+  whitespace-only passwords and passphrases. The form does not offer credential
+  deletion or replacement with an empty string. New profiles with an empty field
+  do not write a credential.
+- Added a German/English field description explaining retain/replace behavior;
+  password and passphrase inputs expose it as their accessible description.
+- Reviewed KeePass unlock, archive-password prompts, IPC/store forwarding and
+  backend credential storage/authentication: no further secret trimming found.
+- Actual dialog tests verify exact net_save_profile arguments for password, key
+  and digest auth, untouched/cleared inputs and blank fields upon reopening.
+- Validation: 18 ConnectionsDialog tests and `npm run check`.

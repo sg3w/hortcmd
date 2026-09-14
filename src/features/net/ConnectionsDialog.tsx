@@ -11,7 +11,7 @@
 // form keeps them around after submitting.
 // ============================================================
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import {
   KeyRound,
   Loader2,
@@ -314,6 +314,7 @@ function ProfileForm({ profile }: { profile: Profile }) {
 
   const [form, setForm] = useState<Profile>(profile);
   const [secret, setSecret] = useState("");
+  const secretHintId = useId();
 
   // Reset when a different profile is opened for editing.
   useEffect(() => {
@@ -348,7 +349,8 @@ function ProfileForm({ profile }: { profile: Profile }) {
   const submit = () => {
     if (!canSave) return;
     const name = form.name.trim() || form.host.trim();
-    const secretToSave = secret.trim() === "" ? null : secret.trim();
+    // Empty means retain; every nonempty secret is an exact replacement.
+    const secretToSave = secret === "" ? null : secret;
     void save({ ...form, name }, secretToSave);
   };
 
@@ -435,6 +437,7 @@ function ProfileForm({ profile }: { profile: Profile }) {
         <Field label={t("net.password")}>
           <input
             type="password"
+            aria-describedby={secretHintId}
             value={secret}
             onChange={(e) => setSecret(e.target.value)}
             className={inputCls}
@@ -456,6 +459,7 @@ function ProfileForm({ profile }: { profile: Profile }) {
           <Field label={t("net.passphrase")}>
             <input
               type="password"
+              aria-describedby={secretHintId}
               value={secret}
               onChange={(e) => setSecret(e.target.value)}
               className={inputCls}
@@ -463,6 +467,9 @@ function ProfileForm({ profile }: { profile: Profile }) {
             />
           </Field>
         </>
+      )}
+      {["password", "digest", "key"].includes(auth) && (
+        <p id={secretHintId} className="text-[11px] text-dim">{t("net.secretHint")}</p>
       )}
       <Field label={t("net.startPath")}>
         <input

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
 import axe from "axe-core";
@@ -13,9 +13,9 @@ vi.mock("@/ipc/invoke", async importOriginal => ({
   ...await importOriginal<typeof import("@/ipc/invoke")>(), hasTauri: true,
 }));
 
-function setup(language: "de" | "en") {
+function setup(language: "de" | "en", overrides: Partial<Profile> = {}) {
   let profile: Profile = { security: { plaintextAcknowledged: false, certificate: null }, id: "p1", name: "Example", protocol: "sftp", host: "example.test",
-    port: 22, user: "demo", auth: "agent", key_path: null, start_path: "/" };
+    port: 22, user: "demo", auth: "agent", key_path: null, start_path: "/", ...overrides };
   let connections: ConnectionStatus[] = [];
   const address = "sftp://demo@example.test:22/";
   const runtime = useTauri({ commands: {
@@ -109,3 +109,34 @@ it.each(["de", "en"] as const)("announces a failed keyboard connection and keeps
   await user.keyboard("{Escape}");
   await waitFor(() => expect(trigger).toHaveFocus());
 });
+
+for (const auth of ["password", "key", "digest"] as const) {
+  it.each(["", "   ", "  päss\t ", "cleared"])(`preserves or retains the ${auth} credential for %j through the save command`, async value => {
+    const { runtime, user } = setup("en", {
+      auth, protocol: auth === "digest" ? "webdav" : "sftp",
+    });
+    await user.keyboard("{Enter}");
+    const group = await screen.findByRole("group", { name: "Example" });
+    await user.click(within(group).getByRole("button", { name: translate("net.edit") }));
+    const input = screen.getByLabelText(translate(auth === "key" ? "net.passphrase" : "net.password"));
+    expect(input).toHaveValue("");
+    expect(input).toHaveAccessibleDescription(translate("net.secretHint"));
+    if (value === "cleared") {
+      await user.type(input, "temporary");
+      await user.clear(input);
+    } else if (value) {
+      fireEvent.change(input, { target: { value } });
+    }
+    await user.click(screen.getByRole("button", { name: translate("net.save") }));
+    await screen.findByRole("group", { name: "Example" });
+    expect(runtime.calls.filter(call => call.cmd === "net_save_profile")).toEqual([
+      { cmd: "net_save_profile", args: {
+        profile: expect.objectContaining({ id: "p1", auth }),
+        secret: value === "" || value === "cleared" ? null : value,
+      } },
+    ]);
+    // Reopening never fills the form with the credential just submitted.
+    await user.click(within(screen.getByRole("group", { name: "Example" })).getByRole("button", { name: translate("net.edit") }));
+    expect(screen.getByLabelText(translate(auth === "key" ? "net.passphrase" : "net.password"))).toHaveValue("");
+  });
+}
