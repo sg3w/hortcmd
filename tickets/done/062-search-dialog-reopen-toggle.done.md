@@ -68,18 +68,18 @@ Dies sind Prüfhypothesen, keine bestätigte Diagnose.
 
 ## Akzeptanzkriterien und Tests
 
-- [ ] Mindestens sechs Wiederöffnungen derselben abgeschlossenen Suche zeigen
+- [x] Mindestens sechs Wiederöffnungen derselben abgeschlossenen Suche zeigen
       dieselben Suchparameter, Treffer und Status, ohne alternierende Leeransicht.
-- [ ] Regressionsfall mit virtualisierter großer Liste, vorherigem Scrollen und
+- [x] Regressionsfall mit virtualisierter großer Liste, vorherigem Scrollen und
       Dialog-Resize geprüft; vorhandene Treffer sind tatsächlich gerendert.
-- [ ] Keine Treffer, erster Aufruf, Fehler sowie abgebrochene Suche bleiben eindeutig.
-- [ ] Schließen während des Streams, sofortiges Wiederöffnen und Start einer neuen
+- [x] Keine Treffer, erster Aufruf, Fehler sowie abgebrochene Suche bleiben eindeutig.
+- [x] Schließen während des Streams, sofortiges Wiederöffnen und Start einer neuen
       Suche sind mit verspäteten Batches/Abschlussmeldungen getestet.
-- [ ] Wechsel von Panel, Suchort und Suchmodus vermischt keine alten Ergebnisse
+- [x] Wechsel von Panel, Suchort und Suchmodus vermischt keine alten Ergebnisse
       mit neuem Kontext; keine automatische erneute Suche.
-- [ ] Alle vorhandenen Öffnungs-/Schließwege geprüft, einschließlich Fokus und
+- [x] Alle vorhandenen Öffnungs-/Schließwege geprüft, einschließlich Fokus und
       fehlender doppelter Shortcut-Ausführung.
-- [ ] Automatischer Regressionstest bildet den reproduzierten Fehler ab;
+- [x] Automatischer Regressionstest bildet den reproduzierten Fehler ab;
       bei Layout-/Virtualisierungsursache zusätzlich Prüfung im echten Browser/Tauri.
 
 ## Definition of Done
@@ -89,3 +89,30 @@ Dies sind Prüfhypothesen, keine bestätigte Diagnose.
 - Erst nach Implementierung und Verifikation nach
   `tickets/done/062-search-dialog-reopen-toggle.done.md` verschieben.
 - Lokaler Commit nach abgeschlossenem Ticket, ohne Push.
+
+## Ursache und Abschluss
+
+Reproduziert mit dem bisherigen Code: Nach vollständigem Unmount fehlen sowohl
+Suchtext als auch Treffer. `LazyFeature` hält den Dialog 400 ms nach dem Schließen
+noch gemountet. Rasches Wiederöffnen behält lokale States, späteres Wiederöffnen
+verliert sie. Ein strikt alternierender Rhythmus unabhängig vom Zeitabstand wurde
+nicht nachgewiesen. Der Regressionstest scheitert vor dem Fix bereits beim ersten
+Wiederöffnen (Suchtext leer) und besteht danach über sechs Unmount-Zyklen.
+
+Fix: Sitzungsspeicher außerhalb des Dialogs, Kontextinitialisierung beim Öffnen
+statt State-Updates in `useMemo`. Keine persistente Historie und keine Änderungen
+an LazyFeature, Tastatur-Routing oder Virtualisierung. Parameterwechsel verwirft
+alte Resultate, Schließen markiert laufende Ergebnisse als abgebrochen.
+
+Verifikation: zehn gezielte Tests einschließlich abgeschlossener/abgebrochener/
+leerer/fehlgeschlagener Suche, späten Batches, neuem Lauf, Panel-/Ordner-/Moduswechsel
+und bestehender de/en-Tastatur-/Fokusprüfung beim Öffnen eines Treffers. Echter
+Browser: temporär 2.000 Demo-Treffer, Scrollen bis Treffer 1999, Resize auf 900×650,
+sechs schnelle Wiederöffnungen und erneutes Öffnen nach vollständigem Unmount.
+Immer 2.000 Treffer im Status und 22–23 gerenderte virtuelle Zeilen; Scrollposition
+kehrt beim Wiederöffnen konsistent an den Anfang zurück. Toolbar, Alt+F7, Menü und
+Escape geprüft; ein X-Schließen-Knopf existiert in diesem Dialog nicht. Temporäre
+Demo-Daten anschließend entfernt.
+
+Die separate Indexsuche besitzt eigene lokale Formular-/Ergebnisdaten; deren
+Sitzungswiederherstellung ist als Folgeticket 261 erfasst.

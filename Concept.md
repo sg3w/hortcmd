@@ -1724,3 +1724,14 @@ Two things follow from that split:
   button is unchanged, search still runs on `Enter`, and `Enter` in the pane
   without a dialog still opens the cursor entry. A `keydown` probe on `window`
   confirms the confirming keystroke never reaches the global handler.
+
+### Search dialog session (TICKET-062)
+
+The last live search is retained in `store/searchSession.ts` for the app session,
+independent of LazyFeature's delayed unmount. No search history is written to disk.
+Opening from a different panel, pane directory or requested mode resets results,
+status and errors while retaining input options. Editing search parameters also
+invalidates results and cancels the active run. Closing keeps partial hits with a
+cancelled status; run tokens reject late batches and completion. `SearchResults`
+mounts with a fresh scroll container and starts at the top on reopening; no
+virtualizer workaround or additional timer is needed.

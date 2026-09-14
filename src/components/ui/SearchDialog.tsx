@@ -5,7 +5,7 @@
 // virtualized. A double-click reveals the hit in the active window.
 // ============================================================
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   AlertTriangle,
@@ -26,7 +26,8 @@ import {
   type SearchMode,
   type SearchOptions,
 } from "@/ipc/client";
-import { useSearchDialog, searchRoot, revealPath } from "@/store/searchStore";
+import { useSearchDialog, revealPath } from "@/store/searchStore";
+import { clearSearchResults, useSearchField, useSearchSession } from "@/store/searchSession";
 import { describeErrorFull } from "@/store/errorText";
 import { useT } from "@/store/settingsStore";
 import type { TransKey } from "@/i18n/dictionaries";
@@ -45,7 +46,6 @@ const MODES: { mode: SearchMode; key: TransKey; Icon: typeof Files }[] = [
   { mode: "large_files", key: "search.mode.largeFiles", Icon: HardDrive },
 ];
 
-const DEFAULT_IGNORE = "node_modules .git target .cache dist";
 
 // Each run gets its own token, so a cancel can never hit a later run.
 let nextToken = 0;
@@ -72,48 +72,37 @@ export function SearchDialog() {
   const returnFocus = useDialogFocusReturn();
   const fieldId = useId();
   const side = useSearchDialog((s) => s.side);
-  const close = useSearchDialog((s) => s.close);
-  // Mode the caller asked for — the Befehle menu opens the dialog straight
-  // into "duplicates", "empty folders" or "large files" (TICKET-058).
-  const requestedMode = useSearchDialog((s) => s.mode);
+  const closeStore = useSearchDialog((s) => s.close);
   const t = useT();
 
-  const [indexed, setIndexed] = useState(false);
-  const [root, setRoot] = useState("");
-  const [mode, setMode] = useState<SearchMode>("files");
-  const [name, setName] = useState("");
-  const [nameRegex, setNameRegex] = useState(false);
-  const [content, setContent] = useState("");
-  const [contentRegex, setContentRegex] = useState(false);
-  const [caseSensitive, setCaseSensitive] = useState(false);
-  const [ignore, setIgnore] = useState(DEFAULT_IGNORE);
-  const [minSizeMb, setMinSizeMb] = useState(10);
+  const [indexed, setIndexed] = useSearchField("indexed");
+  const [root, setRoot] = useSearchField("root");
+  const [mode, setMode] = useSearchField("mode");
+  const [name, setName] = useSearchField("name");
+  const [nameRegex, setNameRegex] = useSearchField("nameRegex");
+  const [content, setContent] = useSearchField("content");
+  const [contentRegex, setContentRegex] = useSearchField("contentRegex");
+  const [caseSensitive, setCaseSensitive] = useSearchField("caseSensitive");
+  const [ignore, setIgnore] = useSearchField("ignore");
+  const [minSizeMb, setMinSizeMb] = useSearchField("minSizeMb");
 
-  const [hits, setHits] = useState<SearchHit[]>([]);
-  const [running, setRunning] = useState(false);
-  const [status, setStatus] = useState<SearchStatus | null>(null);
+  const [hits, setHits] = useSearchField("hits");
+  const [running, setRunning] = useSearchField("running");
+  const [status, setStatus] = useSearchField("status");
   /** Why the chosen root cannot be searched, or null (TICKET-031). The
    *  root is a free-text field, so the answer is re-checked per run
    *  rather than taken from the pane the dialog was opened over. */
-  const [failure, setFailure] = useState<string | null>(null);
-  const [blocked, setBlocked] = useState<string | null>(null);
-  const [skipped, setSkipped] = useState(0);
-  const [ran, setRan] = useState(false);
+  const [failure, setFailure] = useSearchField("failure");
+  const [blocked, setBlocked] = useSearchField("blocked");
+  const [skipped, setSkipped] = useSearchField("skipped");
+  const [ran, setRan] = useSearchField("ran");
   const runToken = useRef(0);
   // Token of the run currently in the backend (null = nothing running).
   const activeToken = useRef<string | null>(null);
   const startedToken = useRef<string | null>(null);
 
 
-  // Adopt the start folder and the requested mode on first open.
   const open = side !== null;
-  useMemo(() => {
-    if (open && side) {
-      setRoot(searchRoot(side));
-      setMode(requestedMode);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
 
   /** Stops the run in the backend (new search, dialog closed, Stop). */
   const stopRunning = useCallback(() => {
@@ -131,12 +120,31 @@ export function SearchDialog() {
     }
   }, []);
 
+  const close = () => { stopRunning(); ++runToken.current; closeStore(); };
+
+  const changeContext = (update: () => void) => {
+    stopRunning();
+    ++runToken.current;
+    clearSearchResults();
+    update();
+  };
+
   // A closed dialog must not leave a scan running.
   useEffect(() => {
     if (!open) stopRunning();
   }, [open, stopRunning]);
 
-  useEffect(() => () => stopRunning(), [stopRunning]);
+  const context = useSearchSession(s => s.context);
+  const previousContext = useRef(context);
+  useEffect(() => {
+    if (previousContext.current === context) return;
+    previousContext.current = context;
+    stopRunning();
+    ++runToken.current;
+    clearSearchResults();
+  }, [context, stopRunning]);
+
+  useEffect(() => () => { stopRunning(); ++runToken.current; }, [stopRunning]);
 
   const runSearch = useCallback(async () => {
     if (!root.trim()) return;
@@ -236,8 +244,8 @@ export function SearchDialog() {
           </Dialog.Title>
 
           <div className="flex gap-2 border-b border-edge p-2">
-            <button aria-pressed={!indexed} onClick={() => setIndexed(false)}>{t("index.live")}</button>
-            <button aria-pressed={indexed} onClick={() => { stopRunning(); setIndexed(true); }}>{t("index.title")}</button>
+            <button aria-pressed={!indexed} onClick={() => changeContext(() => setIndexed(false))}>{t("index.live")}</button>
+            <button aria-pressed={indexed} onClick={() => changeContext(() => setIndexed(true))}>{t("index.title")}</button>
           </div>
           {indexed ? <SearchIndexPanel initialRoot={root} onReveal={path => { close(); if (side) void revealPath(side, path); }} /> : <>
           {/* Form */}
@@ -248,7 +256,7 @@ export function SearchDialog() {
                 <button
                   key={m}
                   aria-pressed={mode === m}
-                  onClick={() => setMode(m)}
+                  onClick={() => changeContext(() => setMode(m))}
                   className={cn(
                     "flex items-center gap-1.5 rounded border px-2.5 py-1 text-[12px]",
                     mode === m
@@ -267,7 +275,7 @@ export function SearchDialog() {
               <span className="w-20 shrink-0 text-dim">{t("search.root")}</span>
               <input
                 value={root}
-                onChange={(e) => setRoot(e.target.value)}
+                onChange={(e) => changeContext(() => setRoot(e.target.value))}
                 className="min-w-0 flex-1 rounded border border-edge bg-panel px-2 py-1 font-mono text-[12px] text-text outline-none focus:border-accent"
               />
             </label>
@@ -281,7 +289,7 @@ export function SearchDialog() {
                   <input
                     id={`${fieldId}-name`}
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) => changeContext(() => setName(e.target.value))}
                     placeholder={t("search.name.ph")}
                     onKeyDown={(e) => {
                       if (e.key !== "Enter") return;
@@ -292,7 +300,7 @@ export function SearchDialog() {
                   />
                   <Check
                     checked={nameRegex}
-                    onChange={() => setNameRegex((v) => !v)}
+                    onChange={() => changeContext(() => setNameRegex((v) => !v))}
                     label={t("search.regex")}
                   />
                 </div>
@@ -303,7 +311,7 @@ export function SearchDialog() {
                   <input
                     id={`${fieldId}-content`}
                     value={content}
-                    onChange={(e) => setContent(e.target.value)}
+                    onChange={(e) => changeContext(() => setContent(e.target.value))}
                     placeholder={t("search.content.ph")}
                     onKeyDown={(e) => {
                       if (e.key !== "Enter") return;
@@ -314,7 +322,7 @@ export function SearchDialog() {
                   />
                   <Check
                     checked={contentRegex}
-                    onChange={() => setContentRegex((v) => !v)}
+                    onChange={() => changeContext(() => setContentRegex((v) => !v))}
                     label={t("search.regex")}
                   />
                 </div>
@@ -331,7 +339,7 @@ export function SearchDialog() {
                   min={0}
                   value={minSizeMb}
                   onChange={(e) =>
-                    setMinSizeMb(Math.max(0, Math.floor(Number(e.target.value) || 0)))
+                    changeContext(() => setMinSizeMb(Math.max(0, Math.floor(Number(e.target.value) || 0))))
                   }
                   className="w-24 rounded border border-edge bg-panel px-2 py-1 text-[12px] text-text outline-none focus:border-accent"
                 />
@@ -347,14 +355,14 @@ export function SearchDialog() {
                 </span>
                 <input
                   value={ignore}
-                  onChange={(e) => setIgnore(e.target.value)}
+                  onChange={(e) => changeContext(() => setIgnore(e.target.value))}
                   className="min-w-0 flex-1 rounded border border-edge bg-panel px-2 py-1 font-mono text-[11px] text-text outline-none focus:border-accent"
                 />
               </label>
               {showFileOpts && (
                 <Check
                   checked={caseSensitive}
-                  onChange={() => setCaseSensitive((v) => !v)}
+                  onChange={() => changeContext(() => setCaseSensitive((v) => !v))}
                   label={t("search.case")}
                 />
               )}

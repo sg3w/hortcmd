@@ -4,6 +4,7 @@
 // match is revealed.
 // ============================================================
 
+import { prepareSearch } from "./searchSession";
 import { create } from "zustand";
 import { panelOf, usePanes, type Side } from "./panesStore";
 import { parentPath } from "@/lib/path";
@@ -20,7 +21,10 @@ interface SearchStore {
 export const useSearchDialog = create<SearchStore>((set) => ({
   side: null,
   mode: "files",
-  open: (side, mode = "files") => set({ side, mode }),
+  open: (side, mode = "files") => {
+    prepareSearch(side, searchRoot(side), mode);
+    set({ side, mode });
+  },
   close: () => set({ side: null }),
 }));
 

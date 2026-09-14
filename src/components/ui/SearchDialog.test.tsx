@@ -121,3 +121,80 @@ for (const status of ["complete", "cancelled"] as const) {
     } finally { observer.disconnect(); }
   });
 }
+
+it("retains the completed search over six real unmount/reopen cycles", async () => {
+  const hit: SearchHit = {name:"kept.txt",path:"/src/kept.txt",is_dir:false,size:1,modified:0,detail:"",group:0};
+  const runtime = useTauri({commands:{
+    location_capabilities: () => ({scheme:"local",store_id:"local",connected:true,caps:["search"]}),
+    search: ({onBatch}) => {
+      (onBatch as {onmessage:(hits:SearchHit[])=>void}).onmessage([hit]);
+      return {status:"complete",hits:1,files:1,dirs:0,unreadable:0};
+    },
+  }});
+  usePanes.setState(s => ({left:{...s.left,tabs:[{...s.left.tabs[0],path:"/src"}],activeTab:0}}));
+  useSearchDialog.getState().open("left");
+  let view = render(<SearchDialog/>);
+  const user = userEvent.setup();
+  await user.type(screen.getByRole("textbox",{name:translate("search.name")}),"*.txt");
+  await user.click(screen.getByRole("button",{name:translate("search.run")}));
+  await screen.findByRole("option",{name:/kept.txt/});
+  for(let cycle=0;cycle<6;cycle++) {
+    await user.keyboard("{Escape}");
+    view.unmount(); // same lifecycle as LazyFeature's delayed removal
+    act(()=>useSearchDialog.getState().open("left"));
+    view=render(<SearchDialog/>);
+    expect(screen.getByRole("textbox",{name:translate("search.name")})).toHaveValue("*.txt");
+    expect(screen.getByRole("option",{name:/kept.txt/})).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent(translate("search.complete").replace("{n}","1"));
+  }
+  expect(runtime.calls.filter(c=>c.cmd==="search")).toHaveLength(1);
+  act(()=>useSearchDialog.getState().open("right"));
+  expect(screen.queryByRole("option")).not.toBeInTheDocument();
+  expect(screen.getByRole("status")).toBeEmptyDOMElement();
+  expect(runtime.calls.filter(c=>c.cmd==="search")).toHaveLength(1);
+});
+
+it("retains cancelled hits and ignores late batches and completion after reopening", async () => {
+  const runs: {send:(hits:SearchHit[])=>void;finish:(summary:SearchSummary)=>void}[]=[];
+  useTauri({commands:{
+    location_capabilities:()=>({scheme:"local",store_id:"local",connected:true,caps:["search"]}),
+    search:({onBatch})=>new Promise<SearchSummary>(finish=>runs.push({send:(onBatch as {onmessage:(hits:SearchHit[])=>void}).onmessage,finish})),
+    cancel_search:()=>{},
+  }});
+  useSearchDialog.getState().open("left");
+  usePanes.setState(s => ({left:{...s.left,tabs:[{...s.left.tabs[0],path:"/src"}],activeTab:0}}));
+  useSearchDialog.getState().open("left");
+  render(<SearchDialog/>);
+  const user=userEvent.setup();
+  await user.click(screen.getByRole("button",{name:translate("search.run")}));
+  await waitFor(()=>expect(runs).toHaveLength(1));
+  const hit:SearchHit={name:"partial.txt",path:"/partial.txt",is_dir:false,size:1,modified:0,detail:"",group:0};
+  act(()=>runs[0].send([hit]));
+  await user.keyboard("{Escape}");
+  act(()=>useSearchDialog.getState().open("left"));
+  expect(screen.getByRole("status")).toHaveTextContent(translate("search.cancelled"));
+  expect(screen.getByRole("option",{name:/partial.txt/})).toBeVisible();
+  await user.click(screen.getByRole("button",{name:translate("search.run")}));
+  await waitFor(()=>expect(runs).toHaveLength(2));
+  await act(async()=>{runs[0].send([hit]);runs[0].finish({status:"complete",hits:1,files:1,dirs:0,unreadable:0});});
+  expect(screen.queryByRole("option")).not.toBeInTheDocument();
+  expect(screen.getByRole("status")).toHaveTextContent(translate("search.running"));
+  await act(async()=>runs[1].finish({status:"complete",hits:0,files:0,dirs:0,unreadable:0}));
+  expect(screen.getByRole("status")).toHaveTextContent(translate("search.complete").replace("{n}","0"));
+});
+
+it("keeps a failed search visible on reopen until parameters change", async () => {
+  useTauri({commands:{location_capabilities:()=>({scheme:"local",store_id:"local",connected:true,caps:["search"]}),search:()=>Promise.reject("search failed")}});
+  usePanes.setState(s=>({left:{...s.left,tabs:[{...s.left.tabs[0],path:"/src"}],activeTab:0}}));
+  useSearchDialog.getState().open("left");
+  let view=render(<SearchDialog/>);
+  const user=userEvent.setup();
+  await user.click(screen.getByRole("button",{name:translate("search.run")}));
+  await screen.findByRole("alert");
+  await user.keyboard("{Escape}");view.unmount();
+  act(()=>useSearchDialog.getState().open("left"));view=render(<SearchDialog/>);
+  expect(screen.getByRole("alert")).toHaveTextContent("search failed");
+  await user.type(screen.getByRole("textbox",{name:translate("search.root")}),"/other");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(screen.getByRole("status")).toBeEmptyDOMElement();
+});
