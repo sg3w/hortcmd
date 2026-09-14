@@ -1,3 +1,4 @@
+import { migrateLegacyLocation } from "@/lib/location";
 // ============================================================
 // The settings schema, versioned (TICKET-039).
 //
@@ -50,7 +51,7 @@ import type { Lang } from "@/i18n/dictionaries";
  *     default-on protection.
  * 1 — versioned. `safeTransfers` becomes `true` on the way in.
  */
-export const SETTINGS_VERSION = 1;
+export const SETTINGS_VERSION = 2;
 
 const THEMES: readonly Theme[] = ["dark", "light", "system"];
 const SCALES: readonly Scale[] = ["sm", "md", "lg"];
@@ -95,6 +96,14 @@ export function migrateSettings(
     state.safeTransfers = true;
   }
 
+  if (from < 2 && Array.isArray(state.favorites)) {
+    state.favorites = state.favorites.map((entry: unknown) => {
+      const favorite = obj(entry);
+      if (typeof favorite.path !== "string") return entry;
+      try { return { ...favorite, path: migrateLegacyLocation(favorite.path) }; }
+      catch { return entry; }
+    });
+  }
   return state;
 }
 

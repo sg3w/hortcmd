@@ -444,7 +444,8 @@ pub fn open_system_properties(path: String) -> AppResult<()> {
 
     // `symlink_metadata`, so a symlink (even a broken one) is its own
     // entry — the info window is about the link, not its target.
-    let target = Path::new(&addr.path);
+    let provider_path = addr.path();
+    let target = Path::new(&provider_path);
     if target.symlink_metadata().is_err() {
         return Err(AppError::new(code::FS_NOT_FOUND).with("path", &path));
     }

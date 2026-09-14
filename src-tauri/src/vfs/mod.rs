@@ -18,6 +18,11 @@ pub mod ftp;
 pub mod identity;
 pub mod limits;
 pub mod local;
+mod local_path;
+pub mod location;
+#[cfg(test)]
+mod location_tests;
+mod provider_path;
 pub mod sftp;
 pub mod smb;
 pub mod webdav;
@@ -27,7 +32,7 @@ pub mod webdav;
 mod harness;
 
 use crate::commands::fs::dir::DirListing;
-use crate::errors::{AppError, AppResult};
+use crate::errors::AppResult;
 use local::LocalProvider;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -36,7 +41,11 @@ use std::sync::{Arc, OnceLock};
 /// Address scheme. `Local` and `Sftp` are implemented; the remaining
 /// variants are reserved for upcoming providers and are parsed but
 /// not yet resolvable.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(
+    Clone, Copy, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize, ts_rs::TS,
+)]
+#[serde(rename_all = "lowercase")]
+#[ts(export, export_to = "../../src/ipc/bindings/")]
 pub enum Scheme {
     Local,
     Sftp,
@@ -59,7 +68,7 @@ impl Scheme {
 
     /// Maps a scheme string to its variant. `file` and `local` both
     /// denote the local file system; unknown schemes return `None`.
-    fn from_scheme_str(s: &str) -> Option<Scheme> {
+    pub(crate) fn from_scheme_str(s: &str) -> Option<Scheme> {
         match s {
             "file" | "local" => Some(Scheme::Local),
             "sftp" => Some(Scheme::Sftp),
@@ -82,100 +91,12 @@ impl Scheme {
     }
 }
 
-/// A parsed address: a scheme, an optional remote authority, and the
-/// provider-local path. Plain local paths (no `scheme://`) map to
-/// `Scheme::Local` with the path unchanged, so existing local paths
-/// keep working verbatim.
-#[derive(Clone, Debug)]
-pub struct Address {
-    pub scheme: Scheme,
-    /// Remote user (from `user@host`), if any.
-    pub user: Option<String>,
-    /// Remote host, if any.
-    pub host: Option<String>,
-    /// Remote port (explicit `:port`), if any.
-    pub port: Option<u16>,
-    /// Path as seen by the provider. For `local` this is the raw
-    /// file-system path; for a remote scheme it is the path portion
-    /// after `scheme://[user@host[:port]]`.
-    pub path: String,
-}
+/// Legacy command-boundary name for the versioned, typed location.
+pub use location::VfsLocation as Address;
 
-impl Address {
-    /// Stable identity of the connection an address points at
-    /// (`user@host:port`); `None` for local addresses. Two addresses
-    /// with the same key share a session/store.
-    pub fn connection_key(&self) -> Option<String> {
-        let host = self.host.as_ref()?;
-        let port = self.port.or_else(|| self.scheme.default_port());
-        let user = self.user.clone().unwrap_or_default();
-        Some(match port {
-            Some(p) => format!("{}@{}:{}", user, host, p),
-            None => format!("{}@{}", user, host),
-        })
-    }
-}
-
-/// Parses a raw address string into a scheme, optional authority, and
-/// provider-local path.
-///
-/// - No `scheme://` prefix → a local path, used verbatim.
-/// - `file://…` / `local://…` → local path (the leading slashes of an
-///   absolute `file:///…` URL stay part of the path).
-/// - `sftp://[user@]host[:port]/path` → remote scheme + authority.
-/// - Any other scheme → an error.
+/// URI input boundary for existing string-valued Tauri/MCP commands.
 pub fn parse_address(raw: &str) -> AppResult<Address> {
-    let Some(idx) = raw.find("://") else {
-        // No scheme: a plain local path.
-        return Ok(local_address(raw));
-    };
-
-    let scheme_str = &raw[..idx];
-    let rest = &raw[idx + 3..];
-    match Scheme::from_scheme_str(scheme_str) {
-        Some(Scheme::Local) => Ok(local_address(rest)),
-        Some(scheme) => Ok(parse_remote(scheme, rest)),
-        None => Err(AppError::from(format!(
-            "Unbekanntes Adressschema: {}://",
-            scheme_str
-        ))),
-    }
-}
-
-fn local_address(path: &str) -> Address {
-    Address {
-        scheme: Scheme::Local,
-        user: None,
-        host: None,
-        port: None,
-        path: path.to_string(),
-    }
-}
-
-/// Splits a remote address body `user@host:port/path` into parts.
-/// A missing path defaults to `/`.
-fn parse_remote(scheme: Scheme, rest: &str) -> Address {
-    let (authority, path) = match rest.find('/') {
-        Some(pos) => (&rest[..pos], rest[pos..].to_string()),
-        None => (rest, "/".to_string()),
-    };
-
-    let (user, host_port) = match authority.rsplit_once('@') {
-        Some((u, hp)) => (Some(u.to_string()), hp),
-        None => (None, authority),
-    };
-    let (host, port) = match host_port.rsplit_once(':') {
-        Some((h, p)) => (h.to_string(), p.parse::<u16>().ok()),
-        None => (host_port.to_string(), None),
-    };
-
-    Address {
-        scheme,
-        user,
-        host: (!host.is_empty()).then_some(host),
-        port,
-        path,
-    }
+    location::VfsLocation::parse(raw)
 }
 
 /// The shared, stateless local provider.
@@ -189,20 +110,37 @@ fn local_provider() -> Arc<dyn Provider> {
 /// bound to an active connection (see `net::session`). Unknown and
 /// reserved-but-unimplemented schemes return a clear error.
 pub fn resolve(raw: &str) -> AppResult<(Arc<dyn Provider>, String)> {
-    let addr = parse_address(raw)?;
-    if addr.scheme == Scheme::Local {
-        return Ok((local_provider(), addr.path));
+    resolve_location(&location::VfsLocation::parse(raw)?)
+}
+
+/// Typed internal resolution; the string-returning provider adapter is retained
+/// for existing streaming interfaces and does not perform URI parsing.
+pub fn resolve_location(
+    location: &location::VfsLocation,
+) -> AppResult<(Arc<dyn Provider>, String)> {
+    location.validate()?;
+    match location.kind() {
+        location::LocationPath::Local { path } => Ok((local_provider(), path.raw.clone())),
+        location::LocationPath::Remote {
+            scheme,
+            authority,
+            path,
+        } => {
+            // Streaming adapters still carry decoded paths through std::path.
+            // Refuse shapes those adapters could normalize into another object.
+            let raw = path.raw();
+            if raw.contains("//") || (std::path::MAIN_SEPARATOR == '\\' && raw.contains('\\')) {
+                return Err(crate::errors::AppError::new(
+                    crate::errors::code::VALIDATION_BAD_INPUT,
+                )
+                .op("vfs-location")
+                .with("reason", "provider-path-adapter"));
+            }
+            let provider =
+                crate::net::session::remote_provider(scheme.as_str(), &authority.key(*scheme))?;
+            Ok((provider, raw))
+        }
     }
-    // Every remote scheme is served by a live connection from the
-    // session registry (opened via the connection manager, ticket 021).
-    let key = addr.connection_key().ok_or_else(|| {
-        AppError::from(format!(
-            "{}-Adresse ohne Host",
-            addr.scheme.as_str().to_uppercase()
-        ))
-    })?;
-    let provider = crate::net::session::remote_provider(addr.scheme.as_str(), &key)?;
-    Ok((provider, addr.path))
 }
 
 /// Lightweight metadata subset used by the transfer engine.
@@ -384,33 +322,33 @@ mod tests {
     #[test]
     fn plain_path_is_local() {
         let a = parse_address("/Users/x/file.txt").unwrap();
-        assert_eq!(a.scheme, Scheme::Local);
-        assert_eq!(a.path, "/Users/x/file.txt");
+        assert_eq!(a.scheme(), Scheme::Local);
+        assert_eq!(a.path(), "/Users/x/file.txt");
         assert_eq!(a.connection_key(), None);
     }
 
     #[test]
     fn relative_path_is_local() {
         let a = parse_address("some/rel path").unwrap();
-        assert_eq!(a.scheme, Scheme::Local);
-        assert_eq!(a.path, "some/rel path");
+        assert_eq!(a.scheme(), Scheme::Local);
+        assert_eq!(a.path(), "some/rel path");
     }
 
     #[test]
     fn file_url_maps_to_local_path() {
         let a = parse_address("file:///Users/x").unwrap();
-        assert_eq!(a.scheme, Scheme::Local);
-        assert_eq!(a.path, "/Users/x");
+        assert_eq!(a.scheme(), Scheme::Local);
+        assert_eq!(a.path(), "/Users/x");
     }
 
     #[test]
     fn sftp_authority_is_parsed() {
         let a = parse_address("sftp://alice@host.example:2222/srv/data").unwrap();
-        assert_eq!(a.scheme, Scheme::Sftp);
-        assert_eq!(a.user.as_deref(), Some("alice"));
-        assert_eq!(a.host.as_deref(), Some("host.example"));
-        assert_eq!(a.port, Some(2222));
-        assert_eq!(a.path, "/srv/data");
+        assert_eq!(a.scheme(), Scheme::Sftp);
+        assert_eq!(a.user(), Some("alice"));
+        assert_eq!(a.host(), Some("host.example"));
+        assert_eq!(a.port(), Some(2222));
+        assert_eq!(a.path(), "/srv/data");
         assert_eq!(
             a.connection_key().as_deref(),
             Some("alice@host.example:2222")
@@ -420,9 +358,9 @@ mod tests {
     #[test]
     fn sftp_defaults_user_and_port() {
         let a = parse_address("sftp://host/only").unwrap();
-        assert_eq!(a.user, None);
-        assert_eq!(a.host.as_deref(), Some("host"));
-        assert_eq!(a.port, None);
+        assert_eq!(a.user(), None);
+        assert_eq!(a.host(), Some("host"));
+        assert_eq!(a.port(), None);
         // Default port 22 fills in for the connection key.
         assert_eq!(a.connection_key().as_deref(), Some("@host:22"));
     }
@@ -461,7 +399,7 @@ mod tests {
             ),
         ] {
             let a = parse_address(raw).unwrap();
-            assert_eq!(a.scheme, scheme, "scheme of {}", raw);
+            assert_eq!(a.scheme(), scheme, "scheme of {}", raw);
             assert_eq!(a.connection_key().as_deref(), Some(key), "key of {}", raw);
         }
     }

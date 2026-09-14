@@ -56,7 +56,12 @@ impl Params {
     /// Opens and logs in a fresh connection (passive mode by default).
     fn open(&self) -> AppResult<RustlsFtpStream> {
         crate::net::security::check(&self.profile)?;
-        let addr = format!("{}:{}", self.host, self.port);
+        let host = self.host.trim_start_matches('[').trim_end_matches(']');
+        let addr = if host.contains(':') {
+            format!("[{host}]:{}", self.port)
+        } else {
+            format!("{host}:{}", self.port)
+        };
         let tls = if self.tls == Tls::None {
             None
         } else {
@@ -198,7 +203,7 @@ pub struct FtpProvider {
 
 /// POSIX path string for the FTP protocol.
 fn p(path: &Path) -> String {
-    let s = path.to_string_lossy().replace('\\', "/");
+    let s = super::provider_path::text(path);
     if s.is_empty() {
         "/".to_string()
     } else {
@@ -298,15 +303,17 @@ impl Provider for FtpProvider {
     }
 
     fn list(&self, path: &str) -> AppResult<DirListing> {
+        super::provider_path::validate(Path::new(path), super::Scheme::Ftp)?;
         let entries = self.entries_of(path)?;
         // Full address so the pane keeps its remote context.
         Ok(DirListing {
-            path: format!("ftp://{}{}", self.key, path),
+            path: super::location::remote_uri("ftp", &self.key, path)?,
             entries,
         })
     }
 
     fn stat(&self, path: &Path) -> io::Result<Stat> {
+        super::provider_path::validate(path, super::Scheme::Ftp)?;
         // The connection root is always a directory.
         if p(path) == "/" {
             return Ok(Stat {
@@ -327,14 +334,21 @@ impl Provider for FtpProvider {
     }
 
     fn exists(&self, path: &Path) -> bool {
+        if super::provider_path::validate(path, super::Scheme::Ftp).is_err() {
+            return false;
+        }
         self.stat(path).is_ok()
     }
 
     fn is_dir(&self, path: &Path) -> bool {
+        if super::provider_path::validate(path, super::Scheme::Ftp).is_err() {
+            return false;
+        }
         self.stat(path).map(|s| s.is_dir).unwrap_or(false)
     }
 
     fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
+        super::provider_path::validate(path, super::Scheme::Ftp)?;
         let base = p(path);
         let entries = self.entries_of(&base).map_err(to_io)?;
         Ok(entries
@@ -344,6 +358,7 @@ impl Provider for FtpProvider {
     }
 
     fn open_read(&self, path: &Path) -> io::Result<Box<dyn Read + Send>> {
+        super::provider_path::validate(path, super::Scheme::Ftp)?;
         // Dedicated connection: keeps long transfers off the shared
         // control connection (see the module comment).
         let mut ctrl = self.params.open().map_err(to_io)?;
@@ -355,6 +370,7 @@ impl Provider for FtpProvider {
     }
 
     fn create_write(&self, path: &Path) -> io::Result<Box<dyn Write + Send>> {
+        super::provider_path::validate(path, super::Scheme::Ftp)?;
         let mut ctrl = self.params.open().map_err(to_io)?;
         let stream = ctrl.put_with_stream(p(path)).map_err(to_io)?;
         Ok(Box::new(FtpWriter {
@@ -364,12 +380,14 @@ impl Provider for FtpProvider {
     }
 
     fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
+        super::provider_path::validate(path, super::Scheme::Ftp)?;
         let mut w = self.create_write(path)?;
         w.write_all(data)?;
         w.flush()
     }
 
     fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+        super::provider_path::validate(path, super::Scheme::Ftp)?;
         // FTP `MKD` is not recursive — create each missing component.
         let full = p(path);
         let mut acc = String::new();
@@ -397,16 +415,20 @@ impl Provider for FtpProvider {
     }
 
     fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+        super::provider_path::validate(from, super::Scheme::Ftp)?;
+        super::provider_path::validate(to, super::Scheme::Ftp)?;
         let mut ctrl = self.ctrl.lock().unwrap();
         ctrl.rename(p(from), p(to)).map_err(to_io)
     }
 
     fn remove_file(&self, path: &Path) -> io::Result<()> {
+        super::provider_path::validate(path, super::Scheme::Ftp)?;
         let mut ctrl = self.ctrl.lock().unwrap();
         ctrl.rm(p(path)).map_err(to_io)
     }
 
     fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
+        super::provider_path::validate(path, super::Scheme::Ftp)?;
         // `RMD` requires an empty directory — clear the contents first.
         for child in self.read_dir(path)? {
             if self.is_dir(&child) {

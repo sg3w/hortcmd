@@ -10,8 +10,26 @@ fn invalid() -> AppError {
     AppError::new(code::VALIDATION_BAD_INPUT).op("transfer-journal")
 }
 fn identity(profile: &Profile) -> String {
+    format!(
+        "vfs1:{}",
+        hex::encode(Sha256::digest(
+            format!("{}\0{}", profile.protocol, profile.connection_key()).as_bytes(),
+        ))
+    )
+}
+fn legacy_identity(profile: &Profile) -> String {
+    let host = profile
+        .host
+        .split_once("://")
+        .map(|(_, rest)| rest)
+        .unwrap_or(&profile.host)
+        .trim_end_matches('/');
     hex::encode(Sha256::digest(
-        format!("{}\0{}", profile.protocol, profile.connection_key()).as_bytes(),
+        format!(
+            "{}\0{}@{}:{}",
+            profile.protocol, profile.user, host, profile.port
+        )
+        .as_bytes(),
     ))
 }
 
@@ -25,39 +43,25 @@ impl RecoveryLocation {
             return Err(invalid());
         }
         let address = vfs::parse_address(raw).map_err(|_| invalid())?;
-        if address.scheme == Scheme::Local {
-            let path = Path::new(&address.path);
+        if address.scheme() == Scheme::Local {
+            let provider_path = address.path();
+            let path = Path::new(&provider_path);
             if !path.is_absolute() {
                 return Err(invalid());
             }
-            return Ok(Self::Local { path: address.path });
-        }
-        // VFS locations have no URI query/fragment or password component.
-        let authority = raw
-            .split_once("://")
-            .ok_or_else(invalid)?
-            .1
-            .split('/')
-            .next()
-            .ok_or_else(invalid)?;
-        if raw.contains(['?', '#'])
-            || authority.contains('%')
-            || address
-                .user
-                .as_ref()
-                .is_some_and(|user| user.contains([':', '@']))
-        {
-            return Err(invalid());
+            return Ok(Self::Local {
+                path: address.path(),
+            });
         }
         let key = address.connection_key().ok_or_else(invalid)?;
         let profile = profiles
             .iter()
-            .find(|p| p.scheme() == address.scheme.as_str() && p.connection_key() == key)
+            .find(|p| p.scheme() == address.scheme().as_str() && p.connection_key() == key)
             .ok_or_else(invalid)?;
         Ok(Self::Remote {
             profile: profile.id.clone(),
             identity: identity(profile),
-            path: address.path,
+            path: address.path(),
         })
     }
 
@@ -75,17 +79,16 @@ impl RecoveryLocation {
                 let profiles = net_list_profiles();
                 let profile = profiles
                     .iter()
-                    .find(|p| &p.id == profile_id && identity(p) == *expected)
+                    .find(|p| {
+                        &p.id == profile_id
+                            && (identity(p) == *expected || legacy_identity(p) == *expected)
+                    })
                     .ok_or_else(invalid)?;
                 if !path.starts_with('/') || path.chars().any(char::is_control) {
                     return Err(invalid());
                 }
-                let address = format!(
-                    "{}://{}{}",
-                    profile.scheme(),
-                    profile.connection_key(),
-                    path
-                );
+                let address =
+                    vfs::location::remote_uri(profile.scheme(), &profile.connection_key(), path)?;
                 vfs::resolve(&address)?;
                 Ok(address)
             }
@@ -104,5 +107,40 @@ impl RecoveryLocation {
                 path,
             },
         })
+    }
+}
+
+#[cfg(test)]
+mod migration_tests {
+    use super::*;
+    #[test]
+    fn journal_capture_decodes_once_and_keeps_legacy_endpoint_digest_reproducible() {
+        let p: Profile = serde_json::from_value(serde_json::json!({
+            "id":"vfs-migration", "name":"test", "protocol":"sftp", "host":"Example.COM",
+            "port":22, "user":"u", "auth":"agent", "key_path":null, "start_path":"/a%20b"
+        }))
+        .unwrap();
+        let legacy = hex::encode(Sha256::digest(b"sftp\0u@Example.COM:22"));
+        assert_eq!(legacy_identity(&p), legacy);
+        assert!(identity(&p).starts_with("vfs1:"));
+        let location =
+            RecoveryLocation::capture_with(&p.address(), std::slice::from_ref(&p)).unwrap();
+        let RecoveryLocation::Remote {
+            path,
+            identity: digest,
+            ..
+        } = location
+        else {
+            panic!("expected remote")
+        };
+        assert_eq!(path, "/a%20b");
+        assert_eq!(digest, identity(&p));
+        let old =
+            serde_json::json!({"kind":"remote","profile":p.id,"identity":legacy,"path":"/a%20b"});
+        let restored: RecoveryLocation = serde_json::from_value(old).unwrap();
+        let RecoveryLocation::Remote { path, .. } = restored else {
+            panic!("expected remote")
+        };
+        assert_eq!(path, "/a%20b");
     }
 }

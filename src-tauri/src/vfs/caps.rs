@@ -281,7 +281,7 @@ fn remote_core_caps() -> Vec<Capability> {
 /// FTP/SMB/WebDAV do not" is read off the provider rather than matched
 /// against a scheme name.
 pub fn for_parsed(addr: &Address) -> AppResult<LocationCapabilities> {
-    if addr.scheme == Scheme::Local {
+    if addr.scheme() == Scheme::Local {
         return Ok(LocationCapabilities {
             transport: None,
             scheme: Scheme::Local.as_str().to_string(),
@@ -291,7 +291,7 @@ pub fn for_parsed(addr: &Address) -> AppResult<LocationCapabilities> {
         });
     }
 
-    let scheme = addr.scheme.as_str().to_string();
+    let scheme = addr.scheme().as_str().to_string();
     let key = addr.connection_key().ok_or_else(|| {
         AppError::new(code::VALIDATION_BAD_ADDRESS)
             .with("scheme", scheme.to_uppercase())

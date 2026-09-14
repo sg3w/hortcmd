@@ -1,3 +1,6 @@
+import { localParts, localParent } from "./localPath";
+import { parseLocation, locationUri, encodeComponent } from "./location";
+
 // Platform-neutral path helpers (frontend side).
 //
 // Local paths keep their original behavior verbatim. Remote VFS
@@ -11,9 +14,11 @@
  * the POSIX path remainder (always starting with `/`). Returns null for
  * ordinary local paths. */
 function splitRemote(p: string): { prefix: string; rest: string } | null {
-  const m = /^([a-z][a-z0-9+.-]*):\/\/([^/]*)(\/.*)?$/i.exec(p);
-  if (!m) return null;
-  return { prefix: `${m[1]}://${m[2]}`, rest: m[3] ?? "/" };
+  const value = parseLocation(p);
+  if (value.location.kind === "local") return null;
+  const uri = locationUri(value);
+  const at = uri.indexOf("/", uri.indexOf("://") + 3);
+  return { prefix: uri.slice(0, at), rest: uri.slice(at) };
 }
 
 /** Scheme of a remote VFS address (`sftp`, `ftp`, …); null for local paths. */
@@ -23,10 +28,12 @@ export function schemeOf(p: string): string | null {
 }
 
 function sep(p: string): string {
-  return p.includes("\\") ? "\\" : "/";
+  return (p.startsWith("\\\\") || /^[A-Za-z]:/.test(p)) && p.includes("\\") ? "\\" : "/";
 }
 
 export function joinPath(base: string, name: string): string {
+  const remote = splitRemote(base);
+  if (remote) return `${remote.prefix}${remote.rest.endsWith("/") ? remote.rest : remote.rest + "/"}${name.split("/").map(encodeComponent).join("/")}`;
   const s = sep(base);
   return base.endsWith(s) ? base + name : base + s + name;
 }
@@ -40,17 +47,14 @@ export function parentPath(p: string): string {
     if (idx <= 0) return `${remote.prefix}/`;
     return remote.prefix + trimmed.slice(0, idx);
   }
-  const s = sep(p);
-  const trimmed = p.replace(/[\\/]+$/, "");
-  const idx = trimmed.lastIndexOf(s);
-  if (idx <= 0) return s;
-  return trimmed.slice(0, idx) || s;
+  return localParent(p);
 }
 
 export function isRoot(p: string): boolean {
   const remote = splitRemote(p);
   if (remote) return remote.rest === "/" || remote.rest === "";
-  return p === "/" || /^[A-Za-z]:\\?$/.test(p);
+  const { root } = localParts(p);
+  return root !== "" && (p === root || p === root + localParts(p).separator);
 }
 
 /** Root of a path: the connection root for remote addresses, else
@@ -58,8 +62,7 @@ export function isRoot(p: string): boolean {
 export function rootOf(p: string): string {
   const remote = splitRemote(p);
   if (remote) return `${remote.prefix}/`;
-  const win = /^([A-Za-z]:)[\\/]?/.exec(p);
-  return win ? `${win[1]}\\` : "/";
+  return localParts(p).root || ".";
 }
 
 /** Last name component of a path; for the root, the path itself. */
@@ -67,13 +70,13 @@ export function baseName(p: string): string {
   if (isRoot(p)) return p;
   const remote = splitRemote(p);
   const target = remote ? remote.rest : p;
-  const parts = target.replace(/[\\/]+$/, "").split(/[\\/]/);
+  const parts = remote ? target.replace(/\/+$/, "").split("/").map(decodeURIComponent) : sep(target) === "/" ? target.replace(/\/+$/, "").split("/") : target.replace(/[\\/]+$/, "").split(/[\\/]/);
   return parts[parts.length - 1] || rootOf(p);
 }
 
 /** Chain from the root to the path (inclusive), e.g. ["/","/Users","/Users/x"]. */
 export function ancestorChain(path: string): string[] {
-  const trimmed = path.replace(/[\\/]+$/, "");
+  const trimmed = sep(path) === "/" ? path.replace(/\/+$/, "") : path.replace(/[\\/]+$/, "");
   // A path that *is* a root keeps the canonical spelling `rootOf` gives
   // it. Trimming alone would turn "sftp://u@host/" into "sftp://u@host",
   // and a crumb built from that no longer matches the pane's own path.

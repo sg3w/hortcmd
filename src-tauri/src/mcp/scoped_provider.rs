@@ -17,7 +17,7 @@ impl ScopedProvider {
     pub fn resolve(raw: &str, config: &McpConfig) -> AppResult<(Self, PathBuf)> {
         let (inner, path) = vfs::resolve(raw)?;
         let address = vfs::parse_address(raw)?;
-        let prefix = if address.scheme == vfs::Scheme::Local {
+        let prefix = if address.scheme() == vfs::Scheme::Local {
             String::new()
         } else {
             let scheme_end = raw.find("://").unwrap_or(0) + 3;
@@ -62,8 +62,21 @@ impl ScopedProvider {
         let path_text = path
             .to_str()
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "non-UTF8 MCP path"))?;
-        scope::require_in_scope(&config.roots, &format!("{}{path_text}", self.prefix))
-            .map_err(|e| io::Error::new(io::ErrorKind::PermissionDenied, e.to_string()))?;
+        scope::require_in_scope(
+            &config.roots,
+            &if self.prefix.is_empty() {
+                path_text.to_owned()
+            } else {
+                format!(
+                    "{}{}",
+                    self.prefix,
+                    vfs::location::ProviderPath::from_raw(path_text)
+                        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e.to_string()))?
+                        .uri()
+                )
+            },
+        )
+        .map_err(|e| io::Error::new(io::ErrorKind::PermissionDenied, e.to_string()))?;
         // Recursive copies must not follow even an in-scope link: a link back
         // to a parent would recurse forever, and a moved link is not its target.
         if self.prefix.is_empty() {

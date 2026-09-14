@@ -25,7 +25,7 @@ const MAX_PATH = 4096;
  * 1 — versioned. No reshaping was needed; the point of the bump is that
  *     the *next* change has a number to migrate from.
  */
-export const SESSION_VERSION = 1;
+export const SESSION_VERSION = 2;
 
 const VIEW_MODES: readonly ViewMode[] = ["details", "list", "thumbnails", "tree"];
 const SIDES: readonly Side[] = ["left", "right"];
@@ -86,7 +86,7 @@ export function validateSession(stored: unknown, r: Repairs): SavedSession | nul
  * 0 — up to TICKET-038.
  * 1 — versioned; the cap is enforced on read as well as on write.
  */
-export const HISTORY_VERSION = 1;
+export const HISTORY_VERSION = 2;
 
 /** The same limit the store applies when pushing. */
 export const HISTORY_MAX = 20;

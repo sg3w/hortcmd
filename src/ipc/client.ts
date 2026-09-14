@@ -42,3 +42,4 @@ export * from "./domains/recovery";
 
 export * from "./domains/undo";
 export * from "./domains/index";
+export { normalizeLocation } from "./domains/location";

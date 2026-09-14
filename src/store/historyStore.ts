@@ -1,3 +1,4 @@
+import { migrateLegacyLocation } from "@/lib/location";
 // ============================================================
 // Global history of recently visited folders (persisted).
 // Newest first, deduplicated, limited to MAX entries.
@@ -37,7 +38,7 @@ export const useHistory = create<HistoryStore>()(
       version: HISTORY_VERSION,
       storage: guardedStorage("history"),
       migrate: (stored, from) =>
-        acceptVersion("history", from, HISTORY_VERSION) ? stored : {},
+        acceptVersion("history", from, HISTORY_VERSION) ? (from < 2 ? migrateLocations(stored) : stored) : {},
       merge: (stored, current) => ({
         ...current,
         recent: rehydrate(
@@ -53,4 +54,14 @@ export const useHistory = create<HistoryStore>()(
 /** Add a history entry from outside React (e.g. in the panesStore). */
 export function pushRecent(path: string): void {
   useHistory.getState().push(path);
+}
+
+function migrateLocations(stored: unknown): unknown {
+  if (!stored || typeof stored !== "object") return stored;
+  // Migrate only this domain's known path fields, preserving unrelated data.
+  return JSON.parse(JSON.stringify(stored), (key: string, value: unknown) => {
+    if (typeof value !== "string") return value;
+    try { return /^\d+$/.test(key) ? migrateLegacyLocation(value) : value; }
+    catch { return value; }
+  }) as unknown;
 }

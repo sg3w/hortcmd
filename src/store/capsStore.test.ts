@@ -111,10 +111,12 @@ describe("locationKey", () => {
     expect(locationKey("local:///Users/x")).toBe("local");
   });
 
-  it("keeps remote servers apart and is case-insensitive", () => {
-    expect(locationKey("sftp://u@Host:22/srv")).toBe("sftp://u@host:22");
-    expect(locationKey("sftp://u@host:22/other/dir")).toBe("sftp://u@host:22");
-    expect(locationKey("ftp://u@host:22/srv")).not.toBe("sftp://u@host:22");
+  it("canonicalizes hosts and ports while preserving username case", () => {
+    expect(locationKey("sftp://u@Host:22/srv")).toBe("sftp:u@host:22");
+    expect(locationKey("sftp://u@host/other/dir")).toBe("sftp:u@host:22");
+    expect(locationKey("ftp://u@host:22/srv")).not.toBe("sftp:u@host:22");
+    expect(locationKey("sftp://U@host/srv")).not.toBe(locationKey("sftp://u@host/srv"));
+    expect(locationKey("sftp://u:secret@host/srv")).toBe("invalid");
   });
 });
 

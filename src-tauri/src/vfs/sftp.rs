@@ -100,7 +100,7 @@ impl SftpProvider {
 
 /// POSIX path string for the SFTP protocol.
 fn p(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
+    super::provider_path::text(path)
 }
 
 /// Child path inside a remote directory, as a POSIX path string.
@@ -135,6 +135,7 @@ impl Provider for SftpProvider {
     }
 
     fn list(&self, path: &str) -> AppResult<DirListing> {
+        super::provider_path::validate(Path::new(path), super::Scheme::Sftp)?;
         let dir = runtime()
             .block_on(self.sftp().read_dir(path))
             .map_err(|e| AppError::from(format!("{}: {}", path, e)))?;
@@ -197,12 +198,13 @@ impl Provider for SftpProvider {
         // subsequent navigation composes `sftp://key/...` paths that
         // resolve back to this provider.
         Ok(DirListing {
-            path: format!("sftp://{}{}", self.key, path),
+            path: super::location::remote_uri("sftp", &self.key, path)?,
             entries,
         })
     }
 
     fn stat(&self, path: &Path) -> io::Result<Stat> {
+        super::provider_path::validate(path, super::Scheme::Sftp)?;
         let attrs = runtime()
             .block_on(self.sftp().metadata(p(path)))
             .map_err(to_io)?;
@@ -213,14 +215,21 @@ impl Provider for SftpProvider {
     }
 
     fn exists(&self, path: &Path) -> bool {
+        if super::provider_path::validate(path, super::Scheme::Sftp).is_err() {
+            return false;
+        }
         runtime().block_on(self.sftp().metadata(p(path))).is_ok()
     }
 
     fn is_dir(&self, path: &Path) -> bool {
+        if super::provider_path::validate(path, super::Scheme::Sftp).is_err() {
+            return false;
+        }
         self.stat(path).map(|s| s.is_dir).unwrap_or(false)
     }
 
     fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
+        super::provider_path::validate(path, super::Scheme::Sftp)?;
         let base = p(path);
         let dir = runtime()
             .block_on(self.sftp().read_dir(&base))
@@ -237,6 +246,7 @@ impl Provider for SftpProvider {
     }
 
     fn open_read(&self, path: &Path) -> io::Result<Box<dyn Read + Send>> {
+        super::provider_path::validate(path, super::Scheme::Sftp)?;
         let file = runtime()
             .block_on(self.sftp().open(p(path)))
             .map_err(to_io)?;
@@ -244,6 +254,7 @@ impl Provider for SftpProvider {
     }
 
     fn create_write(&self, path: &Path) -> io::Result<Box<dyn Write + Send>> {
+        super::provider_path::validate(path, super::Scheme::Sftp)?;
         let file = runtime()
             .block_on(self.sftp().create(p(path)))
             .map_err(to_io)?;
@@ -251,6 +262,7 @@ impl Provider for SftpProvider {
     }
 
     fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
+        super::provider_path::validate(path, super::Scheme::Sftp)?;
         runtime().block_on(async {
             let mut f = self.sftp().create(p(path)).await.map_err(to_io)?;
             f.write_all(data).await.map_err(to_io)?;
@@ -260,6 +272,7 @@ impl Provider for SftpProvider {
     }
 
     fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+        super::provider_path::validate(path, super::Scheme::Sftp)?;
         // SFTP has no recursive mkdir — create each missing component.
         let full = p(path);
         let mut acc = String::new();
@@ -287,18 +300,22 @@ impl Provider for SftpProvider {
     }
 
     fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+        super::provider_path::validate(from, super::Scheme::Sftp)?;
+        super::provider_path::validate(to, super::Scheme::Sftp)?;
         runtime()
             .block_on(self.sftp().rename(p(from), p(to)))
             .map_err(to_io)
     }
 
     fn remove_file(&self, path: &Path) -> io::Result<()> {
+        super::provider_path::validate(path, super::Scheme::Sftp)?;
         runtime()
             .block_on(self.sftp().remove_file(p(path)))
             .map_err(to_io)
     }
 
     fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
+        super::provider_path::validate(path, super::Scheme::Sftp)?;
         runtime().block_on(remove_dir_all_async(self.sftp(), p(path)))
     }
 

@@ -151,12 +151,37 @@ fn config_path() -> AppResult<std::path::PathBuf> {
     config::path("mcp.json")
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ConfigDocument {
+    version: u8,
+    config: McpConfig,
+}
+
+fn decode_config(bytes: &[u8]) -> AppResult<McpConfig> {
+    let value: serde_json::Value = serde_json::from_slice(bytes).map_err(AppError::from)?;
+    if value.get("version").is_some() {
+        let doc: ConfigDocument = serde_json::from_value(value).map_err(AppError::from)?;
+        if doc.version != 1 {
+            return Err(AppError::new(code::VALIDATION_BAD_INPUT).op("mcp-config-version"));
+        }
+        return Ok(doc.config);
+    }
+    let mut config: McpConfig = serde_json::from_value(value).map_err(AppError::from)?;
+    config.roots = config
+        .roots
+        .iter()
+        .map(|root| crate::vfs::location::migrate_legacy(root).map(|location| location.uri()))
+        .collect::<AppResult<_>>()?;
+    Ok(config)
+}
+
 fn load() -> McpConfig {
     let Ok(path) = config_path() else {
         return McpConfig::default();
     };
     match std::fs::read(&path) {
-        Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_default(),
+        Ok(bytes) => decode_config(&bytes).unwrap_or_default(),
         Err(_) => McpConfig::default(),
     }
 }
@@ -194,7 +219,17 @@ pub fn set_config(mut next: McpConfig) -> AppResult<McpConfig> {
                 .detail(format!("{}: {}", dir.display(), e))
         })?;
     }
-    let bytes = serde_json::to_vec_pretty(&next).map_err(|e| {
+    if let Ok(bytes) = std::fs::read(&path) {
+        decode_config(&bytes)?;
+    }
+    for root in &next.roots {
+        crate::vfs::location::VfsLocation::parse(root)?;
+    }
+    let bytes = serde_json::to_vec_pretty(&ConfigDocument {
+        version: 1,
+        config: next.clone(),
+    })
+    .map_err(|e| {
         AppError::new(code::INTERNAL_UNEXPECTED)
             .op("mcp-config")
             .detail(e)
@@ -237,5 +272,32 @@ mod tests {
         c.allow_write = true;
         assert!(c.allows(McpTier::Write));
         assert!(!c.allows(McpTier::Delete), "one switch is not the other");
+    }
+}
+
+#[cfg(test)]
+mod location_migration_tests {
+    use super::*;
+    #[test]
+    fn legacy_roots_keep_literal_percent_and_future_config_is_refused() {
+        let config = McpConfig {
+            roots: vec!["sftp://h/safe%20name".into()],
+            ..Default::default()
+        };
+        let migrated = decode_config(&serde_json::to_vec(&config).unwrap()).unwrap();
+        assert_eq!(migrated.roots, ["sftp://h/safe%2520name"]);
+        let mut value = serde_json::to_value(ConfigDocument {
+            version: 1,
+            config: migrated,
+        })
+        .unwrap();
+        assert_eq!(
+            decode_config(&serde_json::to_vec(&value).unwrap())
+                .unwrap()
+                .roots,
+            ["sftp://h/safe%2520name"]
+        );
+        value["version"] = 2.into();
+        assert!(decode_config(&serde_json::to_vec(&value).unwrap()).is_err());
     }
 }

@@ -297,6 +297,7 @@ impl Provider for SmbProvider {
     }
 
     fn list(&self, path: &str) -> AppResult<DirListing> {
+        super::provider_path::validate(Path::new(path), super::Scheme::Smb)?;
         // The connection root lists the server's shares.
         let entries = match split_share(path) {
             None => self.shares()?,
@@ -304,12 +305,13 @@ impl Provider for SmbProvider {
         };
         // Full address so the pane keeps its remote context.
         Ok(DirListing {
-            path: format!("smb://{}{}", self.key, path),
+            path: super::location::remote_uri("smb", &self.key, path)?,
             entries,
         })
     }
 
     fn stat(&self, path: &Path) -> io::Result<Stat> {
+        super::provider_path::validate(path, super::Scheme::Smb)?;
         let full = p(path);
         // Root and a bare share are always directories.
         let Some((_, rest)) = split_share(&full) else {
@@ -342,14 +344,21 @@ impl Provider for SmbProvider {
     }
 
     fn exists(&self, path: &Path) -> bool {
+        if super::provider_path::validate(path, super::Scheme::Smb).is_err() {
+            return false;
+        }
         self.stat(path).is_ok()
     }
 
     fn is_dir(&self, path: &Path) -> bool {
+        if super::provider_path::validate(path, super::Scheme::Smb).is_err() {
+            return false;
+        }
         self.stat(path).map(|s| s.is_dir).unwrap_or(false)
     }
 
     fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
+        super::provider_path::validate(path, super::Scheme::Smb)?;
         let base = p(path);
         let entries = match split_share(&base) {
             None => self.shares().map_err(to_io)?,
@@ -362,6 +371,7 @@ impl Provider for SmbProvider {
     }
 
     fn open_read(&self, path: &Path) -> io::Result<Box<dyn Read + Send>> {
+        super::provider_path::validate(path, super::Scheme::Smb)?;
         let resource = self.open_existing(&p(path)).map_err(to_io)?;
         let file = resource.unwrap_file();
         Ok(Box::new(SmbReader {
@@ -371,6 +381,7 @@ impl Provider for SmbProvider {
     }
 
     fn create_write(&self, path: &Path) -> io::Result<Box<dyn Write + Send>> {
+        super::provider_path::validate(path, super::Scheme::Smb)?;
         let args = FileCreateArgs::make_overwrite(FileAttributes::new(), CreateOptions::new());
         let resource = self.open(&p(path), &args).map_err(to_io)?;
         let file = resource.unwrap_file();
@@ -381,12 +392,14 @@ impl Provider for SmbProvider {
     }
 
     fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
+        super::provider_path::validate(path, super::Scheme::Smb)?;
         let mut w = self.create_write(path)?;
         w.write_all(data)?;
         w.flush()
     }
 
     fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+        super::provider_path::validate(path, super::Scheme::Smb)?;
         let full = p(path);
         let Some((share, rest)) = split_share(&full) else {
             return Ok(()); // Wurzel existiert immer
@@ -428,6 +441,8 @@ impl Provider for SmbProvider {
     }
 
     fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+        super::provider_path::validate(from, super::Scheme::Smb)?;
+        super::provider_path::validate(to, super::Scheme::Smb)?;
         let (_, to_rest) =
             split_share(&p(to)).ok_or_else(|| io::Error::other("Zielpfad enthält keinen Share"))?;
         // A rename needs DELETE on the source; attribute rights are added
@@ -462,6 +477,7 @@ impl Provider for SmbProvider {
     }
 
     fn remove_file(&self, path: &Path) -> io::Result<()> {
+        super::provider_path::validate(path, super::Scheme::Smb)?;
         // DELETE_ON_CLOSE is the SMB way to unlink.
         let mut args = FileCreateArgs::make_open_existing(FileAccessMask::new().with_delete(true));
         args.options = CreateOptions::new().with_delete_on_close(true);
@@ -469,6 +485,7 @@ impl Provider for SmbProvider {
     }
 
     fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
+        super::provider_path::validate(path, super::Scheme::Smb)?;
         // A directory must be empty before it can be deleted.
         for child in self.read_dir(path)? {
             if self.is_dir(&child) {

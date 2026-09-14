@@ -57,6 +57,11 @@ pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Pro
     };
 
     let (url_scheme, bare_host) = crate::net::security::webdav_endpoint(profile)?;
+    let bare_host = if bare_host.contains(':') && !bare_host.starts_with('[') {
+        format!("[{bare_host}]")
+    } else {
+        bare_host.to_owned()
+    };
     let host = format!(
         "{}://{}:{}",
         url_scheme,
@@ -111,7 +116,7 @@ pub struct WebdavProvider {
 
 /// Path string for the WebDAV protocol (always POSIX-style).
 fn p(path: &Path) -> String {
-    let s = path.to_string_lossy().replace('\\', "/");
+    let s = super::provider_path::text(path);
     if s.is_empty() {
         "/".to_string()
     } else {
@@ -215,6 +220,7 @@ impl Provider for WebdavProvider {
     }
 
     fn list(&self, path: &str) -> AppResult<DirListing> {
+        super::provider_path::validate(Path::new(path), super::Scheme::Webdav)?;
         let items = runtime()
             .block_on(self.client.list(&encode_path(path), Depth::Number(1)))
             .map_err(|e| AppError::from(format!("{}: {}", path, e)))?;
@@ -261,12 +267,13 @@ impl Provider for WebdavProvider {
 
         // Full address so the pane keeps its remote context.
         Ok(DirListing {
-            path: format!("webdav://{}{}", self.key, path),
+            path: super::location::remote_uri("webdav", &self.key, path)?,
             entries,
         })
     }
 
     fn stat(&self, path: &Path) -> io::Result<Stat> {
+        super::provider_path::validate(path, super::Scheme::Webdav)?;
         let entity = self.stat_entity(&p(path)).map_err(to_io)?;
         Ok(match entity {
             ListEntity::File(f) => Stat {
@@ -281,14 +288,21 @@ impl Provider for WebdavProvider {
     }
 
     fn exists(&self, path: &Path) -> bool {
+        if super::provider_path::validate(path, super::Scheme::Webdav).is_err() {
+            return false;
+        }
         self.stat_entity(&p(path)).is_ok()
     }
 
     fn is_dir(&self, path: &Path) -> bool {
+        if super::provider_path::validate(path, super::Scheme::Webdav).is_err() {
+            return false;
+        }
         self.stat(path).map(|s| s.is_dir).unwrap_or(false)
     }
 
     fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
+        super::provider_path::validate(path, super::Scheme::Webdav)?;
         let base = p(path);
         let listing = self.list(&base).map_err(to_io)?;
         Ok(listing
@@ -299,6 +313,7 @@ impl Provider for WebdavProvider {
     }
 
     fn open_read(&self, path: &Path) -> io::Result<Box<dyn Read + Send>> {
+        super::provider_path::validate(path, super::Scheme::Webdav)?;
         let response = runtime()
             .block_on(self.client.get(&e(path)))
             .map_err(to_io)?;
@@ -310,16 +325,19 @@ impl Provider for WebdavProvider {
     }
 
     fn create_write(&self, path: &Path) -> io::Result<Box<dyn Write + Send>> {
+        super::provider_path::validate(path, super::Scheme::Webdav)?;
         Ok(Box::new(WebdavWriter::new(self.client.clone(), e(path))?))
     }
 
     fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
+        super::provider_path::validate(path, super::Scheme::Webdav)?;
         runtime()
             .block_on(self.client.put(&e(path), data.to_vec()))
             .map_err(to_io)
     }
 
     fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+        super::provider_path::validate(path, super::Scheme::Webdav)?;
         // MKCOL creates a single collection — walk the components.
         let full = p(path);
         let mut acc = String::new();
@@ -350,6 +368,8 @@ impl Provider for WebdavProvider {
     /// (and Apache mod_dav) require an absolute URI — servers answer the
     /// short form with "400 Bad Request".
     fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+        super::provider_path::validate(from, super::Scheme::Webdav)?;
+        super::provider_path::validate(to, super::Scheme::Webdav)?;
         use reqwest_dav::re_exports::reqwest::Method;
 
         let destination = format!("{}{}", self.base, e(to));
@@ -380,12 +400,14 @@ impl Provider for WebdavProvider {
     }
 
     fn remove_file(&self, path: &Path) -> io::Result<()> {
+        super::provider_path::validate(path, super::Scheme::Webdav)?;
         runtime()
             .block_on(self.client.delete(&e(path)))
             .map_err(to_io)
     }
 
     fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
+        super::provider_path::validate(path, super::Scheme::Webdav)?;
         // DELETE on a collection removes it recursively.
         runtime()
             .block_on(self.client.delete(&e(path)))

@@ -52,13 +52,34 @@ impl Profile {
     /// (WebDAV allows `http://host`) is stripped so the key — and the
     /// addresses built from it — stay well-formed.
     pub fn connection_key(&self) -> String {
+        self.authority()
+            .map(|a| {
+                a.key(
+                    crate::vfs::Scheme::from_scheme_str(self.scheme())
+                        .unwrap_or(crate::vfs::Scheme::Local),
+                )
+            })
+            .unwrap_or_else(|_| format!("invalid-profile:{}", self.id))
+    }
+
+    pub fn authority(&self) -> AppResult<crate::vfs::location::RemoteAuthority> {
         let host = self
             .host
-            .split_once("://")
-            .map(|(_, rest)| rest)
+            .strip_prefix("https://")
+            .or_else(|| self.host.strip_prefix("http://"))
             .unwrap_or(&self.host)
             .trim_end_matches('/');
-        format!("{}@{}:{}", self.user, host, self.port)
+        let host = if host.contains(':') && !host.starts_with('[') {
+            format!("[{host}]")
+        } else {
+            host.to_owned()
+        };
+        crate::vfs::location::RemoteAuthority::parse(&format!(
+            "{}@{}:{}",
+            crate::vfs::location::encode(&self.user),
+            host,
+            self.port
+        ))
     }
 
     /// VFS address scheme for this profile. Neither FTPS variant is a
@@ -83,7 +104,8 @@ impl Profile {
         } else {
             &self.start_path
         };
-        format!("{}://{}{}", self.scheme(), self.connection_key(), start)
+        crate::vfs::location::remote_uri(self.scheme(), &self.connection_key(), start)
+            .unwrap_or_default()
     }
 }
 
@@ -133,12 +155,32 @@ fn config_path() -> AppResult<PathBuf> {
     crate::config::path("connections.json")
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProfilesDocument {
+    version: u8,
+    profiles: Vec<Profile>,
+}
+
+fn decode_profiles(bytes: &[u8]) -> AppResult<Vec<Profile>> {
+    // v0 was an array of raw profile fields; these fields were never URI-encoded.
+    let value: serde_json::Value = serde_json::from_slice(bytes).map_err(AppError::from)?;
+    if value.is_array() {
+        return serde_json::from_value(value).map_err(AppError::from);
+    }
+    let document: ProfilesDocument = serde_json::from_value(value).map_err(AppError::from)?;
+    if document.version != 1 {
+        return Err(AppError::new(crate::errors::code::VALIDATION_BAD_INPUT).op("profile-version"));
+    }
+    Ok(document.profiles)
+}
+
 fn load_profiles() -> Vec<Profile> {
     let Ok(path) = config_path() else {
         return Vec::new();
     };
     match std::fs::read(&path) {
-        Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_default(),
+        Ok(bytes) => decode_profiles(&bytes).unwrap_or_default(),
         Err(_) => Vec::new(),
     }
 }
@@ -148,7 +190,15 @@ fn store_profiles(profiles: &[Profile]) -> AppResult<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(AppError::from)?;
     }
-    let json = serde_json::to_vec_pretty(profiles).map_err(AppError::from)?;
+    // Do not overwrite an unknown future schema after a refused load.
+    if let Ok(bytes) = std::fs::read(&path) {
+        decode_profiles(&bytes)?;
+    }
+    let json = serde_json::to_vec_pretty(&ProfilesDocument {
+        version: 1,
+        profiles: profiles.to_vec(),
+    })
+    .map_err(AppError::from)?;
     std::fs::write(&path, json).map_err(AppError::from)
 }
 
@@ -354,6 +404,8 @@ pub fn net_list_profiles() -> Vec<Profile> {
 /// configured credential store under the profile id (never into the JSON).
 #[tauri::command]
 pub fn net_save_profile(profile: Profile, secret: Option<String>) -> AppResult<()> {
+    profile.authority()?;
+    crate::vfs::location::VfsLocation::parse(&profile.address())?;
     crate::commands::fs::cache::invalidate();
     super::certificate::approved_der(&profile)?;
     lifecycle::cancel_for_profile(&profile.id);
@@ -487,6 +539,8 @@ fn run_attempt(attempt: &Attempt, profile: &Profile) -> Result<Opened, ConnFailu
 #[tauri::command]
 pub fn net_connect(app: AppHandle, id: String) -> AppResult<ConnectOutcome> {
     let profile = profile_by_id(&id)?;
+    profile.authority()?;
+    crate::vfs::location::VfsLocation::parse(&profile.address())?;
     super::security::check(&profile)?;
 
     let attempt = match lifecycle::begin(&id) {
@@ -737,6 +791,26 @@ mod tests {
         let mut p = profile();
         p.start_path = String::new();
         assert_eq!(p.address(), "sftp://alice@example.com:2222/");
+    }
+
+    #[test]
+    fn profile_migration_retains_literal_paths_and_refuses_future_versions() {
+        let mut p = profile();
+        p.start_path = "/a%20b?c#d".into();
+        let legacy = serde_json::to_vec(&vec![p]).unwrap();
+        let profiles = decode_profiles(&legacy).unwrap();
+        assert!(profiles[0].address().ends_with("/a%2520b%3Fc%23d"));
+        let mut document = serde_json::to_value(ProfilesDocument {
+            version: 1,
+            profiles,
+        })
+        .unwrap();
+        assert_eq!(
+            decode_profiles(&serde_json::to_vec(&document).unwrap()).unwrap()[0].start_path,
+            "/a%20b?c#d"
+        );
+        document["version"] = 2.into();
+        assert!(decode_profiles(&serde_json::to_vec(&document).unwrap()).is_err());
     }
 
     #[test]

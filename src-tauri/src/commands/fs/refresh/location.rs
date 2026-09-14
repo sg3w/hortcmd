@@ -13,8 +13,8 @@ pub struct Location {
 
 pub fn resolve(raw: &str) -> AppResult<Location> {
     let address = vfs::parse_address(raw)?;
-    if address.scheme == Scheme::Local {
-        let path = std::fs::canonicalize(&address.path)?;
+    if address.scheme() == Scheme::Local {
+        let path = std::fs::canonicalize(address.path())?;
         if !path.is_dir() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::NotADirectory,
@@ -24,7 +24,7 @@ pub fn resolve(raw: &str) -> AppResult<Location> {
         }
         return Ok(Location {
             key: path.to_string_lossy().into_owned(),
-            scheme: address.scheme,
+            scheme: address.scheme(),
             native: Some(path),
         });
     }
@@ -33,11 +33,11 @@ pub fn resolve(raw: &str) -> AppResult<Location> {
     Ok(Location {
         key: format!(
             "{}:{}\0{}",
-            address.scheme.as_str(),
+            address.scheme().as_str(),
             address.connection_key().unwrap_or_default(),
-            address.path
+            address.path()
         ),
-        scheme: address.scheme,
+        scheme: address.scheme(),
         native: None,
     })
 }

@@ -73,6 +73,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             vfs::caps::location_capabilities,
+            vfs::location::vfs_location,
             mcp::commands::mcp_status,
             mcp::commands::mcp_publish_panes,
             mcp::commands::mcp_answer,

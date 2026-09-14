@@ -1,3 +1,4 @@
+import { migrateLegacyLocation } from "@/lib/location";
 // ============================================================
 // Session/workspace: the minimal tab layout of both panes is
 // kept in localStorage and restored on the next start.
@@ -65,7 +66,7 @@ export const useSession = create<SessionStore>()(
       storage: guardedStorage("session"),
       partialize: (s) => ({ session: s.session }),
       migrate: (stored, from) =>
-        acceptVersion("session", from, SESSION_VERSION) ? stored : {},
+        acceptVersion("session", from, SESSION_VERSION) ? (from < 2 ? migrateLocations(stored) : stored) : {},
       merge: (stored, current) => ({
         ...current,
         session: rehydrate(
@@ -77,3 +78,13 @@ export const useSession = create<SessionStore>()(
     },
   ),
 );
+
+function migrateLocations(stored: unknown): unknown {
+  if (!stored || typeof stored !== "object") return stored;
+  // Migrate only this domain's known path fields, preserving unrelated data.
+  return JSON.parse(JSON.stringify(stored), (key: string, value: unknown) => {
+    if (typeof value !== "string") return value;
+    try { return key === "path" ? migrateLegacyLocation(value) : value; }
+    catch { return value; }
+  }) as unknown;
+}

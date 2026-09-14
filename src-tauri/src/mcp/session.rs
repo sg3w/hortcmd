@@ -260,6 +260,8 @@ fn read_resource(uri: &str, config: &McpConfig) -> Value {
                     .and_then(Value::as_str)
                     .unwrap_or_default()
                     .to_owned();
+                let remote = crate::vfs::parse_address(&path)
+                    .is_ok_and(|location| location.scheme() != crate::vfs::Scheme::Local);
                 if let Some(selection) = obj.get_mut("selection").and_then(Value::as_array_mut) {
                     selection.retain(|entry| {
                         entry.as_str().is_some_and(|name| {
@@ -268,7 +270,15 @@ fn read_resource(uri: &str, config: &McpConfig) -> Value {
                                 && !name.contains(['/', '\\'])
                                 && super::scope::require_in_scope(
                                     &config.roots,
-                                    &format!("{}/{}", path.trim_end_matches('/'), name),
+                                    &format!(
+                                        "{}/{}",
+                                        path.trim_end_matches('/'),
+                                        if remote {
+                                            crate::vfs::location::encode(name)
+                                        } else {
+                                            name.to_owned()
+                                        }
+                                    ),
                                 )
                                 .is_ok()
                         })

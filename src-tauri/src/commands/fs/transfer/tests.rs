@@ -42,6 +42,7 @@ struct FakeFs {
 }
 
 struct Fake {
+    store: String,
     fs: Arc<Mutex<FakeFs>>,
     /// `rename` fails when the source is in here.
     fail_rename: Mutex<HashSet<PathBuf>>,
@@ -53,6 +54,7 @@ struct Fake {
 impl Fake {
     fn new(replaces: bool) -> Arc<Fake> {
         Arc::new(Fake {
+            store: "fake".into(),
             fs: Arc::new(Mutex::new(FakeFs::default())),
             fail_rename: Mutex::new(HashSet::new()),
             fail_remove: Mutex::new(HashSet::new()),
@@ -114,7 +116,7 @@ impl Drop for FakeWriter {
 
 impl Provider for Fake {
     fn store_id(&self) -> String {
-        "fake".into()
+        self.store.clone()
     }
     fn list(&self, _path: &str) -> AppResult<crate::commands::fs::dir::DirListing> {
         Err(AppError::from("nicht unterstützt"))
@@ -1102,4 +1104,30 @@ fn failed_parallel_directory_preparation_does_not_schedule_file_writes() {
     assert_eq!(fs::read(&blocked).unwrap(), b"existing destination");
     assert_eq!(fs::read(source.join("a.txt")).unwrap(), b"source");
     fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn canonical_uri_resolution_writes_the_exact_decoded_provider_object() {
+    use crate::vfs::{
+        self,
+        location::{ProviderPath, VfsLocation},
+    };
+    for scheme in ["sftp", "ftp", "smb", "webdav"] {
+        let host = format!("canonical-fixture-{scheme}");
+        let location = VfsLocation::parse(&format!("{scheme}://u@{host}/")).unwrap();
+        let mut fake = Fake::new(true);
+        Arc::get_mut(&mut fake).unwrap().store = location.store_identity().0;
+        crate::net::session::register_live(fake.clone());
+        for name in ["%20", "a?b#c", "é", "e\u{301}", "a@b"] {
+            let path = ProviderPath::from_raw("/safe").unwrap().join(name).unwrap();
+            let uri = format!("{scheme}://u@{}{}", host.to_uppercase(), path.uri());
+            let (provider, resolved) = vfs::resolve(&uri).unwrap();
+            assert_eq!(resolved, format!("/safe/{name}"));
+            provider
+                .write(Path::new(&resolved), b"exact object")
+                .unwrap();
+            assert_eq!(fake.get(&resolved).as_deref(), Some("exact object"));
+        }
+        crate::net::session::unregister_live(&fake.store_id());
+    }
 }

@@ -58,7 +58,7 @@ pub fn connections() -> Value {
         .filter(|c| c.connected)
         .filter_map(|c| crate::vfs::parse_address(&c.address)
             .ok()
-            .map(|a| json!({ "name": c.name, "scheme": a.scheme.as_str() })))
+            .map(|a| json!({ "name": c.name, "scheme": a.scheme().as_str() })))
         .collect::<Vec<_>>())
 }
 

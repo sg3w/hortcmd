@@ -70,7 +70,7 @@ describe("parentPath", () => {
 
   it("walks up a Windows path and stops at the drive", () => {
     expect(parentPath("C:\\Users\\x\\a.txt")).toBe("C:\\Users\\x");
-    expect(parentPath("C:\\Users")).toBe("C:");
+    expect(parentPath("C:\\Users")).toBe("C:\\");
   });
 
   it("ignores trailing separators", () => {
@@ -152,7 +152,7 @@ describe("ancestorChain", () => {
 
   it("terminates on a Windows drive", () => {
     expect(ancestorChain("C:\\Users\\x")).toEqual([
-      "C:",
+      "C:\\",
       "C:\\Users",
       "C:\\Users\\x",
     ]);

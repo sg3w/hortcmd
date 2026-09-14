@@ -91,7 +91,17 @@ fn page(
         hits.push(IndexHit {
             id: hex::encode(Sha256::digest(format!("{}\0{path}", snapshot.id))),
             relative: path.clone(),
-            address: address.map(|root| format!("{}/{path}", root.trim_end_matches('/'))),
+            address: address.map(|root| {
+                let suffix = if root.contains("://") {
+                    path.split('/')
+                        .map(crate::vfs::location::encode)
+                        .collect::<Vec<_>>()
+                        .join("/")
+                } else {
+                    path.to_owned()
+                };
+                format!("{}/{suffix}", root.trim_end_matches('/'))
+            }),
             directory: row.directory,
             size: row.size,
             modified: row.modified,

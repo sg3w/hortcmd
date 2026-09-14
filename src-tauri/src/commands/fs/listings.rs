@@ -117,7 +117,7 @@ async fn read_with(path: String, fresh: bool) -> AppResult<DirListing> {
     let original = path.clone();
     let (provider, resolved, key, remote) = tokio::task::spawn_blocking(move || {
         let (provider, resolved) = crate::vfs::resolve(&path)?;
-        let remote = crate::vfs::parse_address(&path)?.scheme != crate::vfs::Scheme::Local;
+        let remote = crate::vfs::parse_address(&path)?.scheme() != crate::vfs::Scheme::Local;
         let canonical = if !remote {
             std::fs::canonicalize(&resolved)?
                 .to_string_lossy()

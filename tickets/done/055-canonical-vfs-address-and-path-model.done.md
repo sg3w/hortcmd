@@ -50,18 +50,18 @@ plugin/MCP boundaries.
 
 ## Acceptance Criteria
 
-- [ ] Internal VFS APIs use typed locations; raw address parsing is confined to
+- [x] Internal VFS APIs use typed locations; raw address parsing is confined to
       documented input/compatibility boundaries.
-- [ ] Rust and TypeScript produce identical canonical forms and relationships for
+- [x] Rust and TypeScript produce identical canonical forms and relationships for
       the shared fixture corpus.
-- [ ] IPv6, Unicode, spaces, percent escapes, default ports, Windows drives/UNC,
+- [x] IPv6, Unicode, spaces, percent escapes, default ports, Windows drives/UNC,
       roots, and reserved characters behave predictably.
-- [ ] Secrets cannot be embedded in or serialized as locations.
-- [ ] Display form is never used as connection, authorization, cache, or journal
+- [x] Secrets cannot be embedded in or serialized as locations.
+- [x] Display form is never used as connection, authorization, cache, or journal
       identity.
-- [ ] Existing saved profiles, tabs, history, and operations migrate without losing
+- [x] Existing saved profiles, tabs, history, and operations migrate without losing
       valid locations.
-- [ ] Provider root containment cannot be bypassed by alternate encodings.
+- [x] Provider root containment cannot be bypassed by alternate encodings.
 
 ## Tests
 
@@ -85,3 +85,29 @@ plugin/MCP boundaries.
 - Existing persisted data migrates safely.
 - Path ambiguity and alternate encoding cannot bypass provider-root policy.
 - Rename this file to `055-canonical-vfs-address-and-path-model.done.md`.
+
+
+## Implementation and verification
+
+Implemented the version-1 typed local/remote model, canonical authority and
+location identities, validated URI parsing/serialization, provider-component
+containment, and generated TypeScript bindings. Existing string-valued commands
+are documented compatibility boundaries returning typed locations internally.
+Navigation and capability caching use the shared presentation specification.
+
+Migrated literal remote paths in sessions/history/preferences (schema 2), profiles
+and MCP configuration (version-1 envelopes). Recovery/search records keep decoded
+paths and accept previous endpoint digests. Unknown future schemas are refused.
+
+See [VFS locations](../../docs/vfs-locations.md) for exact rules and compatibility
+limits. Repeated remote separators are represented losslessly but execution is
+refused before I/O until [TICKET-095](../095-provider-component-streaming-paths.md)
+replaces the remaining streaming adapters. Native Windows/Linux evidence and
+adapter work are deferred to [TICKET-259](../259-vfs-native-provider-path-conformance.md)
+under the user's scheduling instruction. This ticket does not claim those native
+protocol tests have run.
+
+Validation: `npm run check` passed. Shared golden cases, bounded parser round-trip
+checks, malformed/secret input rejection, provider dispatch, typed identity,
+MCP containment, persistence migrations and both IPC modes are covered. Existing
+live protocol/keychain tests remain ignored in the ordinary check.

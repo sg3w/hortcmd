@@ -27,6 +27,7 @@ import { create } from "zustand";
 import type { Capability, LocationCapabilities } from "@/ipc/bindings";
 import { locationCapabilities } from "@/ipc/client";
 import { schemeOf } from "@/lib/path";
+import { parseLocation, storeIdentity } from "@/lib/location";
 
 /** Nothing at all — the answer for a location that is not reachable. */
 const NONE: readonly Capability[] = [];
@@ -38,12 +39,8 @@ const NONE: readonly Capability[] = [];
  * which is why both spellings of one server end up on one entry.
  */
 export function locationKey(address: string): string {
-  const m = /^([a-z][a-z0-9+.-]*):\/\/([^/]*)/i.exec(address);
-  if (!m) return "local";
-  const scheme = m[1].toLowerCase();
-  return scheme === "file" || scheme === "local"
-    ? "local"
-    : `${scheme}://${m[2].toLowerCase()}`;
+  try { return storeIdentity(parseLocation(address)); }
+  catch { return "invalid"; }
 }
 
 interface CapsState {
@@ -124,6 +121,7 @@ function store(
  */
 export function capsOf(address: string): readonly Capability[] {
   const key = locationKey(address);
+  if (key === "invalid") return NONE;
   const known = useCaps.getState().known[key];
   if (known) return known;
   void fetchCaps(address, key);
@@ -186,6 +184,7 @@ export function primeCaps(address: string): void {
  */
 export async function loadCaps(address: string): Promise<readonly Capability[]> {
   const key = locationKey(address);
+  if (key === "invalid") return NONE;
   const known = useCaps.getState().known[key];
   return known ?? fetchCaps(address, key);
 }

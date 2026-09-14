@@ -40,7 +40,10 @@ pub fn normalize_roots(roots: &[String]) -> Vec<String> {
         if trimmed.is_empty() {
             continue;
         }
-        let tidied = trim_trailing_separator(trimmed);
+        let tidied = match vfs::parse_address(trimmed) {
+            Ok(location) if location.scheme() != Scheme::Local => location.uri(),
+            _ => trim_trailing_separator(trimmed),
+        };
         if !out.iter().any(|existing| existing == &tidied) {
             out.push(tidied);
         }
@@ -101,7 +104,7 @@ fn segments_contain(parent: &[String], child: &[String], case_sensitive: bool) -
 /// Two addresses with the same path on different stores are different
 /// places, and a root on one must not admit the other.
 fn store_of(address: &Address) -> String {
-    match address.scheme {
+    match address.scheme() {
         Scheme::Local => "local".to_string(),
         scheme => format!(
             "{}:{}",
@@ -124,16 +127,11 @@ pub fn contains(root: &str, candidate: &str) -> AppResult<bool> {
 
     // Compare local paths in the filesystem's canonical namespace. A lexical
     // precheck would reject legitimate aliases such as /var and /private/var.
-    if root_addr.scheme == Scheme::Local {
-        return Ok(real_path_contains(&root_addr.path, &cand_addr.path));
+    if root_addr.scheme() == Scheme::Local {
+        return Ok(real_path_contains(&root_addr.path(), &cand_addr.path()));
     }
-    let root_segments = lexical_segments(&root_addr.path);
-    let cand_segments = lexical_segments(&cand_addr.path);
-    if !segments_contain(&root_segments, &cand_segments, true) {
-        return Ok(false);
-    }
-
-    Ok(true)
+    Ok(vfs::location::ProviderPath::from_raw(&root_addr.path())?
+        .contains(&vfs::location::ProviderPath::from_raw(&cand_addr.path())?))
 }
 
 /// Containment in the filesystem-resolved namespace.
@@ -220,7 +218,7 @@ pub fn require_in_scope(roots: &[String], candidate: &str) -> AppResult<()> {
     for root in roots {
         if contains(root, candidate).unwrap_or(false) {
             let address = vfs::parse_address(candidate)?;
-            if address.scheme != Scheme::Local {
+            if address.scheme() != Scheme::Local {
                 let (provider, path) = vfs::resolve(candidate)?;
                 verify_remote_path(provider.as_ref(), &path)?;
             }
@@ -290,7 +288,7 @@ mod tests {
             "/".into(),
             "sftp://u@h/data/".into(),
         ]);
-        assert_eq!(roots, vec!["/home/u", "/", "sftp://u@h/data"]);
+        assert_eq!(roots, vec!["/home/u", "/", "sftp://u@h/data/"]);
     }
 
     #[test]

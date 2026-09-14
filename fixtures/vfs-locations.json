@@ -1,0 +1,159 @@
+{
+  "valid": [
+    {
+      "raw": "sftp://Alice@Example.COM/a%20b/%25",
+      "uri": "sftp://Alice@example.com/a b/%25",
+      "store": "sftp:Alice@example.com:22",
+      "path": "/a b/%",
+      "parent": "sftp://Alice@example.com/a b"
+    },
+    {
+      "raw": "sftp://u@[2001:0db8:0:0::1]:22/日本語",
+      "uri": "sftp://u@[2001:db8::1]:22/日本語",
+      "store": "sftp:u@[2001:db8::1]:22",
+      "path": "/日本語",
+      "parent": "sftp://u@[2001:db8::1]:22/"
+    },
+    {
+      "raw": "ftp://127.0.0.1",
+      "uri": "ftp://127.0.0.1/",
+      "store": "ftp:@127.0.0.1:21",
+      "path": "/",
+      "parent": "ftp://127.0.0.1/"
+    },
+    {
+      "raw": "webdav://Jörg@dav/a%3Fb%23c",
+      "uri": "webdav://Jörg@dav/a%3Fb%23c",
+      "store": "webdav:Jörg@dav:443",
+      "path": "/a?b#c",
+      "parent": "webdav://Jörg@dav/"
+    },
+    {
+      "raw": "smb://u@nas/share//x",
+      "uri": "smb://u@nas/share//x",
+      "store": "smb:u@nas:445",
+      "path": "/share//x",
+      "parent": "smb://u@nas/share/"
+    },
+    {
+      "raw": "sftp://a%40b@host/one\\two",
+      "uri": "sftp://a%40b@host/one\\two",
+      "store": "sftp:a%40b@host:22",
+      "path": "/one\\two",
+      "parent": "sftp://a%40b@host/"
+    },
+    {
+      "raw": "sftp://h/é",
+      "uri": "sftp://h/é",
+      "store": "sftp:@h:22",
+      "path": "/é",
+      "parent": "sftp://h/"
+    },
+    {
+      "raw": "sftp://h/é",
+      "uri": "sftp://h/é",
+      "store": "sftp:@h:22",
+      "path": "/é",
+      "parent": "sftp://h/"
+    },
+    {
+      "raw": "sftp://h/%252e%252e",
+      "uri": "sftp://h/%252e%252e",
+      "store": "sftp:@h:22",
+      "path": "/%2e%2e",
+      "parent": "sftp://h/"
+    },
+    {
+      "raw": "/tmp/a\\b",
+      "uri": "/tmp/a\\b",
+      "store": "local",
+      "path": "/tmp/a\\b",
+      "parent": "/tmp"
+    },
+    {
+      "raw": "C:\\Users\\a",
+      "uri": "C:\\Users\\a",
+      "store": "local",
+      "path": "C:\\Users\\a",
+      "parent": "C:\\Users"
+    },
+    {
+      "raw": "\\\\server\\share\\a",
+      "uri": "\\\\server\\share\\a",
+      "store": "local",
+      "path": "\\\\server\\share\\a",
+      "parent": "\\\\server\\share"
+    },
+    {
+      "raw": "\\\\?\\C:\\a",
+      "uri": "\\\\?\\C:\\a",
+      "store": "local",
+      "path": "\\\\?\\C:\\a",
+      "parent": "\\\\?\\C:\\"
+    },
+    {
+      "raw": "relative/a%20b",
+      "uri": "relative/a%20b",
+      "store": "local",
+      "path": "relative/a%20b",
+      "parent": "relative"
+    },
+    {
+      "raw": "file:///tmp/a%20b",
+      "uri": "/tmp/a%20b",
+      "store": "local",
+      "path": "/tmp/a%20b",
+      "parent": "/tmp"
+    },
+    {
+      "raw": "sftp://[::ffff:192.0.2.1]/",
+      "uri": "sftp://[::ffff:c000:201]/",
+      "store": "sftp:@[::ffff:c000:201]:22",
+      "path": "/",
+      "parent": "sftp://[::ffff:c000:201]/"
+    }
+  ],
+  "invalid": [
+    "sftp://u:secret@host/a",
+    "sftp://u%3Asecret@host/a",
+    "sftp://u@x@host/a",
+    "sftp:///a",
+    "sftp://host:bad/a",
+    "sftp://host:0/a",
+    "sftp://host:65536/a",
+    "sftp://host:+22/a",
+    "sftp://[broken]/a",
+    "sftp://2001:db8::1/a",
+    "sftp://h/a?token=secret",
+    "sftp://h/a#secret",
+    "sftp://h/%",
+    "sftp://h/%GG",
+    "sftp://h/%ff",
+    "sftp://h/%00",
+    "sftp://h/%2foutside",
+    "sftp://h/a/../b",
+    "sftp://h/%2e%2e/x",
+    "sftp://h/a/./b",
+    "smb://h/share/a%5cb",
+    "gopher://h/a",
+    "sftp://bad host/a",
+    "constructor://h/a",
+    "__proto__://h/a",
+    "sftp://host;other/a",
+    "sftp://host=other/a"
+  ],
+  "legacy": [
+    {
+      "raw": "sftp://u@host/a%20b",
+      "uri": "sftp://u@host/a%2520b"
+    },
+    {
+      "raw": "webdav://host/a?b#c",
+      "uri": "webdav://host/a%3Fb%23c"
+    },
+    {
+      "raw": "/tmp/a%20b",
+      "uri": "/tmp/a%20b"
+    }
+  ]
+}
