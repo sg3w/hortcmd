@@ -333,7 +333,7 @@ export function demoGitStatus(path: string): GitStatus {
       "readme.md": "untracked",
       "report.pdf": "deleted",
       "photo.jpg": "renamed",
-      "config.json": "staged",
+      "config.json": "added",
       "data.csv": "conflict",
       Projects: "modified",
       // Also executable — shows that the Git rule has the higher priority.

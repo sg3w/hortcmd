@@ -7,7 +7,7 @@ anzeigen: **neu grün, geändert blau, untracked rot**. Die Bedeutung der Zustä
 korrekt unterscheiden; eine bestehende Datei mit staged Änderungen ist nicht neu.
 
 Eigenständiges Farbticket, getrennt vom vorgezogenen Ordnerauswahlfehler in
-[TICKET-060](060-unified-selection-colors-and-toggle.md). Keine neue Tastenbelegung
+[TICKET-060](060-unified-selection-colors-and-toggle.done.md). Keine neue Tastenbelegung
 und keine Neugestaltung der Auswahlfarben. Nach 060 einplanen.
 
 ## Bestandsprüfung
@@ -58,16 +58,16 @@ prüfen. Bei notwendigen Kontrastkorrekturen die gewünschte Farbfamilie erhalte
 
 ## Akzeptanzkriterien und Tests
 
-- [ ] Neue Dateien grün, bestehende geänderte Dateien blau, untracked rot in beiden Themes.
-- [ ] Rust-Tests decken `A `, `AM`, ` M`, `M `, `MM`, `??`, Konflikt, Löschen,
+- [x] Neue Dateien grün, bestehende geänderte Dateien blau, untracked rot in beiden Themes.
+- [x] Rust-Tests decken `A `, `AM`, ` M`, `M `, `MM`, `??`, Konflikt, Löschen,
       Rename, Ignorieren und relevante Submodule-/Ordneraggregation ab.
-- [ ] Ein reales temporäres Git-Repository bestätigt untracked → hinzugefügt sowie
+- [x] Ein reales temporäres Git-Repository bestätigt untracked → hinzugefügt sowie
       Änderung einer bestehenden Datei vor/nach Staging ohne falsche Neu-Klassifizierung.
-- [ ] UI-/Registrytests prüfen neue Defaults, Themewechsel und Overrides.
-- [ ] Markieren → Git-Refresh → Abwählen erhält Auswahlfarben und zeigt danach
+- [x] UI-/Registrytests prüfen neue Defaults, Themewechsel und Overrides.
+- [x] Markieren → Git-Refresh → Abwählen erhält Auswahlfarben und zeigt danach
       den richtigen Git-Zustand; aktives/inaktives Panel und alle Ansichten geprüft.
-- [ ] Legende, Vorschau, Reset und de/en entsprechen der neuen Bedeutung.
-- [ ] Keine Änderung der Tastenbelegung oder der Auswahlfarb-Defaults.
+- [x] Legende, Vorschau, Reset und de/en entsprechen der neuen Bedeutung.
+- [x] Keine Änderung der Tastenbelegung oder der Auswahlfarb-Defaults.
 
 ## Definition of Done
 
@@ -77,3 +77,18 @@ prüfen. Bei notwendigen Kontrastkorrekturen die gewünschte Farbfamilie erhalte
 - Git-Farbzuordnung und etwaige Migration in `Concept.md` dokumentieren.
 - Erst nach Umsetzung nach `tickets/done/061-git-status-font-colors.done.md`
   verschieben. Lokaler Commit nach Ticketabschluss, ohne Push.
+
+## Abschluss
+
+Backend-Klassifikation und zentrale Theme-Defaults umgesetzt. Der persistierte
+Slot `git.staged` bleibt für bestehende Overrides erhalten und trifft jetzt nur
+`added`; bestehende geänderte Dateien verwenden `git.modified`. Kein Umschreiben
+von Einstellungen. Legende, Vorschau und Reset beziehen Werte aus der Registry.
+
+Tests: Porcelain-Matrix einschließlich Prioritäten und Ordneraggregation; echtes
+temporäres Git-Repository für untracked → added und bestehende Dateien vor/nach
+Staging; Registry-Defaults, Overrides und Themewechsel; Markieren/Refresh/Abwählen
+in Details, Liste, Miniaturen und Baum-Dateiliste bei aktivem/inaktivem Panel.
+
+Kontrast gegen aktive/inaktive Panel- und alternierende Zeilenhintergründe:
+Minimum dunkel 4,64:1, hell 5,83:1 für die drei neuen Defaults.

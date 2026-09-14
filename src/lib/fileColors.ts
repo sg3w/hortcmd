@@ -111,9 +111,10 @@ const BUILTIN: FileColorDef[] = [
   gitRule("conflict", 10, { dark: "#ef4444", light: "#b91c1c" }, "font-bold"),
   gitRule("deleted", 20, { dark: "#f87171", light: "#dc2626" }, "line-through"),
   gitRule("renamed", 30, { dark: "#38bdf8", light: "#0369a1" }),
-  gitRule("untracked", 40, { dark: "#34d399", light: "#047857" }),
-  gitRule("staged", 50, { dark: "#a78bfa", light: "#6d28d9" }),
-  gitRule("modified", 60, { dark: "#fbbf24", light: "#b45309" }),
+  gitRule("untracked", 40, { dark: "#F87171", light: "#B91C1C" }),
+  // Keep the persisted slot id so existing staged overrides now color additions.
+  { ...gitRule("added", 50, { dark: "#4ADE80", light: "#166534" }), id: "git.staged" },
+  gitRule("modified", 60, { dark: "#60A5FA", light: "#1D4ED8" }),
   gitRule("ignored", 70, { dark: "#9aa0a6", light: "#6b7178" }, "italic"),
 
   // ----- File attributes (flags come from commands/fs/attrs.rs) -----

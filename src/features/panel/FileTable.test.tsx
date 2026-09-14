@@ -82,3 +82,26 @@ for (const language of ["de", "en"] as const) {
     expect(result.violations.filter(v => v.impact === "serious" || v.impact === "critical").map(v => ({ id: v.id, nodes: v.nodes.map(n => n.html) }))).toEqual([]);
   });
 }
+
+for (const active of ["left", "right"] as const) {
+  it.each(["details", "list", "thumbnails", "tree"] as const)(
+    `keeps marks over Git refresh and restores current color in %s with ${active} active`, viewMode => {
+      usePanes.setState(s => ({active, right: {...s.right, viewMode, tabs: s.right.tabs.map(t => ({...t,
+        git: {is_repo: true, branch: "main", entries: {"d.txt": "added"}},
+      }))}}));
+      render(<FileTable side="right" onOpen={() => {}} />);
+      const entry = () => document.getElementById("right-entry-3")!;
+      expect(entry()).toHaveAttribute("aria-selected", "true");
+      expect(entry()).toHaveClass("text-selection-text");
+      expect((entry() as HTMLElement).style.color).toBe("");
+      act(() => usePanes.setState(s => ({right: {...s.right, tabs: s.right.tabs.map(t => ({...t,
+        git: {is_repo: true, branch: "main", entries: {"d.txt": "modified"}},
+      }))}})));
+      expect(entry()).toHaveClass("text-selection-text");
+      expect((entry() as HTMLElement).style.color).toBe("");
+      act(() => usePanes.setState(s => ({right: {...s.right, tabs: s.right.tabs.map(t => ({...t, selected: new Set<string>()}))}})));
+      expect(entry()).toHaveAttribute("aria-selected", "false");
+      expect((entry() as HTMLElement).style.color).toBe("var(--fc-git-modified)");
+    },
+  );
+}

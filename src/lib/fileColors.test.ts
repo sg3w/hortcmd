@@ -176,3 +176,23 @@ describe("publishing to the document", () => {
     expect(style.getPropertyValue(fileColorVar(builtin.id))).toBeTruthy();
   });
 });
+
+describe("Git meaning and theme defaults (061)", () => {
+  it.each([
+    ["added", "git.staged", "#4ADE80", "#166534"],
+    ["modified", "git.modified", "#60A5FA", "#1D4ED8"],
+    ["untracked", "git.untracked", "#F87171", "#B91C1C"],
+  ])("publishes %s consistently with overrides and reset", (status, id, dark, light) => {
+    const def = resolveFileColor(activeRules(), ctx({gitStatus: status}))!;
+    expect(def.id).toBe(id);
+    for (const [theme, color] of [["dark", dark], ["light", light]] as const) {
+      applyFileColors(theme, {}, []);
+      expect(fileColorValue(def, theme, {})).toBe(color);
+      expect(document.documentElement.style.getPropertyValue(fileColorVar(id))).toBe(color);
+      expect(fileColorValue(def, theme, {[id]: {[theme]: "#123456"}})).toBe("#123456");
+      // Reset removes overrides; the same defaults also feed settings previews.
+      expect(fileColorValue(def, theme, {})).toBe(color);
+    }
+    expect(def.labelKey).toBe(`color.git.${status}`);
+  });
+});

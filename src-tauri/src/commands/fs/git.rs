@@ -18,7 +18,7 @@ use ts_rs::TS;
 pub struct GitStatus {
     pub is_repo: bool,
     pub branch: Option<String>,
-    /// Name (top level in the folder) → status code ("untracked" | "staged" |
+    /// Name (top level in the folder) → status code ("untracked" | "added" |
     /// "modified" | "deleted" | "renamed" | "conflict" | "ignored").
     pub entries: HashMap<String, String>,
 }
@@ -59,9 +59,9 @@ fn run_git(dir: &Path, args: &[&str]) -> Option<String> {
 /// `sub` = the change is in a subfolder (→ folder "modified").
 ///
 /// The two porcelain columns are the index (X) and the worktree (Y).
-/// Deletion, rename and conflict describe *what* happened and keep their
-/// own status; for the remaining changes X/Y decide *where* the change
-/// lives: index only (Y blank) → "staged", otherwise "modified".
+/// Conflict > rename > deletion > addition > modification for direct entries.
+/// Descendant changes aggregate to modified (ignored stays ignored), never added.
+/// Porcelain v1 folds dirty submodules into M, so they remain modified as well.
 fn classify(code: &str, sub: bool) -> &'static str {
     if code == "!!" {
         return "ignored";
@@ -80,8 +80,8 @@ fn classify(code: &str, sub: bool) -> &'static str {
         "renamed"
     } else if x == b'D' || y == b'D' {
         "deleted"
-    } else if x != b' ' && y == b' ' {
-        "staged"
+    } else if x == b'A' {
+        "added"
     } else {
         "modified"
     }
@@ -201,4 +201,99 @@ pub async fn git_status_watch(app: AppHandle, path: String) {
     .await
     .unwrap_or_else(|_| empty(false));
     let _ = app.emit("git-support-ready", GitStatusEvent { path, status });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn porcelain_meaning_and_folder_aggregation() {
+        for (code, expected) in [
+            ("A ", "added"),
+            ("AM", "added"),
+            (" M", "modified"),
+            ("M ", "modified"),
+            ("MM", "modified"),
+            ("??", "untracked"),
+            ("UU", "conflict"),
+            ("AA", "conflict"),
+            ("DD", "conflict"),
+            ("AU", "conflict"),
+            ("AD", "deleted"),
+            (" D", "deleted"),
+            ("D ", "deleted"),
+            ("R ", "renamed"),
+            ("RM", "renamed"),
+            ("RD", "renamed"),
+            ("!!", "ignored"),
+        ] {
+            assert_eq!(classify(code, false), expected, "{code}");
+            assert_eq!(
+                classify(code, true),
+                if code == "!!" { "ignored" } else { "modified" },
+                "folder {code}"
+            );
+        }
+        // Porcelain v1 reports changed/dirty submodules as M, never as added.
+        assert_eq!(classify(" M", false), "modified");
+    }
+
+    #[test]
+    fn real_repository_distinguishes_additions_from_staged_edits() {
+        struct Temp(PathBuf);
+        impl Drop for Temp {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let path = std::env::temp_dir().join(format!(
+            "hortcmd-git-colors-{}",
+            format_args!(
+                "{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            )
+        ));
+        std::fs::create_dir(&path).unwrap();
+        let temp = Temp(path);
+        let dir = temp.0.as_path();
+        let git = |args: &[&str]| run_git(dir, args).expect("local test Git command");
+        git(&["init"]);
+        std::fs::write(dir.join("existing.txt"), "original\n").unwrap();
+        git(&["add", "existing.txt"]);
+        git(&[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-m",
+            "initial",
+        ]);
+        let status = || compute_git_status(dir.to_str().unwrap()).entries;
+        std::fs::write(dir.join("new.txt"), "new\n").unwrap();
+        assert_eq!(status()["new.txt"], "untracked");
+        git(&["add", "new.txt"]);
+        assert_eq!(status()["new.txt"], "added");
+        std::fs::write(dir.join("new.txt"), "new and edited\n").unwrap();
+        assert_eq!(status()["new.txt"], "added");
+        std::fs::write(dir.join("existing.txt"), "edited\n").unwrap();
+        assert_eq!(status()["existing.txt"], "modified");
+        git(&["add", "existing.txt"]);
+        assert_eq!(status()["existing.txt"], "modified");
+        std::fs::create_dir(dir.join("folder")).unwrap();
+        std::fs::write(dir.join("folder/new.txt"), "new\n").unwrap();
+        git(&["add", "folder"]);
+        assert_eq!(status()["folder"], "modified");
+        assert_eq!(
+            compute_git_status(dir.join("folder").to_str().unwrap()).entries["new.txt"],
+            "added"
+        );
+    }
 }

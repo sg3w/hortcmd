@@ -1682,8 +1682,16 @@ Two things follow from that split:
   `DirEntry`/`FileProps` now carry `hidden`/`readonly`/`executable` from the new
   `commands/fs/attrs.rs` (per platform, so the frontend stops guessing from the
   name/mode — this also fixes hidden-file filtering on Windows), and `classify()`
-  in `git.rs` now distinguishes `untracked` (`??`) from `staged` (index-only
-  change) instead of lumping both into `new`. `index.css` no longer hardcodes
+  in `git.rs` now distinguishes `untracked` (`??`) from `added` (`A ` / `AM`)
+  and `modified` (existing files, staged or unstaged; TICKET-061). Defaults are
+  red for untracked, green for added and blue for modified in both themes.
+  Conflict, rename and deletion take precedence over addition, in that order.
+  Descendant changes remain modified at folder level; ignored-only folders stay
+  ignored, independently of record order. Porcelain v1 dirty submodules remain
+  modified. The persisted `git.staged` slot now matches only `added`, preserving
+  existing overrides for additions; existing-file changes use `git.modified`.
+  No settings rewrite is needed because only overrides are persisted. Labels,
+  properties, settings previews and resets all use the central registry. `index.css` no longer hardcodes
   `--selection`/`--cursor-active`/`--cursor-inactive-marker` but references the
   registry. Verified in browser demo mode: all 11 rules incl. priority
   (git-ignored beats executable), custom rule beats built-ins, live update of
