@@ -65,6 +65,7 @@ pub fn run() {
                 })
                 .build()?;
             menu::install(app.handle())?;
+            commands::fs::drives::start(app.handle().clone());
             mcp::confirm::attach(app.handle().clone());
             if let Err(error) = mcp::server::configure(&mcp::config()) {
                 eprintln!("MCP startup failed: {}", error.code);

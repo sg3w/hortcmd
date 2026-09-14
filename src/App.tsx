@@ -5,11 +5,11 @@
 
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import type { Drive } from "@/ipc/bindings";
+import { useDrives } from "@/store/driveStore";
+import { useDriveFallback } from "@/features/panel/useDriveFallback";
 import {
   hasTauri,
   homeDir,
-  listDrives,
   onLeftovers,
   onFsCollision,
   onFsDone,
@@ -58,7 +58,8 @@ import { McpRuntime } from "@/features/settings/McpRuntime";
 
 export default function App() {
   useRefresh();
-  const [drives, setDrives] = useState<Drive[]>([]);
+  const drives = useDrives();
+  useDriveFallback(drives);
   const [ready, setReady] = useState(false);
   const [resolvedTheme, setResolvedTheme] = useState<ThemeMode>("dark");
   const loadDir = usePanes((s) => s.loadDir);
@@ -159,8 +160,6 @@ export default function App() {
   useEffect(() => {
     (async () => {
       void initWindowState(); // Fensterposition/-größe wiederherstellen (Tauri)
-      const ds = await listDrives();
-      setDrives(ds);
       // Restore the saved session (last tabs), otherwise load home.
       const saved = useSession.getState().session;
       const hasTabs =

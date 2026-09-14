@@ -39,7 +39,7 @@ pub struct DirListing {
     pub entries: Vec<DirEntry>,
 }
 
-#[derive(Clone, Serialize, TS)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct Drive {
     pub name: String,
@@ -65,6 +65,10 @@ pub async fn list_dir(path: String, fresh: Option<bool>) -> AppResult<DirListing
 /// Lists drives or mount points along with their storage usage.
 #[tauri::command]
 pub fn list_drives() -> Vec<Drive> {
+    drive_snapshot().unwrap_or_default()
+}
+
+pub(super) fn drive_snapshot() -> Option<Vec<Drive>> {
     use sysinfo::Disks;
 
     let disks = Disks::new_with_refreshed_list();
@@ -86,16 +90,33 @@ pub fn list_drives() -> Vec<Drive> {
         })
         .collect();
 
+    #[cfg(target_os = "macos")]
+    drives.extend(
+        super::drives_native::mounts()?
+            .into_iter()
+            .filter(|mount| mount.remote)
+            .map(|mount| mount.drive),
+    );
+    if drives.is_empty() {
+        return None;
+    }
+    drives.sort_by(|a, b| a.mount.cmp(&b.mount));
+    drives.dedup_by(|a, b| a.mount == b.mount);
     // Add home as a convenient shortcut.
     if let Some(home) = dirs::home_dir() {
-        drives.push(Drive {
-            name: "~".into(),
-            mount: path_to_string(&home),
-            total: 0,
-            free: 0,
-        });
+        if !drives
+            .iter()
+            .any(|drive| drive.mount == path_to_string(&home))
+        {
+            drives.push(Drive {
+                name: "~".into(),
+                mount: path_to_string(&home),
+                total: 0,
+                free: 0,
+            });
+        }
     }
-    drives
+    Some(drives)
 }
 
 /// Home directory of the current user.

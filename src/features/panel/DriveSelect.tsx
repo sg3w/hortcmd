@@ -3,6 +3,7 @@
 // Replaces the earlier button bar.
 // ============================================================
 
+import { onMount } from "@/store/driveStore";
 import { useEffect } from "react";
 import * as Select from "@radix-ui/react-select";
 import {
@@ -42,7 +43,7 @@ export function DriveSelect({ side, drives }: Props) {
 
   // Longest matching mount = current location.
   const current = [...drives]
-    .filter((d) => path.startsWith(d.mount))
+    .filter((d) => onMount(path, d.mount))
     .sort((a, b) => b.mount.length - a.mount.length)[0];
   // Favorites/home carry no capacity (total = 0) – then there is nothing to show.
   const usage = current && current.total > 0 ? current : null;

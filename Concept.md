@@ -196,6 +196,8 @@ commands/fs/
 │   └── tests.rs             Charakterisierungstests (Fake-Provider mit
 │                            injizierbaren Fehlern, Recorder-Sink)
 ├── dir.rs                   list_dir (→ vfs) · list_drives · home_dir (+ DirEntry/DirListing/Drive)
+├── drives.rs                live volume snapshots · capacity throttling · drives-changed (057)
+├── drives_native.rs         macOS cached mount-table metadata (057)
 ├── file.rs                  die Kommando-Adapter (copy/move/delete/mkdir/rename):
 │                            Capability prüfen, Adresse über die VFS-Registry
 │                            auflösen, an `transfer/` übergeben — mehr nicht
@@ -901,6 +903,7 @@ The *design* those changes settled is described where it belongs, in §3–§9.
 - [x] **Copy Path / Copy Filename** (context menu; "Copy path" = absolute path,
       "Copy filename" = name only; multi-selection line by line)
 - [x] **Favorite folders** (Settings) — appear like "drives"
+- [x] **Live removable volumes** (057) — shared picker updates, capacity refresh and home fallback; native hardware matrix tracked in TICKET-260.
 - [x] **Folder "Open in new tab"** (context menu)
 - [x] **Recently visited folders / history**: Back/Forward per pane (Alt+←/→ + toolbar)
       and a global, persisted list of recently visited folders (history dropdown in the

@@ -12,6 +12,7 @@
 
 import type {
   CollisionReq,
+  Drive,
   ConnectionStatus,
   GitStatus,
   GitStatusEvent,
@@ -28,6 +29,8 @@ export const progressSubs = new Set<(p: OpProgress) => void>();
 export const doneSubs = new Set<(d: OpDone) => void>();
 
 export const collisionSubs = new Set<(c: CollisionReq) => void>();
+
+export const drivesSubs = new Set<(drives: Drive[]) => void>();
 
 export const changedSubs = new Set<(dir: string) => void>();
 
@@ -54,6 +57,7 @@ export function ensureTauriEvents(): Promise<void> {
 async function wireEvents(): Promise<void> {
   const { listen } = await import("@tauri-apps/api/event");
   const results = await Promise.allSettled([
+    listen<Drive[]>("drives-changed", e => drivesSubs.forEach(cb => cb(e.payload))),
     listen<OpProgress>("fs-progress", (e) =>
     progressSubs.forEach((f) => f(e.payload)),
     ),
@@ -165,4 +169,10 @@ export function onGitStatusReady(
   gitReadySubs.add(cb);
   void ensureTauriEvents();
   return () => gitReadySubs.delete(cb);
+}
+
+export function onDrivesChanged(cb: (drives: Drive[]) => void): () => void {
+  drivesSubs.add(cb);
+  void ensureTauriEvents().catch(() => {});
+  return () => { drivesSubs.delete(cb); };
 }

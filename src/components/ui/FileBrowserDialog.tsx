@@ -8,8 +8,9 @@ import { useDialogFocusReturn } from "./useDialogFocusReturn";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { ArrowUp, FolderSearch, House } from "lucide-react";
-import type { DirEntry, Drive } from "@/ipc/bindings";
-import { homeDir, listDir, listDrives } from "@/ipc/client";
+import { useDrives, useDriveState, onMount } from "@/store/driveStore";
+import type { DirEntry } from "@/ipc/bindings";
+import { homeDir, listDir } from "@/ipc/client";
 import {
   useFileBrowser,
   type SelectMode,
@@ -47,15 +48,18 @@ export function FileBrowserDialog() {
   const [path, setPath] = useState("");
   const [pathInput, setPathInput] = useState("");
   const [entries, setEntries] = useState<DirEntry[]>([]);
-  const [drives, setDrives] = useState<Drive[]>([]);
+  const drives = useDrives();
+  const navigation = useRef(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const mode = request?.selectMode ?? "file";
 
   const navigate = useCallback(async (target: string) => {
+    const token = ++navigation.current;
     try {
       const res = await listDir(target);
+      if (token !== navigation.current) return;
       const sorted = [...res.entries].sort((a, b) => {
         if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
         return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
@@ -67,20 +71,33 @@ export function FileBrowserDialog() {
       setSelected(null);
       setError(null);
     } catch (e) {
+      if (token !== navigation.current) return;
       setError(describeErrorFull(e));
     }
   }, []);
 
-  // Initialize on open: load the start folder + fetch the drives.
+  // Initialize on open: load the start folder. Drives use the shared subscription.
   useEffect(() => {
     if (!request) return;
     setSelected(null);
-    void listDrives().then(setDrives);
+    let cancelled = false;
     void (async () => {
       const start = request.initialPath || (await homeDir());
-      await navigate(start);
+      if (!cancelled) await navigate(start);
     })();
+    return () => { cancelled = true; navigation.current++; };
   }, [request, navigate]);
+
+  useEffect(() => {
+    if (!request) return;
+    const removed = useDriveState.getState().removed.find(d => onMount(path, d.mount));
+    if (!removed) return;
+    const token = navigation.current;
+    void homeDir().then(home => {
+      if (navigation.current !== token || useDriveState.getState().drives.some(d => d.mount === removed.mount)) return;
+      void navigate(home).then(() => { if (navigation.current === token + 1) setError(t("drive.removed").replace("{name}", removed.name)); });
+    }).catch(() => {});
+  }, [drives, path, request, navigate, t]);
 
   const rows: DirEntry[] = [
     ...(isRoot(path)

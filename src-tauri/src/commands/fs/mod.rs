@@ -18,6 +18,9 @@ pub mod cache;
 pub mod cancel;
 pub mod compare;
 pub mod dir;
+pub mod drives;
+#[cfg(target_os = "macos")]
+mod drives_native;
 pub mod file;
 pub mod filecompare;
 pub mod git;

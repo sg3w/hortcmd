@@ -2532,6 +2532,7 @@ dependencies = [
  "kamadak-exif",
  "keepass",
  "keyring",
+ "libc",
  "md-5 0.10.6",
  "notify",
  "opener",

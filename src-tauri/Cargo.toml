@@ -103,6 +103,7 @@ exacl = "0.12"       # ACL (Access Control Lists) lesen
 # macOS-spezifisch: Finder-Tags liegen als Binär-plist im xattr
 # `com.apple.metadata:_kMDItemUserTags`.
 [target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"        # Cached mount-table metadata (getfsstat/MNT_NOWAIT)
 plist = "1"          # Binär-plist lesen/schreiben (Finder-Tags)
 
 [dev-dependencies]

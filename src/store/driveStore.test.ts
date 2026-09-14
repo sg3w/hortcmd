@@ -1,0 +1,32 @@
+import { waitFor } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import { useTauri } from "@/test/tauri";
+import { acquireDrives, onMount, useDriveState } from "./driveStore";
+import { ensureTauriEvents } from "@/ipc/client";
+import type { Drive } from "@/ipc/bindings";
+vi.mock("@/ipc/invoke", async importOriginal => ({ ...await importOriginal<typeof import("@/ipc/invoke")>(), hasTauri: true }));
+const root: Drive = {name:"disk",mount:"/",free:50,total:100};
+const card: Drive = {name:"card",mount:"/Volumes/card",free:20,total:30};
+let stops: Array<() => void> = [];
+afterEach(() => { stops.forEach(stop => stop()); stops=[]; useDriveState.setState({drives:[],removed:[]}); });
+it("shares events, ignores a late initial snapshot, and unsubscribes", async () => {
+  let finish!: (drives: Drive[]) => void;
+  const h = useTauri({commands:{list_drives: () => new Promise<Drive[]>(resolve => {finish=resolve;})}});
+  stops.push(acquireDrives(),acquireDrives());
+  await ensureTauriEvents(); await Promise.resolve();
+  await waitFor(() => expect(finish).toBeTypeOf("function"));
+  h.emit("drives-changed", [root,card]);
+  finish([root]); await Promise.resolve(); await Promise.resolve();
+  expect(useDriveState.getState().drives).toEqual([root,card]);
+  h.emit("drives-changed", [root]);
+  expect(useDriveState.getState().removed).toEqual([card]);
+  stops.forEach(stop=>stop()); stops=[];
+  h.emit("drives-changed", [root,card]);
+  expect(useDriveState.getState().drives).toEqual([root]);
+});
+it("does not mistake siblings, remotes or backslashes for a mounted volume", () => {
+  expect(onMount("/Volumes/card/a",card.mount)).toBe(true);
+  expect(onMount("/Volumes/card2/a",card.mount)).toBe(false);
+  expect(onMount("sftp://host/Volumes/card/a",card.mount)).toBe(false);
+  expect(onMount("/Volumes/card\\other",card.mount)).toBe(false);
+});
