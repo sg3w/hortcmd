@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  PanelsTopLeft,
   FileArchive,
   Folder,
   FolderPlus,
@@ -111,6 +112,12 @@ export function CommandBar() {
         title={t("tb.refresh")}
         Icon={RefreshCw}
         onClick={() => void refresh(active)}
+      />
+      <CommandButton
+        id="nav.openOpposite"
+        title={t("menu.nav.openOpposite")}
+        Icon={PanelsTopLeft}
+        onClick={() => runCommand("nav.openOpposite")}
       />
       <RecentMenu />
 

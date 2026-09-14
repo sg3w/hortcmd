@@ -58,3 +58,12 @@ export function openEntry(side: Side, index: number): void {
     });
   }
 }
+
+/** Open an explicit location in the opposite active tab, without changing focus. */
+export async function openOpposite(side: Side, target?: { path: string; archive: string | null }): Promise<void> {
+  const store = usePanes.getState();
+  const source = target ?? panelOf(store, side);
+  const destination = side === "left" ? "right" : "left";
+  if (source.archive) await store.loadArchive(destination, source.archive, source.path);
+  else await store.loadDir(destination, source.path);
+}

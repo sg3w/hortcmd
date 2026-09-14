@@ -40,16 +40,16 @@ keine Dateien kopieren, keinen zweiten Ordner auf dem Datenträger anlegen.
 
 ## Akzeptanzkriterien und Tests
 
-- [ ] Toolbar-Button links → rechts und rechts → links zeigt den aktuellen
+- [x] Toolbar-Button links → rechts und rechts → links zeigt den aktuellen
       Quellordner auf der Gegenseite; beide Panels zeigen danach denselben Ort.
-- [ ] Kontextmenü eines Unterordners öffnet genau diesen Ordner auf der Gegenseite.
-- [ ] Aktive Quellseite und andere Tabs bleiben erhalten; Zielnavigation funktioniert
+- [x] Kontextmenü eines Unterordners öffnet genau diesen Ordner auf der Gegenseite.
+- [x] Aktive Quellseite und andere Tabs bleiben erhalten; Zielnavigation funktioniert
       mit bestehendem Zurück-Verlauf und erzeugt keine Dateioperation.
-- [ ] Lokaler Ordner, Wurzelverzeichnis, Unicode-/Leerzeichenpfad, Remote-Ort und
+- [x] Lokaler Ordner, Wurzelverzeichnis, Unicode-/Leerzeichenpfad, Remote-Ort und
       unterstützter Archiv-Innenpfad sind geprüft.
-- [ ] Fehler/Disconnect führen zu verständlicher Rückmeldung ohne Quellnavigation.
-- [ ] Wiederholter Klick, bereits gleicher Zielort und leeres Verzeichnis funktionieren.
-- [ ] Tooltip, Tastaturfokus, de/en und beide Themes geprüft.
+- [x] Fehler/Disconnect führen zu verständlicher Rückmeldung ohne Quellnavigation.
+- [x] Wiederholter Klick, bereits gleicher Zielort und leeres Verzeichnis funktionieren.
+- [x] Tooltip, Tastaturfokus, de/en und beide Themes geprüft.
 
 ## Definition of Done
 
@@ -58,3 +58,23 @@ keine Dateien kopieren, keinen zweiten Ordner auf dem Datenträger anlegen.
 - `Concept.md` und Menüinventar aktualisieren.
 - Erst nach Umsetzung nach `tickets/done/063-open-folder-in-opposite-pane.done.md`
   verschieben. Lokaler Commit nach Ticketabschluss, ohne Push.
+
+## Abschluss
+
+Gemeinsame Aktion `openOpposite` mit expliziter Quellseite und optionalem Ziel
+(Path + Archivcontainer). Toolbar und Befehle → Navigation öffnen den aktuellen
+Ordner, das Kontextmenü den angeklickten Unterordner (bei Datei/Leerfläche den
+aktuellen Ordner). Bestehende Zielnavigation übernimmt Fehleranzeige, Auswahl-
+bereinigung und Verlauf; keine Dateioperation und kein neuer Tab.
+
+Tests prüfen beide Richtungen, Wurzel, Unicode/Leerzeichen, Remote-URI, Archiv-
+Innenpfad und Kontextziele in allen drei Ortsarten, unveränderte Quellseite,
+weitere Tabs, Sortierung, leere Ziele, Wiederholung, Zurück sowie Disconnect.
+Toolbar de/en und beide Theme-Einstellungen mit Tastaturbedienung geprüft.
+Manuell im Browser-Demomodus: links Documents → rechts Documents; rechts Pictures
+→ links Pictures; Kontextmenü rechts Downloads → links Downloads bei unveränderter
+rechter Ansicht. Icon und Tooltip verwenden die bestehenden Theme-Klassen.
+
+Bestehende Einschränkung: Archivnavigation schreibt noch keinen Zurück-/Vor-Verlauf.
+Das betrifft auch normales Archivöffnen; vollständige Archiv-Historie wurde als
+Folgeticket 262 erfasst. Lokaler/Remote-Verlauf bleibt funktionsfähig.

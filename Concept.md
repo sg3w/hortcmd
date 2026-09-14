@@ -1735,3 +1735,14 @@ invalidates results and cancels the active run. Closing keeps partial hits with 
 cancelled status; run tokens reject late batches and completion. `SearchResults`
 mounts with a fresh scroll container and starts at the top on reopening; no
 virtualizer workaround or additional timer is needed.
+
+### Open a folder on the opposite side (TICKET-063)
+
+Toolbar and Commands › Navigation use `nav.openOpposite` to open the active
+folder in the other pane's active tab. The file context menu supplies the clicked
+subfolder explicitly. `navigate.openOpposite` preserves the path and optional
+archive container and delegates to existing `loadDir`/`loadArchive` navigation.
+Source focus, other tabs and target view/sort remain independent; normal target
+selection clearing, error display and local/remote history apply. No filesystem
+copy or new tab is created. Existing archive-history limitations are tracked in
+TICKET-262.

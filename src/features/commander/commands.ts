@@ -58,7 +58,7 @@ import {
   runOpenWithProgram,
   runQuickLook,
 } from "./fileOps";
-import { openEntry } from "./navigate";
+import { openEntry, openOpposite } from "./navigate";
 import {
   hasSnapshot,
   invertSelection,
@@ -640,6 +640,10 @@ export const COMMANDS = {
         ? {}
         : { disabled: true, reason: "menu.why.noHistory" };
     },
+  },
+  "nav.openOpposite": {
+    label: "menu.nav.openOpposite",
+    run: () => { void openOpposite(activeSide()); },
   },
   "nav.up": {
     label: "menu.nav.up",
@@ -1255,7 +1259,7 @@ export const MENUS: MenuCategory[] = [
       {
         kind: "sub",
         label: "menu.cmd.navigation",
-        nodes: [item("nav.back"), item("nav.forward"), item("nav.up")],
+        nodes: [item("nav.back"), item("nav.forward"), item("nav.up"), item("nav.openOpposite")],
       },
       {
         kind: "sub",

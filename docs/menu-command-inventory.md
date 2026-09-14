@@ -133,6 +133,7 @@ on the *visible* rows; quick and comparison filters prune hidden operation targe
 | **Search: large files** | `SearchDialog` mode `large_files` | `cmd.searchLargeFiles` | Befehle › Spezialsuche ▸ | — | not in archive | **058** |
 | Compare / synchronize directories | `compareStore.openCompare`, `CompareDialog` | `cmd.compareDirs` | Befehle | — | always | 040 |
 | Synchronizing copy | `client.ts:syncCopy` | — | inside `CompareDialog` | — | — | dialog |
+| Open current folder on opposite side | `openOpposite` → `panesStore.loadDir/loadArchive` | `nav.openOpposite` | Befehle › Navigation ▸ | — | active folder; context menu uses clicked subfolder | 063 |
 | Back / forward / parent | `panesStore.goBack/goForward`, `openEntry` | `nav.back` / `nav.forward` / `nav.up` | Befehle › Navigation ▸ | ⌥← · ⌥→ · ⌫ | history / `..` row present | 040 |
 | Favorites | `settingsStore.favorites` | dyn. `fav:*` | Befehle › Favoriten ▸ | — | empty list → placeholder | 040 |
 | Recent folders + clear | `historyStore` | dyn. `recent:*`, `recent.clear` | Befehle › Zuletzt besuchte Ordner ▸ | — | clear disabled when empty | 040 |

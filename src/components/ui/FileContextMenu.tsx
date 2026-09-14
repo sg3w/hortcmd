@@ -1,3 +1,4 @@
+import { openOpposite } from "@/features/commander/navigate";
 import { formatShortcut } from "@/lib/shortcut";
 // ============================================================
 // Right-click context menu over the file list (Radix UI).
@@ -303,6 +304,13 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
           >
             <Terminal size={14} className="shrink-0 text-dim" aria-hidden />
             <span>{t("ctx.terminal")}</span>
+          </ContextMenu.Item>
+          <ContextMenu.Item
+            className={itemCls}
+            onSelect={() => void openOpposite(side, {path: targetDir(), archive: panelOf(usePanes.getState(), side).archive})}
+          >
+            <FolderSymlink size={14} className="shrink-0 text-dim" aria-hidden />
+            <span>{t("ctx.openOpposite")}</span>
           </ContextMenu.Item>
           <ContextMenu.Item
             className={itemCls}
