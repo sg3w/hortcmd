@@ -22,4 +22,4 @@ batch. The user explicitly deferred Windows/Linux-specific work.
 ## Definition of Done
 
 Implement on a dedicated ticket branch, pass `npm run check` and native validation,
-then merge locally. Builds on [TICKET-049](049-transfer-preflight-and-resource-estimation.done.md).
+then merge locally. Builds on [TICKET-049](done/049-transfer-preflight-and-resource-estimation.done.md).

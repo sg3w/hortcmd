@@ -95,7 +95,7 @@ delete are explicitly irreversible. Current macOS trash has no stable restore
 token; use system trash restoration. Windows/Linux adapters were moved to
 [TICKET-254](254-file-undo-windows-linux-adapters.md) per the current user scope.
 Copy undo retains bytes at its displayed quarantine path to protect open writers;
-this is intentional and documented in [File undo](../docs/file-undo.md).
+this is intentional and documented in [File undo](../../docs/file-undo.md).
 
 Validation: local inverse/restart/retention/corruption/identity/collision tests,
 grouped successful and partial undo, metadata and unchanged-copy verification,

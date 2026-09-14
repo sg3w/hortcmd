@@ -84,7 +84,7 @@ TICKET-053 reusable metadata identity/invalidation rules.
 Implemented explicit metadata/content scopes, bounded incremental checkpoints,
 private authenticated encrypted persistence, cancellation/resource pauses, watch
 and timed reconciliation, stable paginated queries and an accessible scope UI.
-See [search-index.md](../docs/search-index.md) for exact bounds and supported policy.
+See [search-index.md](../../docs/search-index.md) for exact bounds and supported policy.
 
 The application and live adapters share the scoped contract. Native requests use
 an explicit, tested application fallback; Spotlight is not enabled without proven

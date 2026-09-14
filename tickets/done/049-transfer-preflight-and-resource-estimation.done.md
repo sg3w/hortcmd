@@ -90,7 +90,7 @@ tracked in [TICKET-255](255-preflight-native-provider-limits.md), per the user's
 current scope. Legacy remote directory APIs still return a provider vector before
 the planner's bound is checked; the planner does not keep another full file tree.
 The exact memory/selection bounds, conservative case handling and space semantics
-are documented in [Transfer preflight](../docs/transfer-preflight.md).
+are documented in [Transfer preflight](../../docs/transfer-preflight.md).
 
 Tests cover overlap/duplicates, Unicode normalization, declared name/object bounds,
 checked space arithmetic, capacity/quota changes, source/destination replacement,

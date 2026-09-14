@@ -85,7 +85,7 @@ those identity and freshness contracts exist.
 Implemented memory-only listing and local presentation metadata caches, security-bound
 keys, bounded fair eviction, shared cancellation and conservative mutation/session/
 watch invalidation. Details and measured avoided provider work are in
-[provider-cache.md](../docs/provider-cache.md).
+[provider-cache.md](../../docs/provider-cache.md).
 
 Validation: `npm run check`; isolated real-provider regression plus cache identity,
 budget, expiry, race and cancellation tests; frontend refreshing/stale-state coverage.

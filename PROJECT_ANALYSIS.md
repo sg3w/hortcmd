@@ -159,13 +159,13 @@ instead of failing after invocation.
 | P0 | Archive-controlled paths lack one explicit containment layer | Crafted ZIP, tar, or 7z input could escape the selected destination or exhaust resources. | [TICKET-225](tickets/225-safe-archive-extraction.md) |
 | P1 | Remote transport strength is not governed centrally | Plain FTP/HTTP and implicit provider defaults can expose credentials or permit unintended downgrade. | [TICKET-047](tickets/047-remote-transport-security-policy.md) |
 | P1 | VFS locations are ambiguous strings | Frontend/backend parsing can diverge across IPv6, Unicode, Windows, encoding, and identity cases. | [TICKET-055](tickets/055-canonical-vfs-address-and-path-model.md) |
-| P1 | Predictable transfer constraints are discovered late | Self-copy, naming, staging, capacity, and provider-limit failures can surface after work begins. | [TICKET-049](tickets/049-transfer-preflight-and-resource-estimation.done.md) |
-| P1 | Completed operations have no explicit inverse contract | Users cannot safely undo eligible actions, while a generic undo could overwrite later changes. | [TICKET-048](tickets/048-reversible-file-operations-and-undo.done.md) |
+| P1 | Predictable transfer constraints are discovered late | Self-copy, naming, staging, capacity, and provider-limit failures can surface after work begins. | [TICKET-049](tickets/done/049-transfer-preflight-and-resource-estimation.done.md) |
+| P1 | Completed operations have no explicit inverse contract | Users cannot safely undo eligible actions, while a generic undo could overwrite later changes. | [TICKET-048](tickets/done/048-reversible-file-operations-and-undo.done.md) |
 | P1 | Release artifacts and updates lack an integrity pipeline | Users cannot independently verify official builds or safely recover from failed updates. | [TICKET-222](tickets/222-signed-reproducible-releases-and-updates.md) |
 | P1 | Dependency security and licensing are not continuously checked | Parser, crypto, protocol, and frontend supply-chain risks may reach releases unnoticed. | [TICKET-221](tickets/221-dependency-and-license-governance.md) |
 | P2 | Runtime performance has no shared baseline or budget | Optimizations and regressions cannot be assessed consistently across layers. | [TICKET-223](tickets/223-performance-benchmarks-and-budgets.md) |
-| P2 | Repeated listings have no shared bounded cache | Remote navigation repeats expensive work, but ad hoc caches would risk stale or cross-session data. | [TICKET-053](tickets/053-bounded-provider-aware-cache.done.md) |
-| P2 | Search rescans local trees for every query | Large repeated searches are expensive and remote/native index behavior is undefined. | [TICKET-054](tickets/054-scalable-indexed-search.done.md) |
+| P2 | Repeated listings have no shared bounded cache | Remote navigation repeats expensive work, but ad hoc caches would risk stale or cross-session data. | [TICKET-053](tickets/done/053-bounded-provider-aware-cache.done.md) |
+| P2 | Search rescans local trees for every query | Large repeated searches are expensive and remote/native index behavior is undefined. | [TICKET-054](tickets/done/054-scalable-indexed-search.done.md) |
 
 ## Additional feature proposal
 

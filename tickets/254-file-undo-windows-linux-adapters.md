@@ -3,7 +3,7 @@
 ## Goal
 
 Add native Windows/Linux adapters to the file-undo contract introduced by
-[TICKET-048](048-reversible-file-operations-and-undo.done.md). Deferred because the
+[TICKET-048](done/048-reversible-file-operations-and-undo.done.md). Deferred because the
 current implementation batch explicitly excludes Windows/Linux work.
 
 ## Requirements
