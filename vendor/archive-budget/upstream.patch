@@ -1,0 +1,577 @@
+--- a/sevenz-rust/Cargo.toml
++++ b/sevenz-rust/Cargo.toml
+@@ -116,3 +116,6 @@
+ 
+ [target."cfg(target_arch = \"wasm32\")".dependencies.wasm-bindgen]
+ version = "0.2"
++
++[dependencies.archive-budget]
++path = "../archive-budget"
+--- a/sevenz-rust/src/aes256sha256.rs
++++ b/sevenz-rust/src/aes256sha256.rs
+@@ -120,6 +120,15 @@
+     }
+     let b0 = properties[0];
+     let num_cycles_power = b0 & 63;
++    if num_cycles_power > 20 && num_cycles_power != 63 {
++        return Err(crate::Error::io(archive_budget::fail()));
++    }
++    archive_budget::work(if num_cycles_power == 63 {
++        1
++    } else {
++        1u64 << num_cycles_power
++    })
++    .map_err(crate::Error::io)?;
+     let b1 = properties[1];
+     let iv_size = ((b0 >> 6 & 1) + (b1 & 15)) as usize;
+     let salt_size = ((b0 >> 7 & 1) + (b1 >> 4)) as usize;
+@@ -135,14 +144,17 @@
+     }
+     let aes_key = if num_cycles_power == 0x3f {
+         let mut aes_key = [0u8; 32];
+-        aes_key.copy_from_slice(&salt[..salt_size]);
++        aes_key[..salt_size].copy_from_slice(&salt[..salt_size]);
+         let n = password.len().min(aes_key.len() - salt_size);
+         aes_key[salt_size..n + salt_size].copy_from_slice(&password[0..n]);
+         aes_key
+     } else {
+         let mut sha = sha2::Sha256::default();
+         let mut extra = [0u8; 8];
+-        for _ in 0..(1u32 << num_cycles_power) {
++        for round in 0..(1u32 << num_cycles_power) {
++            if round % 1024 == 0 {
++                archive_budget::check().map_err(crate::Error::io)?;
++            }
+             sha.update(&salt);
+             sha.update(password);
+             sha.update(extra);
+--- a/sevenz-rust/src/decoders.rs
++++ b/sevenz-rust/src/decoders.rs
+@@ -29,17 +29,9 @@
+     AES256SHA256(Aes256Sha256Decoder<R>),
+ }
+ 
+-// impl<R: Read> Decoder<R> {
+-//     pub fn num_streams(&self) -> usize {
+-//         match self {
+-//             Self::BCJ(_) => 4,
+-//             _ => 1,
+-//         }
+-//     }
+-// }
+-
+ impl<R: Read> Read for Decoder<R> {
+     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
++        archive_budget::check()?;
+         match self {
+             #[cfg(feature = "zstd")]
+             Decoder::ZSTD(r) => r.read(buf),
+@@ -62,7 +54,7 @@
+     coder: &Coder,
+     #[allow(unused)] password: &[u8],
+     max_mem_limit_kb: usize,
+-) -> Result<Decoder<I>, Error> {
++) -> Result<archive_budget::ReservedReader<Decoder<I>>, Error> {
+     let method = SevenZMethod::by_id(coder.decompression_method_id());
+     let method = if let Some(m) = method {
+         m
+@@ -72,7 +64,16 @@
+             coder.decompression_method_id()
+         )));
+     };
+-    match method.id() {
++    let dictionary = match method.id() {
++        SevenZMethod::ID_LZMA => get_lzma_dic_size(coder)? as usize,
++        SevenZMethod::ID_LZMA2 => get_lzma2_dic_size(coder)? as usize,
++        _ => 0,
++    };
++    if dictionary > archive_budget::DICTIONARY {
++        return Err(Error::io(archive_budget::fail()));
++    }
++    let reservation = archive_budget::reserve(dictionary + 16 * 1024 * 1024).map_err(Error::io)?;
++    let result = match method.id() {
+         SevenZMethod::ID_COPY => Ok(Decoder::COPY(input)),
+         #[cfg(feature = "zstd")]
+         SevenZMethod::ID_ZSTD => {
+@@ -147,7 +148,8 @@
+         _ => Err(Error::UnsupportedCompressionMethod(
+             method.name().to_string(),
+         )),
+-    }
++    };
++    result.map(|inner| archive_budget::ReservedReader { inner, reservation })
+ }
+ 
+ #[inline]
+--- a/sevenz-rust/src/reader.rs
++++ b/sevenz-rust/src/reader.rs
+@@ -9,7 +9,7 @@
+ 
+ use crate::{archive::*, decoders::add_decoder, error::Error, folder::*, password::Password};
+ pub(crate) const CRC32: Crc<u32> = Crc::<u32>::new(&crc::CRC_32_ISO_HDLC);
+-const MAX_MEM_LIMIT_KB: usize = usize::MAX / 1024;
++const MAX_MEM_LIMIT_KB: usize = archive_budget::DICTIONARY / 1024;
+ 
+ pub(crate) trait SeedRead: Read + Seek {}
+ 
+@@ -336,6 +336,11 @@
+             )));
+         }
+ 
++        archive_budget::header(
++            usize::try_from(start_header.next_header_size)
++                .map_err(|_| Error::io(archive_budget::fail()))?,
++        )
++        .map_err(Error::io)?;
+         let next_header_size_int = start_header.next_header_size as usize;
+ 
+         reader
+@@ -357,6 +362,7 @@
+             let (mut out_reader, buf_size) =
+                 Self::read_encoded_header(&mut buf_reader, reader, &mut archive, password)?;
+             buf.clear();
++            archive_budget::header(buf_size).map_err(Error::io)?;
+             buf.resize(buf_size, 0);
+             out_reader
+                 .read_exact(&mut buf)
+@@ -398,7 +404,9 @@
+             .seek(SeekFrom::Start(folder_offset))
+             .map_err(Error::io)?;
+         let coder_len = folder.coders.len();
+-        let unpack_size = folder.get_unpack_size() as usize;
++        let unpack_size = usize::try_from(folder.get_unpack_size())
++            .map_err(|_| Error::io(archive_budget::fail()))?;
++        archive_budget::header(unpack_size).map_err(Error::io)?;
+         let pack_size = archive.pack_sizes[first_pack_stream_index] as usize;
+         let input_reader =
+             SeekableBoundedReader::new(reader, (folder_offset, folder_offset + pack_size as u64));
+@@ -456,6 +464,8 @@
+ 
+     fn read_files_info<R: Read + Seek>(header: &mut R, archive: &mut Archive) -> Result<(), Error> {
+         let num_files = read_usize(header, "num files")?;
++        archive_budget::charge(num_files, std::mem::size_of::<SevenZArchiveEntry>())
++            .map_err(Error::io)?;
+         let mut files: Vec<SevenZArchiveEntry> = vec![Default::default(); num_files];
+ 
+         let mut is_empty_stream: Option<BitSet> = None;
+@@ -496,7 +506,7 @@
+                     if external != 0 {
+                         return Err(Error::other("Not implemented:external != 0"));
+                     }
+-                    if (size - 1) & 1 != 0 {
++                    if size == 0 || (size - 1) & 1 != 0 {
+                         return Err(Error::other("file names length invalid"));
+                     }
+ 
+@@ -507,7 +517,10 @@
+ 
+                     let mut next_file = 0;
+                     for s in names_reader {
+-                        files[next_file].name = s?;
++                        files
++                            .get_mut(next_file)
++                            .ok_or_else(|| Error::other("Too many file names"))?
++                            .name = s?;
+                         next_file += 1;
+                     }
+ 
+@@ -797,11 +810,15 @@
+             for folder in archive.folders.iter_mut() {
+                 let num_streams = read_usize(header, "numStreams")?;
+                 folder.num_unpack_sub_streams = num_streams;
+-                total_unpack_streams += num_streams;
++                total_unpack_streams = total_unpack_streams
++                    .checked_add(num_streams)
++                    .ok_or_else(|| Error::io(archive_budget::fail()))?;
++                archive_budget::count(total_unpack_streams).map_err(Error::io)?;
+             }
+             nid = read_u8(header)?;
+         }
+ 
++        archive_budget::charge(total_unpack_streams, 24).map_err(Error::io)?;
+         let mut sub_streams_info = SubStreamsInfo::default();
+         sub_streams_info
+             .unpack_sizes
+@@ -888,6 +905,9 @@
+         let mut folder = Folder::default();
+ 
+         let num_coders = read_usize(header, "num coders")?;
++        if num_coders > 16 {
++            return Err(Error::io(archive_budget::fail()));
++        }
+         let mut coders = Vec::with_capacity(num_coders);
+         let mut total_in_streams = 0;
+         let mut total_out_streams = 0;
+@@ -910,6 +930,12 @@
+             } else {
+                 coder.num_in_streams = read_u64(header)?;
+                 coder.num_out_streams = read_u64(header)?;
++                if coder.num_in_streams == 0
++                    || coder.num_in_streams > 16
++                    || coder.num_out_streams != 1
++                {
++                    return Err(Error::io(archive_budget::fail()));
++                }
+             }
+             total_in_streams += coder.num_in_streams;
+             total_out_streams += coder.num_out_streams;
+@@ -970,7 +996,51 @@
+             }
+         }
+         folder.packed_streams = packed_streams;
+-
++        // Reject cyclic/out-of-range graphs before the recursive BCJ2 builder or
++        // ordered iterator can consume unbounded stack/CPU without reading input.
++        let mut incoming = vec![false; total_in_streams];
++        let mut outgoing = vec![false; total_out_streams];
++        let mut owners = Vec::with_capacity(total_in_streams);
++        for (index, coder) in folder.coders.iter().enumerate() {
++            owners.extend(std::iter::repeat(index).take(coder.num_in_streams as usize));
++        }
++        let mut edges = vec![Vec::new(); num_coders];
++        for pair in &folder.bind_pairs {
++            let input =
++                usize::try_from(pair.in_index).map_err(|_| Error::io(archive_budget::fail()))?;
++            let output =
++                usize::try_from(pair.out_index).map_err(|_| Error::io(archive_budget::fail()))?;
++            if input >= total_in_streams
++                || output >= total_out_streams
++                || incoming[input]
++                || outgoing[output]
++            {
++                return Err(Error::io(archive_budget::fail()));
++            }
++            incoming[input] = true;
++            outgoing[output] = true;
++            edges[output].push(owners[input]);
++        }
++        for &stream in &folder.packed_streams {
++            let input = usize::try_from(stream).map_err(|_| Error::io(archive_budget::fail()))?;
++            if input >= total_in_streams || incoming[input] {
++                return Err(Error::io(archive_budget::fail()));
++            }
++            incoming[input] = true;
++        }
++        for origin in 0..num_coders {
++            let mut pending = edges[origin].clone();
++            let mut seen = vec![false; num_coders];
++            while let Some(node) = pending.pop() {
++                if node == origin {
++                    return Err(Error::io(archive_budget::fail()));
++                }
++                if !seen[node] {
++                    seen[node] = true;
++                    pending.extend(&edges[node]);
++                }
++            }
++        }
+         Ok(folder)
+     }
+ }
+@@ -983,19 +1053,24 @@
+ #[inline]
+ fn read_usize<R: Read>(reader: &mut R, field: &str) -> Result<usize, Error> {
+     let size = read_u64(reader)?;
++    if size > archive_budget::ENTRIES as u64 {
++        return Err(Error::io(archive_budget::fail()));
++    }
+     assert_usize(size, field)
+ }
+ 
+ #[inline]
+-fn assert_usize(size: u64, field: &str) -> Result<usize, Error> {
+-    if size > usize::MAX as u64 {
+-        return Err(Error::other(format!("Cannot handle {} {}", field, size)));
+-    }
++fn assert_usize(size: u64, _field: &str) -> Result<usize, Error> {
++    if size > archive_budget::HEADER as u64 {
++        return Err(Error::io(archive_budget::fail()));
++    }
++    archive_budget::charge(size as usize, 8).map_err(Error::io)?;
+     Ok(size as usize)
+ }
+ 
+ #[inline]
+ fn read_u64le<R: Read>(reader: &mut R) -> Result<u64, Error> {
++    archive_budget::check().map_err(Error::io)?;
+     let mut buf = [0; 8];
+     reader.read_exact(&mut buf).map_err(Error::io)?;
+     Ok(u64::from_le_bytes(buf))
+@@ -1025,6 +1100,7 @@
+ 
+ #[inline(always)]
+ fn read_u8<R: Read>(reader: &mut R) -> Result<u8, Error> {
++    archive_budget::check().map_err(Error::io)?;
+     let mut buf = [0];
+     reader.read_exact(&mut buf).map_err(Error::io)?;
+     Ok(buf[0])
+@@ -1033,6 +1109,7 @@
+ fn read_all_or_bits<R: Read>(header: &mut R, size: usize) -> Result<BitSet, Error> {
+     let all = read_u8(header)?;
+     if all != 0 {
++        archive_budget::count(size).map_err(Error::io)?;
+         let mut bits = BitSet::with_capacity(size);
+         for i in 0..size {
+             bits.insert(i);
+@@ -1044,6 +1121,7 @@
+ }
+ 
+ fn read_bits<R: Read>(header: &mut R, size: usize) -> Result<BitSet, Error> {
++    archive_budget::count(size).map_err(Error::io)?;
+     let mut bits = BitSet::with_capacity(size);
+     let mut mask = 0u32;
+     let mut cache = 0u32;
+--- a/zip/Cargo.toml
++++ b/zip/Cargo.toml
+@@ -254,3 +254,6 @@
+ [target."cfg(fuzzing)".dependencies.arbitrary]
+ version = "1.4.1"
+ features = ["derive"]
++
++[dependencies.archive-budget]
++path = "../archive-budget"
+--- a/zip/src/compression.rs
++++ b/zip/src/compression.rs
+@@ -209,6 +209,7 @@
+ 
+ impl<R: io::BufRead> io::Read for Decompressor<R> {
+     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
++        archive_budget::check()?;
+         match self {
+             Decompressor::Stored(r) => r.read(buf),
+             #[cfg(feature = "_deflate-any")]
+@@ -222,7 +223,17 @@
+             #[cfg(feature = "lzma")]
+             Decompressor::Lzma(r) => r.read(buf),
+             #[cfg(feature = "xz")]
+-            Decompressor::Xz(r) => r.read(buf),
++            Decompressor::Xz(r) => r.read(buf).map_err(|error| {
++                if error
++                    .get_ref()
++                    .and_then(|e| e.downcast_ref::<xz2::stream::Error>())
++                    == Some(&xz2::stream::Error::MemLimit)
++                {
++                    archive_budget::fail()
++                } else {
++                    error
++                }
++            }),
+         }
+     }
+ }
+@@ -242,13 +253,21 @@
+             #[cfg(feature = "bzip2")]
+             CompressionMethod::Bzip2 => Decompressor::Bzip2(bzip2::bufread::BzDecoder::new(reader)),
+             #[cfg(feature = "zstd")]
+-            CompressionMethod::Zstd => Decompressor::Zstd(zstd::Decoder::with_buffer(reader)?),
++            CompressionMethod::Zstd => {
++                let mut decoder = zstd::Decoder::with_buffer(reader)?;
++                decoder.window_log_max(26)?;
++                Decompressor::Zstd(decoder)
++            }
+             #[cfg(feature = "lzma")]
+             CompressionMethod::Lzma => {
+                 Decompressor::Lzma(Box::new(crate::read::lzma::LzmaDecoder::new(reader)))
+             }
+             #[cfg(feature = "xz")]
+-            CompressionMethod::Xz => Decompressor::Xz(xz2::bufread::XzDecoder::new(reader)),
++            CompressionMethod::Xz => Decompressor::Xz(xz2::bufread::XzDecoder::new_stream(
++                reader,
++                xz2::stream::Stream::new_stream_decoder(archive_budget::DICTIONARY as u64, 0)
++                    .map_err(io::Error::from)?,
++            )),
+             _ => {
+                 return Err(crate::result::ZipError::UnsupportedArchive(
+                     "Compression method not supported",
+--- a/zip/src/read/lzma.rs
++++ b/zip/src/read/lzma.rs
+@@ -4,21 +4,26 @@
+ 
+ const OPTIONS: Options = Options {
+     unpacked_size: UnpackedSize::ReadFromHeader,
+-    memlimit: None,
++    memlimit: Some(archive_budget::DICTIONARY),
+     allow_incomplete: true,
+ };
+ 
+ #[derive(Debug)]
+ pub struct LzmaDecoder<R> {
+     compressed_reader: R,
+-    stream: Stream<VecDeque<u8>>,
++    stream: Option<Stream<BoundedOutput>>,
++    output: BoundedOutput,
+ }
+ 
+ impl<R: Read> LzmaDecoder<R> {
+     pub fn new(inner: R) -> Self {
+         LzmaDecoder {
+             compressed_reader: inner,
+-            stream: Stream::new_with_options(&OPTIONS, VecDeque::new()),
++            stream: Some(Stream::new_with_options(
++                &OPTIONS,
++                BoundedOutput(VecDeque::new()),
++            )),
++            output: BoundedOutput(VecDeque::new()),
+         }
+     }
+ 
+@@ -29,23 +34,54 @@
+ 
+ impl<R: BufRead> Read for LzmaDecoder<R> {
+     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+-        let mut bytes_read = self
+-            .stream
+-            .get_output_mut()
+-            .ok_or(Error::new(ErrorKind::InvalidData, "Invalid LZMA stream"))?
+-            .read(buf)?;
+-        while bytes_read < buf.len() {
+-            let compressed_bytes = self.compressed_reader.fill_buf()?;
+-            if compressed_bytes.is_empty() {
+-                break;
++        if buf.is_empty() {
++            return Ok(0);
++        }
++        loop {
++            archive_budget::check()?;
++            let Some(stream) = self.stream.as_mut() else {
++                return self.output.read(buf);
++            };
++            let count = stream
++                .get_output_mut()
++                .ok_or(Error::new(ErrorKind::InvalidData, "Invalid LZMA stream"))?
++                .read(buf)?;
++            if count > 0 {
++                return Ok(count);
+             }
+-            self.stream.write_all(compressed_bytes)?;
+-            bytes_read += self
+-                .stream
+-                .get_output_mut()
+-                .unwrap()
+-                .read(&mut buf[bytes_read..])?;
++            let compressed = self.compressed_reader.fill_buf()?;
++            if compressed.is_empty() {
++                self.output = self
++                    .stream
++                    .take()
++                    .unwrap()
++                    .finish()
++                    .map_err(|error| Error::new(ErrorKind::InvalidData, error.to_string()))?;
++            } else {
++                let consumed = compressed.len();
++                stream.write_all(compressed)?;
++                self.compressed_reader.consume(consumed);
++            }
+         }
+-        Ok(bytes_read)
+     }
+ }
++
++#[derive(Debug)]
++struct BoundedOutput(VecDeque<u8>);
++impl Read for BoundedOutput {
++    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
++        self.0.read(buf)
++    }
++}
++impl Write for BoundedOutput {
++    fn write(&mut self, bytes: &[u8]) -> Result<usize> {
++        archive_budget::check()?;
++        if self.0.len().saturating_add(bytes.len()) > 8 * 1024 * 1024 {
++            return Err(archive_budget::fail());
++        }
++        self.0.write(bytes)
++    }
++    fn flush(&mut self) -> Result<()> {
++        Ok(())
++    }
++}
+--- a/zip/src/read.rs
++++ b/zip/src/read.rs
+@@ -703,6 +703,8 @@
+             return unsupported_zip_error("Oversized central directory");
+         }
+ 
++        archive_budget::count(dir_info.number_of_files)?;
++        archive_budget::charge(dir_info.number_of_files, size_of::<ZipFileData>() * 4)?;
+         let mut files = Vec::with_capacity(file_capacity);
+         reader.seek(SeekFrom::Start(dir_info.directory_start))?;
+         for _ in 0..dir_info.number_of_files {
+@@ -1270,6 +1272,7 @@
+ 
+ #[inline]
+ fn read_variable_length_byte_field<R: Read>(reader: &mut R, len: usize) -> io::Result<Box<[u8]>> {
++    archive_budget::charge(len, 8)?;
+     let mut data = vec![0; len].into_boxed_slice();
+     reader.read_exact(&mut data)?;
+     Ok(data)
+--- a/zip/src/spec.rs
++++ b/zip/src/spec.rs
+@@ -512,6 +512,9 @@
+             ..
+         } = Zip64CDEBlock::parse(reader)?;
+ 
++        if number_of_files > archive_budget::ENTRIES as u64 {
++            return Err(archive_budget::fail().into());
++        }
+         if record_size < 44 {
+             return Err(ZipError::InvalidArchive("Low EOCD64 record size"));
+         } else if record_size.saturating_add(12) > max_size {
+@@ -520,6 +523,10 @@
+             ));
+         }
+ 
++        if record_size < 44 || record_size - 44 > archive_budget::HEADER as u64 {
++            return Err(archive_budget::fail().into());
++        }
++        archive_budget::header((record_size - 44) as usize)?;
+         let mut zip_file_comment = vec![0u8; record_size as usize - 44].into_boxed_slice();
+         reader.read_exact(&mut zip_file_comment)?;
+ 
+--- a/tar/Cargo.toml
++++ b/tar/Cargo.toml
+@@ -102,3 +102,6 @@
+ 
+ [lints.rust]
+ dead_code = "deny"
++
++[dependencies.archive-budget]
++path = "../archive-budget"
+--- a/tar/src/archive.rs
++++ b/tar/src/archive.rs
+@@ -384,6 +384,7 @@
+     }
+ 
+     fn next_entry(&mut self) -> io::Result<Option<Entry<'a, io::Empty>>> {
++        archive_budget::charge(1, 1024)?;
+         if self.raw {
+             return self.next_entry_raw(None);
+         }
+@@ -441,6 +442,7 @@
+                 continue;
+             }
+ 
++            archive_budget::entry()?;
+             let mut fields = EntryFields::from(entry);
+             fields.long_pathname = gnu_longname;
+             fields.long_linkname = gnu_longlink;
+@@ -515,6 +517,7 @@
+                          listed",
+                     )
+                 })?;
++                archive_budget::charge(1, 128)?;
+                 data.push(EntryIo::Data(reader.take(len)));
+                 Ok(())
+             };
+--- a/tar/src/entry.rs
++++ b/tar/src/entry.rs
+@@ -295,6 +295,9 @@
+     }
+ 
+     pub fn read_all(&mut self) -> io::Result<Vec<u8>> {
++        let size = usize::try_from(self.size).map_err(|_| archive_budget::fail())?;
++        archive_budget::header(size)?;
++        archive_budget::charge(size, 7)?;
+         // Preallocate some data but don't let ourselves get too crazy now.
+         let cap = cmp::min(self.size, 128 * 1024);
+         let mut v = Vec::with_capacity(cap as usize);

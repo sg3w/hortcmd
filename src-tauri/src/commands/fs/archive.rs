@@ -7,6 +7,7 @@
 // the file module and the listing types from the dir module.
 // ============================================================
 
+mod budget;
 pub(crate) mod extract;
 pub(crate) mod pack;
 #[cfg(windows)]
@@ -21,6 +22,7 @@ use super::transfer::recovery::{
 use crate::errors::{code, AppError, AppResult, ErrorAction};
 use extract::ExtractJob;
 use std::collections::{BTreeSet, HashSet};
+#[cfg(test)]
 use std::fs::File;
 use std::io::Read;
 use std::sync::atomic::AtomicBool;
@@ -107,6 +109,9 @@ fn password(opt: &Option<String>) -> sevenz_rust::Password {
 /// else a corrupt-archive error keeping the library's own wording as
 /// redacted detail.
 fn map_7z_err(e: sevenz_rust::Error) -> AppError {
+    if let Some(error) = budget::failure() {
+        return error;
+    }
     match e {
         sevenz_rust::Error::PasswordRequired => password_required(),
         sevenz_rust::Error::MaybeBadPassword(_) => password_wrong(),
@@ -118,20 +123,25 @@ fn map_7z_err(e: sevenz_rust::Error) -> AppError {
 
 /// Opens a streaming reader for a tar archive (decompressing if needed).
 fn open_tar_reader(kind: ArchiveKind, archive: &str) -> AppResult<Box<dyn Read>> {
-    let f = File::open(archive).map_err(AppError::from)?;
-    Ok(match kind {
+    let f = budget::open(archive)?;
+    let reader: Box<dyn Read> = match kind {
         ArchiveKind::Tar => Box::new(f),
         ArchiveKind::TarGz => Box::new(flate2::read::GzDecoder::new(f)),
-        ArchiveKind::TarXz => Box::new(xz2::read::XzDecoder::new(f)),
+        ArchiveKind::TarXz => Box::new(budget::XzReader(xz2::read::XzDecoder::new_stream(
+            f,
+            xz2::stream::Stream::new_stream_decoder(archive_budget::DICTIONARY as u64, 0)
+                .map_err(|_| safety::limit())?,
+        ))),
         _ => unreachable!("open_tar_reader nur für tar-Varianten"),
-    })
+    };
+    Ok(Box::new(archive_budget::Reader(reader)))
 }
 
 // ---------- Listing ----------
 
 /// Reads the member list of a ZIP archive (metadata only, no password).
 fn zip_raw(archive: &str) -> AppResult<Vec<RawEntry>> {
-    let file = File::open(archive).map_err(AppError::from)?;
+    let file = budget::open(archive)?;
     let mut zip = ZipArchive::new(file).map_err(AppError::from)?;
     let mut out = Vec::with_capacity(zip.len());
     for i in 0..zip.len() {
@@ -162,8 +172,7 @@ fn tar_raw(reader: Box<dyn Read>) -> AppResult<Vec<RawEntry>> {
 
 /// Reads the member list of a 7z archive (with a password if needed).
 fn sevenz_raw(archive: &str, pw: &Option<String>) -> AppResult<Vec<RawEntry>> {
-    let ar =
-        sevenz_rust::Archive::open_with_password(archive, &password(pw)).map_err(map_7z_err)?;
+    let ar = budget::seven_meta(archive, pw).map_err(map_7z_err)?;
     Ok(ar
         .files
         .iter()
@@ -246,6 +255,17 @@ pub(crate) fn read_archive(
     inner: String,
     password: Option<String>,
 ) -> AppResult<DirListing> {
+    budget::run(Arc::new(AtomicBool::new(false)), 30, || {
+        read_archive_inner(archive, inner, password)
+    })
+}
+
+fn read_archive_inner(
+    archive: String,
+    inner: String,
+    password: Option<String>,
+) -> AppResult<DirListing> {
+    budget::password_limit(&password)?;
     // Every reader below opens the archive with `std::fs` (TICKET-031);
     // browsing an archive that lives on a remote share needs the
     // archive commands routed through the VFS first.
@@ -589,7 +609,7 @@ mod tests {
         password: &Option<String>,
         limits: safety::Limits,
     ) -> AppResult<safety::Manifest> {
-        extract::preflight(path, password, limits, &AtomicBool::new(false))
+        extract::preflight(path, password, limits, &Arc::new(AtomicBool::new(false)))
     }
 
     struct Quiet;
@@ -936,7 +956,7 @@ mod tests {
             "/not-an-archive",
             &None,
             safety::Limits::default(),
-            &AtomicBool::new(true),
+            &Arc::new(AtomicBool::new(true)),
         )
         .err()
         .unwrap();

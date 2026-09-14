@@ -133,6 +133,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "archive-budget"
+version = "0.1.0"
+
+[[package]]
 name = "argon2"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2517,6 +2521,7 @@ dependencies = [
 name = "hortcmd"
 version = "0.1.0"
 dependencies = [
+ "archive-budget",
  "base64 0.22.1",
  "cap-std",
  "dirs 5.0.1",
@@ -5820,16 +5825,18 @@ dependencies = [
 [[package]]
 name = "sevenz-rust"
 version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26482cf1ecce4540dc782fc70019eba89ffc4d87b3717eb5ec524b5db6fdefef"
 dependencies = [
+ "aes 0.8.4",
+ "archive-budget",
  "bit-set 0.6.0",
  "byteorder",
+ "cbc 0.1.2",
  "crc",
  "filetime_creation",
  "js-sys",
  "lzma-rust",
  "nt-time",
+ "rand 0.8.7",
  "sha2 0.10.9",
  "wasm-bindgen",
 ]
@@ -6491,9 +6498,8 @@ dependencies = [
 [[package]]
 name = "tar"
 version = "0.4.46"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f6221d9a6003c78398e3b239969f352578258df48c8eb051caadae0015bc840"
 dependencies = [
+ "archive-budget",
  "filetime",
  "libc",
  "xattr",
@@ -8611,11 +8617,10 @@ dependencies = [
 [[package]]
 name = "zip"
 version = "2.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fabe6324e908f85a1c52063ce7aa26b68dcb7eb6dbc83a2d148403c9bc3eba50"
 dependencies = [
  "aes 0.8.4",
  "arbitrary",
+ "archive-budget",
  "bzip2",
  "constant_time_eq 0.3.1",
  "crc32fast",

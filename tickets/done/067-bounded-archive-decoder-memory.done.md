@@ -24,3 +24,16 @@ archive metadata or payload. Preserve password support and existing formats.
 046 adds entry validation, declared/actual expansion limits, staging and rollback.
 This ticket covers allocations inside dependencies that occur before that layer.
 Schedule before claiming broad resource-exhaustion protection for archives.
+
+## Completion
+
+Implemented the project-maintained bounded decoder API and pinned dependency
+patches for 7z, ZIP and tar, plus XZ window limits. Allocation/count/work checks
+run inside metadata/decoder paths, with cancellation before an entry reaches the
+writer. Existing staging and output validation remain active.
+
+Tests cover malicious header sizes/counts/dictionaries, cyclic coder graphs, work
+budgets, cancellation, encrypted headers/payload, and all existing formats.
+Precise limits, scope and provenance: [decoder budgets](../../docs/archive-decoder-budgets.md).
+These are cooperative work/deadline limits, not OS CPU/RSS quotas. Additional
+ZIP-LZMA framing and upstream migration findings are recorded as TICKET-267/268.

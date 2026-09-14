@@ -47,7 +47,7 @@ export const errors = ns(
     "error.archive.passwordWrong": "Falsches Passwort",
     "error.archive.unknownFormat": "Unbekanntes Archivformat",
     "error.archive.unsafeEntry": "Archiv enthält einen unsicheren Pfad oder Link",
-    "error.archive.limit": "Sicherheitsgrenze für das Entpacken überschritten",
+    "error.archive.limit": "Sicherheitsgrenze für Archive überschritten",
     "error.archive.conflict": "Archiv enthält kollidierende Namen oder Dateitypen",
     "error.archive.corrupt": "Archiv ist beschädigt oder nicht lesbar",
 
@@ -149,7 +149,7 @@ export const errors = ns(
     "error.archive.passwordWrong": "Wrong password",
     "error.archive.unknownFormat": "Unknown archive format",
     "error.archive.unsafeEntry": "The archive contains an unsafe path or link",
-    "error.archive.limit": "An extraction safety limit was exceeded",
+    "error.archive.limit": "An archive safety limit was exceeded",
     "error.archive.conflict": "The archive contains conflicting names or entry types",
     "error.archive.corrupt": "The archive is damaged or unreadable",
 

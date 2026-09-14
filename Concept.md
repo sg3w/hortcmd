@@ -1771,3 +1771,17 @@ browser fixture rendered the list in 266.9 ms and the first PNG in 348.1 ms with
 40ms simulated transport; this is not a native end-to-end claim. Windows/Linux
 adapters are deferred to TICKET-265; native GUI/multi-monitor verification to
 TICKET-266. Details and limitations: [native file icons](docs/native-file-icons.md).
+
+### Archive decoder budgets (TICKET-067)
+
+Archive decoding now enforces limits before metadata/dictionary allocation, in
+addition to the existing expansion and staging checks. The pinned 7z, ZIP and tar
+sources carry small documented patches sharing a backend-only budget API. Headers
+are capped at 16 MiB, entry counts at 100,000, dictionaries/windows at 64 MiB, and
+charged metadata/live 7z decoder reservations at 512 MiB per scope. Bounded work
+factors and checkpoints enforce cancellation and wall deadlines even before an
+entry reaches the writer. These are cooperative algorithmic limits, not process
+RSS/OS CPU quotas. 7z AES support is enabled and tested. Details, provenance and
+limitations: [archive decoder budgets](docs/archive-decoder-budgets.md).
+ZIP-LZMA framing conformance and retirement of local patches are tracked by
+TICKET-267 and TICKET-268.

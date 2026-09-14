@@ -26,6 +26,7 @@ tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 unicode-normalization = "0.1"
+archive-budget = { path = "../vendor/archive-budget" }
 cap-std = "4.0.3"
 hyper = { version = "1", features = ["server", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
@@ -43,7 +44,7 @@ zip = "2"            # Archiv-Handling ZIP (lesen/entpacken/packen, inkl. AES-Pa
 tar = "0.4"          # tar-Archive lesen/entpacken
 flate2 = "1"         # gzip-De-/Kompression (tar.gz)
 xz2 = "0.1"          # xz-Dekompression (tar.xz)
-sevenz-rust = "0.6"  # 7z-Archive lesen/entpacken (inkl. Passwort), reines Rust
+sevenz-rust = { version = "0.6", features = ["aes256"] }  # 7z-Archive lesen/entpacken (inkl. Passwort), reines Rust
 notify = "6"         # Verzeichnisse auf Änderungen überwachen
 trash = "5"          # In den Papierkorb verschieben (statt endgültig löschen)
 kamadak-exif = "0.5" # EXIF-Metadaten aus Bildern lesen (Modulname `exif`)
@@ -122,3 +123,7 @@ custom-protocol = ["tauri/custom-protocol"]
 # TICKET-071: backport async SMB read replies while retaining Rust 1.85.1.
 [patch.crates-io]
 smb = { path = "../vendor/smb" }
+
+sevenz-rust = { path = "../vendor/sevenz-rust" }
+zip = { path = "../vendor/zip" }
+tar = { path = "../vendor/tar" }

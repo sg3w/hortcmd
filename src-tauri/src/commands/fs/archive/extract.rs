@@ -1,7 +1,7 @@
 //! Archive-format adapters for the shared validation and staging layers.
 use super::super::transfer::{events::ItemError, Prog};
 use super::{
-    archive_kind, inner_prefix, is_password_error, map_7z_err, open_tar_reader, password,
+    archive_kind, budget, inner_prefix, is_password_error, map_7z_err, open_tar_reader,
     password_required, password_wrong, safety, staging, tar_raw, ArchiveKind,
 };
 use crate::errors::{code, AppError, AppResult};
@@ -37,13 +37,25 @@ pub(super) fn preflight(
     archive: &str,
     pw: &Option<String>,
     limits: safety::Limits,
+    cancel: &std::sync::Arc<std::sync::atomic::AtomicBool>,
+) -> AppResult<safety::Manifest> {
+    budget::run(cancel.clone(), 30, || {
+        preflight_inner(archive, pw, limits, cancel)
+    })
+}
+
+fn preflight_inner(
+    archive: &str,
+    pw: &Option<String>,
+    limits: safety::Limits,
     cancel: &std::sync::atomic::AtomicBool,
 ) -> AppResult<safety::Manifest> {
+    budget::password_limit(pw)?;
     check_cancel(cancel)?;
     let mut manifest = safety::Manifest::new(limits, fs::metadata(archive)?.len());
     match archive_kind(archive) {
         Some(ArchiveKind::Zip) => {
-            let mut zip = ZipArchive::new(File::open(archive)?)?;
+            let mut zip = ZipArchive::new(budget::open(archive)?)?;
             for index in 0..zip.len() {
                 check_cancel(cancel)?;
                 let entry = zip.by_index_raw(index)?;
@@ -71,8 +83,7 @@ pub(super) fn preflight(
             }
         }
         Some(ArchiveKind::SevenZ) => {
-            let meta = sevenz_rust::Archive::open_with_password(archive, &password(pw))
-                .map_err(map_7z_err)?;
+            let meta = budget::seven_meta(archive, pw).map_err(map_7z_err)?;
             for entry in &meta.files {
                 check_cancel(cancel)?;
                 let mode = (entry.windows_attributes >> 16) & 0o170000;
@@ -136,8 +147,8 @@ pub(super) fn extract_zip(
     prog: &mut Prog,
 ) -> AppResult<(u32, Vec<ItemError>)> {
     let all = targets.is_empty();
-    let open = || -> AppResult<ZipArchive<File>> {
-        ZipArchive::new(File::open(archive).map_err(AppError::from)?).map_err(AppError::from)
+    let open = || -> AppResult<ZipArchive<archive_budget::Reader<File>>> {
+        ZipArchive::new(budget::open(archive)?).map_err(AppError::from)
     };
 
     // Pass 1: determine matching indices + totals, check encryption.
@@ -172,6 +183,9 @@ pub(super) fn extract_zip(
     let mut ok = 0u32;
     let mut errors = Vec::new();
     for i in indices {
+        if let Some(error) = budget::failure() {
+            return Err(error);
+        }
         if prog.cancelled() {
             break;
         }
@@ -187,7 +201,7 @@ pub(super) fn extract_zip(
 }
 
 fn extract_zip_one(
-    zip: &mut ZipArchive<File>,
+    zip: &mut ZipArchive<archive_budget::Reader<File>>,
     index: usize,
     base: &str,
     dest: &mut staging::Stage,
@@ -254,6 +268,9 @@ pub(super) fn extract_tar(
     let mut ok = 0u32;
     let mut errors = Vec::new();
     for entry in ar.entries().map_err(AppError::from)? {
+        if let Some(error) = budget::failure() {
+            return Err(error);
+        }
         if prog.cancelled() {
             break;
         }
@@ -303,8 +320,7 @@ pub(super) fn extract_7z(
 ) -> AppResult<(u32, Vec<ItemError>)> {
     let all = targets.is_empty();
     // Pass 1: totals from the metadata (also opens with the password).
-    let meta =
-        sevenz_rust::Archive::open_with_password(archive, &password(pw)).map_err(map_7z_err)?;
+    let meta = budget::seven_meta(archive, pw).map_err(map_7z_err)?;
     for f in &meta.files {
         if f.is_directory {
             if let Some(rel) = match_target(&f.name, base, all, targets) {
@@ -321,7 +337,7 @@ pub(super) fn extract_7z(
     prog.emit("", 0, 0, true);
 
     // Pass 2: extract via the streaming reader.
-    let mut reader = sevenz_rust::SevenZReader::open(archive, password(pw)).map_err(map_7z_err)?;
+    let mut reader = budget::seven_reader(archive, pw).map_err(map_7z_err)?;
     let mut ok = 0u32;
     let mut errors = Vec::new();
     reader
@@ -387,6 +403,8 @@ pub(crate) fn run_with_recovery(
     limits: safety::Limits,
     recovery: Option<&crate::commands::fs::transfer::recovery::Handle>,
 ) -> AppResult<(u32, Vec<ItemError>)> {
+    let _budget =
+        archive_budget::Scope::new(prog.cancel.clone(), std::time::Duration::from_secs(1800));
     let _cache_mutation = crate::commands::fs::cache::Mutation::begin();
     use crate::vfs::caps::{self, Capability};
     let ExtractJob {
@@ -422,7 +440,7 @@ pub(crate) fn run_with_recovery(
         Err(error) => return Ok((0, vec![ItemError::new(&archive, error)])),
     };
     let mut stage = staging::Stage::new_with_recovery(std::path::Path::new(&dest_dir), recovery)?;
-    let result = match archive_kind(&archive) {
+    let result = budget::decode(|| match archive_kind(&archive) {
         Some(ArchiveKind::Zip) => {
             extract_zip(&archive, &base, manifest, &targets, &mut stage, &pw, prog)
         }
@@ -433,11 +451,14 @@ pub(crate) fn run_with_recovery(
             extract_7z(&archive, &base, manifest, &targets, &mut stage, &pw, prog)
         }
         None => Err(AppError::new(code::ARCHIVE_UNKNOWN_FORMAT)),
-    };
+    });
     let (mut ok, mut errors) = match result {
         Ok(result) => result,
         Err(error) => (0, vec![ItemError::new(&archive, error)]),
     };
+    if let Some(error) = budget::failure() {
+        errors.push(ItemError::new(&archive, error));
+    }
     if !prog.cancelled() && errors.is_empty() && prog.files_done != prog.files_total {
         errors.push(ItemError::new(
             &archive,
