@@ -58,6 +58,11 @@ pub fn write_text_file(path: String, contents: String, overwrite: bool) -> AppRe
 #[tauri::command]
 pub fn rename_entry(from: String, to: String) -> AppResult<()> {
     let _cache_mutation = crate::commands::fs::cache::Mutation::begin();
+    let source = vfs::location::VfsLocation::parse(&from)?;
+    let destination = vfs::location::VfsLocation::parse(&to)?;
+    if source.store_identity() != destination.store_identity() {
+        return Err(AppError::new(code::VALIDATION_BAD_INPUT).op("cross-store-rename"));
+    }
     caps::require_pair(&from, Capability::Move, &to, Capability::CopyTo)?;
     let (provider, from_r) = vfs::resolve(&from)?;
     let (_, to_r) = vfs::resolve(&to)?;

@@ -1545,3 +1545,34 @@ fn cancelled_remote_copy_preserves_the_exact_target_and_normalized_alias() {
     );
     assert_eq!(fake.get(&alias).as_deref(), Some("unrelated stage"));
 }
+
+#[test]
+fn rename_refuses_other_stores_before_access_and_keeps_same_store_no_overwrite() {
+    use crate::commands::fs::file::rename_entry;
+    let (first, _first_session, a) = remote_fixture();
+    let (second, _second_session, b) = remote_fixture();
+    first.put("/src/file", "first");
+    second.put("/src/file", "second");
+    for (from, to) in [
+        (format!("{a}/src/file"), format!("{b}/src/file")),
+        (
+            format!("{a}/src/file"),
+            "/absent-local-rename-target".into(),
+        ),
+        (
+            "/absent-local-rename-source".into(),
+            format!("{a}/src/file"),
+        ),
+    ] {
+        let error = rename_entry(from, to).unwrap_err();
+        assert_eq!(&*error.code, crate::errors::code::VALIDATION_BAD_INPUT);
+    }
+    assert_eq!(first.get("/src/file").as_deref(), Some("first"));
+    assert_eq!(second.get("/src/file").as_deref(), Some("second"));
+    first.put("/src/taken", "keep");
+    assert!(rename_entry(format!("{a}/src/file"), format!("{a}/src/taken")).is_err());
+    assert_eq!(first.get("/src/taken").as_deref(), Some("keep"));
+    rename_entry(format!("{a}/src/file"), format!("{a}/src/new")).unwrap();
+    assert_eq!(first.get("/src/new").as_deref(), Some("first"));
+    assert!(first.get("/src/file").is_none());
+}

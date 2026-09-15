@@ -21,3 +21,11 @@ change to the dialog.
 
 A rename never interprets a destination belonging to another store as a path in
 the source store. `npm run check` passes.
+
+## Completion
+
+Canonical VFS store identities are compared before capability checks, provider
+resolution, existence probes, undo preparation or mutation. Cross-store requests
+return a structured validation error with operation `cross-store-rename`.
+Regression coverage uses two registered in-memory remote providers and covers
+both local/remote directions, successful same-store rename and no-overwrite.
