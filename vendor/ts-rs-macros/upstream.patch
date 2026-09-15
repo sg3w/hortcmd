@@ -1,0 +1,60 @@
+--- a/ts-rs-macros/src/attr/enum.rs
++++ b/ts-rs-macros/src/attr/enum.rs
+@@ -224,6 +224,8 @@
+ 
+ impl_parse! {
+     Serde<EnumAttr>(input, out) {
++        // Serde enforces this at runtime; it does not change the TS shape.
++        "deny_unknown_fields" => {},
+         "rename" => out.0.rename = Some(parse_assign_str(input)?),
+         "rename_all" => out.0.rename_all = Some(parse_assign_inflection(input)?),
+         "rename_all_fields" => out.0.rename_all_fields = Some(parse_assign_inflection(input)?),
+--- a/ts-rs-macros/src/attr/field.rs
++++ b/ts-rs-macros/src/attr/field.rs
+@@ -198,6 +198,13 @@
+ 
+ impl_parse! {
+     Serde<FieldAttr>(input, out) {
++        "skip_serializing_if" => {
++            let predicate = parse_assign_str(input)?;
++            if predicate != "Option::is_none" {
++                return Err(syn::Error::new(input.span(), "unsupported skip_serializing_if predicate"));
++            }
++            out.0.optional = Optional { optional: true, nullable: false };
++        },
+         "rename" => out.0.rename = Some(parse_assign_str(input)?),
+         "skip" => out.0.skip = true,
+         "flatten" => out.0.flatten = true,
+@@ -273,3 +280,21 @@
+         }
+     }
+ }
++
++#[cfg(test)]
++mod compatibility_tests {
++    use super::*;
++
++    #[test]
++    fn only_the_supported_omission_predicate_is_accepted() {
++        let known: Attribute = syn::parse_quote!(#[serde(skip_serializing_if = "Option::is_none")]);
++        let parsed = Serde::<FieldAttr>::try_from(&known).unwrap();
++        assert!(parsed.0.optional.optional);
++        assert!(!parsed.0.optional.nullable);
++        let unknown: Attribute =
++            syn::parse_quote!(#[serde(skip_serializing_if = "custom_predicate")]);
++        assert!(Serde::<FieldAttr>::try_from(&unknown).is_err());
++        let unknown: Attribute = syn::parse_quote!(#[serde(unrecognized_attribute)]);
++        assert!(Serde::<FieldAttr>::try_from(&unknown).is_err());
++    }
++}
+--- a/ts-rs-macros/src/types/enum.rs
++++ b/ts-rs-macros/src/types/enum.rs
+@@ -24,7 +24,7 @@
+     if let Some(attr_type_override) = &enum_attr.type_override {
+         return type_override::type_override_enum(&enum_attr, &name, attr_type_override);
+     }
+- 
++
+     if let Some(attr_type_as) = &enum_attr.type_as {
+         return type_as::type_as_enum(&enum_attr, &name, attr_type_as);
+     }

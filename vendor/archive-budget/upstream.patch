@@ -103,18 +103,40 @@
  }
  
  #[inline]
+--- a/sevenz-rust/src/folder.rs
++++ b/sevenz-rust/src/folder.rs
+@@ -49,7 +49,7 @@
+         self.unpack_sizes.get(index).cloned().unwrap_or_default()
+     }
+ 
+-    pub fn ordered_coder_iter(&self) -> OrderedCoderIter {
++    pub fn ordered_coder_iter(&self) -> OrderedCoderIter<'_> {
+         OrderedCoderIter::new(self)
+     }
+ }
 --- a/sevenz-rust/src/reader.rs
 +++ b/sevenz-rust/src/reader.rs
-@@ -9,7 +9,7 @@
+@@ -9,9 +9,7 @@
  
  use crate::{archive::*, decoders::add_decoder, error::Error, folder::*, password::Password};
  pub(crate) const CRC32: Crc<u32> = Crc::<u32>::new(&crc::CRC_32_ISO_HDLC);
 -const MAX_MEM_LIMIT_KB: usize = usize::MAX / 1024;
+-
+-pub(crate) trait SeedRead: Read + Seek {}
 +const MAX_MEM_LIMIT_KB: usize = archive_budget::DICTIONARY / 1024;
  
- pub(crate) trait SeedRead: Read + Seek {}
+ pub struct BoundedReader<R: Read> {
+     inner: R,
+@@ -58,8 +56,6 @@
+     cur: u64,
+     bounds: (u64, u64),
+ }
+-
+-impl<R: Read + Seek> SeedRead for SeekableBoundedReader<R> {}
  
-@@ -336,6 +336,11 @@
+ impl<R: Read + Seek> Seek for SeekableBoundedReader<R> {
+     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+@@ -336,6 +332,11 @@
              )));
          }
  
@@ -126,7 +148,7 @@
          let next_header_size_int = start_header.next_header_size as usize;
  
          reader
-@@ -357,6 +362,7 @@
+@@ -357,6 +358,7 @@
              let (mut out_reader, buf_size) =
                  Self::read_encoded_header(&mut buf_reader, reader, &mut archive, password)?;
              buf.clear();
@@ -134,7 +156,7 @@
              buf.resize(buf_size, 0);
              out_reader
                  .read_exact(&mut buf)
-@@ -398,7 +404,9 @@
+@@ -398,7 +400,9 @@
              .seek(SeekFrom::Start(folder_offset))
              .map_err(Error::io)?;
          let coder_len = folder.coders.len();
@@ -145,7 +167,7 @@
          let pack_size = archive.pack_sizes[first_pack_stream_index] as usize;
          let input_reader =
              SeekableBoundedReader::new(reader, (folder_offset, folder_offset + pack_size as u64));
-@@ -456,6 +464,8 @@
+@@ -456,6 +460,8 @@
  
      fn read_files_info<R: Read + Seek>(header: &mut R, archive: &mut Archive) -> Result<(), Error> {
          let num_files = read_usize(header, "num files")?;
@@ -154,7 +176,7 @@
          let mut files: Vec<SevenZArchiveEntry> = vec![Default::default(); num_files];
  
          let mut is_empty_stream: Option<BitSet> = None;
-@@ -496,7 +506,7 @@
+@@ -496,7 +502,7 @@
                      if external != 0 {
                          return Err(Error::other("Not implemented:external != 0"));
                      }
@@ -163,7 +185,7 @@
                          return Err(Error::other("file names length invalid"));
                      }
  
-@@ -507,7 +517,10 @@
+@@ -507,7 +513,10 @@
  
                      let mut next_file = 0;
                      for s in names_reader {
@@ -175,7 +197,7 @@
                          next_file += 1;
                      }
  
-@@ -797,11 +810,15 @@
+@@ -797,11 +806,15 @@
              for folder in archive.folders.iter_mut() {
                  let num_streams = read_usize(header, "numStreams")?;
                  folder.num_unpack_sub_streams = num_streams;
@@ -192,7 +214,7 @@
          let mut sub_streams_info = SubStreamsInfo::default();
          sub_streams_info
              .unpack_sizes
-@@ -888,6 +905,9 @@
+@@ -888,6 +901,9 @@
          let mut folder = Folder::default();
  
          let num_coders = read_usize(header, "num coders")?;
@@ -202,7 +224,7 @@
          let mut coders = Vec::with_capacity(num_coders);
          let mut total_in_streams = 0;
          let mut total_out_streams = 0;
-@@ -910,6 +930,12 @@
+@@ -910,6 +926,12 @@
              } else {
                  coder.num_in_streams = read_u64(header)?;
                  coder.num_out_streams = read_u64(header)?;
@@ -215,7 +237,7 @@
              }
              total_in_streams += coder.num_in_streams;
              total_out_streams += coder.num_out_streams;
-@@ -970,7 +996,51 @@
+@@ -970,7 +992,51 @@
              }
          }
          folder.packed_streams = packed_streams;
@@ -268,7 +290,7 @@
          Ok(folder)
      }
  }
-@@ -983,19 +1053,24 @@
+@@ -983,19 +1049,24 @@
  #[inline]
  fn read_usize<R: Read>(reader: &mut R, field: &str) -> Result<usize, Error> {
      let size = read_u64(reader)?;
@@ -297,7 +319,7 @@
      let mut buf = [0; 8];
      reader.read_exact(&mut buf).map_err(Error::io)?;
      Ok(u64::from_le_bytes(buf))
-@@ -1025,6 +1100,7 @@
+@@ -1025,6 +1096,7 @@
  
  #[inline(always)]
  fn read_u8<R: Read>(reader: &mut R) -> Result<u8, Error> {
@@ -305,7 +327,7 @@
      let mut buf = [0];
      reader.read_exact(&mut buf).map_err(Error::io)?;
      Ok(buf[0])
-@@ -1033,6 +1109,7 @@
+@@ -1033,6 +1105,7 @@
  fn read_all_or_bits<R: Read>(header: &mut R, size: usize) -> Result<BitSet, Error> {
      let all = read_u8(header)?;
      if all != 0 {
@@ -313,7 +335,7 @@
          let mut bits = BitSet::with_capacity(size);
          for i in 0..size {
              bits.insert(i);
-@@ -1044,6 +1121,7 @@
+@@ -1044,6 +1117,7 @@
  }
  
  fn read_bits<R: Read>(header: &mut R, size: usize) -> Result<BitSet, Error> {
@@ -497,6 +519,36 @@
          let mut files = Vec::with_capacity(file_capacity);
          reader.seek(SeekFrom::Start(dir_info.directory_start))?;
          for _ in 0..dir_info.number_of_files {
+@@ -996,12 +998,12 @@
+     /// There are many passwords out there that will also pass the validity checks
+     /// we are able to perform. This is a weakness of the ZipCrypto algorithm,
+     /// due to its fairly primitive approach to cryptography.
+-    pub fn by_name_decrypt(&mut self, name: &str, password: &[u8]) -> ZipResult<ZipFile> {
++    pub fn by_name_decrypt(&mut self, name: &str, password: &[u8]) -> ZipResult<ZipFile<'_>> {
+         self.by_name_with_optional_password(name, Some(password))
+     }
+ 
+     /// Search for a file entry by name
+-    pub fn by_name(&mut self, name: &str) -> ZipResult<ZipFile> {
++    pub fn by_name(&mut self, name: &str) -> ZipResult<ZipFile<'_>> {
+         self.by_name_with_optional_password(name, None)
+     }
+ 
+@@ -1027,12 +1029,12 @@
+     }
+ 
+     /// Search for a file entry by name and return a seekable object.
+-    pub fn by_name_seek(&mut self, name: &str) -> ZipResult<ZipFileSeek<R>> {
++    pub fn by_name_seek(&mut self, name: &str) -> ZipResult<ZipFileSeek<'_, R>> {
+         self.by_index_seek(self.index_for_name(name).ok_or(ZipError::FileNotFound)?)
+     }
+ 
+     /// Search for a file entry by index and return a seekable object.
+-    pub fn by_index_seek(&mut self, index: usize) -> ZipResult<ZipFileSeek<R>> {
++    pub fn by_index_seek(&mut self, index: usize) -> ZipResult<ZipFileSeek<'_, R>> {
+         let reader = &mut self.reader;
+         self.shared
+             .files
 @@ -1270,6 +1272,7 @@
  
  #[inline]

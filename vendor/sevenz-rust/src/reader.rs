@@ -11,8 +11,6 @@ use crate::{archive::*, decoders::add_decoder, error::Error, folder::*, password
 pub(crate) const CRC32: Crc<u32> = Crc::<u32>::new(&crc::CRC_32_ISO_HDLC);
 const MAX_MEM_LIMIT_KB: usize = archive_budget::DICTIONARY / 1024;
 
-pub(crate) trait SeedRead: Read + Seek {}
-
 pub struct BoundedReader<R: Read> {
     inner: R,
     remain: usize,
@@ -58,8 +56,6 @@ pub struct SeekableBoundedReader<R: Read + Seek> {
     cur: u64,
     bounds: (u64, u64),
 }
-
-impl<R: Read + Seek> SeedRead for SeekableBoundedReader<R> {}
 
 impl<R: Read + Seek> Seek for SeekableBoundedReader<R> {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {

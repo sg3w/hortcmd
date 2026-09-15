@@ -7,7 +7,7 @@ Published `.crate` SHA-256: `502b7620c9f63f2aabccfeb6fe454d0ea3e86731ff76f961126
 Copied from Cargo's unpacked registry release; packaging markers and the
 crate-local Cargo.lock are omitted. Cargo.toml and sources retain upstream text.
 
-The sole source change is in `vendor/smb/src/resource/file.rs`, file-read response options:
+The protocol correction is in `vendor/smb/src/resource/file.rs`, file-read response options:
 
 ```diff
 - .sendo_recvo(request, ReceiveOptions::new())
@@ -24,3 +24,6 @@ Remove this override when a maintained dependency release provides the fix with
 a compatible MSRV, or when the project deliberately raises its supported MSRV.
 Verify with `npm run check`, the declared-MSRV build and the real Docker protocol
 harness. Do not edit the global Cargo cache to apply the fix.
+
+TICKET-271 also gates the sync_helpers import in resource/file_util.rs on
+std-fs-impls, the only feature that uses it, to avoid an unused-import warning.

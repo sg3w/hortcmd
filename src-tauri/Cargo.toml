@@ -127,3 +127,6 @@ smb = { path = "../vendor/smb" }
 sevenz-rust = { path = "../vendor/sevenz-rust" }
 zip = { path = "../vendor/zip" }
 tar = { path = "../vendor/tar" }
+
+# TICKET-271: recognize runtime-only enum guards and omitted Option fields.
+ts-rs-macros = { path = "../vendor/ts-rs-macros" }

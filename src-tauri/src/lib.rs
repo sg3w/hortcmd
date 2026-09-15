@@ -2,6 +2,9 @@
 // App setup & registration of the Tauri commands.
 // ============================================================
 
+#[cfg(test)]
+mod ipc_contract_tests;
+
 mod commands;
 mod config;
 pub mod errors;
