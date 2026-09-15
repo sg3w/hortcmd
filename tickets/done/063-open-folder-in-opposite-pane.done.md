@@ -77,4 +77,4 @@ rechter Ansicht. Icon und Tooltip verwenden die bestehenden Theme-Klassen.
 
 Bestehende Einschränkung: Archivnavigation schreibt noch keinen Zurück-/Vor-Verlauf.
 Das betrifft auch normales Archivöffnen; vollständige Archiv-Historie wurde als
-Folgeticket 262 erfasst. Lokaler/Remote-Verlauf bleibt funktionsfähig.
+Folgeticket 126 erfasst. Lokaler/Remote-Verlauf bleibt funktionsfähig.

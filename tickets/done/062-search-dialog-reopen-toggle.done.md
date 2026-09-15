@@ -115,4 +115,4 @@ Escape geprüft; ein X-Schließen-Knopf existiert in diesem Dialog nicht. Tempor
 Demo-Daten anschließend entfernt.
 
 Die separate Indexsuche besitzt eigene lokale Formular-/Ergebnisdaten; deren
-Sitzungswiederherstellung ist als Folgeticket 261 erfasst.
+Sitzungswiederherstellung ist als Folgeticket 125 erfasst.

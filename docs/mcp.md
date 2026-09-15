@@ -110,4 +110,4 @@ fails, the error result includes a separate cleanup item with the staging addres
 
 Staging allocation still uses the providers' existing create operations. Atomic
 reservation and protection against external replacement races are tracked in
-TICKET-270.
+TICKET-133.

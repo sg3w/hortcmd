@@ -64,9 +64,9 @@ it. `jwalk` is absent.
 
 ## Related Tickets
 
-- TICKET-223: performance benchmarks and budgets.
+- TICKET-112: performance benchmarks and budgets.
 - TICKET-054: indexed search; this ticket improves its non-indexed scan foundation.
-- TICKET-209: folder usage visualization; assess reuse of the traversal component
+- TICKET-108: folder usage visualization; assess reuse of the traversal component
   without expanding this ticket into a rewrite of every recursive operation.
 
 ## Definition of Done

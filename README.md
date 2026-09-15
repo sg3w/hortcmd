@@ -43,7 +43,7 @@ Implemented and in use:
 The **MCP server** is implemented under [TICKET-041](tickets/done/041-mcp-interface.done.md),
 with final integration acceptance still in progress. It is disabled by default;
 see [MCP setup and verification](docs/mcp.md). The **plugin system**
-([TICKET-201](tickets/201-plugin-api-contract.md)–208) remains planned.
+([TICKET-100](tickets/100-plugin-api-contract.md)–107) remains planned.
 
 ## Tech stack
 
@@ -272,8 +272,8 @@ notes, test evidence and native platform follow-ups.
 
 **Not implemented:**
 
-- **Plugins** ([TICKET-201](tickets/201-plugin-api-contract.md) …
-  [TICKET-208](tickets/208-reference-demo-plugin.md)) —
+- **Plugins** ([TICKET-100](tickets/100-plugin-api-contract.md) …
+  [TICKET-107](tickets/107-reference-demo-plugin.md)) —
   there is no plugin host, no loader, and no extension point. Nothing in this
   repository executes third-party code.
 The optional MCP endpoint binds only to loopback and requires its keychain-backed
@@ -381,7 +381,7 @@ npm run tauri build
 
 Produces a platform bundle in `src-tauri/target/release/bundle/` (`.app`/`.dmg`
 on macOS, `.deb`/`.AppImage` on Linux, `.msi`/`.exe` on Windows). Signing and
-notarization are not configured — TICKET-222 owns that.
+notarization are not configured — TICKET-111 owns that.
 
 A packaged build differs from `tauri dev` in two ways that matter: it uses the
 production CSP rather than `devCsp`, and it serves the app document over the

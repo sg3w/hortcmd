@@ -110,7 +110,7 @@ deliberately removed is not a broken document, and keeping deleted files around
 to satisfy the record of their deletion would be absurd.
 
 **README, rewritten around what a reader needs.** "What it does" separates
-implemented from ticketed-but-unimplemented (plugins TICKET-201–208, MCP
+implemented from ticketed-but-unimplemented (plugins TICKET-100–107, MCP
 TICKET-041). "The pieces" is a where-to-look table per component, followed by a
 walkthrough of one remote copy from F5 through `runCopy` → capability check →
 `copy_entries` → `vfs::resolve` → the session registry → the provider's
@@ -169,7 +169,7 @@ The new gate was broken on purpose and observed to fail, four ways:
 - and it caught a real mistake while this ticket was being written: the first
   draft of § Security cited `tickets/201-plugin-host-and-capability-model.md`
   and `tickets/041-mcp-server-integration.md`, neither of which exists (the real
-  files are `201-plugin-api-contract.md` and `041-mcp-interface.md`). That
+  files are `100-plugin-api-contract.md` and `041-mcp-interface.md`). That
   escaped the checker at first because a backticked `.md` path was not being
   resolved; the extension list now includes `md`, with `NNN` placeholders
   exempt.

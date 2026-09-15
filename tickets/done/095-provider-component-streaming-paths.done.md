@@ -18,7 +18,7 @@ before any provider operation; it does not silently normalize them.
   failed publication/rollback and MCP containment.
 - Remove the conservative `provider-path-adapter` refusal only after those tests
   demonstrate the exact destination object is preserved.
-- Keep the Windows/Linux native matrix in TICKET-259 deferred separately.
+- Keep the Windows/Linux native matrix in TICKET-123 deferred separately.
 
 ## Acceptance
 
@@ -37,7 +37,7 @@ identity, including during recovery; `npm run check` passes.
 - Regression tests distinguish normalized aliases from exact resources, covering
   verified copy, failed publication/rollback, journal reopening and MCP scope.
 - Cross-store rename validation found during review is tracked in TICKET-098.
-- Live protocol and Windows/Linux verification remain deferred to TICKET-259.
+- Live protocol and Windows/Linux verification remain deferred to TICKET-123.
 
 ## Validation
 

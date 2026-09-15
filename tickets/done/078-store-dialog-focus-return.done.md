@@ -5,7 +5,7 @@
 Dialogs opened through stores do not have a Radix Trigger. Radix's default close
 handler therefore has no trigger to focus. A regression test reproduces a prompt
 followed by a confirmation; after the confirmation closes, focus is on the body
-instead of the invoking workspace control. Found while verifying ticket 249.
+instead of the invoking workspace control. Found while verifying ticket 114.
 Interpose immediately because keyboard users lose their position after operations.
 
 ## Fix

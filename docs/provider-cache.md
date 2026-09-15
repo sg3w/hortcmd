@@ -42,4 +42,4 @@ refresh sees a newly created file and mutation guards prevent retained results.
 Separate tests cover expiry, byte/item limits, provider fairness, connection and
 capability isolation, invalidation races, redacted metrics and shared cancellation.
 This verifies avoided provider work for the repeated-navigation scenario; broader
-cross-platform timing and memory benchmarks remain in ticket 223.
+cross-platform timing and memory benchmarks remain in ticket 112.

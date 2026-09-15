@@ -23,7 +23,7 @@ requires fresh approval. Root-relative metadata is read through directory handle
 content handles are checked against the discovered object and checked again after
 reading. Excluded parent directories are pruned. Non-Unicode names, inaccessible
 folders or changed files pause the scan with an error rather than silently claiming
-complete coverage. Windows/Linux local adapters are deferred to ticket 256.
+complete coverage. Windows/Linux local adapters are deferred to ticket 121.
 
 Remote scopes must refer to an explicitly selected saved profile and an already
 verified connection. Stored identity contains the profile ID and endpoint digest,
@@ -31,7 +31,7 @@ not a credential-bearing URL. The provider namespace below that approved root is
 the remote boundary, including server-mounted subfolders; physical remote mount
 identity is not available. Reported symlinks are skipped. Remote content indexing
 is refused because current providers cannot prove no-follow stable content reads
-(ticket 257). No profile is connected automatically. Disconnects require reconnect
+(ticket 122). No profile is connected automatically. Disconnects require reconnect
 unless offline viewing was explicitly approved. Offline results have no actionable
 address. Profile deletion or edits erase both open scopes and locked encrypted
 snapshots, including interrupted-write files. Reconnect generations force a new
@@ -111,4 +111,4 @@ A deterministic 1,000-file prefix query is compared with the existing live-searc
 engine and yields the same 111 paths. Twenty repeated index queries enumerate zero
 files. The regression prints initial crawl and both repeated-query timings; timings
 are observational, not a flaky CI assertion. Broader cold/warm, filesystem and
-platform measurements remain in ticket 223.
+platform measurements remain in ticket 112.

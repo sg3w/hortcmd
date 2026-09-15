@@ -2,7 +2,7 @@
 
 ## Problem
 
-Found while implementing ticket 249. `FileBrowserDialog.pick` invokes
+Found while implementing ticket 114. `FileBrowserDialog.pick` invokes
 `request.onPick(full)` and then clears the file-browser store. A callback that
 opens another file-browser request has that new request cleared immediately.
 This is the same ordering issue fixed for confirmation dialogs in ticket 077.

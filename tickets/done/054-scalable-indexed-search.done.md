@@ -46,7 +46,7 @@ TICKET-053 reusable metadata identity/invalidation rules.
 ## Acceptance Criteria
 
 - [x] Only explicitly approved roots and metadata/content categories are indexed.
-- [x] Repeated representative queries improve against the TICKET-223 live-scan
+- [x] Repeated representative queries improve against the TICKET-112 live-scan
       baseline without changing result correctness.
 - [x] Indexing is cancellable, resumable, resource-bounded, and recovers from a
       corrupt or outdated database through rebuild.
@@ -89,8 +89,8 @@ See [search-index.md](../../docs/search-index.md) for exact bounds and supported
 The application and live adapters share the scoped contract. Native requests use
 an explicit, tested application fallback; Spotlight is not enabled without proven
 contract equivalence. Remote scopes are metadata-only under current capabilities;
-remote stable-content guarantees are tracked in TICKET-257. Windows/Linux local
-native validation is deferred to TICKET-256 per user instruction.
+remote stable-content guarantees are tracked in TICKET-122. Windows/Linux local
+native validation is deferred to TICKET-121 per user instruction.
 
 Validation: `npm run check`, deterministic indexed/live result comparison,
 checkpoint/cancellation, exclusion/link/root replacement, encryption/corruption,

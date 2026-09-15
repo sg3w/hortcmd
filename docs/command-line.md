@@ -31,4 +31,4 @@ also covers that case. No command history or session is persisted.
 
 Tests cover local execution, exact working directory and quoting, stderr, nonzero
 exit, closed stdin, bounded output, cancellation, overlapping/stale requests and
-keyboard ownership. Native Windows/Linux verification is tracked in ticket 274.
+keyboard ownership. Native Windows/Linux verification is tracked in ticket 135.

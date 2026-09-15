@@ -42,7 +42,7 @@ pub use crate::errors::code::CAPABILITY_UNSUPPORTED as UNSUPPORTED;
 /// combines two locations.
 ///
 /// New identifiers are appended; existing ones keep their name, because
-/// the planned plugin and MCP surfaces (tickets 201–208, 041) will hand
+/// the planned plugin and MCP surfaces (tickets 100–107, 041) will hand
 /// these very strings out.
 #[derive(Serialize, Clone, Copy, PartialEq, Eq, Hash, Debug, TS)]
 #[serde(rename_all = "camelCase")]

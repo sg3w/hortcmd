@@ -36,4 +36,4 @@ Tests cover malicious header sizes/counts/dictionaries, cyclic coder graphs, wor
 budgets, cancellation, encrypted headers/payload, and all existing formats.
 Precise limits, scope and provenance: [decoder budgets](../../docs/archive-decoder-budgets.md).
 These are cooperative work/deadline limits, not OS CPU/RSS quotas. Additional
-ZIP-LZMA framing and upstream migration findings are recorded as TICKET-267/268.
+ZIP-LZMA framing and upstream migration findings are recorded as TICKET-131/132.

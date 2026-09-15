@@ -5,7 +5,7 @@
 The confirmation button executes `onConfirm` and then clears both operation
 dialogs. If the callback opens an error, retry or input prompt synchronously,
 that new dialog disappears immediately. Found while verifying nested keyboard
-workflows for 249; interposed because it hides follow-up questions and errors.
+workflows for 114; interposed because it hides follow-up questions and errors.
 
 ## Fix
 

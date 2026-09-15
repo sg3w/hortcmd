@@ -2,9 +2,9 @@
 
 ## Problem
 
-Ticket 249's shell inventory found an unnamed command-line input in App.tsx with
+Ticket 114's shell inventory found an unnamed command-line input in App.tsx with
 no state, submission handler or backend command. Text can be entered but Enter
-does nothing. Until execution exists, ticket 249 names and disables the field
+does nothing. Until execution exists, ticket 114 names and disables the field
 with an explicit unavailable explanation so it does not advertise working input.
 
 ## Requirements
@@ -21,12 +21,12 @@ with an explicit unavailable explanation so it does not advertise working input.
 ## Scheduling
 
 After the requested sequence through 065. This is an unfinished feature, separate
-from the core file-operation keyboard workflows of ticket 249.
+from the core file-operation keyboard workflows of ticket 114.
 
 ## Completion
 
 Implemented typed Rust start/status/cancel commands, bounded stdout/stderr, a
 single active process, shell-specific execution in the captured local directory,
 and compact lazy-loaded frontend controls with keyboard ownership guards.
-Behavior and shortcuts: `docs/command-line.md`. Native platform follow-up: 274.
+Behavior and shortcuts: `docs/command-line.md`. Native platform follow-up: 135.
 Validation: Rust execution tests, frontend keyboard tests and `npm run check`.

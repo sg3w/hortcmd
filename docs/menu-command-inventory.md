@@ -142,8 +142,8 @@ on the *visible* rows; quick and comparison filters prune hidden operation targe
 | Running / queued transfers | `transfersStore`, `TransferView` | dyn. `transfer:*` | Befehle › Übertragungen ▸ | — | empty list → placeholder | 040 |
 | Pause / resume / cancel a transfer | `transfersStore.setPaused`, `cancelTransfer` | — | inside the transfer dialog | — | — | dialog |
 | Drive / volume switch | `panel/DriveSelect.tsx` | — | per-pane location picker (also lists favorites and connections) | — | — | dialog |
-| Storage usage analysis | — (TICKET-209) | — | — | — | — | open |
-| Plugin management | — (TICKET-207) | — | — | — | — | open |
+| Storage usage analysis | — (TICKET-108) | — | — | — | — | open |
+| Plugin management | — (TICKET-106) | — | — | — | — | open |
 
 ## Netz / Network
 
@@ -208,7 +208,7 @@ No "save settings" command: every setting is persisted the moment it changes
 Archive test, split/combine files, encode/decode, print, comments, save/load
 selection (→ TICKET-059), checksum files, Windows shares, toolbar editor, a
 "Starter" menu. None of them has an implementation in hortcmd, and this ticket
-adds no functionless placeholders. The plugin toolbar stays with TICKET-204.
+adds no functionless placeholders. The plugin toolbar stays with TICKET-103.
 
 ## Platform checks
 

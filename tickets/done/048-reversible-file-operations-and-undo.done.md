@@ -93,7 +93,7 @@ authorize replay. DE/EN menu, shortcut, confirmations and preview are integrated
 Remote providers, archives, overwrite without retained backups and permanent
 delete are explicitly irreversible. Current macOS trash has no stable restore
 token; use system trash restoration. Windows/Linux adapters were moved to
-[TICKET-254](254-file-undo-windows-linux-adapters.md) per the current user scope.
+[TICKET-119](119-file-undo-windows-linux-adapters.md) per the current user scope.
 Copy undo retains bytes at its displayed quarantine path to protect open writers;
 this is intentional and documented in [File undo](../../docs/file-undo.md).
 

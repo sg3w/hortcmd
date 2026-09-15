@@ -8,7 +8,7 @@
  * combines two locations.
  *
  * New identifiers are appended; existing ones keep their name, because
- * the planned plugin and MCP surfaces (tickets 201–208, 041) will hand
+ * the planned plugin and MCP surfaces (tickets 100–107, 041) will hand
  * these very strings out.
  */
 export type Capability = "browse" | "preview" | "copyFrom" | "copyTo" | "move" | "create" | "deletePermanent" | "trash" | "archiveBrowse" | "archiveExtractFrom" | "archiveExtractTo" | "archivePackFrom" | "archivePackTo" | "stat" | "recursiveSize" | "checksums" | "permissions" | "search" | "compareDirs" | "compareFiles" | "gitStatus" | "finderTags" | "volumeInfo" | "systemOpen" | "openWith" | "quickLook" | "localTerminal" | "sshTerminal";

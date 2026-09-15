@@ -77,7 +77,7 @@ pushed to the frontend as an event.
 ## Acceptance criteria
 
 Implementation completed; physical-device and quiet-machine acceptance checks
-are transferred to TICKET-260. Checked items below denote implemented behaviour,
+are transferred to TICKET-124. Checked items below denote implemented behaviour,
 not a claim that every hardware scenario was exercised.
 - [x] Inserting an SD card makes the new volume appear in the picker of both
       panels within ~2 s, with correct name, mount point and capacity.
@@ -86,10 +86,10 @@ not a claim that every hardware scenario was exercised.
 - [x] The free/total display updates while data is written to a volume.
 - [x] A panel standing on an unmounted volume falls back to home and reports it.
 - [x] `FileBrowserDialog` shows the current drive list, not a startup snapshot.
-- [ ] Deferred native idle logging to TICKET-260 (120 simulated seconds tested):
+- [ ] Deferred native idle logging to TICKET-124 (120 simulated seconds tested):
       No `drives-changed` event is emitted while nothing changes (verified by
       logging over at least a minute of idle time).
-- [ ] Deferred to TICKET-260: Idle CPU load is unchanged in practice (no measurable increase from the
+- [ ] Deferred to TICKET-124: Idle CPU load is unchanged in practice (no measurable increase from the
       watcher).
 
 ## Tests
@@ -122,4 +122,4 @@ recovery with navigation race guards. Open pickers and file browsers update live
 Validation: Rust change/cadence tests, frontend subscription and interaction
 regressions, and a native macOS DMG probe covering mount, capacity writes and
 unmount. See `docs/live-drives.md` for evidence and measurement limits. Hardware,
-network and Windows/Linux validation is deferred to TICKET-260 per user scope.
+network and Windows/Linux validation is deferred to TICKET-124 per user scope.

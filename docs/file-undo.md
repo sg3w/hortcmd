@@ -37,7 +37,7 @@ currently used by hortcmd does not expose a stable restore token, so trash uses
 system restoration and is explicitly excluded from file undo. Remote providers
 lack the required stable identity/no-replace inverse contract and are classified
 irreversible; no reconnect or changed trust identity can revive a local plan.
-Windows/Linux adapters are tracked in [TICKET-254](../tickets/254-file-undo-windows-linux-adapters.md).
+Windows/Linux adapters are tracked in [TICKET-119](../tickets/119-file-undo-windows-linux-adapters.md).
 Redo is not offered.
 
 ## Durability, bounds and privacy

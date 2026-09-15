@@ -1,6 +1,6 @@
 # Archive decoder budgets (TICKET-067)
 
-The expansion/path/staging checks tracked by TICKET-225 (originally 046) remain in place. They cannot
+The expansion/path/staging checks tracked by TICKET-113 (originally 046) remain in place. They cannot
 prevent a library from allocating an advertised dictionary or encoded header before
 returning an entry. The decoder boundary now has a separate, non-configurable set
 of limits, enforced before those allocations. Raising archive-limits.json values
@@ -79,12 +79,12 @@ The local API belongs to the backend's dependency boundary, contains no UI/IPC
 business logic and stores no file names or passwords. Scopes and reservations must
 stay on their decoder thread; decoders are dropped before their scope ends.
 Future upgrades must carry or replace these checks, then rerun the malicious
-fixtures. TICKET-268 tracks upstream migration/patch retirement.
+fixtures. TICKET-132 tracks upstream migration/patch retirement.
 
 Two existing defects surfaced during this work. The root dependency did not enable
 7z AES support despite advertising passwords; the feature is now enabled and tested.
 The ZIP-LZMA adapter neither consumed buffered input nor finished the decoder's
-pending output; both are corrected to make the bounded adapter usable. TICKET-267
+pending output; both are corrected to make the bounded adapter usable. TICKET-131
 tracks independent ZIP-LZMA framing/conformance with externally generated archives;
 the adapter's legacy LZMA-alone framing is not claimed to cover all standard ZIP
 method-14 inputs.

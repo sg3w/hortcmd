@@ -93,7 +93,7 @@ SMB requires encryption and disallows unsigned guest sessions.
 Status/capability metadata and localized connection details expose effective
 protection and available negotiation information. Unavailable FTPS/WebDAV cipher
 and version fields are explicitly labeled, with API diagnostics follow-up in
-[TICKET-253](../253-negotiated-tls-diagnostics.md).
+[TICKET-118](../118-negotiated-tls-diagnostics.md).
 
 Local TLS tests exercise the actual FTPS and WebDAV adapters, unknown/expired/
 future/wrong-host/rotated certificates, private CA removal and profile isolation.
@@ -105,7 +105,7 @@ frontend tests, strict Clippy, bindings, documentation, types and production bui
 
 Native Windows/Linux, live SMB server combinations and known-revocation/packet
 capture evidence are deferred by user instruction to
-[TICKET-252](../252-native-transport-security-verification.md). No such native
+[TICKET-117](../117-native-transport-security-verification.md). No such native
 matrix is claimed as executed here. Policy and migration details are documented in
 [transport security](../../docs/transport-security.md). TICKET-093 was implemented
 and merged separately to correct WebDAV navigation addresses needed by this policy.

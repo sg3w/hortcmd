@@ -15,4 +15,4 @@ Frontend-Suite und npm run check müssen ohne diese Warnung bestehen.
 - MemoryStorage-Erkennung über Property-Deskriptor statt nativen Getter.
 - 670 Frontend-Tests bestehen ohne ExperimentalWarning oder Mock-Hoisting-Warnung.
 - Vollständige Abnahme: npm run check.
-- Eine separate jsdom-Canvas-Diagnose ist in TICKET-273 erfasst.
+- Eine separate jsdom-Canvas-Diagnose ist in TICKET-134 erfasst.

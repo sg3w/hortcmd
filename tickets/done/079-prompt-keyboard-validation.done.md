@@ -2,7 +2,7 @@
 
 ## Problem
 
-Found while verifying ticket 249. `PromptDialog` disables the submit button for
+Found while verifying ticket 114. `PromptDialog` disables the submit button for
 whitespace-only input, but its Enter handler calls `submit()` without that guard.
 An empty rename, pack or mkdir prompt therefore closes without doing anything.
 The selection-pattern callback instead interprets an empty pattern as `*`.

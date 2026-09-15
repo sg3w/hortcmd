@@ -2,7 +2,7 @@
 
 ## Problem
 
-While verifying ticket 249 after 087, inspection of the configured Tauri window
+While verifying ticket 114 after 087, inspection of the configured Tauri window
 and pinned runtime showed that native page zoom is disabled. The existing native
 Window → Zoom item maximizes the window; application font/icon settings do not
 zoom the full page. Tauri's optional hotkey polyfill also handles numeric-keypad
@@ -22,7 +22,7 @@ Plus/Minus, conflicting with ticket 059's selection commands.
 
 ## Scheduling
 
-Urgent prerequisite for ticket 249's native zoom acceptance check.
+Urgent prerequisite for ticket 114's native zoom acceptance check.
 
 ## Implementation and verification
 
@@ -50,5 +50,5 @@ reduced the button to 21×20, and Cmd-0 restored 25×25. Synthetic `keystroke "+
 did not establish the same keyboard behavior, so the physical-key test is the
 shortcut evidence. The app was left at 100% with the dialog closed.
 
-Actual native page enlargement and reset are verified; the complete 249 layout
+Actual native page enlargement and reset are verified; the complete 114 layout
 and screen-reader matrix, and Windows/Linux native verification, remain open.

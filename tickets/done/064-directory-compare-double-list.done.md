@@ -150,7 +150,7 @@ jede Zuordnung horizontal erhalten.
 - [x] Komponenten-/Integrationstests prüfen Paarbildung, Status, Filter/Selektion
       und Richtungsauswahl; bestehende Vergleichslogik behält ihre Tests.
 - [x] Browserprüfung schmal/breit, de/en, hell/dunkel und Tastatur; 200%-Platzbedarf
-      bei 640×360 geprüft. Echtes natives 200%-Zoom und Windows/Linux nach TICKET-263
+      bei 640×360 geprüft. Echtes natives 200%-Zoom und Windows/Linux nach TICKET-127
       verschoben (Nutzerwunsch); keine native Plattformabnahme behauptet.
 
 ## Definition of Done
@@ -174,5 +174,5 @@ strukturierte Kopierfehler sowie verspätete Antworten nach Kontextwechsel/Schli
 Die MCP-Vergleichsroute propagiert dieselben Lesefehler.
 
 Validierung und Grenzen: `docs/directory-comparison.md`. Plattformprüfungen nach
-263 verschoben. Die ebenfalls gefundene strukturierte Fehlerdarstellung im separaten
-Umbenennen-Dialog ist Folgeticket 264.
+127 verschoben. Die ebenfalls gefundene strukturierte Fehlerdarstellung im separaten
+Umbenennen-Dialog ist Folgeticket 128.

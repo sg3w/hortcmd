@@ -28,4 +28,4 @@ Browser verification used the existing demo's 1,507 pairs (1,131 visible with th
 default filters), including scrolling to the final pair, narrow/wide windows,
 reopening, and dark/German plus light/English rendering. At 640×360 effective
 viewport size the form scrolls and the grid remains reachable. Actual native
-200% zoom and Windows/Linux verification remain in TICKET-263.
+200% zoom and Windows/Linux verification remain in TICKET-127.

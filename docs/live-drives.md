@@ -14,7 +14,7 @@ On macOS, `getfsstat(MNT_NOWAIT)` checks cached mount metadata every two seconds
 the more expensive sysinfo snapshot is rebuilt on topology changes or every ten
 seconds. Cached network-mount entries supplement sysinfo, which excludes them.
 Intentionally hidden (`nobrowse`) volumes remain hidden. Other platforms retain
-the common sysinfo polling fallback, pending the native checks in TICKET-260.
+the common sysinfo polling fallback, pending the native checks in TICKET-124.
 No directory traversal or file-content reads are performed by the watcher.
 
 The frontend shares a reference-counted subscription and snapshot between the
@@ -40,11 +40,11 @@ An explicit `native_volume_probe` test can be run while mounting/unmounting an
 owned temporary image. It samples the real platform implementation for 80
 seconds and reports changes and time spent collecting metadata. Physical media,
 network availability and sleeping-drive checks remain in
-[TICKET-260](../tickets/260-removable-media-native-verification.md).
+[TICKET-124](../tickets/124-removable-media-native-verification.md).
 
 Local macOS verification used an owned 16 MiB HFS+ DMG. Its visible mount
 appeared, writing 2 MiB updated available space, and detaching it removed the
 mount from the sampled list. The optimized 80-second probe spent 341 ms in 40
 metadata polls (aggregate wall time, not CPU utilization). Background writes
 changed root capacity during this run, so a quiet-machine idle/CPU measurement
-and physical-media checks remain in TICKET-260.
+and physical-media checks remain in TICKET-124.

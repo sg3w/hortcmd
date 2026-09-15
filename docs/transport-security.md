@@ -58,7 +58,7 @@ public certificate information. A live session's profile ID prevents a different
 saved profile at the same address from appearing to own its certificate approval.
 SFTP reports SSH-2.0; SMB reports its negotiated dialect and cipher when exposed.
 FTPS/WebDAV cipher and version telemetry are not exposed by their current client
-APIs (follow-up [TICKET-253](../tickets/253-negotiated-tls-diagnostics.md)), so the UI explicitly displays “Not exposed by the provider”, rather than
+APIs (follow-up [TICKET-118](../tickets/118-negotiated-tls-diagnostics.md)), so the UI explicitly displays “Not exposed by the provider”, rather than
 substituting the minimum supported version or an inferred cipher. TLS policy still
 enforces version 1.2 or newer. SMB's integrity field describes required signing
 or authenticated encryption, not the header flag of every individual frame.
@@ -78,4 +78,4 @@ changes. Existing connection/lifecycle tests remain in the normal suite.
 
 The isolated protocol harness explicitly enables its plaintext fixtures only in
 its own configuration directory. Native Windows/Linux runs and the live SMB server
-matrix are deferred by user instruction to [TICKET-252](../tickets/252-native-transport-security-verification.md).
+matrix are deferred by user instruction to [TICKET-117](../tickets/117-native-transport-security-verification.md).

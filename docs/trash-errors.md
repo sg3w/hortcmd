@@ -28,4 +28,4 @@ Regression tests cover error mapping, diagnostic redaction, missing entries,
 dangling symlinks, retained source contents after failure, and the actual trash
 confirmation/error dialog in German and English. Controlled native automation
 refusal needs a disposable signed-app/TCC test setup; it was not exercised here.
-Ticket 275 records that smoke-test procedure and the deferred platform checks.
+Ticket 136 records that smoke-test procedure and the deferred platform checks.

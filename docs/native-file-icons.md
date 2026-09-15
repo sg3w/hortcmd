@@ -13,7 +13,7 @@ and [iconForFileType](https://developer.apple.com/documentation/appkit/nsworkspa
 on background threads. The latter preserves compatibility with the app's older
 macOS deployment range; iconForContentType requires macOS 11. A single worker owns
 its graphics context and autorelease pool; shared NSImages are never resized.
-Windows/Linux adapters are deliberately deferred to TICKET-265, as requested.
+Windows/Linux adapters are deliberately deferred to TICKET-129, as requested.
 They currently return the normal simple fallback.
 
 Local requests carry the displayed entry's full identity, including modification
@@ -103,6 +103,6 @@ isolate queue/layout behavior from OS lookup variability.
 Manual browser inspection covered DE/EN settings, dark/light themes, persisted
 simple/system switching, details/thumbnails, selection and symlink overlays while
 scrolling and reloading. Native application automation selected an older installed
-window, so no end-to-end native GUI measurement is claimed. TICKET-266 tracks that
+window, so no end-to-end native GUI measurement is claimed. TICKET-130 tracks that
 remaining platform/GUI verification, including list/tree/picker and multi-monitor
 scale transitions. Backend native integration and common UI regression tests passed.

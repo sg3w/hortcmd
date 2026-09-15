@@ -28,4 +28,4 @@ files or deletion of the source is needed to address this cleanup issue.
   before publication, root/write/server revocation, unrelated paths, pre-existing
   entries and unconfirmed creation.
 - Validation: targeted MCP transfer tests and `npm run check`.
-- Follow-up TICKET-270 records pre-existing provider allocation/replacement races.
+- Follow-up TICKET-133 records pre-existing provider allocation/replacement races.

@@ -285,7 +285,7 @@ disconnected location supports nothing, which is what the UI must show the
 moment a connection drops.
 
 **Initial matrix** (identifiers are stable and forward-compatible with the
-planned plugin and MCP surfaces, tickets 201–208 and 041):
+planned plugin and MCP surfaces, tickets 100–107 and 041):
 
 | Capability | local | SFTP | FTP/FTPS | SMB | WebDAV |
 |---|---|---|---|---|---|
@@ -440,7 +440,7 @@ requests on a local custom protocol buy nothing.
 Ticket 086 adds two German/English system-trash error messages to the immediately
 available error dictionary. The measured entry grows from 319.8 to 320.5 KiB
 (uncompressed); no new eager dependency is added. The budget is deliberately
-adjusted by 1 KiB to 321 KiB for this diagnostic improvement. Ticket 276 tracks
+adjusted by 1 KiB to 321 KiB for this diagnostic improvement. Ticket 137 tracks
 loading feature-only translations with their lazy UI to recover future headroom.
 
 Ticket 096 adds localized connection-monitor controls and status announcements,
@@ -917,7 +917,7 @@ The *design* those changes settled is described where it belongs, in §3–§9.
 - [x] **Copy Path / Copy Filename** (context menu; "Copy path" = absolute path,
       "Copy filename" = name only; multi-selection line by line)
 - [x] **Favorite folders** (Settings) — appear like "drives"
-- [x] **Live removable volumes** (057) — shared picker updates, capacity refresh and home fallback; native hardware matrix tracked in TICKET-260.
+- [x] **Live removable volumes** (057) — shared picker updates, capacity refresh and home fallback; native hardware matrix tracked in TICKET-124.
 - [x] **Folder "Open in new tab"** (context menu)
 - [x] **Recently visited folders / history**: Back/Forward per pane (Alt+←/→ + toolbar)
       and a global, persisted list of recently visited folders (history dropdown in the
@@ -1234,17 +1234,17 @@ The *design* those changes settled is described where it belongs, in §3–§9.
       (TICKET-040).
 - [ ] **Plugin system**: **define the API early**, then Rust/JS plugins,
       context-menu/preview/column/archive extensions, scripting (JS)
-      *(broken down in ticket series `tickets/201`–`208`: 201 API/manifest contract →
-      202 JS host, 203 native Rust host → 204 plugin command bar/colored icons →
-      205 context handoff → 206 mediated actions/events → 207 management →
-      208 demo plugin. Broker as the sole mediation, default-deny permissions; JS
+      *(broken down in ticket series `tickets/100`–`107`: 100 API/manifest contract →
+      101 JS host, 102 native Rust host → 103 plugin command bar/colored icons →
+      104 context handoff → 105 mediated actions/events → 106 management →
+      107 demo plugin. Broker as the sole mediation, default-deny permissions; JS
       sandboxable, native plugins trust-based)*
 - [ ] **MCP interface**: hortcmd as an **MCP server** on localhost, so an AI host
       reaches the VFS incl. the *active* remote connections and the panel context
       *(ticket `tickets/041`; bearer token in the keychain, default-deny capability
       tiers, root allowlist, confirmation for write/delete, audit log; stdio bridge
       binary for hosts that only speak stdio. Independent of the plugin series
-      201–208 — there foreign code runs inside hortcmd, here hortcmd is the server.
+      100–107 — there foreign code runs inside hortcmd, here hortcmd is the server.
       hortcmd as MCP *client* is deliberately not part of it)*
 - [ ] **Multi-column view** (2–4 panels), multiple windows
 - [ ] **Integrate Spotlight search** (macOS)
@@ -1759,7 +1759,7 @@ archive container and delegates to existing `loadDir`/`loadArchive` navigation.
 Source focus, other tabs and target view/sort remain independent; normal target
 selection clearing, error display and local/remote history apply. No filesystem
 copy or new tab is created. Existing archive-history limitations are tracked in
-TICKET-262.
+TICKET-126.
 
 ### Paired comparison grid (TICKET-064)
 
@@ -1783,8 +1783,8 @@ The frontend batches visible requests, discards obsolete consumers and keeps a
 96-icon measurements: 3.209 s cold, 23.50 ms with warm OS caches. A separate 5,000-row
 browser fixture rendered the list in 266.9 ms and the first PNG in 348.1 ms with
 40ms simulated transport; this is not a native end-to-end claim. Windows/Linux
-adapters are deferred to TICKET-265; native GUI/multi-monitor verification to
-TICKET-266. Details and limitations: [native file icons](docs/native-file-icons.md).
+adapters are deferred to TICKET-129; native GUI/multi-monitor verification to
+TICKET-130. Details and limitations: [native file icons](docs/native-file-icons.md).
 
 ### Archive decoder budgets (TICKET-067)
 
@@ -1798,4 +1798,4 @@ entry reaches the writer. These are cooperative algorithmic limits, not process
 RSS/OS CPU quotas. 7z AES support is enabled and tested. Details, provenance and
 limitations: [archive decoder budgets](docs/archive-decoder-budgets.md).
 ZIP-LZMA framing conformance and retirement of local patches are tracked by
-TICKET-267 and TICKET-268.
+TICKET-131 and TICKET-132.

@@ -30,7 +30,7 @@ Vitest release will reject this pattern.
 
 Follow-up after the originally requested 041–065 sequence. Current Vitest 4 executes the
 mocks correctly; this does not prevent accessibility work. Found while testing
-249 after dependency update 073.
+114 after dependency update 073.
 
 ## Completion
 - Both Tauri module mocks are declared at module scope. Removed wireModules and

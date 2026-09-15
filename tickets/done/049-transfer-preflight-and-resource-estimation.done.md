@@ -86,7 +86,7 @@ and staged commit collision revalidation. Archive pack/extract capacity checks r
 before staging. Unknown constraints are explicit and do not promise unlimited space.
 
 Windows/Linux native constraint queries and their real filesystem matrix are
-tracked in [TICKET-255](255-preflight-native-provider-limits.md), per the user's
+tracked in [TICKET-120](120-preflight-native-provider-limits.md), per the user's
 current scope. Legacy remote directory APIs still return a provider vector before
 the planner's bound is checked; the planner does not keep another full file tree.
 The exact memory/selection bounds, conservative case handling and space semantics

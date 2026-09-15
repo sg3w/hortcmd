@@ -2,7 +2,7 @@
 
 ## Problem
 
-Found during ticket 249. `SearchDialog.runSearch` awaits capability preflight
+Found during ticket 114. `SearchDialog.runSearch` awaits capability preflight
 before starting the command, but does not recheck that its run is still current
 after the await. Stop/close can therefore cancel a token before its native search
 has started, and that search may subsequently be dispatched. The search promise
@@ -21,7 +21,7 @@ in the dialog.
 
 ## Scheduling
 
-Interpose before closing ticket 249: rejected searches must leave an accessible
+Interpose before closing ticket 114: rejected searches must leave an accessible
 error state, and cancelled preflight must not dispatch a later background scan.
 
 ## Completed verification

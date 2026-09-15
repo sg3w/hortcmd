@@ -103,7 +103,7 @@ See [VFS locations](../../docs/vfs-locations.md) for exact rules and compatibili
 limits. Repeated remote separators are represented losslessly but execution is
 refused before I/O until [TICKET-095](095-provider-component-streaming-paths.done.md)
 replaces the remaining streaming adapters. Native Windows/Linux evidence and
-adapter work are deferred to [TICKET-259](../259-vfs-native-provider-path-conformance.md)
+adapter work are deferred to [TICKET-123](../123-vfs-native-provider-path-conformance.md)
 under the user's scheduling instruction. This ticket does not claim those native
 protocol tests have run.
 

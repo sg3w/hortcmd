@@ -83,7 +83,7 @@ state, or expose credentials in persisted operation data.
 
 The current user instruction defers Windows/Linux work. The adapter is therefore
 activated on macOS; native enablement and platform/remote fault-harness runs are
-tracked in [TICKET-251](../251-windows-linux-transfer-recovery.md). The journal covers
+tracked in [TICKET-116](../116-windows-linux-transfer-recovery.md). The journal covers
 the desktop transfer queue and desktop archive commands. MCP has its separate
 execution lifecycle and is not attached to the desktop queue.
 

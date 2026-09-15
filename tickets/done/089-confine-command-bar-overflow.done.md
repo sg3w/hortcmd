@@ -2,7 +2,7 @@
 
 ## Problem
 
-The native 200% zoom check for ticket 249 found the Settings toolbar button
+The native 200% zoom check for ticket 114 found the Settings toolbar button
 outside the 1100×720 window. Focusing it scrolled the document horizontally:
 the window began at screen x=730, but the Files menu then began at x=692 and was
 partly clipped. The command bar's unbounded row lets focus scrolling move other
@@ -19,7 +19,7 @@ application surfaces, despite the body's hidden overflow.
 
 ## Scheduling
 
-Urgent during 249 because this directly breaks its zoom/focus acceptance.
+Urgent during 114 because this directly breaks its zoom/focus acceptance.
 
 ## Implementation and verification
 
@@ -41,5 +41,5 @@ and Files at (738,365). The app remains at 100% with no dialog open.
 `npm run check` passed: 387 Rust tests (25 ignored), 488 frontend tests and all
 formatting, lint, bindings, documentation, type, build and bundle checks. This
 layout-only correction was verified through native rendering and traversal;
-no test asserting Tailwind class strings was added. Ticket 249's remaining
+no test asserting Tailwind class strings was added. Ticket 114's remaining
 layouts and screen-reader matrix are still open.

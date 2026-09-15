@@ -1,43 +1,66 @@
 # Ticket organization
 
-## Current scheduling
+All tickets that were open below 100 have been completed. The remaining **38 open
+tickets are numbered consecutively from 100 to 137**, preserving their previous
+relative order and scope. Renumbering does not complete or change the scope of a
+ticket. Dependencies and current references use the new numbers.
 
-The current batch covers ten bug-fix or feature tickets. Windows/Linux-specific
-work and supporting tasks remain deferred. Renumbering does not complete tickets.
+Completed tickets retain their original numbers and live in `tickets/done/`, with
+filenames ending in `.done.md`. This also applies to previously completed support
+tickets with higher numbers. Do not reuse those numbers for new work.
 
-- Direct development retains its existing numbers: user-facing file-manager
-  features, backend functionality, data safety and concrete application defects.
-  This includes transfer recovery, archive/transport safety, undo, preflight,
-  caching, indexed search, the VFS model and the outstanding interaction fixes.
-- 201–209 cover the plugin interface, hosts, integration, technical examples and
-  the first functional plugin. The storage analyzer belongs to 209.
-- 220 and above contain supporting work: support diagnostics, governance,
-  releases, benchmark infrastructure, test maintenance and cross-cutting quality
-  verification. Previously assigned 249 and 250 retain their numbers.
-- Completed tickets keep their numbers. Dependencies remain valid after moves;
-  a higher number does not waive required safety checks or feature-specific tests.
+- 100–108: plugin contract, hosts, integration and the first storage-usage plugin.
+- 109–137: the remaining support, safety, maintenance and verification backlog.
+- Native Windows/Linux verification remains in its existing relative position.
 
-## Renumbered open tickets
+## Renumbering on 2026-09-15
 
-| Previous | Current | Scope |
+| Previous number | Current ticket | Scope |
 | --- | --- | --- |
-| 056 | [209](209-folder-storage-usage-visualizer.md) | First functional plugin: storage-usage analyzer |
-| 045 | [220](220-redacted-diagnostics-and-support-bundle.md) | Diagnostics and support bundles |
-| 050 | [221](221-dependency-and-license-governance.md) | Dependency and license governance |
-| 051 | [222](222-signed-reproducible-releases-and-updates.md) | Signed releases and safe updates |
-| 052 | [223](223-performance-benchmarks-and-budgets.md) | Performance benchmarks and budgets |
-| 074 | [224](done/224-vitest-module-mock-hoisting.done.md) | Test mock maintenance |
-| 046 | [225](225-safe-archive-extraction.md) | Remaining archive platform/security audit; implementation already present |
-| 043 | [249](249-accessibility-and-localization-quality.md) | Accessibility and localization quality; previously moved |
+| 201 | [100](100-plugin-api-contract.md) | Plugin API & manifest (contract first) |
+| 202 | [101](101-js-plugin-host.md) | JS plugin host (sandboxed WebviewWindow) |
+| 203 | [102](102-native-plugin-host.md) | Native Rust plugin host (dynamic library) |
+| 204 | [103](103-plugin-commandbar.md) | Plugin command bar & colorful icons |
+| 205 | [104](104-plugin-context-handoff.md) | Context handoff to plugins |
+| 206 | [105](105-plugin-actions-events.md) | Mediated actions & events |
+| 207 | [106](106-plugin-management.md) | Plugin management (settings) |
+| 208 | [107](107-reference-demo-plugin.md) | Reference/demo plugin(s) |
+| 209 | [108](108-folder-storage-usage-visualizer.md) | First functional plugin — folder storage-usage visualizer |
+| 220 | [109](109-redacted-diagnostics-and-support-bundle.md) | Add redacted diagnostics and an exportable support bundle |
+| 221 | [110](110-dependency-and-license-governance.md) | Establish dependency, vulnerability, and license governance |
+| 222 | [111](111-signed-reproducible-releases-and-updates.md) | Produce signed, reproducible releases with safe updates |
+| 223 | [112](112-performance-benchmarks-and-budgets.md) | Establish performance benchmarks and regression budgets |
+| 225 | [113](113-safe-archive-extraction.md) | Contain archive extraction and limit hostile input |
+| 249 | [114](114-accessibility-and-localization-quality.md) | Establish accessibility and localization quality gates |
+| 250 | [115](115-windows-linux-screen-reader-verification.md) | Complete native Windows/NVDA and Linux/Orca verification |
+| 251 | [116](116-windows-linux-transfer-recovery.md) | Enable and verify transfer recovery on Windows and Linux |
+| 252 | [117](117-native-transport-security-verification.md) | Verify transport security on native platforms and SMB servers |
+| 253 | [118](118-negotiated-tls-diagnostics.md) | Expose negotiated TLS details from client APIs |
+| 254 | [119](119-file-undo-windows-linux-adapters.md) | Validate file undo on Windows and Linux |
+| 255 | [120](120-preflight-native-provider-limits.md) | Validate native Windows/Linux preflight constraints |
+| 256 | [121](121-search-index-windows-linux-adapters.md) | Native Windows/Linux scope validation and resource controls for indexed search |
+| 257 | [122](122-remote-index-stable-content-capabilities.md) | Prove remote no-follow and stable-content reads for optional indexing |
+| 259 | [123](123-vfs-native-provider-path-conformance.md) | Verify native Windows/Linux VFS provider paths |
+| 260 | [124](124-removable-media-native-verification.md) | Removable-media hardware and platform verification |
+| 261 | [125](125-index-search-session-restore.md) | Indexsuche nach Dialog-Unmount konsistent wiederherstellen |
+| 262 | [126](126-archive-navigation-history.md) | Archiv-Orte im Navigationsverlauf erhalten |
+| 263 | [127](127-native-paired-comparison-verification.md) | Native Prüfung der doppelten Vergleichsliste |
+| 264 | [128](128-rename-dialog-structured-errors.md) | Strukturierte Batch-Fehler im Umbenennen-Dialog anzeigen |
+| 265 | [129](129-windows-linux-native-file-icons.md) | Native Dateisymbole unter Windows und Linux |
+| 266 | [130](130-native-icon-gui-verification.md) | Native GUI-Prüfung der Dateisymbole ergänzen |
+| 267 | [131](131-zip-lzma-framing-conformance.md) | ZIP-LZMA-Framing mit externen Archiven prüfen |
+| 268 | [132](132-archive-budget-upstream-migration.md) | Lokale Archiv-Budgetpatches upstream ersetzen |
+| 270 | [133](133-atomic-provider-staging-ownership.md) | Reserve provider staging entries atomically and verify ownership |
+| 273 | [134](134-jsdom-canvas-test-diagnostic.md) | Fehlende Canvas-Unterstützung im Frontend-Testaufbau klären |
+| 274 | [135](135-command-line-native-verification.md) | Native Windows/Linux command-line verification |
+| 275 | [136](136-native-trash-error-verification.md) | Verify native trash errors and refused Finder automation |
+| 276 | [137](137-lazy-feature-translations.md) | Load feature translations with their lazy UI |
 
-[250](250-windows-linux-screen-reader-verification.md) remains the Windows/NVDA
-and Linux/Orca follow-up. The outstanding macOS evidence remains in 249.
+## Earlier moves
 
-[251](251-windows-linux-transfer-recovery.md) tracks native Windows/Linux transfer
-recovery enablement and verification deferred from 044.
-
-[252](252-native-transport-security-verification.md) tracks the native transport
-security and live SMB validation matrix deferred from 047.
-
-[253](253-negotiated-tls-diagnostics.md) tracks additional negotiated TLS telemetry
-that the current client APIs do not expose.
+Older history may describe the prior scheduling: 056 became 209 (now 108),
+045 became 220 (now 109), 050 became 221 (now 110), 051 became 222 (now 111),
+052 became 223 (now 112), 046 became 225 (now 113), and 043 became 249 (now 114).
+074 became [224](done/224-vitest-module-mock-hoisting.done.md), which is already
+completed and retains that number. The table above preserves the identity of
+historical references while active links use the current filenames.

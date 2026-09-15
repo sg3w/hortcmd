@@ -122,8 +122,8 @@ vor Umsetzung inventarisieren. Es existiert noch keine native Iconauflösung in
 ## Abschluss
 
 Gemeinsame Implementierung und macOS-Adapter abgeschlossen. Plattformumfang gemäß
-Benutzerpriorität: Windows/Linux nach TICKET-265 verschoben. Native GUI-/Monitor-
-Prüfung nach TICKET-266: Automation selektierte eine alte installierte Instanz.
+Benutzerpriorität: Windows/Linux nach TICKET-129 verschoben. Native GUI-/Monitor-
+Prüfung nach TICKET-130: Automation selektierte eine alte installierte Instanz.
 Die abgehakten Prüfpunkte beziehen sich auf den dokumentierten lokalen Umfang
 (Backend-Integration plus gemeinsame UI-Tests), nicht auf diese ausgelagerten Prüfungen.
 Messwerte, Limits und genaue Testabdeckung: [Dokumentation](../../docs/native-file-icons.md).

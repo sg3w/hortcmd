@@ -6,7 +6,7 @@ are persisted before they can run. Opening **Commands → Transfer recovery** or
 restarting the application reads the journal; neither action restarts work or
 removes sources. A surviving native operation can be reattached after a webview
 reload. Windows/Linux enablement and native verification are tracked in
-[TICKET-251](../tickets/251-windows-linux-transfer-recovery.md).
+[TICKET-116](../tickets/116-windows-linux-transfer-recovery.md).
 
 ## Recovery choices
 
@@ -79,4 +79,4 @@ sources directly after reopening the journal. Additional tests cover unsafe dire
 writes, queue order/settings, corrupt/future/oversized snapshots, missing sources
 and profiles, ownership changes, cleanup refusal and journal capacity. Frontend
 checks cover explicit confirmation, blocked actions, ordering, native reattachment
-and lost completion events. Native Windows/Linux checks are deferred to 251.
+and lost completion events. Native Windows/Linux checks are deferred to 116.

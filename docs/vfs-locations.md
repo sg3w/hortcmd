@@ -14,7 +14,7 @@ Streaming interfaces carry `StreamPath::Local(PathBuf)` or
 `StreamPath::Remote(ProviderPath)` through planning, traversal, staging, publication
 and rollback. Only native-local boundaries can obtain an OS path; remote
 providers reject local variants. Windows/Linux native verification is tracked
-in [TICKET-259](../tickets/259-vfs-native-provider-path-conformance.md).
+in [TICKET-123](../tickets/123-vfs-native-provider-path-conformance.md).
 
 Local paths retain their original data: no URI unescaping, Unicode normalization,
 case folding or remote separator rules. POSIX backslashes are literal. Windows
