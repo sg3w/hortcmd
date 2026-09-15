@@ -46,3 +46,6 @@ export type { CredConfig } from "./CredConfig";
 export type { CredStatus } from "./CredStatus";
 export type { TermData } from "./TermData";
 export type { TermClosed } from "./TermClosed";
+
+export type { MonitorSettings } from "./MonitorSettings";
+export type { MonitorState } from "./MonitorState";

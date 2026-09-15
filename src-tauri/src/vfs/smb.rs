@@ -38,6 +38,9 @@ pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Pro
     // the server name, so a profile pointing at a non-standard port used
     // to be silently connected to 445 instead (ticket 038).
     let mut config = ClientConfig::default();
+    config.connection.timeout = Some(std::time::Duration::from_secs(u64::from(
+        profile.monitor.clone().unwrap_or_default().timeout_seconds,
+    )));
     config.connection.encryption_mode = smb::connection::EncryptionMode::Required;
     config.connection.allow_unsigned_guest_access = false;
     if profile.port != 0 && profile.port != DEFAULT_PORT {
@@ -288,6 +291,21 @@ impl SmbProvider {
 }
 
 impl Provider for SmbProvider {
+    fn health_check(&self, _timeout: std::time::Duration) -> io::Result<super::Health> {
+        // The connection timeout was captured from this profile at connect.
+        // Use an already attached share: a health probe must not create a login.
+        let share = self.connected.lock().unwrap().iter().next().cloned();
+        let Some(share) = share else {
+            return Ok(super::Health::Unsupported);
+        };
+        let unc = UncPath::new(&self.server)
+            .and_then(|u| u.with_share(&share))
+            .map_err(to_io)?;
+        let session = self.client.get_session(&unc).map_err(to_io)?;
+        session.echo().map_err(to_io)?;
+        Ok(super::Health::Alive)
+    }
+
     fn transport_security(&self) -> Option<crate::net::security::TransportInfo> {
         Some(self.security.clone())
     }

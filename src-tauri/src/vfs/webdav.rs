@@ -79,6 +79,11 @@ pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Pro
     })?;
 
     let mut provider = WebdavProvider {
+        health_path: if profile.start_path.is_empty() {
+            "/".into()
+        } else {
+            profile.start_path.clone()
+        },
         security: crate::net::security::TransportInfo::connected(profile, url_scheme == "https"),
         key: profile.connection_key(),
         base: host,
@@ -106,6 +111,7 @@ pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Pro
 
 /// VFS provider bound to one WebDAV server.
 pub struct WebdavProvider {
+    health_path: String,
     security: crate::net::security::TransportInfo,
     key: String,
     /// Absolute server base (`scheme://host:port`) — needed for the
@@ -215,6 +221,20 @@ impl WebdavProvider {
 }
 
 impl Provider for WebdavProvider {
+    fn health_check(&self, timeout: std::time::Duration) -> io::Result<super::Health> {
+        runtime().block_on(async {
+            tokio::time::timeout(
+                timeout,
+                self.client
+                    .list(&encode_path(&self.health_path), Depth::Number(0)),
+            )
+            .await
+            .map_err(|_| io::Error::from(io::ErrorKind::TimedOut))?
+            .map_err(|e| io::Error::other(e.to_string()))?;
+            Ok(super::Health::Alive)
+        })
+    }
+
     fn transport_security(&self) -> Option<crate::net::security::TransportInfo> {
         Some(self.security.clone())
     }

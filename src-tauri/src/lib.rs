@@ -180,6 +180,11 @@ pub fn run() {
             net::terminal::ssh_close,
             menu::set_menu_language,
         ])
-        .run(tauri::generate_context!())
-        .expect("Fehler beim Start der Tauri-Anwendung");
+        .build(tauri::generate_context!())
+        .expect("Fehler beim Start der Tauri-Anwendung")
+        .run(|_, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                net::session::shutdown();
+            }
+        });
 }

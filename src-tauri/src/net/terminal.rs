@@ -42,6 +42,8 @@ pub struct TermClosed {
 /// A live shell session: the write half of its channel plus the
 /// connection it belongs to (so `net_disconnect` can close it).
 struct Session {
+    app: AppHandle,
+    id: String,
     store_id: String,
     write: ChannelWriteHalf<Msg>,
 }
@@ -109,10 +111,15 @@ pub fn ssh_open_shell(app: AppHandle, address: String, cols: u32, rows: u32) -> 
 
     let id = format!("term-{}", super::unique_id());
     let (mut read, write) = channel.split();
-    sessions()
-        .lock()
-        .unwrap()
-        .insert(id.clone(), Session { store_id, write });
+    sessions().lock().unwrap().insert(
+        id.clone(),
+        Session {
+            app: app.clone(),
+            id: id.clone(),
+            store_id,
+            write,
+        },
+    );
 
     // Pump the shell output to the frontend until the channel ends.
     let task_id = id.clone();
@@ -154,7 +161,7 @@ pub fn ssh_open_shell(app: AppHandle, address: String, cols: u32, rows: u32) -> 
             // remaining shells, which blocks on the runtime this pump is
             // itself running on.
             std::thread::spawn(move || {
-                super::session::report_connection_lost(&store, "Verbindung zum Server verloren");
+                super::session::report_ssh_lost(&store, &task_ssh);
             });
         }
         let _ = app.emit(
@@ -223,7 +230,16 @@ pub fn close_for_store(store_id: &str) {
         ids.iter().filter_map(|id| guard.remove(id)).collect()
     };
     for session in closing {
-        let _ = runtime().block_on(session.write.close());
+        let _ = session.app.emit(
+            "ssh-term-closed",
+            TermClosed {
+                id: session.id,
+                reason: "Verbindung getrennt; Shell wurde beendet".into(),
+            },
+        );
+        let _ = runtime().block_on(async {
+            tokio::time::timeout(std::time::Duration::from_secs(1), session.write.close()).await
+        });
     }
 }
 

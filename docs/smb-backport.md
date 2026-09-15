@@ -27,3 +27,13 @@ harness. Do not edit the global Cargo cache to apply the fix.
 
 TICKET-271 also gates the sync_helpers import in resource/file_util.rs on
 std-fs-impls, the only feature that uses it, to avoid an unused-import warning.
+
+## Authenticated session health check (TICKET-096)
+
+The vendored session exposes `Session::echo`, a small wrapper around the existing
+SMB2 ECHO message and normal session `send_recv` path. It retains message-ID
+routing, response-command verification, signing/encryption and the configured
+connection timeout. It neither creates a new session nor performs file writes.
+The provider obtains an already attached share's session; if none exists, it
+reports that an authenticated probe is unavailable. This addition should be
+replaced by an equivalent upstream API when available.

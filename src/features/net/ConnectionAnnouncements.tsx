@@ -6,7 +6,7 @@ import { phaseLabel } from "./lifecycleUi";
 import { describeFailure } from "./connFailure";
 
 function signature(c: ConnectionStatus): string {
-  return `${c.phase}:${c.phase === "failed" ? c.error?.error.id ?? "" : ""}`;
+  return `${c.monitor ?? ""}:${c.phase}:${c.phase === "failed" ? c.error?.error.id ?? "" : ""}`;
 }
 
 /** Speak lifecycle changes once, not every backend status refresh. */
@@ -23,6 +23,6 @@ export function ConnectionAnnouncements() {
     });
   }, []);
   return <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
-    {changes.map(c => `${c.name}: ${t(phaseLabel(c.phase))}${c.phase === "failed" && c.error ? `. ${describeFailure(c.error)}` : ""}`).join("; ")}
+    {changes.map(c => `${c.name}: ${t(c.monitor === "interrupted" ? "net.monitor.interrupted" : c.monitor === "reconnecting" ? "net.monitor.reconnecting" : phaseLabel(c.phase))}${c.phase === "failed" && c.error ? `. ${describeFailure(c.error)}` : ""}`).join("; ")}
   </div>;
 }

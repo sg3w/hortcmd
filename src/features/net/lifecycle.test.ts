@@ -317,3 +317,14 @@ describe("the store's connect path", () => {
     expect(rowControls(now).action).toBe("connect");
   });
 });
+
+it("offers disconnect while automatic reconnect is waiting without an attempt", () => {
+  const controls = rowControls(status({ phase: "failed", monitor: "interrupted" }));
+  expect(controls.action).toBe("disconnect");
+  expect(controls.busy).toBe(true);
+  expect(controls.status).toEqual({ key: "net.monitor.interrupted" });
+});
+it("shows unavailable health checks without claiming active monitoring", () => {
+  expect(rowControls(status({ phase: "connected", monitor: "unsupported" })).status)
+    .toEqual({ key: "net.monitor.unsupported" });
+});

@@ -8,6 +8,7 @@ fn omitted_transport_fields_remain_optional_in_typescript() {
     use crate::net::{lifecycle::Phase, session::ConnectionStatus};
     use crate::vfs::caps::LocationCapabilities;
     let status = ConnectionStatus {
+        monitor: None,
         transport: None,
         id: "test".into(),
         key: "test".into(),

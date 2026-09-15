@@ -101,6 +101,10 @@ impl SshSession {
     /// russh flags this on its handle, so the check is a read of local
     /// state — no round trip — which is what makes it usable from the
     /// status refresh (ticket 032).
+    pub async fn keepalive(&self) -> Result<(), russh::Error> {
+        self.handle.send_keepalive(true).await
+    }
+
     pub fn is_closed(&self) -> bool {
         self.handle.is_closed()
     }

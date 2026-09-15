@@ -21,6 +21,22 @@ use std::sync::{Arc, Mutex, OnceLock};
 use tauri::{AppHandle, Emitter};
 use ts_rs::TS;
 
+pub mod monitor;
+static SHUTTING_DOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub fn shutdown() {
+    let _gate = session_gate().lock().unwrap();
+    SHUTTING_DOWN.store(true, std::sync::atomic::Ordering::SeqCst);
+    for profile in registry().lock().unwrap().profiles.clone() {
+        monitor::stop_profile(&profile.id);
+    }
+}
+
+// Serializes lifecycle decisions with monitor cancellation, never network I/O.
+fn session_gate() -> &'static Mutex<()> {
+    static GATE: Mutex<()> = Mutex::new(());
+    &GATE
+}
+
 // ---------- Types ----------
 
 /// A saved connection profile. Never contains the secret itself —
@@ -28,6 +44,9 @@ use ts_rs::TS;
 #[derive(Serialize, Deserialize, Clone, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct Profile {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub monitor: Option<monitor::MonitorSettings>,
     #[serde(default)]
     pub security: super::security::ProfileSecurity,
     pub id: String,
@@ -117,6 +136,9 @@ impl Profile {
 #[derive(Serialize, Clone, TS)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct ConnectionStatus {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub monitor: Option<monitor::MonitorState>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub transport: Option<super::security::TransportInfo>,
@@ -310,6 +332,7 @@ fn status_of(profile: &Profile) -> ConnectionStatus {
     let (phase, attempt, error) = lifecycle::reconcile(&profile.id, live && own_session);
     let transport = if own_session { transport } else { None };
     ConnectionStatus {
+        monitor: monitor::state(profile),
         transport,
         id: profile.id.clone(),
         key: profile.connection_key(),
@@ -340,16 +363,16 @@ fn all_states() -> Vec<ConnectionStatus> {
 /// `transport_alive` is answered from local state, so this stays a cheap
 /// check rather than a round trip per connection.
 fn reap_dead_sessions() {
-    let dead: Vec<String> = {
+    let dead: Vec<(String, Arc<dyn Provider>)> = {
         let reg = registry().lock().unwrap();
         reg.live
             .iter()
             .filter(|(_, p)| !p.transport_alive())
-            .map(|(id, _)| id.clone())
+            .map(|(id, provider)| (id.clone(), provider.clone()))
             .collect()
     };
-    for store_id in dead {
-        report_connection_lost(&store_id, "Verbindung zum Server verloren");
+    for (store_id, provider) in dead {
+        report_provider_lost(&store_id, &provider, "Verbindung zum Server verloren");
     }
 }
 
@@ -369,15 +392,37 @@ pub fn emit_states(app: &AppHandle) {
 /// say nothing about the connection. The session is removed once, its
 /// shells are closed with it, and the profile ends in `failed` with the
 /// reason, so nothing stays marked live after the link is lost.
-pub fn report_connection_lost(store_id: &str, reason: &str) {
+pub fn report_ssh_lost(store_id: &str, ssh: &Arc<super::ssh::SshSession>) {
+    let provider = registry().lock().unwrap().live.get(store_id).cloned();
+    if let Some(provider) =
+        provider.filter(|p| p.ssh().is_some_and(|current| Arc::ptr_eq(&current, ssh)))
+    {
+        report_provider_lost(store_id, &provider, "Verbindung zum Server verloren");
+    }
+}
+
+fn report_provider_lost(store_id: &str, expected: &Arc<dyn Provider>, reason: &str) {
+    let _gate = session_gate().lock().unwrap();
     let (removed, profile_id) = {
         let mut reg = registry().lock().unwrap();
         crate::commands::fs::cache::invalidate();
+        if !reg
+            .live
+            .get(store_id)
+            .is_some_and(|p| Arc::ptr_eq(p, expected))
+        {
+            return;
+        }
         let removed = reg.live.remove(store_id).is_some();
         let profile_id = reg
             .profiles
             .iter()
-            .find(|p| p.store_id() == store_id)
+            .find(|p| {
+                p.store_id() == store_id
+                    && expected
+                        .transport_security()
+                        .is_none_or(|security| security.profile_id == p.id)
+            })
             .map(|p| p.id.clone());
         (removed, profile_id)
     };
@@ -405,6 +450,9 @@ pub fn net_list_profiles() -> Vec<Profile> {
 #[tauri::command]
 pub fn net_save_profile(profile: Profile, secret: Option<String>) -> AppResult<()> {
     profile.authority()?;
+    profile.monitor.clone().unwrap_or_default().validate()?;
+    let _gate = session_gate().lock().unwrap();
+    monitor::stop_profile(&profile.id);
     crate::vfs::location::VfsLocation::parse(&profile.address())?;
     crate::commands::fs::cache::invalidate();
     super::certificate::approved_der(&profile)?;
@@ -431,6 +479,8 @@ pub fn net_save_profile(profile: Profile, secret: Option<String>) -> AppResult<(
 /// Deletes a profile and its stored secret (disconnecting if live).
 #[tauri::command]
 pub fn net_delete_profile(id: String) -> AppResult<()> {
+    let _gate = session_gate().lock().unwrap();
+    monitor::stop_profile(&id);
     crate::commands::fs::search_index::delete_profile(&id)?;
     crate::commands::fs::cache::invalidate();
     // A profile that is still connecting loses its attempt with it.
@@ -491,6 +541,12 @@ fn run_attempt(attempt: &Attempt, profile: &Profile) -> Result<Opened, ConnFailu
         .get(&profile.id)
         .map_err(|e| ConnFailure::new(FailureKind::Keychain, e))?;
     attempt.check()?;
+    if secret.is_none() && matches!(profile.auth.as_str(), "password" | "digest") {
+        return Err(ConnFailure::from_error(
+            FailureKind::Keychain,
+            AppError::new(crate::errors::code::CRED_NOT_FOUND),
+        ));
+    }
 
     // 2. The transport. Reaching the port is timed uniformly (15 s),
     //    because most protocol clients cannot express a connect timeout.
@@ -538,11 +594,43 @@ fn run_attempt(attempt: &Attempt, profile: &Profile) -> Result<Opened, ConnFailu
 /// (ticket 028).
 #[tauri::command]
 pub fn net_connect(app: AppHandle, id: String) -> AppResult<ConnectOutcome> {
+    connect_inner(app, id, None)
+}
+
+fn connect_inner(
+    app: AppHandle,
+    id: String,
+    supervisor: Option<Arc<monitor::Control>>,
+) -> AppResult<ConnectOutcome> {
+    let gate = session_gate().lock().unwrap();
+    if SHUTTING_DOWN.load(std::sync::atomic::Ordering::SeqCst) {
+        return Err(AppError::new(crate::errors::code::CANCELLED));
+    }
     let profile = profile_by_id(&id)?;
     profile.authority()?;
+    profile.monitor.clone().unwrap_or_default().validate()?;
     crate::vfs::location::VfsLocation::parse(&profile.address())?;
     super::security::check(&profile)?;
-
+    if supervisor.as_ref().is_some_and(|c| !c.active()) {
+        return Err(AppError::new(crate::errors::code::CANCELLED));
+    }
+    if supervisor.is_none() && lifecycle::snapshot(&id).1.is_none() {
+        monitor::stop(&profile.store_id());
+    }
+    let other = registry()
+        .lock()
+        .unwrap()
+        .profiles
+        .iter()
+        .find(|other| {
+            other.id != id
+                && other.store_id() == profile.store_id()
+                && lifecycle::snapshot(&other.id).1.is_some()
+        })
+        .cloned();
+    if let Some(other) = other {
+        return Ok(ConnectOutcome::Pending(status_of(&other)));
+    }
     let attempt = match lifecycle::begin(&id) {
         Start::Started(a) => a,
         // A duplicate click: report the attempt that is already running,
@@ -556,6 +644,7 @@ pub fn net_connect(app: AppHandle, id: String) -> AppResult<ConnectOutcome> {
             return Ok(ConnectOutcome::Pending(status));
         }
     };
+    drop(gate);
     // The pending state is visible before the first packet leaves.
     emit_states(&app);
 
@@ -612,6 +701,13 @@ pub fn net_connect(app: AppHandle, id: String) -> AppResult<ConnectOutcome> {
             let store_id = provider.store_id();
             // `settle` is the only place a provider becomes live, and it
             // holds the lifecycle lock for exactly that decision.
+            let gate = session_gate().lock().unwrap();
+            if supervisor.as_ref().is_some_and(|c| !c.active()) {
+                lifecycle::cancel(&attempt.id);
+            }
+            if SHUTTING_DOWN.load(std::sync::atomic::Ordering::SeqCst) {
+                lifecycle::cancel(&attempt.id);
+            }
             let installed = lifecycle::settle(&attempt, Ok(()), || {
                 registry()
                     .lock()
@@ -619,6 +715,10 @@ pub fn net_connect(app: AppHandle, id: String) -> AppResult<ConnectOutcome> {
                     .live
                     .insert(store_id.clone(), provider.clone());
             });
+            if installed && supervisor.is_none() {
+                monitor::start(app.clone(), profile.clone());
+            }
+            drop(gate);
             emit_states(&app);
             if !installed {
                 // Cancelled or superseded — dropping `provider` here
@@ -659,7 +759,16 @@ pub fn net_connect(app: AppHandle, id: String) -> AppResult<ConnectOutcome> {
 /// click on "cancel" cannot fail (ticket 032).
 #[tauri::command]
 pub fn net_cancel_connect(app: AppHandle, attempt: String) {
-    lifecycle::cancel(&attempt);
+    {
+        let _gate = session_gate().lock().unwrap();
+        let profiles = registry().lock().unwrap().profiles.clone();
+        for profile in profiles {
+            if lifecycle::snapshot(&profile.id).1.as_deref() == Some(&attempt) {
+                monitor::stop_profile(&profile.id);
+            }
+        }
+        lifecycle::cancel(&attempt);
+    }
     emit_states(&app);
 }
 
@@ -698,9 +807,10 @@ pub fn net_disconnect(app: AppHandle, id: String) -> AppResult<()> {
     // A pending attempt is stopped first: disconnecting a profile that
     // is still connecting must not leave that attempt free to install
     // its provider afterwards (ticket 032).
+    let gate = session_gate().lock().unwrap();
+    monitor::stop_profile(&id);
     lifecycle::cancel_for_profile(&id);
     lifecycle::begin_disconnect(&id);
-    emit_states(&app);
 
     let store_id = {
         let mut reg = registry().lock().unwrap();
@@ -721,6 +831,7 @@ pub fn net_disconnect(app: AppHandle, id: String) -> AppResult<()> {
         super::terminal::close_for_store(&store_id);
     }
     lifecycle::set_disconnected(&id, None);
+    drop(gate);
     emit_states(&app);
     Ok(())
 }
@@ -772,6 +883,7 @@ mod tests {
 
     fn profile() -> Profile {
         Profile {
+            monitor: None,
             security: Default::default(),
             id: "p1".into(),
             name: "Test".into(),
@@ -783,6 +895,21 @@ mod tests {
             key_path: None,
             start_path: "/srv".into(),
         }
+    }
+
+    #[test]
+    fn delayed_loss_report_cannot_remove_a_replacement_session() {
+        let store = format!("test-stale-{}", super::super::unique_id());
+        let old: Arc<dyn Provider> = Arc::new(crate::vfs::local::LocalProvider);
+        let replacement: Arc<dyn Provider> = Arc::new(crate::vfs::local::LocalProvider);
+        registry()
+            .lock()
+            .unwrap()
+            .live
+            .insert(store.clone(), replacement.clone());
+        report_provider_lost(&store, &old, "late response");
+        let retained = registry().lock().unwrap().live.remove(&store).unwrap();
+        assert!(Arc::ptr_eq(&retained, &replacement));
     }
 
     #[test]

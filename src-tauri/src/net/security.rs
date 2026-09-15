@@ -176,6 +176,7 @@ mod tests {
     use super::*;
     fn profile(protocol: &str, host: &str) -> Profile {
         Profile {
+            monitor: None,
             security: ProfileSecurity::default(),
             id: "profile".into(),
             name: "Example".into(),

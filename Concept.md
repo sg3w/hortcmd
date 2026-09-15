@@ -443,7 +443,11 @@ available error dictionary. The measured entry grows from 319.8 to 320.5 KiB
 adjusted by 1 KiB to 321 KiB for this diagnostic improvement. Ticket 276 tracks
 loading feature-only translations with their lazy UI to recover future headroom.
 
-**The budget.** `EAGER_BUDGET_KB = 321` in `vite.config.ts`, enforced by
+Ticket 096 adds localized connection-monitor controls and status announcements,
+plus refresh handling when a connection returns. The measured entry is 322.5 KiB;
+the budget increases to 323 KiB without adding an eager dependency.
+
+**The budget.** `EAGER_BUDGET_KB = 323` in `vite.config.ts`, enforced by
 `scripts/bundle-report.mjs` (`npm run check:bundle`, part of `npm run check` and
 of CI). The report reads the build manifest, walks the entry chunk's import
 graph to tell eager from lazy, prints which watched dependency landed in which

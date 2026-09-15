@@ -155,6 +155,13 @@ pub struct Stat {
 /// progress, pause, cancel and checksums work uniformly and — since
 /// the engine holds a source *and* a destination provider — across
 /// providers (local↔remote, remote↔remote).
+#[derive(Debug, PartialEq, Eq)]
+pub enum Health {
+    Alive,
+    Busy,
+    Unsupported,
+}
+
 pub trait Provider: Send + Sync {
     /// Identity of the underlying store: `"local"` for the local file
     /// system, `"sftp:user@host:port"` for a remote connection. The
@@ -255,6 +262,12 @@ pub trait Provider: Send + Sync {
     /// the session disconnect once rather than staying marked live.
     fn transport_security(&self) -> Option<crate::net::security::TransportInfo> {
         None
+    }
+
+    /// Authenticated, read-only health check. Must bound its own I/O and
+    /// coordinate shared channels; unavailable adapters say so explicitly.
+    fn health_check(&self, _timeout: std::time::Duration) -> io::Result<Health> {
+        Ok(Health::Unsupported)
     }
 
     fn transport_alive(&self) -> bool {

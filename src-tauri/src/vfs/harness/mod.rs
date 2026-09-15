@@ -114,6 +114,7 @@ impl Harness {
             _ => "127.0.0.1".to_string(),
         };
         Profile {
+            monitor: None,
             security: crate::net::security::ProfileSecurity {
                 plaintext_acknowledged: true,
                 certificate: None,

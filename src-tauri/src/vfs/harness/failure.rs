@@ -534,3 +534,36 @@ fn harness_opens_an_ssh_shell() {
     });
     println!("  pty/shell/input/output/resize/close");
 }
+
+#[test]
+#[ignore]
+fn harness_monitor_roundtrips_and_recovers_after_silence() {
+    use crate::vfs::Health;
+    let h = harness_or_skip!("harness_monitor_roundtrips_and_recovers_after_silence");
+    super::for_each_service(&h, "authenticated health check", |h, name| {
+        let provider = h.connect(name);
+        assert_eq!(
+            provider.health_check(Duration::from_secs(2)).unwrap(),
+            Health::Alive
+        );
+        let service = &h.service(name).container;
+        assert!(compose(h, &["pause", service]));
+        struct Resume<'a>(&'a Harness, &'a str);
+        impl Drop for Resume<'_> {
+            fn drop(&mut self) {
+                assert!(compose(self.0, &["unpause", self.1]));
+            }
+        }
+        let resume = Resume(h, service);
+        let start = Instant::now();
+        assert!(provider.health_check(Duration::from_secs(2)).is_err());
+        assert!(start.elapsed() < Duration::from_secs(15));
+        drop(resume);
+        let replacement = h.connect(name);
+        assert_eq!(
+            replacement.health_check(Duration::from_secs(2)).unwrap(),
+            Health::Alive
+        );
+        assert!(replacement.list(&h.service(name).root).is_ok());
+    });
+}

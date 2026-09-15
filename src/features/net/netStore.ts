@@ -274,10 +274,19 @@ export const useNet = create<NetState>((set, get) => ({
   },
 
   applyStates: (states) => {
+    const restored = states.filter(c => c.connected && get().connections.some(old => old.id === c.id && !old.connected));
     if (liveSignature(states) !== liveSignature(get().connections)) {
       useCaps.getState().invalidateRemote();
     }
     set({ connections: states });
+    for (const side of ["left", "right"] as const) {
+      const panes = usePanes.getState();
+      const pane = panes[side];
+      const path = pane.tabs[pane.activeTab].path;
+      if (restored.some(c => path.startsWith(`${c.address.split("://")[0]}://${c.key}/`))) {
+        void panes.refresh(side);
+      }
+    }
   },
 
   disconnect: async (id) => {

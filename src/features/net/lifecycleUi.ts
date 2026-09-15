@@ -50,11 +50,12 @@ export function phaseLabel(phase: Phase): TransKey {
  */
 export function rowControls(status: ConnectionStatus | null): RowControls {
   const phase: Phase = status?.phase ?? "disconnected";
+  const recovering = status?.monitor === "interrupted" || status?.monitor === "reconnecting";
   const connecting = phase === "connecting";
   const disconnecting = phase === "disconnecting";
-  const busy = connecting || disconnecting;
+  const busy = connecting || disconnecting || recovering;
 
-  const action: RowAction = connecting
+  const action: RowAction = recovering ? "disconnect" : connecting
     ? "cancel"
     : disconnecting
       ? "waiting"
@@ -65,7 +66,9 @@ export function rowControls(status: ConnectionStatus | null): RowControls {
   // While something runs, the phase is the news; otherwise the last
   // failure is — and a connected or freshly disconnected profile has
   // nothing to add.
-  const statusLine = busy
+  const statusLine = status?.monitor === "unsupported" ? { key: "net.monitor.unsupported" as const }
+    : recovering ? { key: status?.monitor === "reconnecting" ? "net.monitor.reconnecting" as const : "net.monitor.interrupted" as const }
+    : busy
     ? { key: PHASE_LABEL[phase] }
     : status?.error
       ? { text: describeFailure(status.error) }

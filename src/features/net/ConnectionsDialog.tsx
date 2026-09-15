@@ -41,6 +41,7 @@ import { AppDialog } from "@/components/ui/AppDialog";
 import { cn } from "@/lib/cn";
 import { TransportDetails } from "./TransportDetails";
 import { CertificateTrustForm } from "./CertificateTrustForm";
+import { MonitorSettingsForm } from "./MonitorSettingsForm";
 import { TransportSecurityForm } from "./TransportSecurityForm";
 
 /** Supported protocols with their default port. */
@@ -378,6 +379,7 @@ function ProfileForm({ profile }: { profile: Profile }) {
         </div>
       )}
 
+      <MonitorSettingsForm value={form.monitor} onChange={value => set("monitor", value)} />
       <TransportSecurityForm value={form.security} onChange={value => set("security", value)} />
       {["ftps", "ftps-implicit", "webdav"].includes(proto) && <CertificateTrustForm profile={form} onChange={value => set("security", value)} />}
       <Field label={t("net.name")}>

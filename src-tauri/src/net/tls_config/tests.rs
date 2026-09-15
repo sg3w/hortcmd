@@ -20,6 +20,7 @@ impl Drop for Temp {
 }
 fn profile() -> Profile {
     Profile {
+        monitor: None,
         security: Default::default(),
         id: crate::net::unique_id(),
         name: "TLS test".into(),

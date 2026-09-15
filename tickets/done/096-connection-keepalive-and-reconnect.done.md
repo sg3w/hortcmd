@@ -69,4 +69,16 @@ dieselben Fähigkeiten integrieren können.
 
 Direkte Weiterentwicklung aller unterstützten Netzwerkverbindungen. Baut auf TICKET-021 (Verbindungen),
 TICKET-026 (SSH-Terminal), TICKET-032 (Verbindungslebenszyklus) und der bestehenden
-Transfer-Recovery auf. Dieses Ticket ist offen; angelegt auf Nutzerwunsch.
+Transfer-Recovery auf. Umgesetzt; siehe [Verbindungsüberwachung](../../docs/connection-monitoring.md).
+
+
+## Umsetzung und Nachweis
+
+Pro Profil gespeicherte Überwachung, begrenzte Wiederverbindung, koordinierte
+Protokollprüfungen, Statusanzeigen und Aktualisierung der sichtbaren Verzeichnisse.
+Sitzungsgenerationen und Abbruch verhindern verspätete Reaktivierung. Keine
+Wiederholung von Transfers oder Shell-Eingaben. SMB nutzt die kleine dokumentierte
+ECHO-Erweiterung des vorhandenen vendorten Clients.
+
+Der lokale Protokolltest mit pausierten Servern und neuer Verbindung bestand für
+SFTP, FTP, explizites/implizites FTPS, SMB und WebDAV über HTTP/HTTPS.

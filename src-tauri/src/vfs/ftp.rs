@@ -189,11 +189,13 @@ pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Pro
         key: profile.connection_key(),
         params,
         ctrl: Mutex::new(ctrl),
+        lost: std::sync::atomic::AtomicBool::new(false),
     }))
 }
 
 /// VFS provider bound to one FTP/FTPS server.
 pub struct FtpProvider {
+    lost: std::sync::atomic::AtomicBool,
     key: String,
     params: Params,
     /// Shared control connection for short metadata operations.
@@ -286,6 +288,31 @@ impl FtpProvider {
 }
 
 impl Provider for FtpProvider {
+    fn transport_alive(&self) -> bool {
+        !self.lost.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    fn health_check(&self, timeout: std::time::Duration) -> io::Result<super::Health> {
+        let mut ctrl = match self.ctrl.try_lock() {
+            Ok(ctrl) => ctrl,
+            Err(std::sync::TryLockError::WouldBlock) => return Ok(super::Health::Busy),
+            Err(_) => return Err(io::Error::other("FTP control channel poisoned")),
+        };
+        let read = ctrl.get_ref().read_timeout()?;
+        let write = ctrl.get_ref().write_timeout()?;
+        ctrl.get_ref().set_read_timeout(Some(timeout))?;
+        ctrl.get_ref().set_write_timeout(Some(timeout))?;
+        let result = ctrl.noop().map_err(to_io);
+        if result.is_err() {
+            self.lost.store(true, std::sync::atomic::Ordering::SeqCst);
+            // A timed-out reply must never be consumed by the next command.
+            let _ = ctrl.get_ref().shutdown(std::net::Shutdown::Both);
+        }
+        ctrl.get_ref().set_read_timeout(read)?;
+        ctrl.get_ref().set_write_timeout(write)?;
+        result.map(|_| super::Health::Alive)
+    }
+
     fn transport_security(&self) -> Option<crate::net::security::TransportInfo> {
         let mut info = crate::net::security::TransportInfo::connected(
             &self.params.profile,

@@ -116,6 +116,18 @@ fn to_io<E: std::fmt::Display>(e: E) -> io::Error {
 }
 
 impl Provider for SftpProvider {
+    fn health_check(&self, timeout: std::time::Duration) -> io::Result<super::Health> {
+        runtime().block_on(async {
+            tokio::time::timeout(timeout, async {
+                self.conn.ssh.keepalive().await.map_err(to_io)?;
+                self.sftp().canonicalize(".").await.map_err(to_io)?;
+                Ok(super::Health::Alive)
+            })
+            .await
+            .map_err(|_| io::Error::from(io::ErrorKind::TimedOut))?
+        })
+    }
+
     fn transport_security(&self) -> Option<crate::net::security::TransportInfo> {
         Some(self.security.clone())
     }

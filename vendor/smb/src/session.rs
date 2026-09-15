@@ -184,6 +184,13 @@ impl Session {
         Ok(tree)
     }
 
+    /// Authenticated SMB2 ECHO on this session, using the normal signing,
+    /// encryption, message-id routing and response timeout (hortcmd TICKET-096).
+    pub async fn echo(&self) -> crate::Result<()> {
+        self.session_handler.send_recv(smb_msg::EchoRequest::default().into()).await?;
+        Ok(())
+    }
+
     /// Logs off the session.
     ///
     /// Any resources held by the session will be released,
