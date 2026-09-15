@@ -1,8 +1,8 @@
 //! macOS local adapter. Remote providers have no stable no-replace undo contract.
 use super::{unavailable, UndoEntry};
+use crate::commands::fs::process_lock::ProcessLock;
 use crate::commands::fs::transfer::recovery::durability;
 use crate::errors::AppResult;
-use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
@@ -128,7 +128,7 @@ struct Data {
 }
 pub(super) struct History {
     root: PathBuf,
-    _lock: File,
+    _lock: ProcessLock,
     records: Mutex<Vec<UndoPlan>>,
 }
 impl History {
@@ -149,7 +149,7 @@ impl History {
             .truncate(false)
             .mode(0o600)
             .open(root.join("lock"))?;
-        lock.try_lock_exclusive()?;
+        let lock = ProcessLock::acquire(lock)?;
         let path = root.join("history.json");
         let records = if path.try_exists()? {
             if fs::symlink_metadata(&path)?.file_type().is_symlink() {

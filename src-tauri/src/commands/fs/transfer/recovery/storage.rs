@@ -1,7 +1,7 @@
 //! Private atomic snapshots. One process owns the journal; readers never repair it.
 use super::types::Record;
+use crate::commands::fs::process_lock::ProcessLock;
 use cap_std::fs::{Dir, OpenOptions};
-use fs2::FileExt;
 use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::{self, Read, Write};
@@ -13,7 +13,7 @@ pub const MAX_ITEMS: usize = 20_000;
 
 pub struct Storage {
     root: Dir,
-    _lock: File,
+    _lock: ProcessLock,
 }
 fn invalid() -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, "invalid transfer journal")
@@ -65,7 +65,7 @@ impl Storage {
             options.mode(0o600);
         }
         let lock = root.open_with("lock", &options)?.into_std();
-        lock.try_lock_exclusive()?;
+        let lock = ProcessLock::acquire(lock)?;
         Ok(Self { root, _lock: lock })
     }
 

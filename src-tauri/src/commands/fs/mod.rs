@@ -26,6 +26,7 @@ pub mod filecompare;
 pub mod git;
 pub mod listings;
 pub mod preview;
+mod process_lock;
 pub mod props;
 pub mod refresh;
 pub mod search;
