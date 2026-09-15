@@ -41,11 +41,11 @@ export function joinPath(base: string, name: string): string {
 export function parentPath(p: string): string {
   const remote = splitRemote(p);
   if (remote) {
-    const trimmed = remote.rest.replace(/\/+$/, "");
-    const idx = trimmed.lastIndexOf("/");
-    // Already at (or above) the connection root → stay at the root.
-    if (idx <= 0) return `${remote.prefix}/`;
-    return remote.prefix + trimmed.slice(0, idx);
+    const parts = remote.rest.slice(1).split("/");
+    if (parts[parts.length - 1] === "") parts.pop();
+    parts.pop();
+    if (parts.length === 0 || parts[parts.length - 1] === "") parts.push("");
+    return `${remote.prefix}/${parts.join("/")}`;
   }
   return localParent(p);
 }

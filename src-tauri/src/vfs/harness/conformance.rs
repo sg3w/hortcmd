@@ -24,7 +24,7 @@ fn work_dir(root: &str, name: &str) -> String {
 
 fn read_all(p: &dyn Provider, path: &str) -> Vec<u8> {
     let mut got = Vec::new();
-    p.open_read(Path::new(path))
+    p.open_read(&crate::vfs::StreamPath::remote(&(Path::new(path)).to_string_lossy()).unwrap())
         .unwrap_or_else(|e| panic!("open_read {}: {}", path, e))
         .read_to_end(&mut got)
         .unwrap_or_else(|e| panic!("read {}: {}", path, e));
@@ -33,7 +33,9 @@ fn read_all(p: &dyn Provider, path: &str) -> Vec<u8> {
 
 fn write_all(p: &dyn Provider, path: &str, data: &[u8]) {
     let mut w = p
-        .create_write(Path::new(path))
+        .create_write(
+            &crate::vfs::StreamPath::remote(&(Path::new(path)).to_string_lossy()).unwrap(),
+        )
         .unwrap_or_else(|e| panic!("create_write {}: {}", path, e));
     w.write_all(data)
         .unwrap_or_else(|e| panic!("write {}: {}", path, e));
@@ -126,15 +128,26 @@ fn harness_stat_agrees_with_the_listing() {
         for entry in &svc.seed {
             let path = format!("{}/{}", root, entry.path);
             let st = p
-                .stat(Path::new(&path))
+                .stat(
+                    &crate::vfs::StreamPath::remote(&(Path::new(&path)).to_string_lossy()).unwrap(),
+                )
                 .unwrap_or_else(|e| panic!("{}: stat {}: {}", name, path, e));
             assert_eq!(st.is_dir, entry.dir, "{}: stat kind of {}", name, path);
             if !entry.dir {
                 assert_eq!(st.len, entry.size, "{}: stat size of {}", name, path);
             }
-            assert!(p.exists(Path::new(&path)), "{}: exists {}", name, path);
+            assert!(
+                p.exists(
+                    &crate::vfs::StreamPath::remote(&(Path::new(&path)).to_string_lossy()).unwrap()
+                ),
+                "{}: exists {}",
+                name,
+                path
+            );
             assert_eq!(
-                p.is_dir(Path::new(&path)),
+                p.is_dir(
+                    &crate::vfs::StreamPath::remote(&(Path::new(&path)).to_string_lossy()).unwrap()
+                ),
                 entry.dir,
                 "{}: is_dir {}",
                 name,
@@ -145,9 +158,18 @@ fn harness_stat_agrees_with_the_listing() {
         // A name that is not there must say so rather than error out in
         // a way the caller cannot distinguish from a broken connection.
         let missing = format!("{}/definitely-not-here-{}", root, h.id);
-        assert!(!p.exists(Path::new(&missing)), "{}: phantom entry", name);
         assert!(
-            p.stat(Path::new(&missing)).is_err(),
+            !p.exists(
+                &crate::vfs::StreamPath::remote(&(Path::new(&missing)).to_string_lossy()).unwrap()
+            ),
+            "{}: phantom entry",
+            name
+        );
+        assert!(
+            p.stat(
+                &crate::vfs::StreamPath::remote(&(Path::new(&missing)).to_string_lossy()).unwrap()
+            )
+            .is_err(),
             "{}: stat of a missing path must fail",
             name
         );
@@ -183,11 +205,18 @@ fn harness_streams_large_content_unchanged() {
         // Write one back and read it again — the upload path, including
         // whatever buffering the provider does.
         let dir = work_dir(root, "stream");
-        p.create_dir_all(Path::new(&dir)).expect("create work dir");
+        p.create_dir_all(
+            &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
+        )
+        .expect("create work dir");
         let target = format!("{}/round-trip.bin", dir);
         write_all(&*p, &target, &want);
         assert_eq!(
-            p.stat(Path::new(&target)).expect("stat upload").len,
+            p.stat(
+                &crate::vfs::StreamPath::remote(&(Path::new(&target)).to_string_lossy()).unwrap()
+            )
+            .expect("stat upload")
+            .len,
             want.len() as u64,
             "{}: uploaded size",
             name
@@ -198,7 +227,12 @@ fn harness_streams_large_content_unchanged() {
         // works when handed one big buffer is broken for real copies.
         let chunked = format!("{}/chunked.bin", dir);
         {
-            let mut w = p.create_write(Path::new(&chunked)).expect("create_write");
+            let mut w = p
+                .create_write(
+                    &crate::vfs::StreamPath::remote(&(Path::new(&chunked)).to_string_lossy())
+                        .unwrap(),
+                )
+                .expect("create_write");
             for chunk in want.chunks(7919) {
                 w.write_all(chunk).expect("chunked write");
             }
@@ -213,10 +247,19 @@ fn harness_streams_large_content_unchanged() {
         // An empty file is a file.
         let empty = format!("{}/empty.bin", dir);
         write_all(&*p, &empty, b"");
-        assert_eq!(p.stat(Path::new(&empty)).expect("stat empty").len, 0);
+        assert_eq!(
+            p.stat(
+                &crate::vfs::StreamPath::remote(&(Path::new(&empty)).to_string_lossy()).unwrap()
+            )
+            .expect("stat empty")
+            .len,
+            0
+        );
         assert!(read_all(&*p, &empty).is_empty(), "{}: empty file", name);
 
-        let _ = p.remove_dir_all(Path::new(&dir));
+        let _ = p.remove_dir_all(
+            &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
+        );
     });
 }
 
@@ -231,22 +274,41 @@ fn harness_creates_renames_and_deletes() {
         let p = h.connect(name);
         let root = svc.root.trim_end_matches('/');
         let dir = work_dir(root, "mutate");
-        let _ = p.remove_dir_all(Path::new(&dir));
+        let _ = p.remove_dir_all(
+            &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
+        );
 
         // Nested creation in one call.
         let deep = format!("{}/a/b/c", dir);
-        p.create_dir_all(Path::new(&deep))
-            .unwrap_or_else(|e| panic!("{}: create_dir_all: {}", name, e));
-        assert!(p.is_dir(Path::new(&deep)), "{}: nested dir", name);
+        p.create_dir_all(
+            &crate::vfs::StreamPath::remote(&(Path::new(&deep)).to_string_lossy()).unwrap(),
+        )
+        .unwrap_or_else(|e| panic!("{}: create_dir_all: {}", name, e));
+        assert!(
+            p.is_dir(
+                &crate::vfs::StreamPath::remote(&(Path::new(&deep)).to_string_lossy()).unwrap()
+            ),
+            "{}: nested dir",
+            name
+        );
 
         let file = format!("{}/report.txt", deep);
         write_all(&*p, &file, b"first");
 
         // Rename inside a directory...
         let renamed = format!("{}/final.txt", deep);
-        p.rename(Path::new(&file), Path::new(&renamed))
-            .unwrap_or_else(|e| panic!("{}: rename: {}", name, e));
-        assert!(!p.exists(Path::new(&file)), "{}: old name survived", name);
+        p.rename(
+            &crate::vfs::StreamPath::remote(&(Path::new(&file)).to_string_lossy()).unwrap(),
+            &crate::vfs::StreamPath::remote(&(Path::new(&renamed)).to_string_lossy()).unwrap(),
+        )
+        .unwrap_or_else(|e| panic!("{}: rename: {}", name, e));
+        assert!(
+            !p.exists(
+                &crate::vfs::StreamPath::remote(&(Path::new(&file)).to_string_lossy()).unwrap()
+            ),
+            "{}: old name survived",
+            name
+        );
         assert_eq!(
             read_all(&*p, &renamed),
             b"first",
@@ -257,25 +319,49 @@ fn harness_creates_renames_and_deletes() {
         // ...and across directories, which some servers implement
         // separately from a plain rename.
         let moved = format!("{}/a/moved.txt", dir);
-        p.rename(Path::new(&renamed), Path::new(&moved))
-            .unwrap_or_else(|e| panic!("{}: cross-directory rename: {}", name, e));
+        p.rename(
+            &crate::vfs::StreamPath::remote(&(Path::new(&renamed)).to_string_lossy()).unwrap(),
+            &crate::vfs::StreamPath::remote(&(Path::new(&moved)).to_string_lossy()).unwrap(),
+        )
+        .unwrap_or_else(|e| panic!("{}: cross-directory rename: {}", name, e));
         assert_eq!(read_all(&*p, &moved), b"first", "{}: moved content", name);
 
         // The whole-file helper.
-        p.write(Path::new(&file), b"second").expect("write helper");
-        assert_eq!(p.stat(Path::new(&file)).expect("stat").len, 6);
+        p.write(
+            &crate::vfs::StreamPath::remote(&(Path::new(&file)).to_string_lossy()).unwrap(),
+            b"second",
+        )
+        .expect("write helper");
+        assert_eq!(
+            p.stat(&crate::vfs::StreamPath::remote(&(Path::new(&file)).to_string_lossy()).unwrap())
+                .expect("stat")
+                .len,
+            6
+        );
 
         // Delete a file, then the tree.
-        p.remove_file(Path::new(&moved))
-            .unwrap_or_else(|e| panic!("{}: remove_file: {}", name, e));
+        p.remove_file(
+            &crate::vfs::StreamPath::remote(&(Path::new(&moved)).to_string_lossy()).unwrap(),
+        )
+        .unwrap_or_else(|e| panic!("{}: remove_file: {}", name, e));
         assert!(
-            !p.exists(Path::new(&moved)),
+            !p.exists(
+                &crate::vfs::StreamPath::remote(&(Path::new(&moved)).to_string_lossy()).unwrap()
+            ),
             "{}: deleted file lingers",
             name
         );
-        p.remove_dir_all(Path::new(&dir))
-            .unwrap_or_else(|e| panic!("{}: remove_dir_all: {}", name, e));
-        assert!(!p.exists(Path::new(&dir)), "{}: deleted tree lingers", name);
+        p.remove_dir_all(
+            &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
+        )
+        .unwrap_or_else(|e| panic!("{}: remove_dir_all: {}", name, e));
+        assert!(
+            !p.exists(
+                &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap()
+            ),
+            "{}: deleted tree lingers",
+            name
+        );
     });
 }
 
@@ -299,29 +385,54 @@ fn harness_stages_and_commits() {
 
         let root = svc.root.trim_end_matches('/');
         let dir = work_dir(root, "stage");
-        let _ = p.remove_dir_all(Path::new(&dir));
-        p.create_dir_all(Path::new(&dir)).expect("create work dir");
+        let _ = p.remove_dir_all(
+            &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
+        );
+        p.create_dir_all(
+            &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
+        )
+        .expect("create work dir");
 
         let target = format!("{}/report.txt", dir);
         let first = format!("{}/.hortcmd-stage-a", dir);
         let second = format!("{}/.hortcmd-stage-b", dir);
 
         write_all(&*p, &first, b"first");
-        commit(&*p, Path::new(&first), Path::new(&target), false).expect("commit new");
+        commit(
+            &*p,
+            &crate::vfs::StreamPath::remote(&(Path::new(&first)).to_string_lossy()).unwrap(),
+            &crate::vfs::StreamPath::remote(&(Path::new(&target)).to_string_lossy()).unwrap(),
+            false,
+        )
+        .expect("commit new");
         assert_eq!(
             read_all(&*p, &target),
             b"first",
             "{}: committed bytes",
             name
         );
-        assert!(!p.exists(Path::new(&first)), "{}: staging entry left", name);
+        assert!(
+            !p.exists(
+                &crate::vfs::StreamPath::remote(&(Path::new(&first)).to_string_lossy()).unwrap()
+            ),
+            "{}: staging entry left",
+            name
+        );
 
         write_all(&*p, &second, b"second");
-        commit(&*p, Path::new(&second), Path::new(&target), true).expect("commit replace");
+        commit(
+            &*p,
+            &crate::vfs::StreamPath::remote(&(Path::new(&second)).to_string_lossy()).unwrap(),
+            &crate::vfs::StreamPath::remote(&(Path::new(&target)).to_string_lossy()).unwrap(),
+            true,
+        )
+        .expect("commit replace");
         assert_eq!(read_all(&*p, &target), b"second", "{}: replacement", name);
 
         let left: Vec<String> = p
-            .read_dir(Path::new(&dir))
+            .read_dir(
+                &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
+            )
             .expect("read_dir")
             .iter()
             .filter_map(|c| c.file_name()?.to_str().map(str::to_string))
@@ -334,7 +445,9 @@ fn harness_stages_and_commits() {
             left
         );
 
-        let _ = p.remove_dir_all(Path::new(&dir));
+        let _ = p.remove_dir_all(
+            &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
+        );
     });
 }
 
@@ -368,11 +481,16 @@ fn harness_refuses_to_escape_the_root() {
         ];
 
         for escape in &attempts {
-            let read = p.open_read(Path::new(escape)).map(|mut r| {
-                let mut buf = Vec::new();
-                let _ = r.read_to_end(&mut buf);
-                buf
-            });
+            let read = p
+                .open_read(
+                    &crate::vfs::StreamPath::remote(&(Path::new(escape)).to_string_lossy())
+                        .unwrap(),
+                )
+                .map(|mut r| {
+                    let mut buf = Vec::new();
+                    let _ = r.read_to_end(&mut buf);
+                    buf
+                });
             let reached = match &read {
                 Err(_) => false,
                 Ok(bytes) => String::from_utf8_lossy(bytes).contains("root:"),
@@ -390,19 +508,28 @@ fn harness_refuses_to_escape_the_root() {
         // Writing outside is the dangerous direction, and the entry must
         // never appear under the name that was asked for either way.
         let out = format!("{}/tree/../../escaped-{}.txt", root, h.id);
-        if let Ok(mut w) = p.create_write(Path::new(&out)) {
+        if let Ok(mut w) = p.create_write(
+            &crate::vfs::StreamPath::remote(&(Path::new(&out)).to_string_lossy()).unwrap(),
+        ) {
             let _ = w.write_all(b"x");
             if w.flush().is_ok() && svc.confined {
                 // A confined server may have resolved the path *inside*
                 // the tree, which is fine — what must not happen is a
                 // write landing outside it.
                 assert!(
-                    !p.exists(Path::new("/etc/escaped.txt")),
+                    !p.exists(
+                        &crate::vfs::StreamPath::remote(
+                            &(Path::new("/etc/escaped.txt")).to_string_lossy()
+                        )
+                        .unwrap()
+                    ),
                     "{}: a write with .. left the served tree",
                     name
                 );
             }
-            let _ = p.remove_file(Path::new(&out));
+            let _ = p.remove_file(
+                &crate::vfs::StreamPath::remote(&(Path::new(&out)).to_string_lossy()).unwrap(),
+            );
         }
 
         // Whatever happened, it happened on this store and not another.
@@ -446,9 +573,12 @@ fn harness_maps_failures_to_errors() {
                 let p = p.clone();
                 let path = format!("{}/no-such-file.txt", missing_dir);
                 Box::new(move || {
-                    p.open_read(Path::new(&path))
-                        .map(|_| ())
-                        .map_err(|e| e.to_string())
+                    p.open_read(
+                        &crate::vfs::StreamPath::remote(&(Path::new(&path)).to_string_lossy())
+                            .unwrap(),
+                    )
+                    .map(|_| ())
+                    .map_err(|e| e.to_string())
                 })
             }),
             ("rename something that is not there", {
@@ -456,14 +586,25 @@ fn harness_maps_failures_to_errors() {
                 let from = format!("{}/no-such-file.txt", missing_dir);
                 let to = format!("{}/still-not-there.txt", missing_dir);
                 Box::new(move || {
-                    p.rename(Path::new(&from), Path::new(&to))
-                        .map_err(|e| e.to_string())
+                    p.rename(
+                        &crate::vfs::StreamPath::remote(&(Path::new(&from)).to_string_lossy())
+                            .unwrap(),
+                        &crate::vfs::StreamPath::remote(&(Path::new(&to)).to_string_lossy())
+                            .unwrap(),
+                    )
+                    .map_err(|e| e.to_string())
                 })
             }),
             ("delete something that is not there", {
                 let p = p.clone();
                 let path = format!("{}/no-such-file.txt", missing_dir);
-                Box::new(move || p.remove_file(Path::new(&path)).map_err(|e| e.to_string()))
+                Box::new(move || {
+                    p.remove_file(
+                        &crate::vfs::StreamPath::remote(&(Path::new(&path)).to_string_lossy())
+                            .unwrap(),
+                    )
+                    .map_err(|e| e.to_string())
+                })
             }),
             // Through the flush, not just the open: a buffering remote
             // writer (WebDAV PUTs on flush) has not spoken to the server
@@ -474,7 +615,10 @@ fn harness_maps_failures_to_errors() {
                 let path = format!("{}/nope.txt", missing_dir);
                 Box::new(move || {
                     let mut w = p
-                        .create_write(Path::new(&path))
+                        .create_write(
+                            &crate::vfs::StreamPath::remote(&(Path::new(&path)).to_string_lossy())
+                                .unwrap(),
+                        )
                         .map_err(|e| e.to_string())?;
                     w.write_all(b"x").map_err(|e| e.to_string())?;
                     w.flush().map_err(|e| e.to_string())

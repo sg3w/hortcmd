@@ -19,7 +19,6 @@ use crate::net::session::runtime;
 use crate::net::ssh::SshSession;
 use russh_sftp::client::SftpSession;
 use std::io::{self, Read, Write};
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -99,7 +98,7 @@ impl SftpProvider {
 }
 
 /// POSIX path string for the SFTP protocol.
-fn p(path: &Path) -> String {
+fn p(path: &crate::vfs::StreamPath) -> String {
     super::provider_path::text(path)
 }
 
@@ -135,7 +134,10 @@ impl Provider for SftpProvider {
     }
 
     fn list(&self, path: &str) -> AppResult<DirListing> {
-        super::provider_path::validate(Path::new(path), super::Scheme::Sftp)?;
+        super::provider_path::validate(
+            &crate::vfs::StreamPath::remote(path)?,
+            super::Scheme::Sftp,
+        )?;
         let dir = runtime()
             .block_on(self.sftp().read_dir(path))
             .map_err(|e| AppError::from(format!("{}: {}", path, e)))?;
@@ -203,7 +205,7 @@ impl Provider for SftpProvider {
         })
     }
 
-    fn stat(&self, path: &Path) -> io::Result<Stat> {
+    fn stat(&self, path: &crate::vfs::StreamPath) -> io::Result<Stat> {
         super::provider_path::validate(path, super::Scheme::Sftp)?;
         let attrs = runtime()
             .block_on(self.sftp().metadata(p(path)))
@@ -214,21 +216,21 @@ impl Provider for SftpProvider {
         })
     }
 
-    fn exists(&self, path: &Path) -> bool {
+    fn exists(&self, path: &crate::vfs::StreamPath) -> bool {
         if super::provider_path::validate(path, super::Scheme::Sftp).is_err() {
             return false;
         }
         runtime().block_on(self.sftp().metadata(p(path))).is_ok()
     }
 
-    fn is_dir(&self, path: &Path) -> bool {
+    fn is_dir(&self, path: &crate::vfs::StreamPath) -> bool {
         if super::provider_path::validate(path, super::Scheme::Sftp).is_err() {
             return false;
         }
         self.stat(path).map(|s| s.is_dir).unwrap_or(false)
     }
 
-    fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
+    fn read_dir(&self, path: &crate::vfs::StreamPath) -> io::Result<Vec<crate::vfs::StreamPath>> {
         super::provider_path::validate(path, super::Scheme::Sftp)?;
         let base = p(path);
         let dir = runtime()
@@ -240,12 +242,12 @@ impl Provider for SftpProvider {
             if name == "." || name == ".." {
                 continue;
             }
-            out.push(Path::new(&base).join(name));
+            out.push(path.join(name)?);
         }
         Ok(out)
     }
 
-    fn open_read(&self, path: &Path) -> io::Result<Box<dyn Read + Send>> {
+    fn open_read(&self, path: &crate::vfs::StreamPath) -> io::Result<Box<dyn Read + Send>> {
         super::provider_path::validate(path, super::Scheme::Sftp)?;
         let file = runtime()
             .block_on(self.sftp().open(p(path)))
@@ -253,7 +255,7 @@ impl Provider for SftpProvider {
         Ok(Box::new(SyncSftpFile { file }))
     }
 
-    fn create_write(&self, path: &Path) -> io::Result<Box<dyn Write + Send>> {
+    fn create_write(&self, path: &crate::vfs::StreamPath) -> io::Result<Box<dyn Write + Send>> {
         super::provider_path::validate(path, super::Scheme::Sftp)?;
         let file = runtime()
             .block_on(self.sftp().create(p(path)))
@@ -261,7 +263,7 @@ impl Provider for SftpProvider {
         Ok(Box::new(SyncSftpFile { file }))
     }
 
-    fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
+    fn write(&self, path: &crate::vfs::StreamPath, data: &[u8]) -> io::Result<()> {
         super::provider_path::validate(path, super::Scheme::Sftp)?;
         runtime().block_on(async {
             let mut f = self.sftp().create(p(path)).await.map_err(to_io)?;
@@ -271,20 +273,11 @@ impl Provider for SftpProvider {
         })
     }
 
-    fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+    fn create_dir_all(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
         super::provider_path::validate(path, super::Scheme::Sftp)?;
         // SFTP has no recursive mkdir — create each missing component.
         let full = p(path);
-        let mut acc = String::new();
-        for part in full.split('/') {
-            if part.is_empty() {
-                acc.push('/');
-                continue;
-            }
-            if !acc.ends_with('/') {
-                acc.push('/');
-            }
-            acc.push_str(part);
+        for acc in super::provider_path::prefixes(path)? {
             // Ignore "already exists" — only a real failure at the end matters.
             let _ = runtime().block_on(self.sftp().create_dir(&acc));
         }
@@ -299,7 +292,7 @@ impl Provider for SftpProvider {
         }
     }
 
-    fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+    fn rename(&self, from: &crate::vfs::StreamPath, to: &crate::vfs::StreamPath) -> io::Result<()> {
         super::provider_path::validate(from, super::Scheme::Sftp)?;
         super::provider_path::validate(to, super::Scheme::Sftp)?;
         runtime()
@@ -307,16 +300,16 @@ impl Provider for SftpProvider {
             .map_err(to_io)
     }
 
-    fn remove_file(&self, path: &Path) -> io::Result<()> {
+    fn remove_file(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
         super::provider_path::validate(path, super::Scheme::Sftp)?;
         runtime()
             .block_on(self.sftp().remove_file(p(path)))
             .map_err(to_io)
     }
 
-    fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
+    fn remove_dir_all(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
         super::provider_path::validate(path, super::Scheme::Sftp)?;
-        runtime().block_on(remove_dir_all_async(self.sftp(), p(path)))
+        runtime().block_on(remove_dir_all_async(self.sftp(), path.clone()))
     }
 
     // ----- Failure-safe transfers (ticket 029) -----
@@ -337,23 +330,23 @@ impl Provider for SftpProvider {
 /// directory to be empty first).
 fn remove_dir_all_async<'a>(
     sftp: &'a SftpSession,
-    path: String,
+    path: crate::vfs::StreamPath,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = io::Result<()>> + Send + 'a>> {
     Box::pin(async move {
-        let dir = sftp.read_dir(&path).await.map_err(to_io)?;
+        let dir = sftp.read_dir(p(&path)).await.map_err(to_io)?;
         for item in dir {
             let name = item.file_name();
             if name == "." || name == ".." {
                 continue;
             }
-            let child = format!("{}/{}", path.trim_end_matches('/'), name);
+            let child = path.join(name)?;
             if item.metadata().is_dir() {
                 remove_dir_all_async(sftp, child).await?;
             } else {
-                sftp.remove_file(child).await.map_err(to_io)?;
+                sftp.remove_file(p(&child)).await.map_err(to_io)?;
             }
         }
-        sftp.remove_dir(path).await.map_err(to_io)
+        sftp.remove_dir(p(&path)).await.map_err(to_io)
     })
 }
 

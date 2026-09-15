@@ -19,7 +19,6 @@ use crate::vfs;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::io::Read;
-use std::path::Path;
 use ts_rs::TS;
 
 /// Format version written by this build; `load_selection` rejects
@@ -143,7 +142,7 @@ pub fn save_selection(
     })?;
     let json = serde_json::to_string_pretty(&file).map_err(AppError::from)?;
     let (provider, resolved) = vfs::resolve(&path)?;
-    let p = Path::new(&resolved);
+    let p = &resolved;
     if !overwrite && provider.exists(p) {
         return Ok(false);
     }
@@ -157,7 +156,7 @@ pub fn save_selection(
 #[tauri::command]
 pub fn load_selection(path: String) -> AppResult<SelectionFile> {
     let (provider, resolved) = vfs::resolve(&path)?;
-    let p = Path::new(&resolved);
+    let p = &resolved;
     if let Ok(st) = provider.stat(p) {
         if st.len > MAX_BYTES {
             return Err(AppError::new(code::FS_TOO_LARGE)

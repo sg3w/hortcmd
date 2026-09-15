@@ -34,6 +34,14 @@ fn legacy_identity(profile: &Profile) -> String {
 }
 
 impl RecoveryLocation {
+    /// Reconstruct the path kind without reinterpreting remote components as OS paths.
+    pub fn stream_path(&self) -> AppResult<vfs::StreamPath> {
+        match self {
+            Self::Local { path } => Ok(vfs::StreamPath::from(path)),
+            Self::Remote { path, .. } => vfs::StreamPath::remote(path),
+        }
+    }
+
     pub fn capture(raw: &str) -> AppResult<Self> {
         Self::capture_with(raw, &net_list_profiles())
     }
@@ -95,8 +103,15 @@ impl RecoveryLocation {
         }
     }
 
-    pub fn with_path(&self, path: &Path) -> AppResult<Self> {
-        let path = path.to_str().ok_or_else(invalid)?.to_owned();
+    pub fn with_path(&self, path: impl Into<crate::vfs::StreamPath>) -> AppResult<Self> {
+        let path = path.into();
+        let path = match (self, &path) {
+            (Self::Local { .. }, crate::vfs::StreamPath::Local(path)) => {
+                path.to_str().ok_or_else(invalid)?.to_owned()
+            }
+            (Self::Remote { .. }, crate::vfs::StreamPath::Remote(path)) => path.raw(),
+            _ => return Err(invalid()),
+        };
         Ok(match self {
             Self::Local { .. } => Self::Local { path },
             Self::Remote {

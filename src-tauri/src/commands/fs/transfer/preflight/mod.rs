@@ -5,6 +5,7 @@ pub mod types;
 mod walk;
 use super::recovery::types::{RecoveryKind, RecoveryLocation, RecoverySettings};
 use crate::errors::{code, AppError, AppResult};
+use crate::vfs::StreamPath;
 use crate::vfs::{
     self,
     caps::{self, Capability},
@@ -12,7 +13,7 @@ use crate::vfs::{
 };
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
-use std::path::{Component, Path, PathBuf};
+use std::path::Component;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use types::{OperationMapping, OperationPlan, PlanIssue, SpaceEstimate};
@@ -55,11 +56,11 @@ pub fn space(
         },
     })
 }
-fn normalize(path: &Path) -> AppResult<PathBuf> {
+fn normalize(path: &std::path::Path) -> AppResult<std::path::PathBuf> {
     if !path.is_absolute() {
         return Err(invalid());
     }
-    let mut result = PathBuf::new();
+    let mut result = std::path::PathBuf::new();
     for component in path.components() {
         match component {
             Component::ParentDir => {
@@ -73,22 +74,28 @@ fn normalize(path: &Path) -> AppResult<PathBuf> {
     }
     Ok(result)
 }
-fn normalized(provider: &dyn Provider, path: &str, directory: bool) -> AppResult<PathBuf> {
-    let path = normalize(Path::new(path))?;
+fn normalized(
+    provider: &dyn Provider,
+    path: &StreamPath,
+    directory: bool,
+) -> AppResult<StreamPath> {
     if provider.store_id() != "local" {
-        return Ok(path);
+        return Ok(path.clone());
     }
+    let path = normalize(path.native()?)?;
     if directory {
-        return Ok(std::fs::canonicalize(path)?);
+        return Ok(std::fs::canonicalize(path)?.into());
     }
     let parent = path.parent().ok_or_else(invalid)?.canonicalize()?;
-    Ok(parent.join(path.file_name().ok_or_else(invalid)?))
+    Ok(parent.join(path.file_name().ok_or_else(invalid)?).into())
 }
-fn local_identity(provider: &dyn Provider, path: &Path) -> AppResult<Option<String>> {
+fn local_identity(provider: &dyn Provider, path: &StreamPath) -> AppResult<Option<String>> {
     if provider.store_id() == "local" {
         // Directory mtime changes when our own transfer adds children. Its stable
         // identity, not that volatile mtime, binds the approved destination.
-        return Ok(super::recovery::durability::object_identity(path)?);
+        return Ok(super::recovery::durability::object_identity(
+            path.native()?,
+        )?);
     }
     Ok(provider.planning_identity(path)?)
 }
@@ -202,7 +209,7 @@ pub fn build(
     }
     let mut walker = walk::Walker::new(cancel);
     let mut names = HashSet::new();
-    let mut source_paths: Vec<(String, PathBuf)> = Vec::new();
+    let mut source_paths: Vec<(String, StreamPath)> = Vec::new();
     let mut source_store: Option<String> = None;
     let mut bytes = 0u64;
     let mut old_bytes = 0u64;
@@ -235,13 +242,13 @@ pub fn build(
             .file_name()
             .and_then(|n| n.to_str())
             .ok_or_else(invalid)?;
-        let target = destination_path.join(name);
+        let target = destination_path.join(name)?;
         let same_store = provider.store_id() == destination_provider.store_id();
         if !same_store {
             issue(&mut plan, "decision", "crossProvider", Some(index));
         }
         let containment_source = if provider.store_id() == "local" {
-            source.canonicalize()?
+            std::fs::canonicalize(source.native()?)?.into()
         } else {
             source.clone()
         };
@@ -282,7 +289,9 @@ pub fn build(
                 break;
             }
         };
-        let exists = std::fs::symlink_metadata(&target).is_ok()
+        let exists = target
+            .native()
+            .is_ok_and(|p| std::fs::symlink_metadata(p).is_ok())
             && destination_provider.store_id() == "local"
             || destination_provider.exists(&target);
         let existing_summary = if exists {
@@ -295,7 +304,7 @@ pub fn build(
         let native_move = kind == RecoveryKind::Move
             && same_store
             && (provider.store_id() != "local"
-                || super::recovery::durability::same_device(&source, &destination_path));
+                || matches!((source.native(), destination_path.native()), (Ok(s), Ok(d)) if super::recovery::durability::same_device(s, d)));
         if !native_move {
             bytes = checked(bytes.checked_add(summary.bytes))?;
         }
@@ -341,7 +350,7 @@ pub fn build(
 pub fn revalidate_destination(
     plan: &OperationPlan,
     provider: &dyn Provider,
-    path: &Path,
+    path: &StreamPath,
     required: u64,
 ) -> AppResult<()> {
     let address = plan.destination.resolve()?;
@@ -393,7 +402,7 @@ pub fn cancel_preflight(token: String) {
 
 pub(crate) fn target_stamp(
     provider: &dyn Provider,
-    path: &Path,
+    path: &StreamPath,
 ) -> std::io::Result<Option<String>> {
     if !provider.exists(path) {
         return Ok(None);
@@ -416,7 +425,7 @@ pub(crate) fn target_stamp(
 }
 
 #[cfg(test)]
-pub(crate) fn measure(provider: &dyn Provider, path: &Path) -> std::io::Result<(u32, u64)> {
+pub(crate) fn measure(provider: &dyn Provider, path: &StreamPath) -> std::io::Result<(u32, u64)> {
     let cancel = AtomicBool::new(false);
     let summary = walk::Walker::new(&cancel).measure(
         provider,
@@ -445,11 +454,8 @@ pub fn revalidate_source(
     {
         return Err(invalid().with("reason", "planChanged"));
     }
-    let target = match &mapping.target {
-        RecoveryLocation::Local { path } | RecoveryLocation::Remote { path, .. } => Path::new(path),
-    };
-    let measured =
-        walk::Walker::new(cancel).measure(provider, Path::new(&source), target, limits)?;
+    let target = mapping.target.stream_path()?;
+    let measured = walk::Walker::new(cancel).measure(provider, &source, &target, limits)?;
     if measured.version != mapping.source_version {
         return Err(invalid().with("reason", "sourceChanged"));
     }
@@ -457,7 +463,7 @@ pub fn revalidate_source(
 }
 
 pub(crate) fn archive_capacity(
-    destination: &Path,
+    destination: &StreamPath,
     kind: RecoveryKind,
     bytes: u64,
     files: u32,

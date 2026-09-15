@@ -26,7 +26,6 @@ use crate::errors::AppResult;
 use crate::vfs;
 use serde_json::{json, Value};
 use std::io::Read;
-use std::path::Path;
 
 /// One callable tool.
 pub struct Tool {
@@ -128,7 +127,7 @@ fn address_field(what: &str) -> Value {
 fn list_dir(args: &Args) -> AppResult<Value> {
     let path = args.str("path")?;
     let (provider, resolved) = vfs::resolve(&path)?;
-    let listing = provider.list(&resolved)?;
+    let listing = provider.list(&resolved.to_string_lossy())?;
     let entries: Vec<Value> = listing
         .entries
         .iter()
@@ -149,14 +148,14 @@ fn list_dir(args: &Args) -> AppResult<Value> {
 fn stat(args: &Args) -> AppResult<Value> {
     let path = args.str("path")?;
     let (provider, resolved) = vfs::resolve(&path)?;
-    let st = provider.stat(Path::new(&resolved))?;
+    let st = provider.stat(&resolved)?;
     Ok(json!({ "path": path, "isDir": st.is_dir, "size": st.len }))
 }
 
 fn read_file(args: &Args) -> AppResult<Value> {
     let path = args.str("path")?;
     let (provider, resolved) = vfs::resolve(&path)?;
-    let target = Path::new(&resolved);
+    let target = &resolved;
 
     // The size is checked *before* a byte is read, so an oversized file
     // costs a `stat` rather than a transfer that is thrown away.
@@ -314,7 +313,7 @@ fn volume_info(args: &Args) -> AppResult<Value> {
     crate::vfs::caps::require(&path, crate::vfs::caps::Capability::VolumeInfo)?;
     let (_, path) = vfs::resolve(&path)?;
     Ok(serde_json::to_value(crate::commands::fs::volume::find(
-        Path::new(&path),
+        path.native()?,
     ))?)
 }
 
@@ -323,7 +322,7 @@ fn git_status(args: &Args) -> AppResult<Value> {
     crate::vfs::caps::require(&path, crate::vfs::caps::Capability::GitStatus)?;
     let (_, path) = vfs::resolve(&path)?;
     Ok(serde_json::to_value(
-        crate::commands::fs::git::compute_git_status(&path),
+        crate::commands::fs::git::compute_git_status(&path.to_string_lossy()),
     )?)
 }
 
@@ -340,8 +339,8 @@ fn compare_dirs(args: &Args) -> AppResult<Value> {
     let (_, right) = vfs::resolve(&right)?;
     let entries = std::cell::RefCell::new(Vec::new());
     let truncated = crate::commands::fs::compare::walk_compare(
-        Path::new(&left),
-        Path::new(&right),
+        left.native()?,
+        right.native()?,
         "",
         args.bool("recursive", false),
         &|batch| entries.borrow_mut().extend(batch),
@@ -355,7 +354,7 @@ fn compare_dirs(args: &Args) -> AppResult<Value> {
 fn make_dir(args: &Args) -> AppResult<Value> {
     let path = args.str("path")?;
     let (provider, resolved) = vfs::resolve(&path)?;
-    provider.create_dir_all(Path::new(&resolved))?;
+    provider.create_dir_all(&resolved)?;
     Ok(json!({ "path": path, "created": true }))
 }
 
@@ -363,7 +362,7 @@ fn write_file(args: &Args) -> AppResult<Value> {
     let path = args.str("path")?;
     let contents = args.str("contents")?;
     let (provider, resolved) = vfs::resolve(&path)?;
-    let target = Path::new(&resolved);
+    let target = &resolved;
     if !args.bool("overwrite", false) && provider.exists(target) {
         return Err(bad_input(format!(
             "{} exists; pass overwrite: true to replace it",
@@ -382,10 +381,10 @@ fn rename(args: &Args) -> AppResult<Value> {
     if provider.store_id() != destination.store_id() {
         return Err(bad_input("rename requires the same store"));
     }
-    if provider.exists(Path::new(&to_resolved)) {
+    if provider.exists(&to_resolved) {
         return Err(bad_input(format!("{} already exists", to)));
     }
-    provider.rename(Path::new(&from_resolved), Path::new(&to_resolved))?;
+    provider.rename(&from_resolved, &to_resolved)?;
     Ok(json!({ "from": from, "to": to }))
 }
 
@@ -395,7 +394,7 @@ fn trash(args: &Args) -> AppResult<Value> {
     let path = args.str("path")?;
     crate::vfs::caps::require(&path, crate::vfs::caps::Capability::Trash)?;
     let (_, resolved) = vfs::resolve(&path)?;
-    trash::delete(&resolved).map_err(|e| {
+    trash::delete(resolved.native()?).map_err(|e| {
         crate::errors::AppError::new(crate::errors::code::FS_IO)
             .op("mcp-trash")
             .detail(e)
@@ -411,7 +410,7 @@ fn delete(args: &Args) -> AppResult<Value> {
     }
     let path = args.str("path")?;
     let (provider, resolved) = vfs::resolve(&path)?;
-    let target = Path::new(&resolved);
+    let target = &resolved;
     if provider.is_dir(target) {
         provider.remove_dir_all(target)?;
     } else {

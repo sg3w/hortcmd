@@ -161,27 +161,46 @@ fn changed_or_replaced_staging_and_backups_are_never_cleaned_on_a_guess() {
         .enqueue("job", intent(&temp.0, RecoveryKind::Copy))
         .unwrap();
     let handle = journal.begin("job").unwrap();
-    let mut plan = Plan::staged(&LocalProvider, temp.0.join("output/result.txt"), true);
-    plan.track(&handle, &temp.0.join("input/result.txt"), &LocalProvider)
-        .unwrap();
+    let mut plan = Plan::staged(
+        &LocalProvider,
+        crate::vfs::StreamPath::from(temp.0.join("output/result.txt")),
+        true,
+    )
+    .unwrap();
+    plan.track(
+        &handle,
+        &crate::vfs::StreamPath::from(&temp.0.join("input/result.txt")),
+        &LocalProvider,
+    )
+    .unwrap();
     let stage = plan.owned_root.clone().unwrap();
     drop(Run(handle));
     let record = journal.records().unwrap().remove(0);
     let displaced = temp.0.join("displaced");
-    fs::rename(&stage, &displaced).unwrap();
-    fs::create_dir(&stage).unwrap();
-    fs::write(stage.join("unrelated"), b"keep").unwrap();
-    assert!(reconcile::cleanup(&journal, &record).is_err());
-    assert_eq!(fs::read(stage.join("unrelated")).unwrap(), b"keep");
-    fs::remove_dir_all(&stage).unwrap();
-    fs::rename(&displaced, &stage).unwrap();
-    fs::rename(
-        temp.0.join("output/result.txt"),
-        plan.backup.as_ref().unwrap(),
+    fs::rename(stage.native().unwrap(), &displaced).unwrap();
+    fs::create_dir(stage.native().unwrap()).unwrap();
+    fs::write(
+        (stage.join("unrelated")).unwrap().native().unwrap(),
+        b"keep",
     )
     .unwrap();
     assert!(reconcile::cleanup(&journal, &record).is_err());
-    assert_eq!(fs::read(plan.backup.as_ref().unwrap()).unwrap(), b"old");
+    assert_eq!(
+        fs::read((stage.join("unrelated")).unwrap().native().unwrap()).unwrap(),
+        b"keep"
+    );
+    fs::remove_dir_all(stage.native().unwrap()).unwrap();
+    fs::rename(&displaced, stage.native().unwrap()).unwrap();
+    fs::rename(
+        temp.0.join("output/result.txt"),
+        (plan.backup.as_ref().unwrap()).native().unwrap(),
+    )
+    .unwrap();
+    assert!(reconcile::cleanup(&journal, &record).is_err());
+    assert_eq!(
+        fs::read((plan.backup.as_ref().unwrap()).native().unwrap()).unwrap(),
+        b"old"
+    );
 }
 
 #[test]
@@ -206,10 +225,19 @@ fn crash_child() {
         )
         .unwrap();
     let run = Run(journal.begin("job").unwrap());
-    let mut plan = Plan::staged(&LocalProvider, root.join("output/result.txt"), true);
+    let mut plan = Plan::staged(
+        &LocalProvider,
+        crate::vfs::StreamPath::from(root.join("output/result.txt")),
+        true,
+    )
+    .unwrap();
     plan.native_move = mode == "native";
-    plan.track(&run.0, &root.join("input/result.txt"), &LocalProvider)
-        .unwrap();
+    plan.track(
+        &run.0,
+        &crate::vfs::StreamPath::from(&root.join("input/result.txt")),
+        &LocalProvider,
+    )
+    .unwrap();
     if mode == "native" {
         plan.writing().unwrap();
         crate::commands::fs::transfer::plan::publish(&LocalProvider, &plan).unwrap();
@@ -246,7 +274,7 @@ fn crash_child() {
         parallel_copy_file(
             &CopyTask {
                 idx: 0,
-                src: root.join("input/result.txt"),
+                src: crate::vfs::StreamPath::from(root.join("input/result.txt")),
                 dst: plan.write_to.clone(),
             },
             &sp,
@@ -270,7 +298,7 @@ fn crash_child() {
     copy::transfer_one(
         &LocalProvider,
         &LocalProvider,
-        &root.join("input/result.txt"),
+        &crate::vfs::StreamPath::from(&root.join("input/result.txt")),
         &plan,
         &mut progress(),
         CopyTuning {
@@ -380,13 +408,22 @@ fn retry_revalidates_committed_content_and_remaining_sources() {
         .push(local(&temp.0.join("input/remaining.txt")));
     journal.enqueue("job", request).unwrap();
     let run = Run(journal.begin("job").unwrap());
-    let mut plan = Plan::staged(&LocalProvider, temp.0.join("output/result.txt"), false);
-    plan.track(&run.0, &temp.0.join("input/result.txt"), &LocalProvider)
-        .unwrap();
+    let mut plan = Plan::staged(
+        &LocalProvider,
+        crate::vfs::StreamPath::from(temp.0.join("output/result.txt")),
+        false,
+    )
+    .unwrap();
+    plan.track(
+        &run.0,
+        &crate::vfs::StreamPath::from(&temp.0.join("input/result.txt")),
+        &LocalProvider,
+    )
+    .unwrap();
     copy::transfer_one(
         &LocalProvider,
         &LocalProvider,
-        &temp.0.join("input/result.txt"),
+        &crate::vfs::StreamPath::from(&temp.0.join("input/result.txt")),
         &plan,
         &mut progress(),
         CopyTuning {
@@ -438,8 +475,8 @@ fn parallel_planning_errors_propagate_before_any_job_can_be_committed() {
     let result = crate::commands::fs::transfer::parallel::flatten_tree(
         &LocalProvider,
         &LocalProvider,
-        &temp.0.join("source"),
-        &temp.0.join("blocked/sub"),
+        &crate::vfs::StreamPath::from(&temp.0.join("source")),
+        &crate::vfs::StreamPath::from(&temp.0.join("blocked/sub")),
         0,
         &mut Vec::new(),
     );
@@ -604,14 +641,23 @@ fn normal_cancel_removes_only_owned_unpublished_stage() {
         .enqueue("job", intent(&temp.0, RecoveryKind::Move))
         .unwrap();
     let run = Run(journal.begin("job").unwrap());
-    let mut plan = Plan::staged(&LocalProvider, temp.0.join("output/result.txt"), true);
-    plan.track(&run.0, &temp.0.join("input/result.txt"), &LocalProvider)
-        .unwrap();
-    fs::write(&plan.write_to, b"partial").unwrap();
+    let mut plan = Plan::staged(
+        &LocalProvider,
+        crate::vfs::StreamPath::from(temp.0.join("output/result.txt")),
+        true,
+    )
+    .unwrap();
+    plan.track(
+        &run.0,
+        &crate::vfs::StreamPath::from(&temp.0.join("input/result.txt")),
+        &LocalProvider,
+    )
+    .unwrap();
+    fs::write(plan.write_to.native().unwrap(), b"partial").unwrap();
     let mut errors = Vec::new();
     discard_staging(&LocalProvider, &plan, &mut errors);
     assert!(errors.is_empty(), "{errors:?}");
-    assert!(!plan.owned_root.unwrap().exists());
+    assert!(!plan.owned_root.unwrap().native().unwrap().exists());
     assert_eq!(
         fs::read(temp.0.join("input/result.txt")).unwrap(),
         b"source"
@@ -773,13 +819,22 @@ fn verified_completed_but_unreported_operation_can_be_acknowledged() {
         .unwrap();
     let run = Run(journal.begin("job").unwrap());
     assert!(journal.acknowledge("job").is_err());
-    let mut plan = Plan::staged(&LocalProvider, temp.0.join("output/result.txt"), false);
-    plan.track(&run.0, &temp.0.join("input/result.txt"), &LocalProvider)
-        .unwrap();
+    let mut plan = Plan::staged(
+        &LocalProvider,
+        crate::vfs::StreamPath::from(temp.0.join("output/result.txt")),
+        false,
+    )
+    .unwrap();
+    plan.track(
+        &run.0,
+        &crate::vfs::StreamPath::from(&temp.0.join("input/result.txt")),
+        &LocalProvider,
+    )
+    .unwrap();
     copy::transfer_one(
         &LocalProvider,
         &LocalProvider,
-        &temp.0.join("input/result.txt"),
+        &crate::vfs::StreamPath::from(&temp.0.join("input/result.txt")),
         &plan,
         &mut progress(),
         CopyTuning {

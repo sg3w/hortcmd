@@ -7,7 +7,7 @@ use std::path::Path;
 fn exists(location: &RecoveryLocation) -> AppResult<bool> {
     let address = location.resolve()?;
     let (provider, path) = vfs::resolve(&address)?;
-    Ok(provider.exists(Path::new(&path)))
+    Ok(provider.exists(&path))
 }
 
 pub fn verified(item: &Item) -> bool {

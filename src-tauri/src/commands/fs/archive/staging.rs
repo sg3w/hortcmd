@@ -46,7 +46,7 @@ impl Stage {
                 handle.track(Item {
                     source: None,
                     target: location.clone(),
-                    staging: Some(location.with_path(&destination.join(&name))?),
+                    staging: Some(location.with_path(destination.join(&name))?),
                     backup: None,
                     phase: Phase::Writing,
                     digest: None,
@@ -66,7 +66,7 @@ impl Stage {
         root.create_dir_with(&name, &builder)?;
         if let Some(step) = &recovery_root {
             root.try_clone()?.into_std_file().sync_all()?;
-            step.own(location.with_path(&destination.join(&name))?)?;
+            step.own(location.with_path(destination.join(&name))?)?;
             recovery::fault("staging");
         }
         let result = (|| -> io::Result<(Dir, Dir)> {
@@ -190,12 +190,11 @@ impl Stage {
                         let staging = self.destination.join(&self.name).join("data").join(name);
                         handle.track(Item {
                             source: None,
-                            target: location.with_path(&self.destination.join(name))?,
+                            target: location.with_path(self.destination.join(name))?,
                             staging: Some(location.with_path(&staging)?),
                             backup: Some(
                                 location.with_path(
-                                    &self
-                                        .destination
+                                    self.destination
                                         .join(&self.name)
                                         .join("backups")
                                         .join(i.to_string()),

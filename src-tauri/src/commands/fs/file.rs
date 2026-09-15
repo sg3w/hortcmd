@@ -17,7 +17,6 @@ use crate::errors::{code, AppError, AppResult};
 use crate::vfs::caps::{self, Capability};
 use crate::vfs::{self, Provider};
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::AppHandle;
 
@@ -28,9 +27,7 @@ pub fn make_dir(path: String) -> AppResult<String> {
     caps::require(&path, Capability::Create)?;
     let (provider, resolved) = vfs::resolve(&path)?;
     let undo = super::undo::prepare("mkdir", &path, &path)?;
-    provider
-        .create_dir_all(Path::new(&resolved))
-        .map_err(AppError::from)?;
+    provider.create_dir_all(&resolved).map_err(AppError::from)?;
     if let Some(undo) = undo {
         undo.finish()?;
     }
@@ -46,7 +43,7 @@ pub fn write_text_file(path: String, contents: String, overwrite: bool) -> AppRe
     let _cache_mutation = crate::commands::fs::cache::Mutation::begin();
     caps::require(&path, Capability::Create)?;
     let (provider, resolved) = vfs::resolve(&path)?;
-    let p = Path::new(&resolved);
+    let p = &resolved;
     if !overwrite && provider.exists(p) {
         return Ok(false);
     }
@@ -64,8 +61,8 @@ pub fn rename_entry(from: String, to: String) -> AppResult<()> {
     caps::require_pair(&from, Capability::Move, &to, Capability::CopyTo)?;
     let (provider, from_r) = vfs::resolve(&from)?;
     let (_, to_r) = vfs::resolve(&to)?;
-    let from_p = Path::new(&from_r);
-    let to_p = Path::new(&to_r);
+    let from_p = &from_r;
+    let to_p = &to_r;
     if !provider.exists(from_p) {
         return Err(AppError::from("Quelle existiert nicht"));
     }
@@ -85,12 +82,15 @@ pub fn rename_entry(from: String, to: String) -> AppResult<()> {
 static TEMP_SEQ: AtomicU64 = AtomicU64::new(1);
 
 /// Finds a free temporary name in the same folder (hidden file).
-fn unique_temp(provider: &dyn Provider, base: &Path) -> PathBuf {
+fn unique_temp(
+    provider: &dyn Provider,
+    base: &crate::vfs::StreamPath,
+) -> std::io::Result<crate::vfs::StreamPath> {
     loop {
         let n = TEMP_SEQ.fetch_add(1, Ordering::Relaxed);
-        let cand = base.join(format!(".rcren-tmp-{}", n));
+        let cand = base.join(format!(".rcren-tmp-{}", n))?;
         if !provider.exists(&cand) {
-            return cand;
+            return Ok(cand);
         }
     }
 }
@@ -120,16 +120,16 @@ pub fn rename_batch(dir: String, renames: Vec<(String, String)>) -> OpResult {
             }
         }
     };
-    rename_batch_on(&*provider, Path::new(&base_str), renames, |from, to| {
+    rename_batch_on(&*provider, &base_str, renames, |from, to| {
         provider.rename(from, to)
     })
 }
 
 fn rename_batch_on(
     provider: &dyn Provider,
-    base: &Path,
+    base: &crate::vfs::StreamPath,
     renames: Vec<(String, String)>,
-    rename: impl Fn(&Path, &Path) -> std::io::Result<()>,
+    rename: impl Fn(&crate::vfs::StreamPath, &crate::vfs::StreamPath) -> std::io::Result<()>,
 ) -> OpResult {
     let mut errors: Vec<ItemError> = Vec::new();
 
@@ -142,7 +142,7 @@ fn rename_batch_on(
     }
 
     // Filter out the valid pairs.
-    let mut valid: Vec<(&str, &str)> = Vec::new();
+    let mut valid: Vec<(&str, &str, crate::vfs::StreamPath, crate::vfs::StreamPath)> = Vec::new();
     for (from, to) in &renames {
         if from == to {
             continue; // nichts zu tun
@@ -161,19 +161,29 @@ fn rename_batch_on(
             ));
             continue;
         }
-        if !provider.exists(&base.join(from)) {
+        let (source, target) = match base
+            .join(from)
+            .and_then(|source| Ok((source, base.join(to)?)))
+        {
+            Ok(paths) => paths,
+            Err(error) => {
+                errors.push(ItemError::new(from, error.into()));
+                continue;
+            }
+        };
+        if !provider.exists(&source) {
             errors.push(ItemError::new(from, AppError::new(code::FS_NOT_FOUND)));
             continue;
         }
         // Foreign collision: the target exists and is not itself being renamed.
-        if provider.exists(&base.join(to)) && !sources.contains(to.as_str()) {
+        if provider.exists(&target) && !sources.contains(to.as_str()) {
             errors.push(ItemError::new(
                 from,
                 AppError::new(code::FS_EXISTS).with("name", to),
             ));
             continue;
         }
-        valid.push((from.as_str(), to.as_str()));
+        valid.push((from.as_str(), to.as_str(), source, target));
     }
 
     let mut undo = HashMap::new();
@@ -183,11 +193,11 @@ fn rename_batch_on(
         TEMP_SEQ.fetch_add(1, Ordering::Relaxed)
     );
     if provider.store_id() == "local" {
-        for (from, to) in &valid {
+        for (from, _, source, target) in &valid {
             match super::undo::prepare_group(
                 "rename",
-                &base.join(from).to_string_lossy(),
-                &base.join(to).to_string_lossy(),
+                &source.to_string_lossy(),
+                &target.to_string_lossy(),
                 &group,
                 true,
             ) {
@@ -204,31 +214,42 @@ fn rename_batch_on(
     }
 
     // Phase 1: all sources to temporary names.
-    let mut staged: Vec<(PathBuf, &str, &str)> = Vec::new(); // (temp, to, from)
-    for (from, to) in &valid {
-        let tmp = unique_temp(provider, base);
-        match rename(&base.join(from), &tmp) {
-            Ok(_) => staged.push((tmp, to, from)),
+    let mut staged: Vec<(
+        crate::vfs::StreamPath,
+        &str,
+        &str,
+        &crate::vfs::StreamPath,
+        &crate::vfs::StreamPath,
+    )> = Vec::new(); // (temp, to, from)
+    for (from, to, source, target) in &valid {
+        let tmp = match unique_temp(provider, base) {
+            Ok(tmp) => tmp,
+            Err(error) => {
+                errors.push(ItemError::new(*from, error.into()));
+                continue;
+            }
+        };
+        match rename(source, &tmp) {
+            Ok(_) => staged.push((tmp, to, from, source, target)),
             Err(e) => errors.push(ItemError::new(*from, e.into())),
         }
     }
 
     // If any source remains in place, publishing a chain could destroy it.
     if staged.len() != valid.len() {
-        for (tmp, _, from) in staged {
-            restore_staged(provider, base, &tmp, from, &rename, &mut errors);
+        for (tmp, _, from, source, _) in staged {
+            restore_staged(provider, source, &tmp, from, &rename, &mut errors);
         }
         return OpResult { ok: 0, errors };
     }
 
     // Phase 2: temporary names to the target names.
     let mut ok = 0u32;
-    for (tmp, to, from) in staged {
-        let target = base.join(to);
-        let result = if provider.exists(&target) {
+    for (tmp, to, from, source, target) in staged {
+        let result = if provider.exists(target) {
             Err(AppError::new(code::FS_EXISTS).with("name", to))
         } else {
-            rename(&tmp, &target).map_err(AppError::from)
+            rename(&tmp, target).map_err(AppError::from)
         };
         match result {
             Ok(_) => {
@@ -241,7 +262,7 @@ fn rename_batch_on(
             }
             Err(e) => {
                 errors.push(ItemError::new(from, e.with("name", to)));
-                restore_staged(provider, base, &tmp, from, &rename, &mut errors);
+                restore_staged(provider, source, &tmp, from, &rename, &mut errors);
             }
         }
     }
@@ -258,17 +279,16 @@ fn rename_batch_on(
 /// published result or if the provider rejects rollback.
 fn restore_staged(
     provider: &dyn Provider,
-    base: &Path,
-    tmp: &Path,
+    original: &crate::vfs::StreamPath,
+    tmp: &crate::vfs::StreamPath,
     from: &str,
-    rename: &impl Fn(&Path, &Path) -> std::io::Result<()>,
+    rename: &impl Fn(&crate::vfs::StreamPath, &crate::vfs::StreamPath) -> std::io::Result<()>,
     errors: &mut Vec<ItemError>,
 ) {
-    let original = base.join(from);
-    let result = if provider.exists(&original) {
+    let result = if provider.exists(original) {
         Err(AppError::new(code::FS_EXISTS).with("name", from))
     } else {
-        rename(tmp, &original).map_err(AppError::from)
+        rename(tmp, original).map_err(AppError::from)
     };
     if let Err(error) = result {
         errors.push(ItemError::new(
@@ -398,11 +418,7 @@ pub fn delete_entries(paths: Vec<String>) -> OpResult {
     for p in &paths {
         let res = caps::require(p, Capability::DeletePermanent)
             .and_then(|_| vfs::resolve(p))
-            .and_then(|(provider, resolved)| {
-                provider
-                    .remove(Path::new(&resolved))
-                    .map_err(AppError::from)
-            });
+            .and_then(|(provider, resolved)| provider.remove(&resolved).map_err(AppError::from));
         match res {
             Ok(_) => ok += 1,
             Err(e) => errors.push(ItemError::new(p, e)),
@@ -452,7 +468,7 @@ mod tests {
         write(&d, "b.txt", "BBB");
         let result = super::rename_batch_on(
             &crate::vfs::local::LocalProvider,
-            &d,
+            &crate::vfs::StreamPath::from(&d),
             vec![ren("a.txt", "b.txt"), ren("b.txt", "c.txt")],
             |from, to| {
                 if from.file_name().unwrap() == "b.txt" {
@@ -461,7 +477,7 @@ mod tests {
                         "injected staging failure",
                     ));
                 }
-                fs::rename(from, to)
+                fs::rename((from).native().unwrap(), (to).native().unwrap())
             },
         );
         assert_eq!(read(&d, "b.txt"), "BBB");
@@ -479,7 +495,7 @@ mod tests {
         write(&d, "b.txt", "BBB");
         let result = super::rename_batch_on(
             &crate::vfs::local::LocalProvider,
-            &d,
+            &crate::vfs::StreamPath::from(&d),
             vec![ren("a.txt", "b.txt"), ren("b.txt", "a.txt")],
             |from, to| {
                 if to.file_name().unwrap() == "a.txt" {
@@ -488,7 +504,7 @@ mod tests {
                         "injected publication failure",
                     ));
                 }
-                fs::rename(from, to)
+                fs::rename((from).native().unwrap(), (to).native().unwrap())
             },
         );
         assert_eq!(read(&d, "b.txt"), "AAA");
@@ -518,10 +534,10 @@ mod tests {
         write(&d, "a.txt", "AAA");
         let result = super::rename_batch_on(
             &crate::vfs::local::LocalProvider,
-            &d,
+            &crate::vfs::StreamPath::from(&d),
             vec![ren("a.txt", "x.txt")],
             |from, to| {
-                fs::rename(from, to)?;
+                fs::rename((from).native().unwrap(), (to).native().unwrap())?;
                 if from.file_name().unwrap() == "a.txt" {
                     write(&d, "x.txt", "external");
                 }
@@ -643,6 +659,7 @@ mod tests {
 #[cfg(test)]
 mod trash_error_tests {
     use super::*;
+    use std::path::Path;
 
     #[test]
     fn reports_each_failure_and_preserves_sources_without_delete_fallback() {

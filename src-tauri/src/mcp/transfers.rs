@@ -67,7 +67,7 @@ fn transfer(args: &Args, moving: bool) -> AppResult<Value> {
             "destination exists",
         )));
     }
-    let plan = Plan::staged(&destination, dst, exists);
+    let plan = Plan::staged(&destination, dst, exists)?;
     let mut prog = progress(if moving { "move" } else { "copy" });
     transfer_planned(&source, &mut destination, &src, &plan, &mut prog, moving)?;
     Ok(
@@ -78,7 +78,7 @@ fn transfer(args: &Args, moving: bool) -> AppResult<Value> {
 fn transfer_planned(
     source: &ScopedProvider,
     destination: &mut ScopedProvider,
-    src: &std::path::Path,
+    src: &crate::vfs::StreamPath,
     plan: &Plan,
     prog: &mut Prog,
     moving: bool,
@@ -164,7 +164,7 @@ pub fn create_archive(args: &Args) -> AppResult<Value> {
         &destination,
         &mut prog,
         Limits::load()?,
-        &|path| provider.check(path).map_err(AppError::from),
+        &|path| provider.check(&path.into()).map_err(AppError::from),
     )?;
     Ok(json!({"files":files,"bytes":prog.bytes_done}))
 }
@@ -272,7 +272,7 @@ mod tests {
                                 let (mut destination, dst) =
                                     ScopedProvider::resolve(dst.to_str().unwrap(), &config)
                                         .unwrap();
-                                let plan = Plan::staged(&destination, dst.clone(), true);
+                                let plan = Plan::staged(&destination, dst.clone(), true).unwrap();
                                 let mut prog = progress(if moving { "move" } else { "copy" });
                                 prog.sink = Arc::new(CancelOnProgress {
                                     cancel,
@@ -288,19 +288,28 @@ mod tests {
                                     moving,
                                 )
                                 .unwrap_err();
-                                assert_eq!(plan.write_to.exists(), revoke.is_some(), "moving={moving} tree={tree} after_copy={after_copy} revoke={revoke:?}");
+                                assert_eq!(plan.write_to.native().unwrap().exists(), revoke.is_some(), "moving={moving} tree={tree} after_copy={after_copy} revoke={revoke:?}");
                                 if revoke.is_some() {
                                     let detail = serde_json::to_string(&error).unwrap();
                                     assert!(
-                                        detail.contains(plan.write_to.to_str().unwrap()),
+                                        detail.contains(
+                                            plan.write_to.native().unwrap().to_str().unwrap()
+                                        ),
                                         "{detail}"
                                     );
                                     assert!(detail.contains("cleanup"), "{detail}");
                                 }
-                                assert!(source.remove_file(&payload).is_err());
-                                assert!(destination.rename(&other, &dst).is_err());
+                                assert!(source
+                                    .remove_file(&crate::vfs::StreamPath::from(&payload))
+                                    .is_err());
+                                assert!(destination
+                                    .rename(&crate::vfs::StreamPath::from(&other), &dst)
+                                    .is_err());
                                 assert_eq!(
-                                    destination.cleanup_stage(&other).unwrap_err().kind(),
+                                    destination
+                                        .cleanup_stage(&crate::vfs::StreamPath::from(&other))
+                                        .unwrap_err()
+                                        .kind(),
                                     std::io::ErrorKind::PermissionDenied
                                 );
                             },
@@ -322,15 +331,23 @@ mod tests {
         let (mut provider, _) =
             ScopedProvider::resolve(existing.to_str().unwrap(), &f.config()).unwrap();
         assert_eq!(
-            provider.track_stage(&existing).unwrap_err().kind(),
+            provider
+                .track_stage(&crate::vfs::StreamPath::from(&existing))
+                .unwrap_err()
+                .kind(),
             std::io::ErrorKind::AlreadyExists
         );
         let stage = f.0.join(".hortcmd-stage-new");
-        provider.track_stage(&stage).unwrap();
+        provider
+            .track_stage(&crate::vfs::StreamPath::from(&stage))
+            .unwrap();
         // A path appearing without a successful creation by this adapter is not owned.
         std::fs::write(&stage, b"not ours").unwrap();
         assert_eq!(
-            provider.cleanup_stage(&stage).unwrap_err().kind(),
+            provider
+                .cleanup_stage(&crate::vfs::StreamPath::from(&stage))
+                .unwrap_err()
+                .kind(),
             std::io::ErrorKind::PermissionDenied
         );
         assert_eq!(std::fs::read(&stage).unwrap(), b"not ours");

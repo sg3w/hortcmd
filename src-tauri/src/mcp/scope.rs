@@ -62,29 +62,6 @@ fn trim_trailing_separator(value: &str) -> String {
     }
 }
 
-/// Splits a provider path into its meaningful segments, resolving `.`
-/// and `..` lexically.
-///
-/// Lexical resolution is not the whole answer for a local path — a
-/// symlink can still point out — but it is the whole answer for a remote
-/// one, where there is no `canonicalize` to ask and the server resolves
-/// the same way.
-pub fn lexical_segments(path: &str) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    for raw in path.split(['/', '\\']) {
-        match raw {
-            "" | "." => {}
-            ".." => {
-                // Popping past the root stays at the root, which is what
-                // every file system does with `/..`.
-                out.pop();
-            }
-            other => out.push(other.to_string()),
-        }
-    }
-    out
-}
-
 /// Whether `child` is `parent` or lies beneath it, segment by segment.
 fn segments_contain(parent: &[String], child: &[String], case_sensitive: bool) -> bool {
     if child.len() < parent.len() {
@@ -220,7 +197,7 @@ pub fn require_in_scope(roots: &[String], candidate: &str) -> AppResult<()> {
             let address = vfs::parse_address(candidate)?;
             if address.scheme() != Scheme::Local {
                 let (provider, path) = vfs::resolve(candidate)?;
-                verify_remote_path(provider.as_ref(), &path)?;
+                verify_remote_path(provider.as_ref(), &path.to_string_lossy())?;
             }
             return Ok(());
         }
@@ -236,7 +213,12 @@ fn verify_remote_path(provider: &dyn vfs::Provider, path: &str) -> AppResult<()>
         return Err(denied(path, "remote parent traversal is ambiguous"));
     }
     let mut parent = String::from("/");
-    let mut segments = lexical_segments(path).into_iter();
+    let typed = vfs::location::ProviderPath::from_raw(path)?;
+    let mut parts = typed.components.as_slice();
+    if parts.last().is_some_and(String::is_empty) {
+        parts = &parts[..parts.len() - 1];
+    }
+    let mut segments = parts.iter().map(String::as_str);
     if provider.store_id().starts_with("smb:") {
         // The first component selects an SMB share, not a filesystem entry.
         // Do not require optional srvsvc share enumeration to access an
@@ -250,14 +232,26 @@ fn verify_remote_path(provider: &dyn vfs::Provider, path: &str) -> AppResult<()>
         let child = if parent == "/" {
             format!("/{segment}")
         } else {
-            format!("{parent}/{segment}")
+            format!(
+                "{}{segment}",
+                if parent.ends_with('/') {
+                    parent.clone()
+                } else {
+                    format!("{parent}/")
+                }
+            )
+        };
+        let child = if segment.is_empty() {
+            format!("{child}/")
+        } else {
+            child
         };
         match listing.entries.iter().find(|e| e.name == segment) {
             Some(entry) if entry.is_symlink => {
                 return Err(denied(path, "remote symbolic links are not allowed"))
             }
             Some(_) => parent = child,
-            None if provider.exists(Path::new(&child)) => {
+            None if provider.exists(&vfs::StreamPath::remote(&child)?) => {
                 return Err(denied(path, "remote spelling is not canonical"))
             }
             None => return Ok(()), // a new destination beneath a checked parent
@@ -289,14 +283,6 @@ mod tests {
             "sftp://u@h/data/".into(),
         ]);
         assert_eq!(roots, vec!["/home/u", "/", "sftp://u@h/data/"]);
-    }
-
-    #[test]
-    fn dot_segments_are_resolved_before_anything_is_compared() {
-        assert_eq!(lexical_segments("/a/b/../c"), vec!["a", "c"]);
-        assert_eq!(lexical_segments("/a/./b//c/"), vec!["a", "b", "c"]);
-        assert_eq!(lexical_segments("/a/../.."), Vec::<String>::new());
-        assert_eq!(lexical_segments("a\\b\\..\\c"), vec!["a", "c"]);
     }
 
     /// A temporary tree, because the local check ends with the

@@ -1,21 +1,21 @@
-//! Checks at the legacy streaming adapter boundary, before any provider I/O.
+//! Component validation and traversal at the remote provider boundary.
+use super::StreamPath;
 use super::{location::ProviderPath, Scheme};
-use std::{io, path::Path};
+use std::io;
 
-pub fn text(path: &Path) -> String {
-    let raw = path.to_string_lossy();
-    if std::path::MAIN_SEPARATOR == '\\' {
-        raw.replace('\\', "/")
-    } else {
-        raw.into_owned()
-    }
+pub fn text(path: &StreamPath) -> String {
+    path.to_string_lossy().into_owned()
 }
 
-pub fn validate(path: &Path, scheme: Scheme) -> io::Result<()> {
-    path.to_str()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "non-UTF8 provider path"))?;
+pub fn validate(path: &StreamPath, scheme: Scheme) -> io::Result<()> {
+    if !matches!(path, StreamPath::Remote(_)) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "native path at remote boundary",
+        ));
+    }
     let raw = text(path);
-    if raw.contains("//") || (scheme == Scheme::Smb && raw.contains('\\')) {
+    if scheme == Scheme::Smb && (raw.contains('\\') || raw.contains("//")) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "ambiguous provider path",
@@ -26,23 +26,46 @@ pub fn validate(path: &Path, scheme: Scheme) -> io::Result<()> {
     Ok(())
 }
 
+/// Proper remote parents, including an empty directory component. Construct one
+/// at a time: deeply nested paths do not allocate all prefixes simultaneously.
+pub fn prefixes(path: &StreamPath) -> io::Result<impl Iterator<Item = String> + '_> {
+    let StreamPath::Remote(path) = path else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "native remote prefix",
+        ));
+    };
+    let mut parts = path.components.as_slice();
+    if parts.last().is_some_and(String::is_empty) {
+        parts = &parts[..parts.len() - 1];
+    }
+    Ok((1..=parts.len()).map(move |end| {
+        let mut raw = format!("/{}", parts[..end].join("/"));
+        if parts[end - 1].is_empty() {
+            raw.push('/');
+        }
+        raw
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
-    fn raw_provider_names_are_not_uri_decoded_again() {
-        for raw in ["/a%20b", "/a?b#c", "/é", "/e\u{301}"] {
-            validate(Path::new(raw), Scheme::Sftp).unwrap();
-            assert_eq!(text(Path::new(raw)), raw);
+    fn raw_components_and_prefixes_are_preserved() {
+        for raw in ["/a%20b", "/a?b#c", "/é", "/e\u{301}", "/safe//other"] {
+            let path = StreamPath::remote(raw).unwrap();
+            validate(&path, Scheme::Webdav).unwrap();
+            assert_eq!(text(&path), raw);
         }
-        assert!(validate(Path::new("/safe//other"), Scheme::Webdav).is_err());
-        assert!(validate(Path::new("/safe/../other"), Scheme::Sftp).is_err());
-    }
-    #[cfg(unix)]
-    #[test]
-    fn non_utf8_names_fail_instead_of_substituting_another_name() {
-        use std::os::unix::ffi::OsStrExt;
-        let path = Path::new(std::ffi::OsStr::from_bytes(b"/a\xff"));
-        assert!(validate(path, Scheme::Sftp).is_err());
+        assert_eq!(
+            prefixes(&StreamPath::remote("/a///b").unwrap())
+                .unwrap()
+                .collect::<Vec<_>>(),
+            ["/a", "/a//", "/a///", "/a///b"]
+        );
+        assert!(StreamPath::remote("/safe/../other").is_err());
+        assert!(validate(&StreamPath::from("/a"), Scheme::Webdav).is_err());
+        assert!(validate(&StreamPath::remote("/a//b").unwrap(), Scheme::Smb).is_err());
     }
 }

@@ -23,6 +23,8 @@ pub mod location;
 #[cfg(test)]
 mod location_tests;
 mod provider_path;
+pub mod stream_path;
+pub use stream_path::StreamPath;
 pub mod sftp;
 pub mod smb;
 pub mod webdav;
@@ -35,7 +37,7 @@ use crate::commands::fs::dir::DirListing;
 use crate::errors::AppResult;
 use local::LocalProvider;
 use std::io::{self, Read, Write};
-use std::path::{Path, PathBuf};
+
 use std::sync::{Arc, OnceLock};
 
 /// Address scheme. `Local` and `Sftp` are implemented; the remaining
@@ -109,36 +111,27 @@ fn local_provider() -> Arc<dyn Provider> {
 /// Local addresses use the shared local provider; `sftp` addresses are
 /// bound to an active connection (see `net::session`). Unknown and
 /// reserved-but-unimplemented schemes return a clear error.
-pub fn resolve(raw: &str) -> AppResult<(Arc<dyn Provider>, String)> {
+pub fn resolve(raw: &str) -> AppResult<(Arc<dyn Provider>, StreamPath)> {
     resolve_location(&location::VfsLocation::parse(raw)?)
 }
 
-/// Typed internal resolution; the string-returning provider adapter is retained
-/// for existing streaming interfaces and does not perform URI parsing.
+/// Resolve the provider and retain local/native or remote/component path identity.
 pub fn resolve_location(
     location: &location::VfsLocation,
-) -> AppResult<(Arc<dyn Provider>, String)> {
+) -> AppResult<(Arc<dyn Provider>, StreamPath)> {
     location.validate()?;
     match location.kind() {
-        location::LocationPath::Local { path } => Ok((local_provider(), path.raw.clone())),
+        location::LocationPath::Local { path } => {
+            Ok((local_provider(), StreamPath::from(path.raw.clone())))
+        }
         location::LocationPath::Remote {
             scheme,
             authority,
             path,
         } => {
-            // Streaming adapters still carry decoded paths through std::path.
-            // Refuse shapes those adapters could normalize into another object.
-            let raw = path.raw();
-            if raw.contains("//") || (std::path::MAIN_SEPARATOR == '\\' && raw.contains('\\')) {
-                return Err(crate::errors::AppError::new(
-                    crate::errors::code::VALIDATION_BAD_INPUT,
-                )
-                .op("vfs-location")
-                .with("reason", "provider-path-adapter"));
-            }
             let provider =
                 crate::net::session::remote_provider(scheme.as_str(), &authority.key(*scheme))?;
-            Ok((provider, raw))
+            Ok((provider, StreamPath::Remote(path.clone())))
         }
     }
 }
@@ -190,24 +183,24 @@ pub trait Provider: Send + Sync {
     }
 
     /// Cheap metadata (following symlinks) for the transfer totals.
-    fn stat(&self, path: &Path) -> io::Result<Stat>;
+    fn stat(&self, path: &StreamPath) -> io::Result<Stat>;
 
     /// Whether the path exists.
-    fn exists(&self, path: &Path) -> bool;
+    fn exists(&self, path: &StreamPath) -> bool;
 
     /// Whether the path is a directory (following symlinks).
-    fn is_dir(&self, path: &Path) -> bool;
+    fn is_dir(&self, path: &StreamPath) -> bool;
 
     /// Child paths of a directory (errors propagate).
-    fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>>;
+    fn read_dir(&self, path: &StreamPath) -> io::Result<Vec<StreamPath>>;
 
     /// Bounded traversal hook. Streaming providers can stop without materializing
     /// the entire directory. Legacy protocol APIs still have their own read bound.
     fn visit_dir(
         &self,
-        path: &Path,
+        path: &StreamPath,
         limit: usize,
-        visit: &mut dyn FnMut(PathBuf) -> io::Result<()>,
+        visit: &mut dyn FnMut(StreamPath) -> io::Result<()>,
     ) -> io::Result<()> {
         let entries = self.read_dir(path)?;
         if entries.len() > limit {
@@ -219,7 +212,7 @@ pub trait Provider: Send + Sync {
         Ok(())
     }
 
-    fn limits(&self, path: &Path) -> io::Result<limits::ProviderLimits> {
+    fn limits(&self, path: &StreamPath) -> io::Result<limits::ProviderLimits> {
         Ok(limits::ProviderLimits {
             available_bytes: self.free_space(path),
             staging: self.supports_staging(),
@@ -228,30 +221,30 @@ pub trait Provider: Send + Sync {
     }
 
     /// A cheap stable object/version token where supported. Never a cached answer.
-    fn planning_identity(&self, _path: &Path) -> io::Result<Option<String>> {
+    fn planning_identity(&self, _path: &StreamPath) -> io::Result<Option<String>> {
         Ok(None)
     }
 
     /// Opens a file for streaming reads (transfer / checksum).
-    fn open_read(&self, path: &Path) -> io::Result<Box<dyn Read + Send>>;
+    fn open_read(&self, path: &StreamPath) -> io::Result<Box<dyn Read + Send>>;
 
     /// Creates/truncates a file for streaming writes (transfer).
-    fn create_write(&self, path: &Path) -> io::Result<Box<dyn Write + Send>>;
+    fn create_write(&self, path: &StreamPath) -> io::Result<Box<dyn Write + Send>>;
 
     /// Writes a whole file at once (small helper for text export).
-    fn write(&self, path: &Path, data: &[u8]) -> io::Result<()>;
+    fn write(&self, path: &StreamPath, data: &[u8]) -> io::Result<()>;
 
     /// Creates a directory and all missing parents (mkdir).
-    fn create_dir_all(&self, path: &Path) -> io::Result<()>;
+    fn create_dir_all(&self, path: &StreamPath) -> io::Result<()>;
 
     /// Renames/moves an entry within the same provider.
-    fn rename(&self, from: &Path, to: &Path) -> io::Result<()>;
+    fn rename(&self, from: &StreamPath, to: &StreamPath) -> io::Result<()>;
 
     /// Removes a single file.
-    fn remove_file(&self, path: &Path) -> io::Result<()>;
+    fn remove_file(&self, path: &StreamPath) -> io::Result<()>;
 
     /// Removes a directory and its contents recursively.
-    fn remove_dir_all(&self, path: &Path) -> io::Result<()>;
+    fn remove_dir_all(&self, path: &StreamPath) -> io::Result<()>;
 
     /// Whether this provider's transport is still usable.
     ///
@@ -301,12 +294,12 @@ pub trait Provider: Send + Sync {
     /// state it definitively. `None` means unknown: staging proceeds and
     /// a genuine write failure surfaces normally, rather than blocking a
     /// transfer on a guess.
-    fn free_space(&self, _path: &Path) -> Option<u64> {
+    fn free_space(&self, _path: &StreamPath) -> Option<u64> {
         None
     }
 
     /// Removes an entry regardless of kind (file or directory).
-    fn remove(&self, path: &Path) -> io::Result<()> {
+    fn remove(&self, path: &StreamPath) -> io::Result<()> {
         if self.is_dir(path) {
             self.remove_dir_all(path)
         } else {
@@ -421,6 +414,6 @@ mod tests {
     fn local_address_resolves_to_local_provider() {
         let (p, path) = resolve("/tmp/x").unwrap();
         assert_eq!(p.store_id(), "local");
-        assert_eq!(path, "/tmp/x");
+        assert_eq!(path, StreamPath::from("/tmp/x"));
     }
 }

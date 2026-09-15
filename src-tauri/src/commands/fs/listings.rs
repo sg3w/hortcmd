@@ -119,13 +119,13 @@ async fn read_with(path: String, fresh: bool) -> AppResult<DirListing> {
         let (provider, resolved) = crate::vfs::resolve(&path)?;
         let remote = crate::vfs::parse_address(&path)?.scheme() != crate::vfs::Scheme::Local;
         let canonical = if !remote {
-            std::fs::canonicalize(&resolved)?
+            std::fs::canonicalize(resolved.native()?)?
                 .to_string_lossy()
                 .into_owned()
         } else {
             // Remote symlinks make lexical '..' collapsing unsafe. Preserve
             // provider paths while unifying equivalent connection authorities.
-            resolved.clone()
+            resolved.to_string_lossy().into_owned()
         };
         let identity = if remote {
             crate::vfs::identity::generation(&provider)?
@@ -133,7 +133,7 @@ async fn read_with(path: String, fresh: bool) -> AppResult<DirListing> {
             format!(
                 "local:{}",
                 provider
-                    .planning_identity(std::path::Path::new(&canonical))?
+                    .planning_identity(&crate::vfs::StreamPath::from(&canonical))?
                     .unwrap_or_default()
             )
         };
@@ -168,7 +168,7 @@ async fn read_with(path: String, fresh: bool) -> AppResult<DirListing> {
     let result = READERS
         .get_or_init(|| Arc::new(Listings::default()))
         .get_cancellable(pending_key, move |cancel| {
-            let result = provider.list_cancellable(&resolved, &cancel)?;
+            let result = provider.list_cancellable(&resolved.to_string_lossy(), &cancel)?;
             if remote {
                 let (current, _) = crate::vfs::resolve(&original)?;
                 if !Arc::ptr_eq(&current, &provider) {

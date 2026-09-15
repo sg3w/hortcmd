@@ -33,7 +33,7 @@
       "uri": "smb://u@nas/share//x",
       "store": "smb:u@nas:445",
       "path": "/share//x",
-      "parent": "smb://u@nas/share/"
+      "parent": "smb://u@nas/share//"
     },
     {
       "raw": "sftp://a%40b@host/one\\two",
@@ -111,6 +111,13 @@
       "store": "sftp:@[::ffff:c000:201]:22",
       "path": "/",
       "parent": "sftp://[::ffff:c000:201]/"
+    },
+    {
+      "raw": "webdav://u@host/a//b",
+      "uri": "webdav://u@host/a//b",
+      "store": "webdav:u@host:443",
+      "path": "/a//b",
+      "parent": "webdav://u@host/a//"
     }
   ],
   "invalid": [

@@ -1,3 +1,4 @@
+use crate::vfs::StreamPath;
 // ============================================================
 // Operation state: cancel flags, pause flags and the channels a
 // collision question waits on (ticket 035).
@@ -17,7 +18,6 @@
 use super::events::CollisionReq;
 use crate::vfs::Provider;
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::time::Duration;
@@ -62,7 +62,7 @@ pub(crate) fn ask_collision(
     app: &AppHandle,
     provider: &dyn Provider,
     transfer_id: &str,
-    target: &Path,
+    target: &StreamPath,
     cancel: &Arc<AtomicBool>,
 ) -> (Resolution, bool) {
     let req_id = format!("c{}", REQ_COUNTER.fetch_add(1, Ordering::Relaxed));

@@ -82,7 +82,7 @@ fn hex_dump(bytes: &[u8]) -> String {
 }
 
 /// Reads the whole file through the provider (for images).
-fn read_all(provider: &dyn Provider, p: &Path) -> io::Result<Vec<u8>> {
+fn read_all(provider: &dyn Provider, p: &crate::vfs::StreamPath) -> io::Result<Vec<u8>> {
     let mut r = provider.open_read(p)?;
     let mut buf = Vec::new();
     r.read_to_end(&mut buf)?;
@@ -92,7 +92,11 @@ fn read_all(provider: &dyn Provider, p: &Path) -> io::Result<Vec<u8>> {
 /// Reads up to `cap` bytes through the provider, looping over short
 /// reads (a single `read` may return a partial chunk, especially over
 /// SFTP).
-fn read_upto(provider: &dyn Provider, p: &Path, cap: usize) -> io::Result<Vec<u8>> {
+fn read_upto(
+    provider: &dyn Provider,
+    p: &crate::vfs::StreamPath,
+    cap: usize,
+) -> io::Result<Vec<u8>> {
     let mut r = provider.open_read(p)?;
     let mut buf = Vec::with_capacity(cap.min(1 << 20));
     let mut chunk = vec![0u8; 64 * 1024];
@@ -112,7 +116,7 @@ fn read_upto(provider: &dyn Provider, p: &Path, cap: usize) -> io::Result<Vec<u8
 #[tauri::command]
 pub fn read_preview(path: String, max_bytes: u32) -> AppResult<Preview> {
     let (provider, rpath) = vfs::resolve(&path)?;
-    let p = Path::new(&rpath);
+    let p = &rpath;
     let st = provider.stat(p).map_err(AppError::from)?;
     if st.is_dir {
         return Err(AppError::from("Verzeichnis kann nicht angezeigt werden"));

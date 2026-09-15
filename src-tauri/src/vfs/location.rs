@@ -151,11 +151,13 @@ impl ProviderPath {
     }
     pub fn parent(&self) -> Self {
         let mut parts = self.components.clone();
-        while parts.last().is_some_and(String::is_empty) {
+        // One final empty component is the directory delimiter. Earlier empty
+        // components are resource identity, not redundant separators.
+        if parts.last().is_some_and(String::is_empty) {
             parts.pop();
         }
         parts.pop();
-        if parts.is_empty() {
+        if parts.is_empty() || parts.last().is_some_and(String::is_empty) {
             parts.push(String::new());
         }
         Self { components: parts }

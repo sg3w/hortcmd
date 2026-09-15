@@ -23,7 +23,7 @@ use crate::net::session::{runtime, Profile};
 use reqwest_dav::list_cmd::ListEntity;
 use reqwest_dav::{Auth, Client, ClientBuilder, Depth};
 use std::io::{self, Read, Seek, SeekFrom, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 /// Opens a WebDAV connection and returns the ready provider.
@@ -115,7 +115,7 @@ pub struct WebdavProvider {
 }
 
 /// Path string for the WebDAV protocol (always POSIX-style).
-fn p(path: &Path) -> String {
+fn p(path: &crate::vfs::StreamPath) -> String {
     let s = super::provider_path::text(path);
     if s.is_empty() {
         "/".to_string()
@@ -157,7 +157,7 @@ fn encode_path(path: &str) -> String {
 }
 
 /// The encoded form of a path, for a request.
-fn e(path: &Path) -> String {
+fn e(path: &crate::vfs::StreamPath) -> String {
     encode_path(&p(path))
 }
 
@@ -182,15 +182,18 @@ fn percent_decode(s: &str) -> String {
 
 /// Last path segment of an href (the entry name), percent-decoded.
 fn name_of(href: &str) -> String {
-    let trimmed = href.trim_end_matches('/');
+    let trimmed = href.strip_suffix('/').unwrap_or(href);
     let last = trimmed.rsplit('/').next().unwrap_or(trimmed);
     percent_decode(last)
 }
 
-/// Normalizes a path/href for comparison (no trailing slash, decoded).
+/// Decode an href for comparison, removing only its directory delimiter.
 fn norm(s: &str) -> String {
-    let d = percent_decode(s);
-    let t = d.trim_end_matches('/');
+    let path = s.split_once("://").map_or(s, |(_, authority)| {
+        authority.find('/').map_or("/", |index| &authority[index..])
+    });
+    let d = percent_decode(path);
+    let t = d.strip_suffix('/').unwrap_or(&d);
     if t.is_empty() {
         "/".to_string()
     } else {
@@ -220,12 +223,15 @@ impl Provider for WebdavProvider {
     }
 
     fn list(&self, path: &str) -> AppResult<DirListing> {
-        super::provider_path::validate(Path::new(path), super::Scheme::Webdav)?;
+        super::provider_path::validate(
+            &crate::vfs::StreamPath::remote(path)?,
+            super::Scheme::Webdav,
+        )?;
         let items = runtime()
             .block_on(self.client.list(&encode_path(path), Depth::Number(1)))
             .map_err(|e| AppError::from(format!("{}: {}", path, e)))?;
 
-        let self_key = norm(path);
+        let self_key = norm(&encode_path(path));
         let mut entries = Vec::new();
         for item in items {
             let (href, is_dir, size, modified) = match item {
@@ -243,12 +249,14 @@ impl Provider for WebdavProvider {
                 ),
             };
             // PROPFIND depth 1 includes the collection itself — skip it.
-            if norm(&href).ends_with(&self_key) {
+            if norm(&href) == self_key {
                 continue;
             }
             let name = name_of(&href);
             if name.is_empty() {
-                continue;
+                return Err(AppError::from(
+                    "empty WebDAV entry name cannot be traversed",
+                ));
             }
             entries.push(DirEntry {
                 hidden: name.starts_with('.'),
@@ -272,7 +280,7 @@ impl Provider for WebdavProvider {
         })
     }
 
-    fn stat(&self, path: &Path) -> io::Result<Stat> {
+    fn stat(&self, path: &crate::vfs::StreamPath) -> io::Result<Stat> {
         super::provider_path::validate(path, super::Scheme::Webdav)?;
         let entity = self.stat_entity(&p(path)).map_err(to_io)?;
         Ok(match entity {
@@ -287,32 +295,32 @@ impl Provider for WebdavProvider {
         })
     }
 
-    fn exists(&self, path: &Path) -> bool {
+    fn exists(&self, path: &crate::vfs::StreamPath) -> bool {
         if super::provider_path::validate(path, super::Scheme::Webdav).is_err() {
             return false;
         }
         self.stat_entity(&p(path)).is_ok()
     }
 
-    fn is_dir(&self, path: &Path) -> bool {
+    fn is_dir(&self, path: &crate::vfs::StreamPath) -> bool {
         if super::provider_path::validate(path, super::Scheme::Webdav).is_err() {
             return false;
         }
         self.stat(path).map(|s| s.is_dir).unwrap_or(false)
     }
 
-    fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
+    fn read_dir(&self, path: &crate::vfs::StreamPath) -> io::Result<Vec<crate::vfs::StreamPath>> {
         super::provider_path::validate(path, super::Scheme::Webdav)?;
         let base = p(path);
         let listing = self.list(&base).map_err(to_io)?;
-        Ok(listing
+        listing
             .entries
             .iter()
-            .map(|e| Path::new(&base).join(&e.name))
-            .collect())
+            .map(|e| path.join(&e.name))
+            .collect::<io::Result<Vec<_>>>()
     }
 
-    fn open_read(&self, path: &Path) -> io::Result<Box<dyn Read + Send>> {
+    fn open_read(&self, path: &crate::vfs::StreamPath) -> io::Result<Box<dyn Read + Send>> {
         super::provider_path::validate(path, super::Scheme::Webdav)?;
         let response = runtime()
             .block_on(self.client.get(&e(path)))
@@ -324,30 +332,24 @@ impl Provider for WebdavProvider {
         }))
     }
 
-    fn create_write(&self, path: &Path) -> io::Result<Box<dyn Write + Send>> {
+    fn create_write(&self, path: &crate::vfs::StreamPath) -> io::Result<Box<dyn Write + Send>> {
         super::provider_path::validate(path, super::Scheme::Webdav)?;
         Ok(Box::new(WebdavWriter::new(self.client.clone(), e(path))?))
     }
 
-    fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
+    fn write(&self, path: &crate::vfs::StreamPath, data: &[u8]) -> io::Result<()> {
         super::provider_path::validate(path, super::Scheme::Webdav)?;
         runtime()
             .block_on(self.client.put(&e(path), data.to_vec()))
             .map_err(to_io)
     }
 
-    fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+    fn create_dir_all(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
         super::provider_path::validate(path, super::Scheme::Webdav)?;
         // MKCOL creates a single collection — walk the components.
         let full = p(path);
-        let mut acc = String::new();
-        for part in full.split('/') {
-            if part.is_empty() {
-                continue;
-            }
-            acc.push('/');
-            acc.push_str(part);
-            if self.is_dir(Path::new(&acc)) {
+        for acc in super::provider_path::prefixes(path)? {
+            if self.is_dir(&crate::vfs::StreamPath::remote(&acc).map_err(io::Error::other)?) {
                 continue;
             }
             // Ignore "already exists"; the final check reports real failures.
@@ -367,7 +369,7 @@ impl Provider for WebdavProvider {
     /// helper sends a **path-only** `Destination` header while RFC 4918
     /// (and Apache mod_dav) require an absolute URI — servers answer the
     /// short form with "400 Bad Request".
-    fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+    fn rename(&self, from: &crate::vfs::StreamPath, to: &crate::vfs::StreamPath) -> io::Result<()> {
         super::provider_path::validate(from, super::Scheme::Webdav)?;
         super::provider_path::validate(to, super::Scheme::Webdav)?;
         use reqwest_dav::re_exports::reqwest::Method;
@@ -399,14 +401,14 @@ impl Provider for WebdavProvider {
         })
     }
 
-    fn remove_file(&self, path: &Path) -> io::Result<()> {
+    fn remove_file(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
         super::provider_path::validate(path, super::Scheme::Webdav)?;
         runtime()
             .block_on(self.client.delete(&e(path)))
             .map_err(to_io)
     }
 
-    fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
+    fn remove_dir_all(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
         super::provider_path::validate(path, super::Scheme::Webdav)?;
         // DELETE on a collection removes it recursively.
         runtime()
@@ -603,5 +605,10 @@ mod tests {
         assert_eq!(norm("/a/b/"), "/a/b");
         assert_eq!(norm("/"), "/");
         assert_eq!(norm("/a%20b/"), "/a b");
+        assert_eq!(norm("/a//"), "/a/");
+        assert_eq!(norm("https://host/a//"), "/a/");
+        assert_ne!(norm("/a/a"), norm("/a"));
+        assert_ne!(norm("/a//"), norm("/a/"));
+        assert_eq!(name_of("/a//"), "");
     }
 }

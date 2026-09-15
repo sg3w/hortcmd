@@ -1,9 +1,9 @@
 //! Depth-first summaries: retain only ancestors and the current sibling-name set.
+use crate::vfs::StreamPath;
 use crate::vfs::{limits::ProviderLimits, Provider};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::io;
-use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use unicode_normalization::UnicodeNormalization;
 const MAX_NODES: usize = 1_000_000;
@@ -15,7 +15,7 @@ pub fn failure(reason: &'static str) -> io::Error {
 pub fn folded(name: &str) -> String {
     name.nfc().flat_map(char::to_lowercase).collect()
 }
-pub fn check_name(path: &Path, limits: &ProviderLimits) -> io::Result<()> {
+pub fn check_name(path: &StreamPath, limits: &ProviderLimits) -> io::Result<()> {
     let name = path
         .file_name()
         .and_then(|n| n.to_str())
@@ -29,7 +29,7 @@ pub fn check_name(path: &Path, limits: &ProviderLimits) -> io::Result<()> {
             .is_some_and(|n| name.len() > n as usize)
         || limits
             .maximum_path_bytes
-            .is_some_and(|n| path.as_os_str().len() > n as usize)
+            .is_some_and(|n| path.to_string_lossy().len() > n as usize)
         || limits
             .reserved_names
             .as_ref()
@@ -68,8 +68,8 @@ impl<'a> Walker<'a> {
     pub fn measure(
         &mut self,
         provider: &dyn Provider,
-        source: &Path,
-        target: &Path,
+        source: &StreamPath,
+        target: &StreamPath,
         limits: &ProviderLimits,
     ) -> io::Result<Summary> {
         let mut summary = Summary {
@@ -94,8 +94,8 @@ impl<'a> Walker<'a> {
     fn visit(
         &mut self,
         provider: &dyn Provider,
-        source: &Path,
-        target: &Path,
+        source: &StreamPath,
+        target: &StreamPath,
         limits: &ProviderLimits,
         depth: usize,
         total: &mut Summary,
@@ -134,13 +134,13 @@ impl<'a> Walker<'a> {
             let mut names = HashSet::new();
             let mut child_summaries = Vec::new();
             provider.visit_dir(source, MAX_NAMES, &mut |child| {
-                if child.parent() != Some(source) {
-                    return Err(failure("invalidName"));
-                }
                 let name = child
                     .file_name()
                     .and_then(|n| n.to_str())
                     .ok_or_else(|| failure("invalidName"))?;
+                if source.join(name)? != child {
+                    return Err(failure("invalidName"));
+                }
                 let key = if limits.case_sensitive == Some(true) {
                     name.to_owned()
                 } else {
@@ -160,7 +160,7 @@ impl<'a> Walker<'a> {
                 self.visit(
                     provider,
                     &child,
-                    &target.join(name),
+                    &target.join(name)?,
                     limits,
                     depth + 1,
                     total,

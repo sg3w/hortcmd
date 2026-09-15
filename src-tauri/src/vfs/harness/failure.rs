@@ -85,11 +85,23 @@ fn harness_survives_a_server_dying_mid_copy() {
     let p = h.connect(name);
     let root = h.service(name).root.trim_end_matches('/').to_string();
     let dir = format!("{}/work/interrupt", root);
-    let _ = p.remove_dir_all(Path::new(&dir));
-    p.create_dir_all(Path::new(&dir)).expect("create work dir");
+    let _ = p.remove_dir_all(
+        &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
+    );
+    p.create_dir_all(
+        &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
+    )
+    .expect("create work dir");
 
     let target = format!("{}/interrupted.bin", dir);
-    let plan = plan_for(&*p, Path::new(&target).to_path_buf(), false, true);
+    let plan = plan_for(
+        &*p,
+        crate::vfs::StreamPath::remote(&(Path::new(&target).to_path_buf()).to_string_lossy())
+            .unwrap(),
+        false,
+        true,
+    )
+    .unwrap();
     assert!(plan.is_staged(), "safe mode must stage");
     let staged = plan.write_to.clone();
 
@@ -129,15 +141,22 @@ fn harness_survives_a_server_dying_mid_copy() {
     );
     let p = wait_for(&h, name);
     assert!(
-        !p.exists(Path::new(&target)),
+        !p.exists(
+            &crate::vfs::StreamPath::remote(&(Path::new(&target)).to_string_lossy()).unwrap()
+        ),
         "the final name must not exist after an interrupted staged copy"
     );
 
     // Whatever is left is a working entry, which the app reports rather
     // than deletes — it can hold the only copy of a file.
-    let leftovers = stale_working_entries(&*p, Path::new(&dir));
+    let leftovers = stale_working_entries(
+        &*p,
+        &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
+    );
     println!("  leftovers reported: {:?}", leftovers);
-    let _ = p.remove_dir_all(Path::new(&dir));
+    let _ = p.remove_dir_all(
+        &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
+    );
 }
 
 /// The same interruption in *direct* mode, which is the default: the
@@ -158,15 +177,26 @@ fn harness_direct_mode_reports_an_interrupted_copy() {
     let p = h.connect(name);
     let root = h.service(name).root.trim_end_matches('/').to_string();
     let dir = format!("{}/work/interrupt-direct", root);
-    let _ = p.remove_dir_all(Path::new(&dir));
-    p.create_dir_all(Path::new(&dir)).expect("create work dir");
+    let _ = p.remove_dir_all(
+        &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
+    );
+    p.create_dir_all(
+        &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
+    )
+    .expect("create work dir");
 
     let dst = format!("{}/copy.bin", dir);
-    let plan = plan_for(&*p, Path::new(&dst).to_path_buf(), false, false);
+    let plan = plan_for(
+        &*p,
+        crate::vfs::StreamPath::remote(&(Path::new(&dst).to_path_buf()).to_string_lossy()).unwrap(),
+        false,
+        false,
+    )
+    .unwrap();
     assert!(!plan.is_staged(), "direct mode must not stage");
     assert_eq!(
         plan.write_to,
-        Path::new(&dst),
+        crate::vfs::StreamPath::remote(&(Path::new(&dst)).to_string_lossy()).unwrap(),
         "direct mode writes the final name"
     );
 
@@ -201,7 +231,9 @@ fn harness_direct_mode_reports_an_interrupted_copy() {
 
     assert!(compose(&h, &["start", &container]), "restart");
     let p = wait_for(&h, name);
-    let _ = p.remove_dir_all(Path::new(&dir));
+    let _ = p.remove_dir_all(
+        &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
+    );
 }
 
 /// Waits for a restarted service to answer again, and hands back a live

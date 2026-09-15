@@ -1,3 +1,4 @@
+use crate::vfs::StreamPath;
 // ============================================================
 // The parallel copy path (ticket 035).
 //
@@ -18,7 +19,6 @@ use super::plan::{discard_staging, publish, Plan};
 use super::progress::SharedProg;
 use crate::vfs::Provider;
 use std::io::{ErrorKind, Read, Write};
-use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -27,8 +27,8 @@ use tauri::AppHandle;
 /// A single file copy task (with source index for the ok counting).
 pub(crate) struct CopyTask {
     pub(crate) idx: usize,
-    pub(crate) src: PathBuf,
-    pub(crate) dst: PathBuf,
+    pub(crate) src: StreamPath,
+    pub(crate) dst: StreamPath,
 }
 
 /// Flattens a source tree into individual file tasks, creating the
@@ -36,8 +36,8 @@ pub(crate) struct CopyTask {
 pub(crate) fn flatten_tree(
     srcp: &dyn Provider,
     dstp: &dyn Provider,
-    src: &Path,
-    dst: &Path,
+    src: &StreamPath,
+    dst: &StreamPath,
     idx: usize,
     tasks: &mut Vec<CopyTask>,
 ) -> std::io::Result<()> {
@@ -46,12 +46,12 @@ pub(crate) fn flatten_tree(
         {
             for child in srcp.read_dir(src)? {
                 let name = child.file_name().unwrap_or_default();
-                flatten_tree(srcp, dstp, &child, &dst.join(name), idx, tasks)?;
+                flatten_tree(srcp, dstp, &child, &dst.join(name)?, idx, tasks)?;
             }
         }
     } else {
         if let Some(parent) = dst.parent() {
-            dstp.create_dir_all(parent)?;
+            dstp.create_dir_all(&parent)?;
         }
         tasks.push(CopyTask {
             idx,
@@ -86,7 +86,7 @@ pub(crate) fn parallel_copy_file(
     let mut hasher = verify.then(Sha256::new);
     let mut file_done = 0u64;
 
-    let abort = |writer: Box<dyn Write + Send>, dst: &Path| {
+    let abort = |writer: Box<dyn Write + Send>, dst: &StreamPath| {
         drop(writer);
         let _ = dstp.remove_file(dst);
         std::io::Error::new(ErrorKind::Interrupted, "abgebrochen")
@@ -143,7 +143,7 @@ pub(crate) fn run_parallel_copy(
     app: AppHandle,
     id: String,
     op: String,
-    jobs: Vec<(PathBuf, Plan)>,
+    jobs: Vec<(StreamPath, Plan)>,
     cancel: Arc<AtomicBool>,
     pause: Arc<AtomicBool>,
     tune: CopyTuning,

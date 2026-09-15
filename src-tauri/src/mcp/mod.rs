@@ -39,7 +39,7 @@ pub mod panes;
 pub mod protocol;
 mod schema;
 pub mod scope;
-mod scoped_provider;
+pub(crate) mod scoped_provider;
 pub mod server;
 pub mod session;
 pub mod tools;

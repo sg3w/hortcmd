@@ -26,7 +26,6 @@ use smb::{
 };
 use std::collections::HashSet;
 use std::io::{self, Read, Write};
-use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 /// The port SMB is served on unless a profile says otherwise.
@@ -124,7 +123,7 @@ fn split_share(path: &str) -> Option<(String, String)> {
 }
 
 /// Normalizes a `Path` to the provider's POSIX-ish form.
-fn p(path: &Path) -> String {
+fn p(path: &crate::vfs::StreamPath) -> String {
     let s = path.to_string_lossy().replace('\\', "/");
     if s.is_empty() {
         "/".to_string()
@@ -297,7 +296,7 @@ impl Provider for SmbProvider {
     }
 
     fn list(&self, path: &str) -> AppResult<DirListing> {
-        super::provider_path::validate(Path::new(path), super::Scheme::Smb)?;
+        super::provider_path::validate(&crate::vfs::StreamPath::remote(path)?, super::Scheme::Smb)?;
         // The connection root lists the server's shares.
         let entries = match split_share(path) {
             None => self.shares()?,
@@ -310,7 +309,7 @@ impl Provider for SmbProvider {
         })
     }
 
-    fn stat(&self, path: &Path) -> io::Result<Stat> {
+    fn stat(&self, path: &crate::vfs::StreamPath) -> io::Result<Stat> {
         super::provider_path::validate(path, super::Scheme::Smb)?;
         let full = p(path);
         // Root and a bare share are always directories.
@@ -343,34 +342,34 @@ impl Provider for SmbProvider {
             })
     }
 
-    fn exists(&self, path: &Path) -> bool {
+    fn exists(&self, path: &crate::vfs::StreamPath) -> bool {
         if super::provider_path::validate(path, super::Scheme::Smb).is_err() {
             return false;
         }
         self.stat(path).is_ok()
     }
 
-    fn is_dir(&self, path: &Path) -> bool {
+    fn is_dir(&self, path: &crate::vfs::StreamPath) -> bool {
         if super::provider_path::validate(path, super::Scheme::Smb).is_err() {
             return false;
         }
         self.stat(path).map(|s| s.is_dir).unwrap_or(false)
     }
 
-    fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
+    fn read_dir(&self, path: &crate::vfs::StreamPath) -> io::Result<Vec<crate::vfs::StreamPath>> {
         super::provider_path::validate(path, super::Scheme::Smb)?;
         let base = p(path);
         let entries = match split_share(&base) {
             None => self.shares().map_err(to_io)?,
             Some(_) => self.dir_entries(&base).map_err(to_io)?,
         };
-        Ok(entries
+        entries
             .iter()
-            .map(|e| Path::new(&base).join(&e.name))
-            .collect())
+            .map(|e| path.join(&e.name))
+            .collect::<io::Result<Vec<_>>>()
     }
 
-    fn open_read(&self, path: &Path) -> io::Result<Box<dyn Read + Send>> {
+    fn open_read(&self, path: &crate::vfs::StreamPath) -> io::Result<Box<dyn Read + Send>> {
         super::provider_path::validate(path, super::Scheme::Smb)?;
         let resource = self.open_existing(&p(path)).map_err(to_io)?;
         let file = resource.unwrap_file();
@@ -380,7 +379,7 @@ impl Provider for SmbProvider {
         }))
     }
 
-    fn create_write(&self, path: &Path) -> io::Result<Box<dyn Write + Send>> {
+    fn create_write(&self, path: &crate::vfs::StreamPath) -> io::Result<Box<dyn Write + Send>> {
         super::provider_path::validate(path, super::Scheme::Smb)?;
         let args = FileCreateArgs::make_overwrite(FileAttributes::new(), CreateOptions::new());
         let resource = self.open(&p(path), &args).map_err(to_io)?;
@@ -391,14 +390,14 @@ impl Provider for SmbProvider {
         }))
     }
 
-    fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
+    fn write(&self, path: &crate::vfs::StreamPath, data: &[u8]) -> io::Result<()> {
         super::provider_path::validate(path, super::Scheme::Smb)?;
         let mut w = self.create_write(path)?;
         w.write_all(data)?;
         w.flush()
     }
 
-    fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+    fn create_dir_all(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
         super::provider_path::validate(path, super::Scheme::Smb)?;
         let full = p(path);
         let Some((share, rest)) = split_share(&full) else {
@@ -417,7 +416,7 @@ impl Provider for SmbProvider {
             }
             acc.push('/');
             acc.push_str(part);
-            if self.is_dir(Path::new(&acc)) {
+            if self.is_dir(&crate::vfs::StreamPath::remote(&acc).map_err(io::Error::other)?) {
                 continue;
             }
             let args = FileCreateArgs::make_create_new(
@@ -440,7 +439,7 @@ impl Provider for SmbProvider {
         }
     }
 
-    fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+    fn rename(&self, from: &crate::vfs::StreamPath, to: &crate::vfs::StreamPath) -> io::Result<()> {
         super::provider_path::validate(from, super::Scheme::Smb)?;
         super::provider_path::validate(to, super::Scheme::Smb)?;
         let (_, to_rest) =
@@ -476,7 +475,7 @@ impl Provider for SmbProvider {
         }
     }
 
-    fn remove_file(&self, path: &Path) -> io::Result<()> {
+    fn remove_file(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
         super::provider_path::validate(path, super::Scheme::Smb)?;
         // DELETE_ON_CLOSE is the SMB way to unlink.
         let mut args = FileCreateArgs::make_open_existing(FileAccessMask::new().with_delete(true));
@@ -484,7 +483,7 @@ impl Provider for SmbProvider {
         close_resource(self.open(&p(path), &args).map_err(to_io)?)
     }
 
-    fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
+    fn remove_dir_all(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
         super::provider_path::validate(path, super::Scheme::Smb)?;
         // A directory must be empty before it can be deleted.
         for child in self.read_dir(path)? {

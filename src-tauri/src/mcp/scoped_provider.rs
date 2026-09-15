@@ -2,21 +2,21 @@
 //! publication is checked through the same scope policy as a top-level call.
 use super::{execution, scope, McpConfig, McpTier};
 use crate::errors::AppResult;
+use crate::vfs::StreamPath;
 use crate::vfs::{self, Provider, Stat};
 use std::io::{self, Read, Write};
-use std::path::{Path, PathBuf};
 use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc};
 
 pub struct ScopedProvider {
     inner: Arc<dyn Provider>,
     prefix: String,
     config: McpConfig,
-    stage: Option<PathBuf>,
+    stage: Option<StreamPath>,
     stage_created: AtomicBool,
 }
 
 impl ScopedProvider {
-    pub fn resolve(raw: &str, config: &McpConfig) -> AppResult<(Self, PathBuf)> {
+    pub fn resolve(raw: &str, config: &McpConfig) -> AppResult<(Self, StreamPath)> {
         let (inner, path) = vfs::resolve(raw)?;
         let address = vfs::parse_address(raw)?;
         let prefix = if address.scheme() == vfs::Scheme::Local {
@@ -28,11 +28,12 @@ impl ScopedProvider {
                 .map_or(raw.len(), |i| scheme_end + i);
             raw[..end].to_owned()
         };
-        let path = PathBuf::from(path);
         let path = if prefix.is_empty() {
             match (path.parent(), path.file_name()) {
-                (Some(parent), Some(name)) => std::fs::canonicalize(parent)?.join(name),
-                _ => std::fs::canonicalize(path)?,
+                (Some(parent), Some(name)) => {
+                    std::fs::canonicalize(parent.native()?)?.join(name).into()
+                }
+                _ => std::fs::canonicalize(path.native()?)?.into(),
             }
         } else {
             path
@@ -50,7 +51,7 @@ impl ScopedProvider {
 
     /// Bind this destination adapter to one freshly planned staging path.
     /// A filename prefix alone never grants cleanup permission.
-    pub fn track_stage(&mut self, path: &Path) -> io::Result<()> {
+    pub fn track_stage(&mut self, path: &StreamPath) -> io::Result<()> {
         self.check(path)?;
         if self.stage.is_some() {
             return Err(io::Error::other("staging already registered"));
@@ -69,16 +70,16 @@ impl ScopedProvider {
         Ok(())
     }
 
-    fn created(&self, path: &Path) {
-        if self.stage.as_deref() == Some(path) {
+    fn created(&self, path: &StreamPath) {
+        if self.stage.as_ref() == Some(path) {
             self.stage_created.store(true, Ordering::Relaxed);
         }
     }
 
     /// Called after the transfer has released its readers and writers. Ordinary
     /// remove/rename operations retain cancellation checks, including source deletion.
-    pub fn cleanup_stage(&self, path: &Path) -> io::Result<()> {
-        if self.stage.as_deref() != Some(path) {
+    pub fn cleanup_stage(&self, path: &StreamPath) -> io::Result<()> {
+        if self.stage.as_ref() != Some(path) {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
                 "unowned staging path",
@@ -104,24 +105,21 @@ impl ScopedProvider {
         Ok(())
     }
 
-    pub fn address(&self, path: &Path) -> io::Result<String> {
-        let text = path
-            .to_str()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "non-UTF8 MCP path"))?;
-        if self.prefix.is_empty() {
-            Ok(text.to_owned())
-        } else {
-            Ok(format!(
-                "{}{}",
-                self.prefix,
-                vfs::location::ProviderPath::from_raw(text)
-                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e.to_string()))?
-                    .uri()
-            ))
+    pub fn address(&self, path: &StreamPath) -> io::Result<String> {
+        match (self.prefix.is_empty(), path) {
+            (true, StreamPath::Local(path)) => Ok(path
+                .to_str()
+                .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "non-UTF8 MCP path"))?
+                .to_owned()),
+            (false, StreamPath::Remote(path)) => Ok(format!("{}{}", self.prefix, path.uri())),
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "MCP path kind mismatch",
+            )),
         }
     }
 
-    pub fn check(&self, path: &Path) -> io::Result<()> {
+    pub fn check(&self, path: &StreamPath) -> io::Result<()> {
         if execution::cancel_flag().load(std::sync::atomic::Ordering::Relaxed) {
             return Err(io::Error::new(
                 io::ErrorKind::Interrupted,
@@ -132,7 +130,7 @@ impl ScopedProvider {
     }
 
     // Cleanup may ignore cancellation, but never a live scope/permission change.
-    fn check_scope(&self, path: &Path) -> io::Result<()> {
+    fn check_scope(&self, path: &StreamPath) -> io::Result<()> {
         let current = execution::live_config();
         let config = current.as_ref().unwrap_or(&self.config);
         if (current.is_some() && !config.enabled) || !config.allows(McpTier::Write) {
@@ -146,7 +144,7 @@ impl ScopedProvider {
         // Recursive copies must not follow even an in-scope link: a link back
         // to a parent would recurse forever, and a moved link is not its target.
         if self.prefix.is_empty() {
-            for ancestor in path.ancestors() {
+            for ancestor in path.native()?.ancestors() {
                 match std::fs::symlink_metadata(ancestor) {
                     Ok(meta) if meta.file_type().is_symlink() => {
                         return Err(io::Error::new(
@@ -169,24 +167,33 @@ impl Provider for ScopedProvider {
         self.inner.store_id()
     }
     fn list(&self, path: &str) -> AppResult<crate::commands::fs::dir::DirListing> {
-        self.check(Path::new(path))?;
+        self.check(&if self.prefix.is_empty() {
+            StreamPath::from(path)
+        } else {
+            StreamPath::remote(path)?
+        })?;
         self.inner.list(path)
     }
-    fn stat(&self, path: &Path) -> io::Result<Stat> {
+    fn stat(&self, path: &crate::vfs::StreamPath) -> io::Result<Stat> {
         self.check(path)?;
         self.inner.stat(path)
     }
-    fn exists(&self, path: &Path) -> bool {
+    fn exists(&self, path: &crate::vfs::StreamPath) -> bool {
         self.check(path).is_ok() && self.inner.exists(path)
     }
-    fn is_dir(&self, path: &Path) -> bool {
+    fn is_dir(&self, path: &crate::vfs::StreamPath) -> bool {
         self.stat(path).is_ok_and(|s| s.is_dir)
     }
-    fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
+    fn read_dir(&self, path: &crate::vfs::StreamPath) -> io::Result<Vec<crate::vfs::StreamPath>> {
         self.check(path)?;
         let children = self.inner.read_dir(path)?;
         for child in &children {
-            if child.parent() != Some(path) {
+            if path.join(
+                child
+                    .file_name()
+                    .ok_or_else(|| io::Error::other("missing child name"))?,
+            )? != *child
+            {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "provider returned a non-child path",
@@ -196,36 +203,36 @@ impl Provider for ScopedProvider {
         }
         Ok(children)
     }
-    fn open_read(&self, path: &Path) -> io::Result<Box<dyn Read + Send>> {
+    fn open_read(&self, path: &crate::vfs::StreamPath) -> io::Result<Box<dyn Read + Send>> {
         self.check(path)?;
         self.inner.open_read(path)
     }
-    fn create_write(&self, path: &Path) -> io::Result<Box<dyn Write + Send>> {
+    fn create_write(&self, path: &crate::vfs::StreamPath) -> io::Result<Box<dyn Write + Send>> {
         self.check(path)?;
         let writer = self.inner.create_write(path)?;
         self.created(path);
         Ok(writer)
     }
-    fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
+    fn write(&self, path: &crate::vfs::StreamPath, data: &[u8]) -> io::Result<()> {
         self.check(path)?;
         self.inner.write(path, data)
     }
-    fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+    fn create_dir_all(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
         self.check(path)?;
         self.inner.create_dir_all(path)?;
         self.created(path);
         Ok(())
     }
-    fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+    fn rename(&self, from: &crate::vfs::StreamPath, to: &crate::vfs::StreamPath) -> io::Result<()> {
         self.check(from)?;
         self.check(to)?;
         self.inner.rename(from, to)
     }
-    fn remove_file(&self, path: &Path) -> io::Result<()> {
+    fn remove_file(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
         self.check(path)?;
         self.inner.remove_file(path)
     }
-    fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
+    fn remove_dir_all(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
         self.check(path)?;
         self.inner.remove_dir_all(path)
     }

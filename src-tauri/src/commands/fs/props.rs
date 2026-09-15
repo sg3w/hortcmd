@@ -282,7 +282,7 @@ pub(crate) fn read_file_checksums(path: String) -> AppResult<Checksums> {
     use md5::Digest as _; // shared Digest trait (also for sha1/sha2)
 
     let (provider, resolved) = crate::vfs::resolve(&path)?;
-    let mut file = provider.open_read(Path::new(&resolved))?;
+    let mut file = provider.open_read(&resolved)?;
     let mut md5 = md5::Md5::new();
     let mut sha1 = sha1::Sha1::new();
     let mut sha256 = sha2::Sha256::new();

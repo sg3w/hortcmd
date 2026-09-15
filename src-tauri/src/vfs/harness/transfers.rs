@@ -59,7 +59,7 @@ fn prog(sink: Arc<Recorder>, files: u32, bytes: u64) -> Prog {
 
 fn read_all(p: &dyn Provider, path: &Path) -> Vec<u8> {
     let mut got = Vec::new();
-    p.open_read(path)
+    p.open_read(&crate::vfs::StreamPath::remote(&(path).to_string_lossy()).unwrap())
         .unwrap_or_else(|e| panic!("open_read {}: {}", path.display(), e))
         .read_to_end(&mut got)
         .expect("read_to_end");
@@ -75,14 +75,24 @@ fn transfer(
     dst: &Path,
     safe: bool,
 ) -> Arc<Recorder> {
-    let (files, bytes) = measure(srcp, src).unwrap();
+    let (files, bytes) = measure(
+        srcp,
+        &crate::vfs::StreamPath::remote(&(src).to_string_lossy()).unwrap(),
+    )
+    .unwrap();
     let sink = Arc::new(Recorder::default());
     let mut p = prog(sink.clone(), files.max(1), bytes);
-    let plan = plan_for(dstp, dst.to_path_buf(), dstp.exists(dst), safe);
+    let plan = plan_for(
+        dstp,
+        crate::vfs::StreamPath::remote(&(dst.to_path_buf()).to_string_lossy()).unwrap(),
+        dstp.exists(&crate::vfs::StreamPath::remote(&(dst).to_string_lossy()).unwrap()),
+        safe,
+    )
+    .unwrap();
     copy_tree(
         srcp,
         dstp,
-        src,
+        &crate::vfs::StreamPath::remote(&(src).to_string_lossy()).unwrap(),
         &plan.write_to,
         &mut p,
         CopyTuning {
@@ -159,9 +169,13 @@ fn harness_copies_between_local_and_remote() {
 
             // --- upload: local → remote ---
             let up = format!("{}/work/{}-up-{}", root, name, mode);
-            let _ = remote.remove_dir_all(Path::new(&up));
+            let _ = remote.remove_dir_all(
+                &crate::vfs::StreamPath::remote(&(Path::new(&up)).to_string_lossy()).unwrap(),
+            );
             remote
-                .create_dir_all(Path::new(&up))
+                .create_dir_all(
+                    &crate::vfs::StreamPath::remote(&(Path::new(&up)).to_string_lossy()).unwrap(),
+                )
                 .expect("create remote dir");
             let uploaded = format!("{}/large.bin", up);
             transfer(&*local, &target, &*remote, Path::new(&uploaded), safe);
@@ -176,13 +190,20 @@ fn harness_copies_between_local_and_remote() {
             let tree_up = format!("{}/tree-copy", up);
             transfer(&*local, &down, &*remote, Path::new(&tree_up), safe);
             assert!(
-                remote.exists(Path::new(&format!("{}/large.bin", tree_up))),
+                remote.exists(
+                    &crate::vfs::StreamPath::remote(
+                        &(Path::new(&format!("{}/large.bin", tree_up))).to_string_lossy()
+                    )
+                    .unwrap()
+                ),
                 "{} ({}): directory copy lost its content",
                 name,
                 mode
             );
 
-            let _ = remote.remove_dir_all(Path::new(&up));
+            let _ = remote.remove_dir_all(
+                &crate::vfs::StreamPath::remote(&(Path::new(&up)).to_string_lossy()).unwrap(),
+            );
             let _ = std::fs::remove_dir_all(&down);
         }
     });
@@ -203,8 +224,13 @@ fn harness_copies_within_one_server() {
         let want = seeded_large(h, name);
 
         let dir = format!("{}/work/{}-same", root, name);
-        let _ = p.remove_dir_all(Path::new(&dir));
-        p.create_dir_all(Path::new(&dir)).expect("create work dir");
+        let _ = p.remove_dir_all(
+            &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
+        );
+        p.create_dir_all(
+            &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
+        )
+        .expect("create work dir");
 
         let dst = format!("{}/copy.bin", dir);
         transfer(
@@ -235,7 +261,9 @@ fn harness_copies_within_one_server() {
             name
         );
 
-        let _ = p.remove_dir_all(Path::new(&dir));
+        let _ = p.remove_dir_all(
+            &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
+        );
     });
 }
 
@@ -270,9 +298,13 @@ fn harness_copies_between_different_servers() {
             let want = seeded_large(&h, from);
 
             let dir = format!("{}/work/{}-from-{}", dst_root, to, from);
-            let _ = dstp.remove_dir_all(Path::new(&dir));
-            dstp.create_dir_all(Path::new(&dir))
-                .expect("create work dir");
+            let _ = dstp.remove_dir_all(
+                &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
+            );
+            dstp.create_dir_all(
+                &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
+            )
+            .expect("create work dir");
 
             let dst = format!("{}/large.bin", dir);
             transfer(
@@ -308,7 +340,9 @@ fn harness_copies_between_different_servers() {
                 to
             );
 
-            let _ = dstp.remove_dir_all(Path::new(&dir));
+            let _ = dstp.remove_dir_all(
+                &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
+            );
             println!("   {} → {} OK", from, to);
         }));
         if result.is_err() {

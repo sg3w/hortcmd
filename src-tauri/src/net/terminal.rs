@@ -100,7 +100,12 @@ pub fn ssh_open_shell(app: AppHandle, address: String, cols: u32, rows: u32) -> 
     let store_id = provider.store_id();
     let store_id_for_task = store_id.clone();
 
-    let channel = runtime().block_on(open_shell_channel(&ssh, &path, cols, rows))?;
+    let channel = runtime().block_on(open_shell_channel(
+        &ssh,
+        &path.to_string_lossy(),
+        cols,
+        rows,
+    ))?;
 
     let id = format!("term-{}", super::unique_id());
     let (mut read, write) = channel.split();

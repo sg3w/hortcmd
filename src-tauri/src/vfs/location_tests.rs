@@ -88,14 +88,3 @@ fn equality_and_hash_use_identity_not_display_spelling() {
     assert_eq!(a, b);
     assert_eq!(std::collections::HashSet::from([a, b]).len(), 1);
 }
-
-#[test]
-fn ambiguous_streaming_paths_are_refused_before_provider_lookup() {
-    let location = VfsLocation::parse("webdav://h/a//b").unwrap();
-    let error = super::resolve_location(&location).err().unwrap();
-    assert_eq!(error.op.as_deref(), Some("vfs-location"));
-    assert_eq!(
-        error.params.get("reason").map(String::as_str),
-        Some("provider-path-adapter")
-    );
-}

@@ -1,4 +1,5 @@
 use super::*;
+use std::path::{Path, PathBuf};
 #[test]
 fn checked_peak_space_counts_backups_without_allocating_them_twice() {
     let estimate = space(&RecoveryKind::Copy, 100, 40, 2, true, true).unwrap();
@@ -100,9 +101,13 @@ fn changed_source_and_replaced_destination_invalidate_approved_plan() {
     assert!(after.matches_review(&before.digest).is_err());
     std::fs::rename(&dst, root.0.join("retained-destination")).unwrap();
     std::fs::create_dir(&dst).unwrap();
-    assert!(
-        revalidate_destination(&after, &vfs::local::LocalProvider, Path::new(&dst), 0).is_err()
-    );
+    assert!(revalidate_destination(
+        &after,
+        &vfs::local::LocalProvider,
+        &crate::vfs::StreamPath::from(Path::new(&dst)),
+        0
+    )
+    .is_err());
 }
 #[test]
 fn native_move_requires_no_second_copy_and_cancellation_never_mutates() {
@@ -141,24 +146,38 @@ fn walker_enforces_names_objects_cycles_and_missing_sources() {
         ..Default::default()
     };
     assert!(walk::Walker::new(&cancel)
-        .measure(&provider, &file, &Path::new(&dst).join("too-long"), &limits)
+        .measure(
+            &provider,
+            &crate::vfs::StreamPath::from(&file),
+            &crate::vfs::StreamPath::from(&Path::new(&dst).join("too-long")),
+            &limits
+        )
         .is_err());
     let limits = vfs::limits::ProviderLimits {
         maximum_object_bytes: Some(3),
         ..Default::default()
     };
     assert!(walk::Walker::new(&cancel)
-        .measure(&provider, &file, &Path::new(&dst).join("a"), &limits)
+        .measure(
+            &provider,
+            &crate::vfs::StreamPath::from(&file),
+            &crate::vfs::StreamPath::from(&Path::new(&dst).join("a")),
+            &limits
+        )
         .is_err());
-    assert!(measure(&provider, &Path::new(&src).join("missing")).is_err());
+    assert!(measure(
+        &provider,
+        &crate::vfs::StreamPath::from(&Path::new(&src).join("missing"))
+    )
+    .is_err());
     #[cfg(unix)]
     {
         std::os::unix::fs::symlink(&src, Path::new(&src).join("cycle")).unwrap();
         assert!(walk::Walker::new(&cancel)
             .measure(
                 &provider,
-                Path::new(&src),
-                &Path::new(&dst).join("src"),
+                &crate::vfs::StreamPath::from(Path::new(&src)),
+                &crate::vfs::StreamPath::from(&Path::new(&dst).join("src")),
                 &Default::default()
             )
             .is_err());
@@ -180,29 +199,29 @@ impl Provider for Capacity {
     fn list(&self, p: &str) -> AppResult<crate::commands::fs::dir::DirListing> {
         vfs::local::LocalProvider.list(p)
     }
-    fn stat(&self, p: &Path) -> std::io::Result<vfs::Stat> {
+    fn stat(&self, p: &crate::vfs::StreamPath) -> std::io::Result<vfs::Stat> {
         if self.synthetic.is_some() {
             return Ok(vfs::Stat {
-                is_dir: p == Path::new("/synthetic"),
+                is_dir: p == &crate::vfs::StreamPath::from("/synthetic"),
                 len: 1,
             });
         }
         vfs::local::LocalProvider.stat(p)
     }
-    fn exists(&self, p: &Path) -> bool {
-        p.exists()
+    fn exists(&self, p: &crate::vfs::StreamPath) -> bool {
+        p.native().unwrap().exists()
     }
-    fn is_dir(&self, p: &Path) -> bool {
-        p.is_dir()
+    fn is_dir(&self, p: &crate::vfs::StreamPath) -> bool {
+        p.native().unwrap().is_dir()
     }
-    fn read_dir(&self, p: &Path) -> std::io::Result<Vec<PathBuf>> {
+    fn read_dir(&self, p: &crate::vfs::StreamPath) -> std::io::Result<Vec<crate::vfs::StreamPath>> {
         vfs::local::LocalProvider.read_dir(p)
     }
     fn visit_dir(
         &self,
-        path: &Path,
+        path: &crate::vfs::StreamPath,
         limit: usize,
-        visit: &mut dyn FnMut(PathBuf) -> std::io::Result<()>,
+        visit: &mut dyn FnMut(crate::vfs::StreamPath) -> std::io::Result<()>,
     ) -> std::io::Result<()> {
         if let Some(count) = &self.synthetic {
             for i in 0..1_000_000 {
@@ -215,35 +234,45 @@ impl Provider for Capacity {
                         stop.store(true, Ordering::Relaxed);
                     }
                 }
-                visit(path.join(format!("f-{i}")))?;
+                visit(path.join(format!("f-{i}"))?)?;
             }
             Ok(())
         } else {
             vfs::local::LocalProvider.visit_dir(path, limit, visit)
         }
     }
-    fn open_read(&self, p: &Path) -> std::io::Result<Box<dyn std::io::Read + Send>> {
+    fn open_read(
+        &self,
+        p: &crate::vfs::StreamPath,
+    ) -> std::io::Result<Box<dyn std::io::Read + Send>> {
         vfs::local::LocalProvider.open_read(p)
     }
-    fn create_write(&self, _: &Path) -> std::io::Result<Box<dyn std::io::Write + Send>> {
+    fn create_write(
+        &self,
+        _: &crate::vfs::StreamPath,
+    ) -> std::io::Result<Box<dyn std::io::Write + Send>> {
         panic!("preflight must not write")
     }
-    fn write(&self, _: &Path, _: &[u8]) -> std::io::Result<()> {
+    fn write(&self, _: &crate::vfs::StreamPath, _: &[u8]) -> std::io::Result<()> {
         panic!("preflight must not write")
     }
-    fn create_dir_all(&self, _: &Path) -> std::io::Result<()> {
+    fn create_dir_all(&self, _: &crate::vfs::StreamPath) -> std::io::Result<()> {
         panic!("preflight must not create")
     }
-    fn rename(&self, _: &Path, _: &Path) -> std::io::Result<()> {
+    fn rename(
+        &self,
+        _: &crate::vfs::StreamPath,
+        _: &crate::vfs::StreamPath,
+    ) -> std::io::Result<()> {
         panic!("preflight must not rename")
     }
-    fn remove_file(&self, _: &Path) -> std::io::Result<()> {
+    fn remove_file(&self, _: &crate::vfs::StreamPath) -> std::io::Result<()> {
         panic!("preflight must not remove")
     }
-    fn remove_dir_all(&self, _: &Path) -> std::io::Result<()> {
+    fn remove_dir_all(&self, _: &crate::vfs::StreamPath) -> std::io::Result<()> {
         panic!("preflight must not remove")
     }
-    fn limits(&self, _: &Path) -> std::io::Result<vfs::limits::ProviderLimits> {
+    fn limits(&self, _: &crate::vfs::StreamPath) -> std::io::Result<vfs::limits::ProviderLimits> {
         Ok(vfs::limits::ProviderLimits {
             available_bytes: self.free,
             quota_remaining_bytes: self.quota,
@@ -277,7 +306,13 @@ fn live_capacity_uses_the_stricter_known_limit_and_keeps_unknown_explicit() {
             ..Default::default()
         };
         assert_eq!(
-            revalidate_destination(&plan, &provider, Path::new(&dst), 5).is_ok(),
+            revalidate_destination(
+                &plan,
+                &provider,
+                &crate::vfs::StreamPath::from(Path::new(&dst)),
+                5
+            )
+            .is_ok(),
             allowed
         );
     }
@@ -297,8 +332,8 @@ fn million_entry_source_is_streamed_to_a_bound_and_cancellation_stops_work() {
         assert!(walk::Walker::new(&cancel)
             .measure(
                 &provider,
-                Path::new("/synthetic"),
-                Path::new("/out"),
+                &crate::vfs::StreamPath::from(Path::new("/synthetic")),
+                &crate::vfs::StreamPath::from(Path::new("/out")),
                 &Default::default()
             )
             .is_err());
@@ -337,14 +372,22 @@ fn publication_refuses_a_destination_changed_after_collision_review() {
     )
     .unwrap();
     let provider = vfs::local::LocalProvider;
-    let mut plan = super::super::plan::Plan::staged(&provider, target.clone(), true);
+    let mut plan = super::super::plan::Plan::staged(
+        &provider,
+        crate::vfs::StreamPath::from(target.clone()),
+        true,
+    )
+    .unwrap();
     plan.preflight = Some(Arc::new(reviewed));
     plan.observe_target(&provider).unwrap();
-    std::fs::write(&plan.write_to, "new").unwrap();
+    std::fs::write(plan.write_to.native().unwrap(), "new").unwrap();
     std::fs::write(&target, "external writer").unwrap();
     assert!(super::super::plan::publish(&provider, &plan).is_err());
     assert_eq!(std::fs::read_to_string(&target).unwrap(), "external writer");
-    assert_eq!(std::fs::read_to_string(&plan.write_to).unwrap(), "new");
+    assert_eq!(
+        std::fs::read_to_string(plan.write_to.native().unwrap()).unwrap(),
+        "new"
+    );
 }
 #[test]
 fn case_equivalent_destinations_and_declared_reserved_names_are_rejected() {
@@ -371,6 +414,10 @@ fn case_equivalent_destinations_and_declared_reserved_names_are_rejected() {
         reserved_names: Some(vec!["reserved".into()]),
         ..Default::default()
     };
-    assert!(walk::check_name(Path::new("/dst/RESERVED"), &limits).is_err());
+    assert!(walk::check_name(
+        &crate::vfs::StreamPath::from(Path::new("/dst/RESERVED")),
+        &limits
+    )
+    .is_err());
     assert_eq!(walk::folded("É"), walk::folded("e\u{301}"));
 }

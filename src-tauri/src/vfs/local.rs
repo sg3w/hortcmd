@@ -115,7 +115,8 @@ impl Provider for LocalProvider {
         })
     }
 
-    fn stat(&self, path: &Path) -> io::Result<Stat> {
+    fn stat(&self, path: &crate::vfs::StreamPath) -> io::Result<Stat> {
+        let path = path.native()?;
         let meta = fs::metadata(path)?;
         Ok(Stat {
             is_dir: meta.is_dir(),
@@ -123,34 +124,38 @@ impl Provider for LocalProvider {
         })
     }
 
-    fn exists(&self, path: &Path) -> bool {
-        path.exists()
+    fn exists(&self, path: &crate::vfs::StreamPath) -> bool {
+        path.native().is_ok_and(Path::exists)
     }
 
-    fn is_dir(&self, path: &Path) -> bool {
-        path.is_dir()
+    fn is_dir(&self, path: &crate::vfs::StreamPath) -> bool {
+        path.native().is_ok_and(Path::is_dir)
     }
 
-    fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
-        fs::read_dir(path)?.map(|e| e.map(|d| d.path())).collect()
+    fn read_dir(&self, path: &crate::vfs::StreamPath) -> io::Result<Vec<crate::vfs::StreamPath>> {
+        let path = path.native()?;
+        fs::read_dir(path)?
+            .map(|e| e.map(|d| d.path().into()))
+            .collect()
     }
 
     fn visit_dir(
         &self,
-        path: &Path,
+        path: &crate::vfs::StreamPath,
         limit: usize,
-        visit: &mut dyn FnMut(PathBuf) -> io::Result<()>,
+        visit: &mut dyn FnMut(crate::vfs::StreamPath) -> io::Result<()>,
     ) -> io::Result<()> {
+        let path = path.native()?;
         for (index, entry) in fs::read_dir(path)?.enumerate() {
             if index >= limit {
                 return Err(io::Error::other("preflight directory limit"));
             }
-            visit(entry?.path())?;
+            visit(entry?.path().into())?;
         }
         Ok(())
     }
 
-    fn limits(&self, path: &Path) -> io::Result<super::limits::ProviderLimits> {
+    fn limits(&self, path: &crate::vfs::StreamPath) -> io::Result<super::limits::ProviderLimits> {
         let mut limits = super::limits::ProviderLimits {
             available_bytes: self.free_space(path),
             staging: true,
@@ -166,7 +171,8 @@ impl Provider for LocalProvider {
                 fn access(path: *const std::ffi::c_char, mode: i32) -> i32;
                 fn pathconf(path: *const std::ffi::c_char, name: i32) -> std::ffi::c_long;
             }
-            let path = CString::new(path.as_os_str().as_bytes()).map_err(io::Error::other)?;
+            let path =
+                CString::new(path.native()?.as_os_str().as_bytes()).map_err(io::Error::other)?;
             // Darwin SDK sys/unistd.h: W_OK=2, _PC_NAME_MAX=4, _PC_PATH_MAX=5.
             // SAFETY: path is NUL-terminated and outlives all three read-only calls.
             unsafe {
@@ -178,35 +184,42 @@ impl Provider for LocalProvider {
         Ok(limits)
     }
 
-    fn planning_identity(&self, path: &Path) -> io::Result<Option<String>> {
+    fn planning_identity(&self, path: &crate::vfs::StreamPath) -> io::Result<Option<String>> {
+        let path = path.native()?;
         crate::commands::fs::transfer::recovery::durability::rename_identity(path)
     }
 
-    fn open_read(&self, path: &Path) -> io::Result<Box<dyn Read + Send>> {
+    fn open_read(&self, path: &crate::vfs::StreamPath) -> io::Result<Box<dyn Read + Send>> {
+        let path = path.native()?;
         Ok(Box::new(fs::File::open(path)?))
     }
 
-    fn create_write(&self, path: &Path) -> io::Result<Box<dyn Write + Send>> {
+    fn create_write(&self, path: &crate::vfs::StreamPath) -> io::Result<Box<dyn Write + Send>> {
+        let path = path.native()?;
         Ok(Box::new(fs::File::create(path)?))
     }
 
-    fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
+    fn write(&self, path: &crate::vfs::StreamPath, data: &[u8]) -> io::Result<()> {
+        let path = path.native()?;
         fs::write(path, data)
     }
 
-    fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+    fn create_dir_all(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
+        let path = path.native()?;
         fs::create_dir_all(path)
     }
 
-    fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
-        fs::rename(from, to)
+    fn rename(&self, from: &crate::vfs::StreamPath, to: &crate::vfs::StreamPath) -> io::Result<()> {
+        fs::rename(from.native()?, to.native()?)
     }
 
-    fn remove_file(&self, path: &Path) -> io::Result<()> {
+    fn remove_file(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
+        let path = path.native()?;
         fs::remove_file(path)
     }
 
-    fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
+    fn remove_dir_all(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
+        let path = path.native()?;
         fs::remove_dir_all(path)
     }
 
@@ -223,8 +236,8 @@ impl Provider for LocalProvider {
     }
 
     /// Reported by the same mount lookup the volume bar uses.
-    fn free_space(&self, path: &Path) -> Option<u64> {
-        crate::commands::fs::volume::free_space_of(path)
+    fn free_space(&self, path: &crate::vfs::StreamPath) -> Option<u64> {
+        crate::commands::fs::volume::free_space_of(path.native().ok()?)
     }
 }
 
@@ -253,17 +266,21 @@ mod tests {
         let d = tmp_dir();
         let f = d.join("a.txt");
 
-        p.write(&f, b"hello").unwrap();
-        assert!(p.exists(&f));
-        assert_eq!(p.stat(&f).unwrap().len, 5);
-        assert!(!p.stat(&f).unwrap().is_dir);
+        p.write(&crate::vfs::StreamPath::from(&f), b"hello")
+            .unwrap();
+        assert!(p.exists(&crate::vfs::StreamPath::from(&f)));
+        assert_eq!(p.stat(&crate::vfs::StreamPath::from(&f)).unwrap().len, 5);
+        assert!(!p.stat(&crate::vfs::StreamPath::from(&f)).unwrap().is_dir);
 
         let mut buf = Vec::new();
-        p.open_read(&f).unwrap().read_to_end(&mut buf).unwrap();
+        p.open_read(&crate::vfs::StreamPath::from(&f))
+            .unwrap()
+            .read_to_end(&mut buf)
+            .unwrap();
         assert_eq!(buf, b"hello");
 
-        p.remove(&f).unwrap();
-        assert!(!p.exists(&f));
+        p.remove(&crate::vfs::StreamPath::from(&f)).unwrap();
+        assert!(!p.exists(&crate::vfs::StreamPath::from(&f)));
     }
 
     #[test]
@@ -271,28 +288,36 @@ mod tests {
         let p = LocalProvider;
         let d = tmp_dir();
         let sub = d.join("sub");
-        p.create_dir_all(&sub).unwrap();
-        assert!(p.is_dir(&sub));
+        p.create_dir_all(&crate::vfs::StreamPath::from(&sub))
+            .unwrap();
+        assert!(p.is_dir(&crate::vfs::StreamPath::from(&sub)));
 
-        p.write(&sub.join("x"), b"1").unwrap();
+        p.write(&crate::vfs::StreamPath::from(&sub.join("x")), b"1")
+            .unwrap();
         let renamed = d.join("sub2");
-        p.rename(&sub, &renamed).unwrap();
-        assert!(!p.exists(&sub));
+        p.rename(
+            &crate::vfs::StreamPath::from(&sub),
+            &crate::vfs::StreamPath::from(&renamed),
+        )
+        .unwrap();
+        assert!(!p.exists(&crate::vfs::StreamPath::from(&sub)));
 
-        let kids = p.read_dir(&renamed).unwrap();
+        let kids = p.read_dir(&crate::vfs::StreamPath::from(&renamed)).unwrap();
         assert_eq!(kids.len(), 1);
         assert_eq!(kids[0].file_name().unwrap(), "x");
 
-        p.remove(&renamed).unwrap();
-        assert!(!p.exists(&renamed));
+        p.remove(&crate::vfs::StreamPath::from(&renamed)).unwrap();
+        assert!(!p.exists(&crate::vfs::StreamPath::from(&renamed)));
     }
 
     #[test]
     fn list_returns_entries() {
         let p = LocalProvider;
         let d = tmp_dir();
-        p.write(&d.join("file.txt"), b"abc").unwrap();
-        p.create_dir_all(&d.join("dir")).unwrap();
+        p.write(&crate::vfs::StreamPath::from(&d.join("file.txt")), b"abc")
+            .unwrap();
+        p.create_dir_all(&crate::vfs::StreamPath::from(&d.join("dir")))
+            .unwrap();
 
         let listing = p.list(&d.to_string_lossy()).unwrap();
         let names: Vec<&str> = listing.entries.iter().map(|e| e.name.as_str()).collect();
@@ -316,8 +341,10 @@ mod tests {
 
         let p = LocalProvider;
         let d = tmp_dir();
-        p.create_dir_all(&d.join("real")).unwrap();
-        p.write(&d.join("file.txt"), b"abc").unwrap();
+        p.create_dir_all(&crate::vfs::StreamPath::from(&d.join("real")))
+            .unwrap();
+        p.write(&crate::vfs::StreamPath::from(&d.join("file.txt")), b"abc")
+            .unwrap();
         // Target names are deliberately shorter/longer than the real sizes,
         // so a leaked `lstat` length would not accidentally match.
         symlink("real", d.join("link_to_dir")).unwrap();

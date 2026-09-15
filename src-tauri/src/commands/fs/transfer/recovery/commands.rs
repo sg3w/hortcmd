@@ -138,11 +138,11 @@ pub fn recovery_destination(id: String) -> AppResult<String> {
     let destination = record.intent.destination.resolve()?;
     if record.intent.kind == RecoveryKind::Pack {
         let (provider, path) = crate::vfs::resolve(&destination)?;
-        let parent = std::path::Path::new(&path)
+        let parent = path
             .parent()
             .ok_or_else(|| AppError::new(code::VALIDATION_BAD_INPUT))?;
         let _ = provider;
-        record.intent.destination.with_path(parent)?.resolve()
+        record.intent.destination.with_path(&parent)?.resolve()
     } else {
         Ok(destination)
     }

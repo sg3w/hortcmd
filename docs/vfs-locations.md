@@ -10,8 +10,10 @@ String-valued Tauri/MCP commands retain their public signatures. `parse_address`
 is their compatibility input boundary and returns the typed location;
 `resolve_location` performs typed provider lookup. `vfs_location` exposes the
 typed value, canonical URI, location/store identities and parent to IPC clients.
-The streaming provider interfaces still accept decoded paths through their
-existing adapters. Windows/Linux replacement and native verification are tracked
+Streaming interfaces carry `StreamPath::Local(PathBuf)` or
+`StreamPath::Remote(ProviderPath)` through planning, traversal, staging, publication
+and rollback. Only native-local boundaries can obtain an OS path; remote
+providers reject local variants. Windows/Linux native verification is tracked
 in [TICKET-259](../tickets/259-vfs-native-provider-path-conformance.md).
 
 Local paths retain their original data: no URI unescaping, Unicode normalization,
@@ -31,11 +33,13 @@ Repeated separators are preserved; no Unicode normalization or filename case
 folding is performed. Conservative equality does not equate two differently
 spelled names merely because some servers do.
 
-The codec preserves repeated separators, but VFS execution currently refuses
-them before provider lookup: streaming `PathBuf` adapters could otherwise change
-their parent. [TICKET-095](../tickets/095-provider-component-streaming-paths.md)
-tracks replacing that remaining adapter and lifting the refusal. This is an
-explicit unsupported shape, not a normalization to a different resource.
+[TICKET-095](../tickets/done/095-provider-component-streaming-paths.done.md)
+removes the generic repeated-separator refusal. `/a//b` retains parent `/a//`
+and its staging and backup files stay in that exact directory. FTP, SFTP and
+WebDAV forward the preserved path; SMB still rejects repeated separators and
+backslashes because its native namespace cannot safely represent them.
+Recovery records preserve the same identity across journal reopening. Remote
+cleanup remains conservative when ownership cannot be proven.
 
 Authorities accept hostnames, IPv4 and bracketed IPv6. Hostnames are lowercased,
 IPv6 compressed, ports validated in 1–65535, and missing ports receive the
@@ -80,3 +84,8 @@ Unicode spelling variants, default ports, reserved characters, empty components,
 local drive/UNC forms, malformed input and legacy migration. Additional tests
 cover component round trips, root containment, serialization validation,
 Zustand migration, profile/MCP migration and both IPC adapters.
+
+Streaming regression tests use a fake store where `/a/b` and `/a//b` name
+different resources. They exercise preflight traversal, verified copy, failed
+publication and rollback, reopened journals and MCP containment. No live remote
+server or Windows/Linux native matrix was run for this ticket.

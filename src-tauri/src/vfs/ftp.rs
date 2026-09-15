@@ -22,7 +22,6 @@ use crate::commands::fs::dir::{DirEntry, DirListing};
 use crate::errors::{code, AppError, AppResult};
 use crate::net::session::Profile;
 use std::io::{self, Read, Write};
-use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
@@ -202,7 +201,7 @@ pub struct FtpProvider {
 }
 
 /// POSIX path string for the FTP protocol.
-fn p(path: &Path) -> String {
+fn p(path: &crate::vfs::StreamPath) -> String {
     let s = super::provider_path::text(path);
     if s.is_empty() {
         "/".to_string()
@@ -276,11 +275,10 @@ impl FtpProvider {
     }
 
     /// FTP has no `stat`: look the entry up in its parent listing.
-    fn lookup(&self, path: &Path) -> Option<DirEntry> {
-        let full = p(path);
-        let (parent, name) = full.rsplit_once('/')?;
-        let parent = if parent.is_empty() { "/" } else { parent };
-        self.entries_of(parent)
+    fn lookup(&self, path: &crate::vfs::StreamPath) -> Option<DirEntry> {
+        let parent = path.parent()?;
+        let name = path.file_name()?.to_str()?;
+        self.entries_of(&p(&parent))
             .ok()?
             .into_iter()
             .find(|e| e.name == name)
@@ -303,7 +301,7 @@ impl Provider for FtpProvider {
     }
 
     fn list(&self, path: &str) -> AppResult<DirListing> {
-        super::provider_path::validate(Path::new(path), super::Scheme::Ftp)?;
+        super::provider_path::validate(&crate::vfs::StreamPath::remote(path)?, super::Scheme::Ftp)?;
         let entries = self.entries_of(path)?;
         // Full address so the pane keeps its remote context.
         Ok(DirListing {
@@ -312,7 +310,7 @@ impl Provider for FtpProvider {
         })
     }
 
-    fn stat(&self, path: &Path) -> io::Result<Stat> {
+    fn stat(&self, path: &crate::vfs::StreamPath) -> io::Result<Stat> {
         super::provider_path::validate(path, super::Scheme::Ftp)?;
         // The connection root is always a directory.
         if p(path) == "/" {
@@ -333,31 +331,31 @@ impl Provider for FtpProvider {
         }
     }
 
-    fn exists(&self, path: &Path) -> bool {
+    fn exists(&self, path: &crate::vfs::StreamPath) -> bool {
         if super::provider_path::validate(path, super::Scheme::Ftp).is_err() {
             return false;
         }
         self.stat(path).is_ok()
     }
 
-    fn is_dir(&self, path: &Path) -> bool {
+    fn is_dir(&self, path: &crate::vfs::StreamPath) -> bool {
         if super::provider_path::validate(path, super::Scheme::Ftp).is_err() {
             return false;
         }
         self.stat(path).map(|s| s.is_dir).unwrap_or(false)
     }
 
-    fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
+    fn read_dir(&self, path: &crate::vfs::StreamPath) -> io::Result<Vec<crate::vfs::StreamPath>> {
         super::provider_path::validate(path, super::Scheme::Ftp)?;
         let base = p(path);
         let entries = self.entries_of(&base).map_err(to_io)?;
-        Ok(entries
+        entries
             .iter()
-            .map(|e| Path::new(&base).join(&e.name))
-            .collect())
+            .map(|e| path.join(&e.name))
+            .collect::<io::Result<Vec<_>>>()
     }
 
-    fn open_read(&self, path: &Path) -> io::Result<Box<dyn Read + Send>> {
+    fn open_read(&self, path: &crate::vfs::StreamPath) -> io::Result<Box<dyn Read + Send>> {
         super::provider_path::validate(path, super::Scheme::Ftp)?;
         // Dedicated connection: keeps long transfers off the shared
         // control connection (see the module comment).
@@ -369,7 +367,7 @@ impl Provider for FtpProvider {
         }))
     }
 
-    fn create_write(&self, path: &Path) -> io::Result<Box<dyn Write + Send>> {
+    fn create_write(&self, path: &crate::vfs::StreamPath) -> io::Result<Box<dyn Write + Send>> {
         super::provider_path::validate(path, super::Scheme::Ftp)?;
         let mut ctrl = self.params.open().map_err(to_io)?;
         let stream = ctrl.put_with_stream(p(path)).map_err(to_io)?;
@@ -379,25 +377,19 @@ impl Provider for FtpProvider {
         }))
     }
 
-    fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
+    fn write(&self, path: &crate::vfs::StreamPath, data: &[u8]) -> io::Result<()> {
         super::provider_path::validate(path, super::Scheme::Ftp)?;
         let mut w = self.create_write(path)?;
         w.write_all(data)?;
         w.flush()
     }
 
-    fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+    fn create_dir_all(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
         super::provider_path::validate(path, super::Scheme::Ftp)?;
         // FTP `MKD` is not recursive — create each missing component.
         let full = p(path);
-        let mut acc = String::new();
-        for part in full.split('/') {
-            if part.is_empty() {
-                continue;
-            }
-            acc.push('/');
-            acc.push_str(part);
-            if self.is_dir(Path::new(&acc)) {
+        for acc in super::provider_path::prefixes(path)? {
+            if self.is_dir(&crate::vfs::StreamPath::remote(&acc).map_err(io::Error::other)?) {
                 continue;
             }
             let mut ctrl = self.ctrl.lock().unwrap();
@@ -414,20 +406,20 @@ impl Provider for FtpProvider {
         }
     }
 
-    fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+    fn rename(&self, from: &crate::vfs::StreamPath, to: &crate::vfs::StreamPath) -> io::Result<()> {
         super::provider_path::validate(from, super::Scheme::Ftp)?;
         super::provider_path::validate(to, super::Scheme::Ftp)?;
         let mut ctrl = self.ctrl.lock().unwrap();
         ctrl.rename(p(from), p(to)).map_err(to_io)
     }
 
-    fn remove_file(&self, path: &Path) -> io::Result<()> {
+    fn remove_file(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
         super::provider_path::validate(path, super::Scheme::Ftp)?;
         let mut ctrl = self.ctrl.lock().unwrap();
         ctrl.rm(p(path)).map_err(to_io)
     }
 
-    fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
+    fn remove_dir_all(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
         super::provider_path::validate(path, super::Scheme::Ftp)?;
         // `RMD` requires an empty directory — clear the contents first.
         for child in self.read_dir(path)? {

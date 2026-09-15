@@ -266,9 +266,14 @@ fn remote(
     if current != snapshot.generation {
         return Err(bad("connection changed; rebuild index"));
     }
-    let directory = Path::new(&root).join(folder);
-    let listing =
-        provider.list_cancellable(directory.to_str().ok_or_else(|| bad("index path"))?, cancel)?;
+    let directory = if folder.is_empty() {
+        root
+    } else {
+        folder
+            .split('/')
+            .try_fold(root, |path, part| path.join(part))?
+    };
+    let listing = provider.list_cancellable(&directory.to_string_lossy(), cancel)?;
     if listing.entries.len() > 50_000 {
         return Err(bad("index directory limit"));
     }
@@ -277,7 +282,8 @@ fn remote(
         if cancel.load(Ordering::Relaxed) {
             return Err(bad("index cancelled"));
         }
-        if entry.name.contains('/')
+        if entry.name.is_empty()
+            || entry.name.contains('/')
             || entry.name.contains('\\')
             || entry.name == "."
             || entry.name == ".."

@@ -429,7 +429,7 @@ pub(crate) fn run_with_recovery(
             match_target(name, &base, targets.is_empty(), &targets).is_some()
         })?;
         crate::commands::fs::transfer::preflight::archive_capacity(
-            std::path::Path::new(&dest_dir),
+            &crate::vfs::StreamPath::from(&dest_dir),
             crate::commands::fs::transfer::recovery::types::RecoveryKind::Extract,
             bytes,
             files,

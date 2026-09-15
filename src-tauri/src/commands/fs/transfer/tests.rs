@@ -22,7 +22,7 @@ use super::plan::{
     Plan, BACKUP_PREFIX, STAGE_PREFIX,
 };
 use super::progress::{Prog, ProgressSink, SharedProg};
-use crate::errors::{AppError, AppResult};
+use crate::errors::AppResult;
 use crate::vfs::local::LocalProvider;
 use crate::vfs::Provider;
 use std::collections::{HashMap, HashSet};
@@ -37,17 +37,17 @@ use std::time::Instant;
 
 #[derive(Default)]
 struct FakeFs {
-    files: HashMap<PathBuf, Vec<u8>>,
-    dirs: HashSet<PathBuf>,
+    files: HashMap<crate::vfs::StreamPath, Vec<u8>>,
+    dirs: HashSet<crate::vfs::StreamPath>,
 }
 
 struct Fake {
     store: String,
     fs: Arc<Mutex<FakeFs>>,
     /// `rename` fails when the source is in here.
-    fail_rename: Mutex<HashSet<PathBuf>>,
+    fail_rename: Mutex<HashSet<crate::vfs::StreamPath>>,
     /// `remove`/`remove_file` fails when the path is in here.
-    fail_remove: Mutex<HashSet<PathBuf>>,
+    fail_remove: Mutex<HashSet<crate::vfs::StreamPath>>,
     replaces: bool,
 }
 
@@ -61,19 +61,26 @@ impl Fake {
             replaces,
         })
     }
+    fn path(&self, raw: &str) -> crate::vfs::StreamPath {
+        if self.store.contains(':') {
+            crate::vfs::StreamPath::remote(raw).unwrap()
+        } else {
+            crate::vfs::StreamPath::from(raw)
+        }
+    }
     fn put(&self, path: &str, data: &str) {
         self.fs
             .lock()
             .unwrap()
             .files
-            .insert(PathBuf::from(path), data.as_bytes().to_vec());
+            .insert(self.path(path), data.as_bytes().to_vec());
     }
     fn get(&self, path: &str) -> Option<String> {
         self.fs
             .lock()
             .unwrap()
             .files
-            .get(Path::new(path))
+            .get(&self.path(path))
             .map(|b| String::from_utf8_lossy(b).into_owned())
     }
     fn names_in(&self, dir: &str) -> Vec<String> {
@@ -81,7 +88,7 @@ impl Fake {
         fs.files
             .keys()
             .chain(fs.dirs.iter())
-            .filter(|p| p.parent() == Some(Path::new(dir)))
+            .filter(|p| p.parent().as_ref() == Some(&self.path(dir)))
             .filter_map(|p| p.file_name()?.to_str().map(str::to_string))
             .collect()
     }
@@ -89,7 +96,7 @@ impl Fake {
 
 struct FakeWriter {
     fs: Arc<Mutex<FakeFs>>,
-    path: PathBuf,
+    path: crate::vfs::StreamPath,
     buf: Vec<u8>,
 }
 
@@ -118,10 +125,35 @@ impl Provider for Fake {
     fn store_id(&self) -> String {
         self.store.clone()
     }
-    fn list(&self, _path: &str) -> AppResult<crate::commands::fs::dir::DirListing> {
-        Err(AppError::from("nicht unterstützt"))
+    fn list(&self, raw: &str) -> AppResult<crate::commands::fs::dir::DirListing> {
+        let path = self.path(raw);
+        let fs = self.fs.lock().unwrap();
+        if !fs.dirs.contains(&path) {
+            return Err(io::Error::from(ErrorKind::NotFound).into());
+        }
+        let entries = fs
+            .files
+            .keys()
+            .chain(fs.dirs.iter())
+            .filter(|p| p.parent().as_ref() == Some(&path))
+            .map(|p| crate::commands::fs::dir::DirEntry {
+                name: p.file_name().unwrap().to_string_lossy().into_owned(),
+                is_dir: fs.dirs.contains(p),
+                is_symlink: false,
+                size: fs.files.get(p).map_or(0, |b| b.len() as u64),
+                modified: 0,
+                hidden: false,
+                readonly: false,
+                executable: false,
+                mode: None,
+            })
+            .collect();
+        Ok(crate::commands::fs::dir::DirListing {
+            path: raw.into(),
+            entries,
+        })
     }
-    fn stat(&self, path: &Path) -> io::Result<crate::vfs::Stat> {
+    fn stat(&self, path: &crate::vfs::StreamPath) -> io::Result<crate::vfs::Stat> {
         let fs = self.fs.lock().unwrap();
         if fs.dirs.contains(path) {
             return Ok(crate::vfs::Stat {
@@ -137,24 +169,24 @@ impl Provider for Fake {
             })
             .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "nicht gefunden"))
     }
-    fn exists(&self, path: &Path) -> bool {
+    fn exists(&self, path: &crate::vfs::StreamPath) -> bool {
         let fs = self.fs.lock().unwrap();
         fs.files.contains_key(path) || fs.dirs.contains(path)
     }
-    fn is_dir(&self, path: &Path) -> bool {
+    fn is_dir(&self, path: &crate::vfs::StreamPath) -> bool {
         self.fs.lock().unwrap().dirs.contains(path)
     }
-    fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
+    fn read_dir(&self, path: &crate::vfs::StreamPath) -> io::Result<Vec<crate::vfs::StreamPath>> {
         let fs = self.fs.lock().unwrap();
         Ok(fs
             .files
             .keys()
             .chain(fs.dirs.iter())
-            .filter(|p| p.parent() == Some(path))
+            .filter(|p| p.parent().as_ref() == Some(path))
             .cloned()
             .collect())
     }
-    fn open_read(&self, path: &Path) -> io::Result<Box<dyn Read + Send>> {
+    fn open_read(&self, path: &crate::vfs::StreamPath) -> io::Result<Box<dyn Read + Send>> {
         let fs = self.fs.lock().unwrap();
         let data = fs
             .files
@@ -163,14 +195,14 @@ impl Provider for Fake {
             .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "nicht gefunden"))?;
         Ok(Box::new(std::io::Cursor::new(data)))
     }
-    fn create_write(&self, path: &Path) -> io::Result<Box<dyn Write + Send>> {
+    fn create_write(&self, path: &crate::vfs::StreamPath) -> io::Result<Box<dyn Write + Send>> {
         Ok(Box::new(FakeWriter {
             fs: Arc::clone(&self.fs),
             path: path.to_path_buf(),
             buf: Vec::new(),
         }))
     }
-    fn write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
+    fn write(&self, path: &crate::vfs::StreamPath, data: &[u8]) -> io::Result<()> {
         self.fs
             .lock()
             .unwrap()
@@ -178,11 +210,11 @@ impl Provider for Fake {
             .insert(path.to_path_buf(), data.to_vec());
         Ok(())
     }
-    fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+    fn create_dir_all(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
         self.fs.lock().unwrap().dirs.insert(path.to_path_buf());
         Ok(())
     }
-    fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+    fn rename(&self, from: &crate::vfs::StreamPath, to: &crate::vfs::StreamPath) -> io::Result<()> {
         if self.fail_rename.lock().unwrap().contains(from) {
             return Err(io::Error::other("rename abgelehnt (Test)"));
         }
@@ -197,14 +229,14 @@ impl Provider for Fake {
         }
         Err(io::Error::new(ErrorKind::NotFound, "nicht gefunden"))
     }
-    fn remove_file(&self, path: &Path) -> io::Result<()> {
+    fn remove_file(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
         if self.fail_remove.lock().unwrap().contains(path) {
             return Err(io::Error::other("remove abgelehnt (Test)"));
         }
         self.fs.lock().unwrap().files.remove(path);
         Ok(())
     }
-    fn remove_dir_all(&self, path: &Path) -> io::Result<()> {
+    fn remove_dir_all(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
         if self.fail_remove.lock().unwrap().contains(path) {
             return Err(io::Error::other("remove abgelehnt (Test)"));
         }
@@ -242,7 +274,9 @@ fn fail() -> io::Error {
 
 #[test]
 fn direct_mode_writes_straight_to_the_target() {
-    let plan = Plan::direct(PathBuf::from("/dst/report.txt"));
+    let plan = Plan::direct(crate::vfs::StreamPath::from(PathBuf::from(
+        "/dst/report.txt",
+    )));
     assert!(!plan.is_staged());
     assert_eq!(plan.write_to, plan.target);
     assert!(!plan.replace);
@@ -251,7 +285,12 @@ fn direct_mode_writes_straight_to_the_target() {
 #[test]
 fn staged_mode_writes_next_to_the_target() {
     let fake = Fake::new(false);
-    let plan = Plan::staged(&*fake, PathBuf::from("/dst/report.txt"), true);
+    let plan = Plan::staged(
+        &*fake,
+        crate::vfs::StreamPath::from(PathBuf::from("/dst/report.txt")),
+        true,
+    )
+    .unwrap();
     assert!(plan.is_staged());
     assert_eq!(plan.write_to.parent(), plan.target.parent());
     let name = plan.write_to.file_name().unwrap().to_str().unwrap();
@@ -262,9 +301,19 @@ fn staged_mode_writes_next_to_the_target() {
 #[test]
 fn working_names_are_unique_and_avoid_existing_entries() {
     let fake = Fake::new(false);
-    let a = working_name(&*fake, Path::new("/dst"), STAGE_PREFIX);
-    fake.put(a.to_str().unwrap(), "taken");
-    let b = working_name(&*fake, Path::new("/dst"), STAGE_PREFIX);
+    let a = working_name(
+        &*fake,
+        &crate::vfs::StreamPath::from(Path::new("/dst")),
+        STAGE_PREFIX,
+    )
+    .unwrap();
+    fake.put(a.native().unwrap().to_str().unwrap(), "taken");
+    let b = working_name(
+        &*fake,
+        &crate::vfs::StreamPath::from(Path::new("/dst")),
+        STAGE_PREFIX,
+    )
+    .unwrap();
     assert_ne!(a, b);
     assert!(!fake.exists(&b));
 }
@@ -283,7 +332,7 @@ fn leftovers_are_reported_but_never_touched() {
     let fake = Fake::new(false);
     fake.put("/dst/.hortcmd-stage-9-1", "half a copy");
     fake.put("/dst/keep.txt", "user data");
-    let stale = stale_working_entries(&*fake, Path::new("/dst"));
+    let stale = stale_working_entries(&*fake, &crate::vfs::StreamPath::from(Path::new("/dst")));
     assert_eq!(stale, vec![".hortcmd-stage-9-1".to_string()]);
     // Reporting is all it does.
     assert_eq!(
@@ -300,8 +349,8 @@ fn a_new_destination_is_committed_with_one_rename() {
     fake.put("/dst/.stage", "new");
     commit(
         &*fake,
-        Path::new("/dst/.stage"),
-        Path::new("/dst/f.txt"),
+        &crate::vfs::StreamPath::from(Path::new("/dst/.stage")),
+        &crate::vfs::StreamPath::from(Path::new("/dst/f.txt")),
         false,
     )
     .unwrap();
@@ -316,8 +365,8 @@ fn an_atomic_replace_is_used_where_the_provider_has_one() {
     fake.put("/dst/.stage", "new");
     commit(
         &*fake,
-        Path::new("/dst/.stage"),
-        Path::new("/dst/f.txt"),
+        &crate::vfs::StreamPath::from(Path::new("/dst/.stage")),
+        &crate::vfs::StreamPath::from(Path::new("/dst/f.txt")),
         true,
     )
     .unwrap();
@@ -336,8 +385,8 @@ fn without_an_atomic_replace_the_old_destination_is_kept_until_the_end() {
     fake.put("/dst/.stage", "new");
     commit(
         &*fake,
-        Path::new("/dst/.stage"),
-        Path::new("/dst/f.txt"),
+        &crate::vfs::StreamPath::from(Path::new("/dst/.stage")),
+        &crate::vfs::StreamPath::from(Path::new("/dst/f.txt")),
         true,
     )
     .unwrap();
@@ -354,12 +403,12 @@ fn a_failed_commit_puts_the_old_destination_back() {
     fake.fail_rename
         .lock()
         .unwrap()
-        .insert(PathBuf::from("/dst/.stage"));
+        .insert(crate::vfs::StreamPath::from(PathBuf::from("/dst/.stage")));
 
     let err = commit(
         &*fake,
-        Path::new("/dst/.stage"),
-        Path::new("/dst/f.txt"),
+        &crate::vfs::StreamPath::from(Path::new("/dst/.stage")),
+        &crate::vfs::StreamPath::from(Path::new("/dst/f.txt")),
         true,
     )
     .unwrap_err();
@@ -381,14 +430,19 @@ fn a_failed_commit_puts_the_old_destination_back() {
 fn a_failed_copy_leaves_the_old_destination_untouched() {
     let fake = Fake::new(false);
     fake.put("/dst/f.txt", "old");
-    let plan = Plan::staged(&*fake, PathBuf::from("/dst/f.txt"), true);
-    fake.put(plan.write_to.to_str().unwrap(), "half");
+    let plan = Plan::staged(
+        &*fake,
+        crate::vfs::StreamPath::from(PathBuf::from("/dst/f.txt")),
+        true,
+    )
+    .unwrap();
+    fake.put(plan.write_to.native().unwrap().to_str().unwrap(), "half");
 
     let mut errors = Vec::new();
     let err = transfer_one_with(
         &*fake,
         &*fake,
-        Path::new("/src/f.txt"),
+        &crate::vfs::StreamPath::from(Path::new("/src/f.txt")),
         &plan,
         false,
         &mut errors,
@@ -405,20 +459,25 @@ fn a_failed_copy_leaves_the_old_destination_untouched() {
 #[test]
 fn a_cancelled_new_copy_leaves_no_file_under_the_final_name() {
     let fake = Fake::new(false);
-    let plan = Plan::staged(&*fake, PathBuf::from("/dst/new.txt"), false);
-    fake.put(plan.write_to.to_str().unwrap(), "partial");
+    let plan = Plan::staged(
+        &*fake,
+        crate::vfs::StreamPath::from(PathBuf::from("/dst/new.txt")),
+        false,
+    )
+    .unwrap();
+    fake.put(plan.write_to.native().unwrap().to_str().unwrap(), "partial");
 
     let mut errors = Vec::new();
     let _ = transfer_one_with(
         &*fake,
         &*fake,
-        Path::new("/src/new.txt"),
+        &crate::vfs::StreamPath::from(Path::new("/src/new.txt")),
         &plan,
         false,
         &mut errors,
         || Err(io::Error::new(ErrorKind::Interrupted, "abgebrochen")),
     );
-    assert!(!fake.exists(Path::new("/dst/new.txt")));
+    assert!(!fake.exists(&crate::vfs::StreamPath::from(Path::new("/dst/new.txt"))));
     assert!(
         fake.names_in("/dst").is_empty(),
         "{:?}",
@@ -429,20 +488,28 @@ fn a_cancelled_new_copy_leaves_no_file_under_the_final_name() {
 #[test]
 fn the_final_name_appears_only_after_the_copy_is_complete() {
     let fake = Fake::new(false);
-    let plan = Plan::staged(&*fake, PathBuf::from("/dst/new.txt"), false);
+    let plan = Plan::staged(
+        &*fake,
+        crate::vfs::StreamPath::from(PathBuf::from("/dst/new.txt")),
+        false,
+    )
+    .unwrap();
 
     let mut errors = Vec::new();
     transfer_one_with(
         &*fake,
         &*fake,
-        Path::new("/src/new.txt"),
+        &crate::vfs::StreamPath::from(Path::new("/src/new.txt")),
         &plan,
         false,
         &mut errors,
         || {
             // Mid-copy: the bytes exist, the final name does not.
-            fake.put(plan.write_to.to_str().unwrap(), "all of it");
-            assert!(!fake.exists(Path::new("/dst/new.txt")));
+            fake.put(
+                plan.write_to.native().unwrap().to_str().unwrap(),
+                "all of it",
+            );
+            assert!(!fake.exists(&crate::vfs::StreamPath::from(Path::new("/dst/new.txt"))));
             Ok(())
         },
     )
@@ -456,7 +523,12 @@ fn the_final_name_appears_only_after_the_copy_is_complete() {
 fn a_failed_commit_reports_and_keeps_the_old_destination() {
     let fake = Fake::new(false);
     fake.put("/dst/f.txt", "old");
-    let plan = Plan::staged(&*fake, PathBuf::from("/dst/f.txt"), true);
+    let plan = Plan::staged(
+        &*fake,
+        crate::vfs::StreamPath::from(PathBuf::from("/dst/f.txt")),
+        true,
+    )
+    .unwrap();
     fake.fail_rename
         .lock()
         .unwrap()
@@ -466,12 +538,12 @@ fn a_failed_commit_reports_and_keeps_the_old_destination() {
     let err = transfer_one_with(
         &*fake,
         &*fake,
-        Path::new("/src/f.txt"),
+        &crate::vfs::StreamPath::from(Path::new("/src/f.txt")),
         &plan,
         false,
         &mut errors,
         || {
-            fake.put(plan.write_to.to_str().unwrap(), "new");
+            fake.put(plan.write_to.native().unwrap().to_str().unwrap(), "new");
             Ok(())
         },
     )
@@ -486,40 +558,50 @@ fn a_failed_commit_reports_and_keeps_the_old_destination() {
 fn a_move_removes_its_source_only_after_the_commit() {
     let fake = Fake::new(false);
     fake.put("/src/f.txt", "payload");
-    let plan = Plan::staged(&*fake, PathBuf::from("/dst/f.txt"), false);
+    let plan = Plan::staged(
+        &*fake,
+        crate::vfs::StreamPath::from(PathBuf::from("/dst/f.txt")),
+        false,
+    )
+    .unwrap();
 
     let mut errors = Vec::new();
     transfer_one_with(
         &*fake,
         &*fake,
-        Path::new("/src/f.txt"),
+        &crate::vfs::StreamPath::from(Path::new("/src/f.txt")),
         &plan,
         true,
         &mut errors,
         || {
-            fake.put(plan.write_to.to_str().unwrap(), "payload");
+            fake.put(plan.write_to.native().unwrap().to_str().unwrap(), "payload");
             // Still the only committed copy at this point.
-            assert!(fake.exists(Path::new("/src/f.txt")));
+            assert!(fake.exists(&crate::vfs::StreamPath::from(Path::new("/src/f.txt"))));
             Ok(())
         },
     )
     .unwrap();
 
     assert_eq!(fake.get("/dst/f.txt").as_deref(), Some("payload"));
-    assert!(!fake.exists(Path::new("/src/f.txt")));
+    assert!(!fake.exists(&crate::vfs::StreamPath::from(Path::new("/src/f.txt"))));
 }
 
 #[test]
 fn a_failed_move_keeps_its_source() {
     let fake = Fake::new(false);
     fake.put("/src/f.txt", "payload");
-    let plan = Plan::staged(&*fake, PathBuf::from("/dst/f.txt"), false);
+    let plan = Plan::staged(
+        &*fake,
+        crate::vfs::StreamPath::from(PathBuf::from("/dst/f.txt")),
+        false,
+    )
+    .unwrap();
 
     let mut errors = Vec::new();
     let _ = transfer_one_with(
         &*fake,
         &*fake,
-        Path::new("/src/f.txt"),
+        &crate::vfs::StreamPath::from(Path::new("/src/f.txt")),
         &plan,
         true,
         &mut errors,
@@ -535,19 +617,24 @@ fn an_undeletable_move_source_is_reported_and_both_copies_stay() {
     fake.fail_remove
         .lock()
         .unwrap()
-        .insert(PathBuf::from("/src/f.txt"));
-    let plan = Plan::staged(&*fake, PathBuf::from("/dst/f.txt"), false);
+        .insert(crate::vfs::StreamPath::from(PathBuf::from("/src/f.txt")));
+    let plan = Plan::staged(
+        &*fake,
+        crate::vfs::StreamPath::from(PathBuf::from("/dst/f.txt")),
+        false,
+    )
+    .unwrap();
 
     let mut errors = Vec::new();
     transfer_one_with(
         &*fake,
         &*fake,
-        Path::new("/src/f.txt"),
+        &crate::vfs::StreamPath::from(Path::new("/src/f.txt")),
         &plan,
         true,
         &mut errors,
         || {
-            fake.put(plan.write_to.to_str().unwrap(), "payload");
+            fake.put(plan.write_to.native().unwrap().to_str().unwrap(), "payload");
             Ok(())
         },
     )
@@ -570,8 +657,13 @@ fn an_undeletable_move_source_is_reported_and_both_copies_stay() {
 #[test]
 fn a_failed_cleanup_is_reported_on_its_own() {
     let fake = Fake::new(false);
-    let plan = Plan::staged(&*fake, PathBuf::from("/dst/f.txt"), false);
-    fake.put(plan.write_to.to_str().unwrap(), "half");
+    let plan = Plan::staged(
+        &*fake,
+        crate::vfs::StreamPath::from(PathBuf::from("/dst/f.txt")),
+        false,
+    )
+    .unwrap();
+    fake.put(plan.write_to.native().unwrap().to_str().unwrap(), "half");
     fake.fail_remove
         .lock()
         .unwrap()
@@ -581,7 +673,7 @@ fn a_failed_cleanup_is_reported_on_its_own() {
     let err = transfer_one_with(
         &*fake,
         &*fake,
-        Path::new("/src/f.txt"),
+        &crate::vfs::StreamPath::from(Path::new("/src/f.txt")),
         &plan,
         false,
         &mut errors,
@@ -604,13 +696,13 @@ fn a_failed_cleanup_is_reported_on_its_own() {
 #[test]
 fn direct_mode_keeps_writing_to_the_final_name() {
     let fake = Fake::new(false);
-    let plan = Plan::direct(PathBuf::from("/dst/f.txt"));
+    let plan = Plan::direct(crate::vfs::StreamPath::from(PathBuf::from("/dst/f.txt")));
 
     let mut errors = Vec::new();
     transfer_one_with(
         &*fake,
         &*fake,
-        Path::new("/src/f.txt"),
+        &crate::vfs::StreamPath::from(Path::new("/src/f.txt")),
         &plan,
         false,
         &mut errors,
@@ -632,7 +724,13 @@ fn direct_mode_keeps_writing_to_the_final_name() {
 fn safe_mode_stages_an_overwrite_instead_of_deleting_first() {
     let fake = Fake::new(false);
     fake.put("/dst/f.txt", "old");
-    let plan = plan_for(&*fake, PathBuf::from("/dst/f.txt"), true, true);
+    let plan = plan_for(
+        &*fake,
+        crate::vfs::StreamPath::from(PathBuf::from("/dst/f.txt")),
+        true,
+        true,
+    )
+    .unwrap();
     assert!(plan.is_staged());
     assert!(plan.replace);
     // Choosing the plan must not have touched anything yet.
@@ -642,7 +740,13 @@ fn safe_mode_stages_an_overwrite_instead_of_deleting_first() {
 #[test]
 fn direct_mode_never_stages() {
     let fake = Fake::new(false);
-    let plan = plan_for(&*fake, PathBuf::from("/dst/f.txt"), false, false);
+    let plan = plan_for(
+        &*fake,
+        crate::vfs::StreamPath::from(PathBuf::from("/dst/f.txt")),
+        false,
+        false,
+    )
+    .unwrap();
     assert!(!plan.is_staged());
     assert!(!plan.replace);
 }
@@ -657,10 +761,17 @@ fn staged_jobs(fake: &Fake, names: &[&str]) -> Vec<Plan> {
         .map(|name| {
             let plan = Plan::staged(
                 fake,
-                PathBuf::from(format!("/dst/{}", name)),
-                fake.exists(Path::new(&format!("/dst/{}", name))),
+                crate::vfs::StreamPath::from(PathBuf::from(format!("/dst/{}", name))),
+                fake.exists(&crate::vfs::StreamPath::from(Path::new(&format!(
+                    "/dst/{}",
+                    name
+                )))),
+            )
+            .unwrap();
+            fake.put(
+                plan.write_to.native().unwrap().to_str().unwrap(),
+                &format!("new {}", name),
             );
-            fake.put(plan.write_to.to_str().unwrap(), &format!("new {}", name));
             plan
         })
         .collect()
@@ -698,7 +809,7 @@ fn a_cancelled_parallel_run_commits_nothing() {
 
     assert_eq!(ok, 0);
     assert_eq!(fake.get("/dst/a.txt").as_deref(), Some("old a"));
-    assert!(!fake.exists(Path::new("/dst/b.txt")));
+    assert!(!fake.exists(&crate::vfs::StreamPath::from(Path::new("/dst/b.txt"))));
     assert_eq!(fake.names_in("/dst"), vec!["a.txt".to_string()]);
 }
 
@@ -707,7 +818,7 @@ fn every_parallel_job_gets_its_own_staging_entry() {
     let fake = Fake::new(false);
     let plans = staged_jobs(&fake, &["a.txt", "b.txt", "c.txt"]);
     let mut names: Vec<_> = plans.iter().map(|p| p.write_to.clone()).collect();
-    names.sort();
+    names.sort_by_key(|p| p.to_string_lossy().into_owned());
     names.dedup();
     assert_eq!(names.len(), 3, "workers must not share a staging name");
 }
@@ -725,7 +836,13 @@ fn the_local_provider_commits_and_replaces() {
     let stage = dir.join(".hortcmd-stage-test");
     std::fs::write(&stage, "new").unwrap();
 
-    commit(&local, &stage, &target, true).unwrap();
+    commit(
+        &local,
+        &crate::vfs::StreamPath::from(&stage),
+        &crate::vfs::StreamPath::from(&target),
+        true,
+    )
+    .unwrap();
     assert_eq!(std::fs::read_to_string(&target).unwrap(), "new");
     assert!(!stage.exists());
     let left: Vec<_> = std::fs::read_dir(&dir)
@@ -751,7 +868,13 @@ fn the_local_provider_commits_a_directory_over_an_existing_one() {
 
     // A populated directory target cannot use a plain rename — the
     // backup route has to carry it.
-    commit(&local, &stage, &target, true).unwrap();
+    commit(
+        &local,
+        &crate::vfs::StreamPath::from(&stage),
+        &crate::vfs::StreamPath::from(&target),
+        true,
+    )
+    .unwrap();
     assert!(target.join("new.txt").exists());
     assert!(!target.join("sub").exists());
     assert!(!stage.exists());
@@ -769,14 +892,22 @@ fn a_free_name_counts_up_past_every_taken_one() {
     let fake = Fake::new(false);
     fake.put("/dst/report.txt", "x");
     assert_eq!(
-        free_name(&*fake, Path::new("/dst/report.txt")),
-        PathBuf::from("/dst/report (2).txt")
+        free_name(
+            &*fake,
+            &crate::vfs::StreamPath::from(Path::new("/dst/report.txt"))
+        )
+        .unwrap(),
+        crate::vfs::StreamPath::from(PathBuf::from("/dst/report (2).txt"))
     );
     fake.put("/dst/report (2).txt", "x");
     fake.put("/dst/report (3).txt", "x");
     assert_eq!(
-        free_name(&*fake, Path::new("/dst/report.txt")),
-        PathBuf::from("/dst/report (4).txt")
+        free_name(
+            &*fake,
+            &crate::vfs::StreamPath::from(Path::new("/dst/report.txt"))
+        )
+        .unwrap(),
+        crate::vfs::StreamPath::from(PathBuf::from("/dst/report (4).txt"))
     );
 }
 
@@ -786,24 +917,41 @@ fn a_free_name_keeps_the_extension_and_handles_names_without_one() {
     fake.put("/dst/archive.tar.gz", "x");
     // Only the last suffix counts as the extension, as everywhere else.
     assert_eq!(
-        free_name(&*fake, Path::new("/dst/archive.tar.gz")),
-        PathBuf::from("/dst/archive.tar (2).gz")
+        free_name(
+            &*fake,
+            &crate::vfs::StreamPath::from(Path::new("/dst/archive.tar.gz"))
+        )
+        .unwrap(),
+        crate::vfs::StreamPath::from(PathBuf::from("/dst/archive.tar (2).gz"))
     );
     fake.put("/dst/README", "x");
     assert_eq!(
-        free_name(&*fake, Path::new("/dst/README")),
-        PathBuf::from("/dst/README (2)")
+        free_name(
+            &*fake,
+            &crate::vfs::StreamPath::from(Path::new("/dst/README"))
+        )
+        .unwrap(),
+        crate::vfs::StreamPath::from(PathBuf::from("/dst/README (2)"))
     );
 }
 
 #[test]
 fn the_target_keeps_the_sources_base_name() {
     assert_eq!(
-        target_in(Path::new("/dst"), Path::new("/src/deep/report.txt")),
-        Some(PathBuf::from("/dst/report.txt"))
+        target_in(
+            &crate::vfs::StreamPath::from(Path::new("/dst")),
+            &crate::vfs::StreamPath::from(Path::new("/src/deep/report.txt"))
+        ),
+        Some(crate::vfs::StreamPath::from("/dst/report.txt"))
     );
     // A path with no final component has no target.
-    assert_eq!(target_in(Path::new("/dst"), Path::new("/")), None);
+    assert_eq!(
+        target_in(
+            &crate::vfs::StreamPath::from(Path::new("/dst")),
+            &crate::vfs::StreamPath::from(Path::new("/"))
+        ),
+        None
+    );
 }
 
 // ---------- Characterization: sequential copy ----------
@@ -815,16 +963,18 @@ fn a_sequential_copy_reproduces_the_tree_and_its_bytes() {
     fake.put("/src/sub/b.txt", "welt");
     {
         let mut fs = fake.fs.lock().unwrap();
-        fs.dirs.insert(PathBuf::from("/src"));
-        fs.dirs.insert(PathBuf::from("/src/sub"));
+        fs.dirs
+            .insert(crate::vfs::StreamPath::from(PathBuf::from("/src")));
+        fs.dirs
+            .insert(crate::vfs::StreamPath::from(PathBuf::from("/src/sub")));
     }
 
     let mut prog = silent_prog();
     copy_tree(
         &*fake,
         &*fake,
-        Path::new("/src"),
-        Path::new("/dst"),
+        &crate::vfs::StreamPath::from(Path::new("/src")),
+        &crate::vfs::StreamPath::from(Path::new("/dst")),
         &mut prog,
         plain_tuning(),
     )
@@ -846,8 +996,8 @@ fn a_cancelled_sequential_copy_stops_and_removes_the_partial_file() {
     let err = copy_file_prog(
         &*fake,
         &*fake,
-        Path::new("/src/a.txt"),
-        Path::new("/dst/a.txt"),
+        &crate::vfs::StreamPath::from(Path::new("/src/a.txt")),
+        &crate::vfs::StreamPath::from(Path::new("/dst/a.txt")),
         &mut prog,
         plain_tuning(),
     )
@@ -869,8 +1019,8 @@ fn verification_compares_the_checksums_of_source_and_target() {
     copy_file_prog(
         &*fake,
         &*fake,
-        Path::new("/src/a.txt"),
-        Path::new("/dst/a.txt"),
+        &crate::vfs::StreamPath::from(Path::new("/src/a.txt")),
+        &crate::vfs::StreamPath::from(Path::new("/dst/a.txt")),
         &mut prog,
         tune,
     )
@@ -887,16 +1037,18 @@ fn flattening_assigns_every_file_to_its_top_level_source() {
     fake.put("/src/sub/b.txt", "22");
     {
         let mut fs = fake.fs.lock().unwrap();
-        fs.dirs.insert(PathBuf::from("/src"));
-        fs.dirs.insert(PathBuf::from("/src/sub"));
+        fs.dirs
+            .insert(crate::vfs::StreamPath::from(PathBuf::from("/src")));
+        fs.dirs
+            .insert(crate::vfs::StreamPath::from(PathBuf::from("/src/sub")));
     }
 
     let mut tasks = Vec::new();
     flatten_tree(
         &*fake,
         &*fake,
-        Path::new("/src"),
-        Path::new("/dst"),
+        &crate::vfs::StreamPath::from(Path::new("/src")),
+        &crate::vfs::StreamPath::from(Path::new("/dst")),
         7,
         &mut tasks,
     )
@@ -906,7 +1058,7 @@ fn flattening_assigns_every_file_to_its_top_level_source() {
     // which is what lets one failing job be discarded on its own.
     assert!(tasks.iter().all(|t| t.idx == 7));
     // The target folders exist before any worker writes into them.
-    assert!(fake.is_dir(Path::new("/dst/sub")));
+    assert!(fake.is_dir(&crate::vfs::StreamPath::from(Path::new("/dst/sub"))));
 }
 
 #[test]
@@ -914,8 +1066,8 @@ fn a_cancelled_parallel_copy_writes_nothing() {
     let fake = Fake::new(false);
     fake.put("/src/a.txt", "hallo");
     let task = CopyTask {
-        src: PathBuf::from("/src/a.txt"),
-        dst: PathBuf::from("/dst/a.txt"),
+        src: crate::vfs::StreamPath::from(PathBuf::from("/src/a.txt")),
+        dst: crate::vfs::StreamPath::from(PathBuf::from("/dst/a.txt")),
         idx: 0,
     };
     let sp = shared_prog(fake.clone(), Arc::new(AtomicBool::new(true)));
@@ -930,13 +1082,13 @@ fn a_cancelled_parallel_copy_writes_nothing() {
 fn a_move_that_fails_to_copy_keeps_its_source() {
     let fake = Fake::new(false);
     fake.put("/src/a.txt", "hallo");
-    let plan = Plan::direct(PathBuf::from("/dst/a.txt"));
+    let plan = Plan::direct(crate::vfs::StreamPath::from(PathBuf::from("/dst/a.txt")));
     let mut errors = Vec::new();
 
     let err = transfer_one_with(
         &*fake,
         &*fake,
-        Path::new("/src/a.txt"),
+        &crate::vfs::StreamPath::from(Path::new("/src/a.txt")),
         &plan,
         true, // remove_source
         &mut errors,
@@ -1049,7 +1201,15 @@ fn flatten_tree_collects_files_and_makes_dirs() {
     let dst = root.join("dst");
 
     let mut tasks: Vec<CopyTask> = Vec::new();
-    flatten_tree(&LocalProvider, &LocalProvider, &src, &dst, 0, &mut tasks).unwrap();
+    flatten_tree(
+        &LocalProvider,
+        &LocalProvider,
+        &crate::vfs::StreamPath::from(&src),
+        &crate::vfs::StreamPath::from(&dst),
+        0,
+        &mut tasks,
+    )
+    .unwrap();
 
     assert_eq!(tasks.len(), 2, "zwei Dateien erwartet");
     assert!(dst.join("sub").is_dir(), "Zielordner angelegt");
@@ -1068,11 +1228,14 @@ fn hash_file_matches_known_vector() {
     // copy verification (source vs. target).
     let d = tmp_dir();
     write(&d, "abc.bin", "abc");
-    let hex: String = hash_file_sha256(&LocalProvider, &d.join("abc.bin"))
-        .unwrap()
-        .iter()
-        .map(|b| format!("{:02x}", b))
-        .collect();
+    let hex: String = hash_file_sha256(
+        &LocalProvider,
+        &crate::vfs::StreamPath::from(&d.join("abc.bin")),
+    )
+    .unwrap()
+    .iter()
+    .map(|b| format!("{:02x}", b))
+    .collect();
     assert_eq!(
         hex,
         "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
@@ -1091,8 +1254,8 @@ fn failed_parallel_directory_preparation_does_not_schedule_file_writes() {
     let result = flatten_tree(
         &LocalProvider,
         &LocalProvider,
-        &source,
-        &blocked.join("sub"),
+        &crate::vfs::StreamPath::from(&source),
+        &crate::vfs::StreamPath::from(&blocked.join("sub")),
         0,
         &mut tasks,
     );
@@ -1122,12 +1285,263 @@ fn canonical_uri_resolution_writes_the_exact_decoded_provider_object() {
             let path = ProviderPath::from_raw("/safe").unwrap().join(name).unwrap();
             let uri = format!("{scheme}://u@{}{}", host.to_uppercase(), path.uri());
             let (provider, resolved) = vfs::resolve(&uri).unwrap();
-            assert_eq!(resolved, format!("/safe/{name}"));
-            provider
-                .write(Path::new(&resolved), b"exact object")
-                .unwrap();
-            assert_eq!(fake.get(&resolved).as_deref(), Some("exact object"));
+            assert_eq!(resolved.to_string_lossy(), format!("/safe/{name}"));
+            provider.write(&resolved, b"exact object").unwrap();
+            assert_eq!(
+                fake.get(&resolved.to_string_lossy()).as_deref(),
+                Some("exact object")
+            );
         }
         crate::net::session::unregister_live(&fake.store_id());
     }
+}
+
+fn remote_fixture() -> (Arc<Fake>, crate::net::session::TestConnection, String) {
+    let host = format!("component-fixture-{}", crate::net::unique_id());
+    let profile: crate::net::session::Profile = serde_json::from_value(serde_json::json!({
+        "id":host, "name":"component fixture", "protocol":"webdav", "host":host,
+        "port":443, "user":"u", "auth":"anonymous", "key_path":null, "start_path":"/"
+    }))
+    .unwrap();
+    let prefix = format!("webdav://{}/", profile.connection_key());
+    let mut fake = Fake::new(false);
+    Arc::get_mut(&mut fake).unwrap().store = format!("webdav:{}", profile.connection_key());
+    for dir in ["/", "/src", "/src//", "/src//folder", "/dst", "/dst//"] {
+        fake.create_dir_all(&fake.path(dir)).unwrap();
+    }
+    let connection = crate::net::session::register_test_connection(profile, fake.clone());
+    (fake, connection, prefix.trim_end_matches('/').to_owned())
+}
+
+#[test]
+fn repeated_components_survive_planning_publication_rollback_and_journal_reopen() {
+    use super::recovery::{
+        self,
+        types::{Intent, RecoveryKind, RecoverySettings, RecoveryState},
+        Journal,
+    };
+    for failure in ["none", "publish", "rollback"] {
+        let (fake, _connection, prefix) = remote_fixture();
+        fake.put("/src//folder/file.txt", "new payload");
+        fake.put("/dst//file.txt", "old payload");
+        fake.put("/dst/file.txt", "different resource");
+        let source_uri = format!("{prefix}/src//folder/file.txt");
+        let destination_uri = format!("{prefix}/dst//");
+        let source = crate::vfs::resolve(&source_uri).unwrap().1;
+        let target = fake.path("/dst//file.txt");
+        let review = super::preflight::build(
+            RecoveryKind::Copy,
+            std::slice::from_ref(&source_uri),
+            &destination_uri,
+            RecoverySettings::default(),
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        review.ensure_executable().unwrap();
+        assert_eq!(review.mappings[0].source.stream_path().unwrap(), source);
+        assert_eq!(review.mappings[0].target.stream_path().unwrap(), target);
+        super::preflight::revalidate_source(
+            &review.mappings[0],
+            &*fake,
+            &review.limits,
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        assert_eq!(
+            crate::vfs::resolve(&review.mappings[0].target.resolve().unwrap())
+                .unwrap()
+                .1,
+            target
+        );
+        let tree = super::preflight::build(
+            RecoveryKind::Copy,
+            &[format!("{prefix}/src//folder")],
+            &destination_uri,
+            RecoverySettings::default(),
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        tree.ensure_executable().unwrap();
+        assert_eq!(tree.mappings[0].files, 1);
+
+        let root = fresh_dir();
+        let journal = Journal::open(&root).unwrap();
+        journal
+            .enqueue(
+                "job",
+                Intent::transfer(
+                    RecoveryKind::Copy,
+                    &[source_uri],
+                    &destination_uri,
+                    RecoverySettings::default(),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let handle = journal.begin("job").unwrap();
+        let mut plan = Plan::staged(&*fake, target.clone(), true).unwrap();
+        plan.track(&handle, &source, &*fake).unwrap();
+        let stage = plan.write_to.clone();
+        let backup = plan.backup.clone().unwrap();
+        assert_eq!(stage.parent(), Some(fake.path("/dst//")));
+        assert_eq!(backup.parent(), Some(fake.path("/dst//")));
+        // Aliases produced by the old host-Path adapter must never be touched,
+        // even by startup recovery's existence probes.
+        let stage_alias = format!("/dst/{}", stage.file_name().unwrap().to_str().unwrap());
+        let backup_alias = format!("/dst/{}", backup.file_name().unwrap().to_str().unwrap());
+        fake.put(&stage_alias, "unrelated stage");
+        fake.put(&backup_alias, "unrelated backup");
+        if failure != "none" {
+            fake.fail_rename.lock().unwrap().insert(stage.clone());
+        }
+        if failure == "rollback" {
+            fake.fail_rename.lock().unwrap().insert(backup.clone());
+        }
+        let mut errors = Vec::new();
+        let result = super::copy::transfer_one(
+            &*fake,
+            &*fake,
+            &source,
+            &plan,
+            &mut silent_prog(),
+            CopyTuning {
+                limit: 0,
+                verify: true,
+                buf_size: 4096,
+            },
+            false,
+            &mut errors,
+        );
+        assert_eq!(result.is_ok(), failure == "none");
+        assert_eq!(
+            fake.get("/dst/file.txt").as_deref(),
+            Some("different resource")
+        );
+        assert_eq!(fake.get(&stage_alias).as_deref(), Some("unrelated stage"));
+        assert_eq!(fake.get(&backup_alias).as_deref(), Some("unrelated backup"));
+        assert_eq!(
+            fake.get("/src//folder/file.txt").as_deref(),
+            Some("new payload")
+        );
+        if failure == "rollback" {
+            assert!(!fake.exists(&target));
+            assert_eq!(
+                fake.get(&backup.to_string_lossy()).as_deref(),
+                Some("old payload")
+            );
+        } else {
+            assert_eq!(
+                fake.get("/dst//file.txt").as_deref(),
+                Some(if failure == "none" {
+                    "new payload"
+                } else {
+                    "old payload"
+                })
+            );
+        }
+        drop(plan);
+        drop(handle);
+        drop(journal);
+        let reopened = Journal::open(&root).unwrap();
+        let record = reopened.records().unwrap().remove(0);
+        let item = &record.items[0];
+        assert_eq!(
+            crate::vfs::resolve(&item.target.resolve().unwrap())
+                .unwrap()
+                .1,
+            target
+        );
+        assert_eq!(
+            crate::vfs::resolve(&item.staging.as_ref().unwrap().resolve().unwrap())
+                .unwrap()
+                .1,
+            stage
+        );
+        assert_eq!(
+            crate::vfs::resolve(&item.backup.as_ref().unwrap().resolve().unwrap())
+                .unwrap()
+                .1,
+            backup
+        );
+        let view = recovery::reconcile::entry(&reopened, &record);
+        assert_eq!(
+            view.state == RecoveryState::CleanupRequired,
+            failure != "none"
+        );
+        // Remote recovery remains conservative: no native fingerprint or guessed deletion.
+        assert!(recovery::reconcile::cleanup(&reopened, &record).is_err());
+        assert_eq!(fake.get(&backup_alias).as_deref(), Some("unrelated backup"));
+        drop(reopened);
+        fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[test]
+fn mcp_containment_and_descendant_checks_distinguish_empty_components() {
+    let (fake, _connection, prefix) = remote_fixture();
+    fake.put("/dst//file.txt", "inside");
+    fake.put("/dst/file.txt", "outside");
+    let root = format!("{prefix}/dst//");
+    let inside = format!("{prefix}/dst//file.txt");
+    let outside = format!("{prefix}/dst/file.txt");
+    let config = crate::mcp::McpConfig {
+        roots: vec![root.clone()],
+        enabled: true,
+        allow_write: true,
+        ..Default::default()
+    };
+    crate::mcp::scope::require_in_scope(&config.roots, &inside).unwrap();
+    assert!(crate::mcp::scope::require_in_scope(&config.roots, &outside).is_err());
+    let (provider, path) =
+        crate::mcp::scoped_provider::ScopedProvider::resolve(&root, &config).unwrap();
+    assert_eq!(
+        provider.read_dir(&path).unwrap(),
+        vec![fake.path("/dst//file.txt")]
+    );
+    assert!(provider
+        .rename(&fake.path("/dst//file.txt"), &fake.path("/dst/file.txt"))
+        .is_err());
+    assert_eq!(fake.get("/dst/file.txt").as_deref(), Some("outside"));
+}
+
+#[test]
+fn cancelled_remote_copy_preserves_the_exact_target_and_normalized_alias() {
+    let (fake, _connection, _) = remote_fixture();
+    fake.put("/src//file.txt", "source");
+    fake.put("/dst//file.txt", "old target");
+    fake.put("/dst/file.txt", "unrelated target");
+    let plan = Plan::staged(&*fake, fake.path("/dst//file.txt"), true).unwrap();
+    let alias = format!(
+        "/dst/{}",
+        plan.write_to.file_name().unwrap().to_str().unwrap()
+    );
+    fake.put(&alias, "unrelated stage");
+    let mut progress = silent_prog();
+    progress
+        .cancel
+        .store(true, std::sync::atomic::Ordering::Relaxed);
+    let error = super::copy::transfer_one(
+        &*fake,
+        &*fake,
+        &fake.path("/src//file.txt"),
+        &plan,
+        &mut progress,
+        CopyTuning {
+            limit: 0,
+            verify: true,
+            buf_size: 4096,
+        },
+        false,
+        &mut Vec::new(),
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::Interrupted);
+    assert!(!fake.exists(&plan.write_to));
+    assert_eq!(fake.get("/src//file.txt").as_deref(), Some("source"));
+    assert_eq!(fake.get("/dst//file.txt").as_deref(), Some("old target"));
+    assert_eq!(
+        fake.get("/dst/file.txt").as_deref(),
+        Some("unrelated target")
+    );
+    assert_eq!(fake.get(&alias).as_deref(), Some("unrelated stage"));
 }

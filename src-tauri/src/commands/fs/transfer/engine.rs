@@ -1,3 +1,4 @@
+use crate::vfs::StreamPath;
 // ============================================================
 // The transfer engine (ticket 035).
 //
@@ -26,7 +27,6 @@ use crate::errors::{code, AppError, ErrorAction};
 use crate::vfs;
 use crate::vfs::caps::{self, Capability};
 use std::io::ErrorKind;
-use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Instant;
@@ -133,7 +133,7 @@ pub(crate) fn run_transfer(
         Ok(v) => v,
         Err(e) => return fail(id, op, &dest_dir, e),
     };
-    let dest = PathBuf::from(&dest_path);
+    let dest = StreamPath::from(&dest_path);
     // Safe mode never degrades to direct writes behind the user's back:
     // a destination that cannot publish a staged entry stops the
     // transfer with something the user can act on.
@@ -207,17 +207,15 @@ pub(crate) fn run_transfer(
     }
     let live_plan = Arc::new(live_plan);
     let mut errors: Vec<ItemError> = Vec::new();
-    let measured: Vec<(String, u32, u64)> = live_plan
+    let measured = match live_plan
         .mappings
         .iter()
-        .map(|m| {
-            let path = match &m.source {
-                super::recovery::types::RecoveryLocation::Local { path }
-                | super::recovery::types::RecoveryLocation::Remote { path, .. } => path.clone(),
-            };
-            (path, m.files, m.bytes)
-        })
-        .collect();
+        .map(|mapping| Ok((mapping.source.stream_path()?, mapping.files, mapping.bytes)))
+        .collect::<crate::errors::AppResult<Vec<_>>>()
+    {
+        Ok(measured) => measured,
+        Err(error) => return fail(id, op, "", error),
+    };
     let files_total = measured.iter().map(|m| m.1).sum();
     let bytes_total: u64 = measured.iter().map(|m| m.2).sum();
 
@@ -243,7 +241,7 @@ pub(crate) fn run_transfer(
         // deleted — such an entry can hold the only copy of a file.
         let stale = stale_working_entries(&*dstp, &dest);
         if !stale.is_empty() {
-            let base = dest_dir.trim_end_matches('/');
+            let base = dest_dir.strip_suffix('/').unwrap_or(&dest_dir);
             let _ = app.emit(
                 "fs-leftovers",
                 Leftovers {
@@ -272,13 +270,14 @@ pub(crate) fn run_transfer(
     let mut default_res: Option<Resolution> = None; // „Für alle übernehmen"
                                                     // In parallel mode the resolved pairs are collected and afterwards
                                                     // copied in parallel (collisions are resolved here sequentially/interactively).
-    let mut copy_jobs: Vec<(PathBuf, Plan)> = Vec::new();
+    let mut copy_jobs: Vec<(StreamPath, Plan)> = Vec::new();
 
-    'outer: for (index, (s, files, bytes)) in measured.iter().enumerate() {
+    'outer: for (index, (src, files, bytes)) in measured.iter().enumerate() {
         if prog.cancelled() {
             break;
         }
-        let src = Path::new(s);
+        let source_display = src.to_string_lossy();
+        let s = source_display.as_ref();
         let Some(mut target) = target_in(&dest, src) else {
             errors.push(ItemError::new(
                 s,
@@ -334,7 +333,13 @@ pub(crate) fn run_transfer(
             };
             match res {
                 Resolution::Skip => continue,
-                Resolution::Rename => target = free_name(&*dstp, &target),
+                Resolution::Rename => match free_name(&*dstp, &target) {
+                    Ok(path) => target = path,
+                    Err(error) => {
+                        errors.push(ItemError::new(s, error.into()));
+                        continue;
+                    }
+                },
                 Resolution::Overwrite if safe => replace = true,
                 Resolution::Overwrite => {
                     if let Err(e) = dstp.remove(&target) {
@@ -345,13 +350,20 @@ pub(crate) fn run_transfer(
             }
         }
 
-        let mut plan = plan_for(&*dstp, target, replace, safe);
+        let mut plan = match plan_for(&*dstp, target, replace, safe) {
+            Ok(plan) => plan,
+            Err(error) => {
+                errors.push(ItemError::new(s, error.into()));
+                continue;
+            }
+        };
         plan.cancel = prog.cancel.clone();
         plan.preflight = Some(live_plan.clone());
         plan.native_move = run.is_some()
             && remove_source
             && same_store
-            && (srcp.store_id() != "local" || recovery::durability::same_device(src, &dest));
+            && (srcp.store_id() != "local"
+                || matches!((src.native(), dest.native()), (Ok(s), Ok(d)) if recovery::durability::same_device(s, d)));
         if let Err(error) = plan.observe_target(&*dstp) {
             errors.push(ItemError::new(s, error.into()));
             break;

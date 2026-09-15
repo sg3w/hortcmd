@@ -9,7 +9,7 @@ use crate::vfs::{
 };
 use std::fs::{self, File};
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use zip::{write::SimpleFileOptions, ZipWriter};
 
 fn cancelled(prog: &Prog) -> AppResult<()> {
@@ -49,7 +49,7 @@ pub(crate) fn run_with_recovery(
     }
     caps::require(destination, Capability::ArchivePackTo)?;
     let (_, destination) = vfs::resolve(destination)?;
-    let destination = Path::new(&destination);
+    let destination = destination.native()?;
     let parent = fs::canonicalize(destination.parent().unwrap_or(Path::new(".")))?;
     let name = destination
         .file_name()
@@ -61,7 +61,7 @@ pub(crate) fn run_with_recovery(
     for raw in sources {
         caps::require(raw, Capability::ArchivePackFrom)?;
         let (_, source) = vfs::resolve(raw)?;
-        let source = PathBuf::from(source);
+        let source = source.native()?.to_path_buf();
         check(&source)?;
         let source_meta = fs::symlink_metadata(&source)?;
         if source_meta.file_type().is_symlink() {
@@ -114,7 +114,7 @@ pub(crate) fn run_with_recovery(
         entries.push((path, name, directory, meta.len()));
     }
     crate::commands::fs::transfer::preflight::archive_capacity(
-        &parent,
+        &parent.clone().into(),
         crate::commands::fs::transfer::recovery::types::RecoveryKind::Pack,
         prog.bytes_total,
         entries.len().try_into().map_err(|_| safety::limit())?,

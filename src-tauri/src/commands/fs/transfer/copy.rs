@@ -1,3 +1,4 @@
+use crate::vfs::StreamPath;
 // ============================================================
 // The sequential copy path (ticket 035).
 //
@@ -17,7 +18,6 @@ use super::progress::Prog;
 use crate::errors::{AppError, ErrorAction};
 use crate::vfs::Provider;
 use std::io::{ErrorKind, Read, Write};
-use std::path::Path;
 use std::time::{Duration, Instant};
 
 /// The three knobs every copy shares, from the settings down to the
@@ -40,8 +40,8 @@ pub(crate) struct CopyTuning {
 pub(crate) fn copy_file_prog(
     srcp: &dyn Provider,
     dstp: &dyn Provider,
-    src: &Path,
-    dst: &Path,
+    src: &StreamPath,
+    dst: &StreamPath,
     prog: &mut Prog,
     tune: CopyTuning,
 ) -> std::io::Result<()> {
@@ -64,7 +64,7 @@ pub(crate) fn copy_file_prog(
     let mut win_start = Instant::now();
     let mut win_bytes = 0u64;
 
-    let abort = |writer: Box<dyn Write + Send>, dst: &Path| {
+    let abort = |writer: Box<dyn Write + Send>, dst: &StreamPath| {
         drop(writer);
         let _ = dstp.remove_file(dst); // unvollständige Zieldatei verwerfen
         std::io::Error::new(ErrorKind::Interrupted, "abgebrochen")
@@ -138,7 +138,10 @@ pub(crate) fn copy_file_prog(
 }
 
 /// SHA-256 of a file (for the copy verification).
-pub(crate) fn hash_file_sha256(provider: &dyn Provider, path: &Path) -> std::io::Result<Vec<u8>> {
+pub(crate) fn hash_file_sha256(
+    provider: &dyn Provider,
+    path: &StreamPath,
+) -> std::io::Result<Vec<u8>> {
     use sha2::{Digest, Sha256};
     let mut f = provider.open_read(path)?;
     let mut h = Sha256::new();
@@ -157,8 +160,8 @@ pub(crate) fn hash_file_sha256(provider: &dyn Provider, path: &Path) -> std::io:
 pub(crate) fn copy_tree(
     srcp: &dyn Provider,
     dstp: &dyn Provider,
-    src: &Path,
-    dst: &Path,
+    src: &StreamPath,
+    dst: &StreamPath,
     prog: &mut Prog,
     tune: CopyTuning,
 ) -> std::io::Result<()> {
@@ -166,11 +169,11 @@ pub(crate) fn copy_tree(
         dstp.create_dir_all(dst)?;
         for child in srcp.read_dir(src)? {
             let name = child.file_name().unwrap_or_default();
-            copy_tree(srcp, dstp, &child, &dst.join(name), prog, tune)?;
+            copy_tree(srcp, dstp, &child, &dst.join(name)?, prog, tune)?;
         }
     } else {
         if let Some(parent) = dst.parent() {
-            dstp.create_dir_all(parent)?;
+            dstp.create_dir_all(&parent)?;
         }
         copy_file_prog(srcp, dstp, src, dst, prog, tune)?;
     }
@@ -184,7 +187,7 @@ pub(crate) fn copy_tree(
 pub(crate) fn transfer_one_with<F>(
     srcp: &dyn Provider,
     dstp: &dyn Provider,
-    src: &Path,
+    src: &StreamPath,
     plan: &Plan,
     remove_source: bool,
     errors: &mut Vec<ItemError>,
@@ -216,7 +219,7 @@ where
             ));
         } else if let Some(step) = &plan.recovery {
             if srcp.store_id() == "local" {
-                super::recovery::durability::sync_parent(src)?;
+                super::recovery::durability::sync_parent(src.native()?)?;
             }
             step.transition(super::recovery::types::Phase::SourceRemoved)
                 .map_err(std::io::Error::other)?;
@@ -230,7 +233,7 @@ where
 pub(crate) fn transfer_one(
     srcp: &dyn Provider,
     dstp: &dyn Provider,
-    src: &Path,
+    src: &StreamPath,
     plan: &Plan,
     prog: &mut Prog,
     tune: CopyTuning,

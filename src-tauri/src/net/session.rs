@@ -738,6 +738,34 @@ pub(crate) fn connection_states() -> Vec<ConnectionStatus> {
     all_states()
 }
 
+/// In-memory fixture only: never writes profiles or credentials to disk.
+#[cfg(test)]
+pub(crate) fn register_test_connection(
+    profile: Profile,
+    provider: Arc<dyn Provider>,
+) -> TestConnection {
+    let id = profile.id.clone();
+    let store = provider.store_id();
+    let mut registry = registry().lock().unwrap();
+    assert!(!registry.profiles.iter().any(|p| p.id == id));
+    registry.profiles.push(profile);
+    registry.live.insert(store.clone(), provider);
+    TestConnection { id, store }
+}
+#[cfg(test)]
+pub(crate) struct TestConnection {
+    id: String,
+    store: String,
+}
+#[cfg(test)]
+impl Drop for TestConnection {
+    fn drop(&mut self) {
+        let mut registry = registry().lock().unwrap();
+        registry.profiles.retain(|p| p.id != self.id);
+        registry.live.remove(&self.store);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
