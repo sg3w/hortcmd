@@ -1576,3 +1576,31 @@ fn rename_refuses_other_stores_before_access_and_keeps_same_store_no_overwrite()
     assert_eq!(first.get("/src/new").as_deref(), Some("first"));
     assert!(first.get("/src/file").is_none());
 }
+
+#[test]
+fn actual_storage_full_error_preserves_source_and_old_destination() {
+    let fake = Fake::new(false);
+    fake.put("/src/file", "source");
+    fake.put("/dst/file", "old");
+    let plan = Plan::staged(&*fake, fake.path("/dst/file"), true).unwrap();
+    fake.put(&plan.write_to.to_string_lossy(), "partial");
+    let mut errors = Vec::new();
+    let error = transfer_one_with(
+        &*fake,
+        &*fake,
+        &fake.path("/src/file"),
+        &plan,
+        true,
+        &mut errors,
+        || Err(io::Error::from(ErrorKind::StorageFull)),
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::StorageFull);
+    assert_eq!(
+        &*crate::errors::AppError::from(error).code,
+        crate::errors::code::FS_NO_SPACE
+    );
+    assert_eq!(fake.get("/src/file").as_deref(), Some("source"));
+    assert_eq!(fake.get("/dst/file").as_deref(), Some("old"));
+    assert!(!fake.exists(&plan.write_to));
+}

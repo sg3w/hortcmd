@@ -51,6 +51,7 @@ interface SettingsStore extends PersistedSettings {
   setQueueTransfers: (v: boolean) => void;
   setBufferSizeKb: (v: number) => void;
   setCopyThreads: (v: number) => void;
+  setCheckTransferSpace: (v: boolean) => void;
   setSafeTransfers: (v: boolean) => void;
   setFoldersFirst: (v: boolean) => void;
   setShowExtColumn: (v: boolean) => void;
@@ -101,6 +102,7 @@ export const useSettings = create<SettingsStore>()(
       bufferSizeKb: 256,
       copyThreads: 1,
       safeTransfers: true,
+      checkTransferSpace: true,
 
       foldersFirst: true,
       showExtColumn: true,
@@ -141,6 +143,7 @@ export const useSettings = create<SettingsStore>()(
         set({ bufferSizeKb: Math.min(16384, Math.max(0, Math.floor(bufferSizeKb))) }),
       setCopyThreads: (copyThreads) =>
         set({ copyThreads: Math.min(16, Math.max(1, Math.floor(copyThreads))) }),
+      setCheckTransferSpace: (checkTransferSpace) => set({ checkTransferSpace }),
       setSafeTransfers: (safeTransfers) => set({ safeTransfers }),
       setFoldersFirst: (foldersFirst) => set({ foldersFirst }),
       setShowExtColumn: (showExtColumn) => set({ showExtColumn }),

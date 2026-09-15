@@ -483,3 +483,9 @@ it("defaults native icons for older settings and validates the persisted mode", 
   expect(load({ fileIcons: "simple" }).value.fileIcons).toBe("simple");
   expect(load({ fileIcons: "bogus" }).value.fileIcons).toBe("system");
 });
+
+it("persists an explicitly disabled quota check and defaults older settings to enabled", () => {
+  expect(load({}, SETTINGS_VERSION).value.checkTransferSpace).toBe(true);
+  expect(load({ checkTransferSpace: false }, SETTINGS_VERSION).value.checkTransferSpace).toBe(false);
+  expect(load({ checkTransferSpace: "false" }, SETTINGS_VERSION).value.checkTransferSpace).toBe(true);
+});

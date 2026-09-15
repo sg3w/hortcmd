@@ -320,6 +320,7 @@ pub fn copy_entries(
     buf_kb: u64,
     threads: u32,
     safe: bool,
+    check_space: Option<bool>,
 ) {
     let id2 = id.clone();
     spawn_op(id, move |cancel, pause| {
@@ -337,6 +338,7 @@ pub fn copy_entries(
             buf_kb,
             threads,
             safe,
+            check_space,
         )
     });
 }
@@ -356,6 +358,7 @@ pub fn move_entries(
     buf_kb: u64,
     threads: u32,
     safe: bool,
+    check_space: Option<bool>,
 ) {
     let id2 = id.clone();
     spawn_op(id, move |cancel, pause| {
@@ -373,6 +376,7 @@ pub fn move_entries(
             buf_kb,
             threads,
             safe,
+            check_space,
         )
     });
 }

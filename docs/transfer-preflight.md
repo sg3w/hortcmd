@@ -1,10 +1,24 @@
 # Transfer preflight
 
-Copy and move confirmation includes a read-only plan: selected sources, destination,
-file count, additional space, peak footprint, capacity/quota, safety mode,
-verification reads and warnings. Blocking issues disable confirmation. Closing the
-dialog cancels traversal. The approved settings and plan digest accompany the
-queued request; changes to settings do not alter waiting work.
+Copy and move confirmation shows a short file-count/size summary with directly
+relevant decisions and blocking problems. **Details** contains capacity/quota,
+peak footprint, safety mode, verification reads and additional advisories. Sizes
+use readable units. Blocking issues disable confirmation. Closing the dialog
+cancels traversal. The approved settings and plan digest accompany the queued
+request; changes to settings do not alter waiting work.
+
+**Space check settings** opens Settings → File operations, where **Check available
+space and quota** can be turned off permanently. The confirmation waits while
+settings are open and refreshes its review after the option changes. Enabled is
+the default for existing settings and journals. Disabled checks are explicitly
+labelled, distinct from an enabled check with unknown capacity.
+
+Disabling skips capacity queries and no-space prechecks in planning, queue review,
+execution and immediately before publication. It preserves write-access, name,
+object-size, source/destination identity, staging and collision checks. Actual
+write/flush failures still fail safely and are reported normally; no-space errors
+never authorize overwriting the original. The option covers copy/move transfers;
+archive extraction's expansion/resource limits remain enforced.
 
 ## Planning and revalidation
 
@@ -20,8 +34,8 @@ queuing still supplies the complete authorized operation and checks live provide
 capabilities. The queue recomputes the plan and rejects changed reviewed semantics
 before saving it in the existing private recovery journal. The engine recomputes
 again before work starts. Every source is revalidated before writes; destination
-identity, connection generation, writable/staging state and capacity are checked
-before writes and immediately before commit. Staged publication also rejects a
+identity, connection generation and writable/staging state are checked
+before writes and immediately before commit; capacity is checked when enabled. Staged publication also rejects a
 changed target. An overwrite decision remains a fresh transfer collision decision.
 
 Connection generations distinguish provider instances even for identical store

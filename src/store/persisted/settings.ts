@@ -182,6 +182,7 @@ export function validateSettings(
     }),
     copyThreads: num(s.copyThreads, 1, "copyThreads", r, { min: 1, max: 16, int: true }),
     safeTransfers: bool(s.safeTransfers, true, "safeTransfers", r),
+    checkTransferSpace: bool(s.checkTransferSpace, true, "checkTransferSpace", r),
 
     foldersFirst: bool(s.foldersFirst, true, "foldersFirst", r),
     showExtColumn: bool(s.showExtColumn, true, "showExtColumn", r),

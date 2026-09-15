@@ -219,9 +219,17 @@ pub trait Provider: Send + Sync {
         Ok(())
     }
 
-    fn limits(&self, path: &StreamPath) -> io::Result<limits::ProviderLimits> {
+    fn limits(
+        &self,
+        path: &StreamPath,
+        check_capacity: bool,
+    ) -> io::Result<limits::ProviderLimits> {
         Ok(limits::ProviderLimits {
-            available_bytes: self.free_space(path),
+            available_bytes: if check_capacity {
+                self.free_space(path)
+            } else {
+                None
+            },
             staging: self.supports_staging(),
             ..Default::default()
         })

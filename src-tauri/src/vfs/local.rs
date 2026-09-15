@@ -155,9 +155,17 @@ impl Provider for LocalProvider {
         Ok(())
     }
 
-    fn limits(&self, path: &crate::vfs::StreamPath) -> io::Result<super::limits::ProviderLimits> {
+    fn limits(
+        &self,
+        path: &crate::vfs::StreamPath,
+        check_capacity: bool,
+    ) -> io::Result<super::limits::ProviderLimits> {
         let mut limits = super::limits::ProviderLimits {
-            available_bytes: self.free_space(path),
+            available_bytes: if check_capacity {
+                self.free_space(path)
+            } else {
+                None
+            },
             staging: true,
             reserved_names: Some(vec![".".into(), "..".into()]),
             forbidden_characters: Some("/\0".into()),

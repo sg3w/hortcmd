@@ -20,6 +20,7 @@ interface StartCall {
   bufKb: number;
   threads: number;
   safe: boolean;
+  checkSpace?: boolean;
 }
 
 const started: StartCall[] = [];
@@ -36,8 +37,9 @@ vi.mock("@/ipc/client", () => ({
     bufKb: number,
     threads: number,
     safe: boolean,
+    checkSpace?: boolean,
   ) => {
-    started.push({ op, id, sources, dest, limit, verify, bufKb, threads, safe });
+    started.push({ op, id, sources, dest, limit, verify, bufKb, threads, safe, checkSpace });
   },
   startExtract: () => {},
   startPack: () => {},
@@ -176,6 +178,7 @@ describe("settings are snapshotted at request time", () => {
   it("keeps the policy a queued transfer was requested with", () => {
     useSettings.setState({
       safeTransfers: true,
+      checkTransferSpace: false,
       verifyCopies: true,
       speedLimit: 100,
       copyThreads: 4,
@@ -186,6 +189,7 @@ describe("settings are snapshotted at request time", () => {
     // The user changes their mind while it waits.
     useSettings.setState({
       safeTransfers: false,
+      checkTransferSpace: true,
       verifyCopies: false,
       speedLimit: 0,
       copyThreads: 1,
@@ -203,6 +207,7 @@ describe("settings are snapshotted at request time", () => {
 
     const released = started[1];
     expect(released.safe).toBe(true);
+    expect(released.checkSpace).toBe(false);
     expect(released.verify).toBe(true);
     expect(released.limit).toBe(100 * 1024);
     expect(released.threads).toBe(4);

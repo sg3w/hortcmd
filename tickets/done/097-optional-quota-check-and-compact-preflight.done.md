@@ -40,4 +40,12 @@ Im Dialog einen Verweis auf die entsprechende Einstellung anzeigen.
 
 ## Status
 
-Offen. Auf Nutzerwunsch nur als Ticket angelegt; noch nicht implementiert.
+Umgesetzt. Die gespeicherte Einstellung steuert die Kapazitätsabfragen im Backend
+bis zur Veröffentlichung; andere Sicherheitsprüfungen bleiben bestehen.
+Warteschlange und Recovery übernehmen die bestätigte Einstellung. Der Dialog
+zeigt eine kompakte Zusammenfassung mit Details und direktem Einstellungslink.
+
+Tests prüfen aktivierte/deaktivierte Abfragen, erhaltene Schreib-/Staging- und
+Pfadprüfungen, echten StorageFull-Fehlerpfad, Journal-Persistenz, alte Einstellungen,
+Warteschlangen-Snapshots und den Dialogwechsel mit erneuter Vorprüfung.
+Bedienung: [Transfer preflight](../../docs/transfer-preflight.md).

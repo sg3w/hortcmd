@@ -126,6 +126,7 @@ interface QueuedParams {
   threads: number;
   /** Safety policy captured at enqueue time (TICKET-029). */
   safe: boolean;
+  checkSpace?: boolean;
 }
 /** Parameters of waiting (not yet started) transfers per id. */
 const queuedParams = new Map<string, QueuedParams>();
@@ -146,7 +147,7 @@ function hasActiveTransfer(exceptId?: string): boolean {
 
 function transferSettings(): RecoverySettings {
   const st = useSettings.getState();
-  return { limit: Math.max(0, Math.round(st.speedLimit)) * 1024, verify: st.verifyCopies, bufKb: st.bufferSizeKb, threads: st.copyThreads, safe: st.safeTransfers };
+  return { limit: Math.max(0, Math.round(st.speedLimit)) * 1024, verify: st.verifyCopies, bufKb: st.bufferSizeKb, threads: st.copyThreads, safe: st.safeTransfers, checkSpace: st.checkTransferSpace };
 }
 function beginTransfer(op: "copy" | "move", sources: string[], dest: string, onApproved?: () => void): void {
   if (!sources.length) return;
@@ -163,12 +164,12 @@ function beginApprovedTransfer(op: "copy" | "move", sources: string[], dest: str
   if (!sources.length) return;
   const st = useSettings.getState();
   const settings = plan?.settings ?? transferSettings();
-  const { limit, verify, bufKb, threads, safe } = settings;
+  const { limit, verify, bufKb, threads, safe, checkSpace } = settings;
   const id = newId();
   useTransfers.getState().start(op, id);
 
   if (hasTauri) {
-    persistedIntents.set(id, queueRecovery(id, op, sources, dest, { limit, verify, bufKb, threads, safe }, plan?.digest).then(() => true, error => {
+    persistedIntents.set(id, queueRecovery(id, op, sources, dest, { limit, verify, bufKb, threads, safe, checkSpace }, plan?.digest).then(() => true, error => {
       useTransfers.getState().finish({ id, op, ok: 0, errors: [{ item: "", error: ipcError(error) }], cancelled: false, mode: safe ? "safe" : "direct" });
       startNextQueued();
       return false;
@@ -176,10 +177,10 @@ function beginApprovedTransfer(op: "copy" | "move", sources: string[], dest: str
   }
   // Queue active and an operation already underway → enqueue.
   if (st.queueTransfers && hasActiveTransfer(id)) {
-    queuedParams.set(id, { op, sources, dest, limit, verify, bufKb, threads, safe });
+    queuedParams.set(id, { op, sources, dest, limit, verify, bufKb, threads, safe, checkSpace });
     useTransfers.getState().setQueued(id, true);
   } else {
-    const start = () => startTransfer(op, id, sources, dest, limit, verify, bufKb, threads, safe);
+    const start = () => startTransfer(op, id, sources, dest, limit, verify, bufKb, threads, safe, checkSpace);
     const persisted = persistedIntents.get(id);
     if (persisted) void persisted.then(ok => { persistedIntents.delete(id); if (ok) start(); });
     else start();
@@ -205,6 +206,7 @@ export function startNextQueued(): void {
     params.bufKb,
     params.threads,
     params.safe,
+    params.checkSpace,
   );
   const persisted = persistedIntents.get(next.id);
   if (persisted) void persisted.then(ok => {
@@ -636,5 +638,5 @@ export function startRecovered(request: import("@/ipc/bindings/RecoveryLaunch").
   }
   useTransfers.getState().start(kind, id);
   if (kind === "pack") startPack(id, sources, destination);
-  else startTransfer(kind, id, sources, destination, settings.limit, settings.verify, settings.bufKb, settings.threads, settings.safe);
+  else startTransfer(kind, id, sources, destination, settings.limit, settings.verify, settings.bufKb, settings.threads, settings.safe, settings.checkSpace);
 }

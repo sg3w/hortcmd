@@ -96,6 +96,7 @@ export interface PersistedSettings {
    * a standing warning.
    */
   safeTransfers: boolean;
+  checkTransferSpace: boolean;
 
   // ----- File view -----
   /** Always sort folders before files. */

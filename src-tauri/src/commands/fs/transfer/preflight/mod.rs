@@ -166,7 +166,7 @@ pub fn build(
         return Err(invalid());
     }
     let location = RecoveryLocation::capture(destination)?.with_path(&destination_path)?;
-    let limits = destination_provider.limits(&destination_path)?;
+    let limits = destination_provider.limits(&destination_path, settings.checks_space())?;
     let mut plan = OperationPlan {
         version: 1,
         digest: String::new(),
@@ -186,7 +186,7 @@ pub fn build(
     if plan.limits.writable == Some(false) {
         issue(&mut plan, "blocking", "readOnly", None);
     }
-    if plan.limits.available().is_none() {
+    if settings.checks_space() && plan.limits.available().is_none() {
         issue(&mut plan, "advisory", "capacityUnknown", None);
     }
     if plan.limits.preserves_metadata != Some(true) {
@@ -331,10 +331,11 @@ pub fn build(
         settings.safe,
         settings.verify,
     )?;
-    if plan
-        .limits
-        .available()
-        .is_some_and(|free| free < plan.space.additional_bytes)
+    if settings.checks_space()
+        && plan
+            .limits
+            .available()
+            .is_some_and(|free| free < plan.space.additional_bytes)
     {
         issue(&mut plan, "blocking", "noSpace", None);
     }
@@ -363,11 +364,11 @@ pub fn revalidate_destination(
     {
         return Err(invalid().with("reason", "planChanged"));
     }
-    let limits = provider.limits(path)?;
+    let limits = provider.limits(path, plan.settings.checks_space())?;
     if limits.writable == Some(false) || plan.settings.safe && !limits.staging {
         return Err(invalid().with("reason", "planChanged"));
     }
-    if limits.available().is_some_and(|free| free < required) {
+    if plan.settings.checks_space() && limits.available().is_some_and(|free| free < required) {
         return Err(AppError::new(code::FS_NO_SPACE));
     }
     Ok(())
@@ -469,7 +470,7 @@ pub(crate) fn archive_capacity(
     files: u32,
 ) -> AppResult<SpaceEstimate> {
     let estimate = space(&kind, bytes, 0, files, true, false)?;
-    let limits = vfs::local::LocalProvider.limits(destination)?;
+    let limits = vfs::local::LocalProvider.limits(destination, true)?;
     if limits.writable == Some(false) {
         return Err(AppError::new(code::FS_PERMISSION));
     }

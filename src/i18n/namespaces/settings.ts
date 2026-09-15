@@ -66,6 +66,9 @@ export const settings = ns(
   "settings.threads.hint":
     "Threads beim Kopieren (1 = sequenziell). Auf HDDs kann >1 langsamer sein.",
   "settings.safeTransfers": "Ausfallsichere Übertragung",
+  "settings.checkTransferSpace": "Speicherplatz und Quota prüfen",
+  "settings.checkTransferSpace.hint": "Vor Kopieren und Verschieben auf ausreichenden Platz prüfen. Ausgeschaltet entfällt diese Prüfung; tatsächliche Schreibfehler werden weiterhin sicher behandelt.",
+
   "settings.safeTransfers.hint":
     "Kopiert zuerst in einen versteckten Zwischeneintrag am Ziel und veröffentlicht ihn erst am Ende unter dem endgültigen Namen. Braucht vorübergehend Platz am Ziel, verhindert aber, dass ein fehlgeschlagenes Überschreiben die bisherige Zieldatei zerstört.",
   "settings.safeTransfers.warning":
@@ -221,6 +224,9 @@ export const settings = ns(
   "settings.threads.hint":
     "Threads when copying (1 = sequential). On HDDs, >1 can be slower.",
   "settings.safeTransfers": "Failure-safe transfers",
+  "settings.checkTransferSpace": "Check available space and quota",
+  "settings.checkTransferSpace.hint": "Check space before copying and moving. Disabling skips this check; actual write errors are still handled safely.",
+
   "settings.safeTransfers.hint":
     "Copies into a hidden staging entry at the destination first and publishes it under the final name only at the end. Needs temporary room at the destination, but keeps a failed overwrite from destroying the previous destination file.",
   "settings.safeTransfers.warning":

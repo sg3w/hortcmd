@@ -27,6 +27,7 @@ export function startTransfer(
   bufKb = 256,
   threads = 1,
   safe = false,
+  checkSpace?: boolean,
 ): void {
   if (!hasTauri) {
     demo.demoTransfer(op, id, sources, destDir, true);
@@ -42,6 +43,7 @@ export function startTransfer(
     bufKb,
     threads,
     safe,
+    ...(checkSpace === undefined ? {} : { checkSpace }),
   })).catch(error => failed(id, op, error));
 }
 

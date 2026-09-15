@@ -119,7 +119,7 @@ describe("File operations", () => {
     const user = userEvent.setup();
     useSettings.setState({ safeTransfers: false });
     render(<OperationsForm />);
-    const safe = screen.getAllByRole("switch")[3];
+    const safe = screen.getByRole("switch", { name: translate("settings.safeTransfers") });
     await user.click(safe);
     expect(useSettings.getState().safeTransfers).toBe(true);
   });

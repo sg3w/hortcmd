@@ -10,6 +10,7 @@ import { useUndoClassification } from "./useUndoClassification";
 import { useEffect, useId, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AlertTriangle, FileWarning, FolderPlus, XCircle } from "lucide-react";
+import { useUi } from "@/store/uiStore";
 import { useOps } from "@/store/opsStore";
 import { useTransfers } from "@/store/transfersStore";
 import { cancelTransfer, resolveCollision } from "@/ipc/client";
@@ -114,6 +115,7 @@ function basename(path: string): string {
 function ConfirmDialog() {
   const returnFocus = useDialogFocusReturn();
   const confirm = useOps((s) => s.confirm);
+  const settingsOpen = useUi(s => s.settingsOpen);
   const undoClass = useUndoClassification(confirm?.undo);
   const preflight = useTransferPreflight(confirm?.preflight);
   const closeDialogs = useOps((s) => s.closeDialogs);
@@ -123,7 +125,7 @@ function ConfirmDialog() {
 
   return (
     <Dialog.Root
-      open={!!confirm}
+      open={!!confirm && !settingsOpen}
       onOpenChange={(o) => !o && closeDialogs()}
     >
       <Dialog.Portal>

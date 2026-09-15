@@ -186,6 +186,9 @@ fn walker_enforces_names_objects_cycles_and_missing_sources() {
 
 #[derive(Default)]
 struct Capacity {
+    capacity_checks: Option<Arc<std::sync::atomic::AtomicU32>>,
+    readonly: bool,
+    no_staging: bool,
     synthetic: Option<Arc<std::sync::atomic::AtomicU64>>,
     stop: Option<Arc<AtomicBool>>,
     store: Option<String>,
@@ -272,11 +275,21 @@ impl Provider for Capacity {
     fn remove_dir_all(&self, _: &crate::vfs::StreamPath) -> std::io::Result<()> {
         panic!("preflight must not remove")
     }
-    fn limits(&self, _: &crate::vfs::StreamPath) -> std::io::Result<vfs::limits::ProviderLimits> {
+    fn limits(
+        &self,
+        _: &crate::vfs::StreamPath,
+        check_capacity: bool,
+    ) -> std::io::Result<vfs::limits::ProviderLimits> {
+        if check_capacity {
+            if let Some(count) = &self.capacity_checks {
+                count.fetch_add(1, Ordering::Relaxed);
+            }
+        }
         Ok(vfs::limits::ProviderLimits {
-            available_bytes: self.free,
-            quota_remaining_bytes: self.quota,
-            staging: true,
+            writable: Some(!self.readonly),
+            available_bytes: if check_capacity { self.free } else { None },
+            quota_remaining_bytes: if check_capacity { self.quota } else { None },
+            staging: !self.no_staging,
             ..Default::default()
         })
     }
@@ -420,4 +433,80 @@ fn case_equivalent_destinations_and_declared_reserved_names_are_rejected() {
     )
     .is_err());
     assert_eq!(walk::folded("É"), walk::folded("e\u{301}"));
+}
+
+#[test]
+fn disabled_capacity_skips_probes_but_preserves_other_guards() {
+    let (_root, src, dst) = fixture();
+    let source = format!("{src}/a");
+    std::fs::write(&source, "12345").unwrap();
+    for kind in [RecoveryKind::Copy, RecoveryKind::Move] {
+        for enabled in [false, true] {
+            let settings = RecoverySettings {
+                check_space: Some(enabled),
+                ..Default::default()
+            };
+            let plan = build(
+                kind.clone(),
+                std::slice::from_ref(&source),
+                &dst,
+                settings.clone(),
+                &AtomicBool::new(false),
+            )
+            .unwrap();
+            assert!(
+                enabled
+                    || !plan
+                        .issues
+                        .iter()
+                        .any(|i| i.code == "capacityUnknown" || i.code == "noSpace")
+            );
+            assert!(enabled || plan.limits.available().is_none());
+            let calls = Arc::new(std::sync::atomic::AtomicU32::new(0));
+            let mut provider = Capacity {
+                capacity_checks: Some(calls.clone()),
+                free: Some(0),
+                quota: Some(0),
+                ..Default::default()
+            };
+            // This guard is used before writing and again at publication.
+            for _ in 0..2 {
+                assert_eq!(
+                    revalidate_destination(&plan, &provider, &dst.as_str().into(), 5).is_ok(),
+                    !enabled
+                );
+            }
+            assert_eq!(calls.load(Ordering::Relaxed), if enabled { 2 } else { 0 });
+            provider.readonly = true;
+            assert!(revalidate_destination(&plan, &provider, &dst.as_str().into(), 5).is_err());
+            provider.readonly = false;
+            provider.no_staging = true;
+            assert!(revalidate_destination(&plan, &provider, &dst.as_str().into(), 5).is_err());
+            let self_copy = build(
+                kind.clone(),
+                std::slice::from_ref(&source),
+                &src,
+                settings,
+                &AtomicBool::new(false),
+            )
+            .unwrap();
+            assert!(self_copy.ensure_executable().is_err());
+        }
+    }
+}
+
+#[test]
+fn old_transfer_settings_keep_space_checks_enabled() {
+    let old = r#"{"limit":0,"verify":false,"bufKb":256,"threads":1,"safe":true}"#;
+    let settings: RecoverySettings = serde_json::from_str(old).unwrap();
+    assert!(settings.checks_space());
+    let disabled = RecoverySettings {
+        check_space: Some(false),
+        ..settings
+    };
+    assert!(
+        !serde_json::from_str::<RecoverySettings>(&serde_json::to_string(&disabled).unwrap())
+            .unwrap()
+            .checks_space()
+    );
 }

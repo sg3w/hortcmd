@@ -36,6 +36,9 @@ export function OperationsForm() {
   const safeTransfers = useSettings((s) => s.safeTransfers);
   const setSafeTransfers = useSettings((s) => s.setSafeTransfers);
 
+  const checkSpace = useSettings(s => s.checkTransferSpace);
+  const setCheckSpace = useSettings(s => s.setCheckTransferSpace);
+
   return (
     <div className="flex flex-col gap-4">
       <Toggle
@@ -58,6 +61,13 @@ export function OperationsForm() {
         icon={ShieldCheck}
         label={t("settings.verify")}
         hint={t("settings.verify.hint")}
+      />
+      <Toggle
+        checked={checkSpace}
+        onChange={setCheckSpace}
+        icon={HardDriveDownload}
+        label={t("settings.checkTransferSpace")}
+        hint={t("settings.checkTransferSpace.hint")}
       />
       {/* Failure-safe transfers (TICKET-029). Opt-in, so the risk of the
           default state is spelled out rather than left implicit. */}

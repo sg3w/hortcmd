@@ -447,7 +447,11 @@ Ticket 096 adds localized connection-monitor controls and status announcements,
 plus refresh handling when a connection returns. The measured entry is 322.5 KiB;
 the budget increases to 323 KiB without adding an eager dependency.
 
-**The budget.** `EAGER_BUDGET_KB = 323` in `vite.config.ts`, enforced by
+Ticket 097 adds the compact transfer review, settings handoff and localized quota
+option. The measured entry becomes 324.3 KiB; its budget is deliberately raised
+to 325 KiB. Existing lazy feature boundaries remain intact.
+
+**The budget.** `EAGER_BUDGET_KB = 325` in `vite.config.ts`, enforced by
 `scripts/bundle-report.mjs` (`npm run check:bundle`, part of `npm run check` and
 of CI). The report reads the build manifest, walks the entry chunk's import
 graph to tell eager from lazy, prints which watched dependency landed in which

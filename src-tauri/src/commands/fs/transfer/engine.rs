@@ -48,6 +48,7 @@ pub(crate) fn run_transfer(
     buf_kb: u64,
     threads: u32,
     safe: bool,
+    check_space: Option<bool>,
 ) {
     let _cache_mutation = crate::commands::fs::cache::Mutation::begin();
     let tune = CopyTuning {
@@ -66,6 +67,7 @@ pub(crate) fn run_transfer(
             &sources,
             &dest_dir,
             RecoverySettings {
+                check_space,
                 limit,
                 verify,
                 buf_kb,
@@ -180,6 +182,7 @@ pub(crate) fn run_transfer(
         &sources,
         &dest_dir,
         RecoverySettings {
+            check_space,
             limit,
             verify,
             buf_kb,
@@ -224,7 +227,12 @@ pub(crate) fn run_transfer(
     // the write itself decide, and either way the old destination is
     // still untouched at this point.
     if safe {
-        if let Some(free) = dstp.free_space(&dest) {
+        if let Some(free) = live_plan
+            .settings
+            .checks_space()
+            .then(|| dstp.free_space(&dest))
+            .flatten()
+        {
             if free < live_plan.space.additional_bytes {
                 return fail(
                     id,

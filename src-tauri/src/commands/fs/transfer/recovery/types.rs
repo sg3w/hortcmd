@@ -22,6 +22,10 @@ pub enum RecoveryLocation {
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct RecoverySettings {
+    /// None preserves the enabled policy of older journals and IPC clients.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub check_space: Option<bool>,
     #[ts(type = "number")]
     pub limit: u64,
     pub verify: bool,
@@ -30,9 +34,15 @@ pub struct RecoverySettings {
     pub threads: u32,
     pub safe: bool,
 }
+impl RecoverySettings {
+    pub fn checks_space(&self) -> bool {
+        self.check_space != Some(false)
+    }
+}
 impl Default for RecoverySettings {
     fn default() -> Self {
         Self {
+            check_space: None,
             limit: 0,
             verify: false,
             buf_kb: 256,

@@ -37,6 +37,7 @@ fn intent(root: &Path, kind: RecoveryKind) -> Intent {
         sources: vec![local(&root.join("input/result.txt"))],
         destination: local(&root.join("output")),
         settings: RecoverySettings {
+            check_space: None,
             verify: true,
             threads: 4,
             limit: 0,
@@ -71,9 +72,9 @@ fn queue_order_settings_and_process_lock_survive_reopen() {
     let temp = Temp::new();
     let root = temp.0.join("journal");
     let journal = Journal::open(&root).unwrap();
-    journal
-        .enqueue("second-lexically", intent(&temp.0, RecoveryKind::Copy))
-        .unwrap();
+    let mut copy = intent(&temp.0, RecoveryKind::Copy);
+    copy.settings.check_space = Some(false);
+    journal.enqueue("second-lexically", copy).unwrap();
     journal
         .enqueue("a-first-lexically", intent(&temp.0, RecoveryKind::Move))
         .unwrap();
@@ -88,6 +89,8 @@ fn queue_order_settings_and_process_lock_survive_reopen() {
         records.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
         ["second-lexically", "a-first-lexically"]
     );
+    assert!(!records[0].intent.settings.checks_space());
+    assert!(records[1].intent.settings.checks_space());
     assert_eq!(records[0].intent.settings.threads, 4);
     assert!(records[0].intent.settings.verify);
     assert_eq!(
