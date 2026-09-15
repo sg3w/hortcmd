@@ -355,6 +355,13 @@ pub fn move_entries(
 /// Moves several entries to the system trash (restorable).
 #[tauri::command]
 pub fn trash_entries(paths: Vec<String>) -> OpResult {
+    trash_entries_with(paths, |p| trash::delete(p).map_err(AppError::from))
+}
+
+fn trash_entries_with(
+    paths: Vec<String>,
+    mut dispose: impl FnMut(&str) -> AppResult<()>,
+) -> OpResult {
     let _cache_mutation = crate::commands::fs::cache::Mutation::begin();
     let mut ok = 0u32;
     let mut errors = Vec::new();
@@ -367,9 +374,15 @@ pub fn trash_entries(paths: Vec<String>) -> OpResult {
             errors.push(ItemError::new(p, e));
             continue;
         }
-        match trash::delete(p) {
+        // The library discards the original access error on macOS/Windows.
+        // Inspect the entry itself (not the symlink target) before handing off.
+        // This is evidence at this instant, not a classification of later failures.
+        let result = std::fs::symlink_metadata(p)
+            .map_err(AppError::from)
+            .and_then(|_| dispose(p));
+        match result {
             Ok(_) => ok += 1,
-            Err(e) => errors.push(ItemError::new(p, e.into())),
+            Err(e) => errors.push(ItemError::new(p, e.op("trash"))),
         }
     }
     OpResult { ok, errors }
@@ -624,5 +637,65 @@ mod tests {
         // With overwrite: written anew.
         assert_eq!(write_text_file(p.clone(), "second".into(), true), Ok(true));
         assert_eq!(read(&d, "list.txt"), "second");
+    }
+}
+
+#[cfg(test)]
+mod trash_error_tests {
+    use super::*;
+
+    #[test]
+    fn reports_each_failure_and_preserves_sources_without_delete_fallback() {
+        let root = std::env::temp_dir().join(format!("hortcmd-trash-{}", crate::net::unique_id()));
+        std::fs::create_dir(&root).unwrap();
+        let denied = root.join("denied");
+        let failed = root.join("failed");
+        let missing = root.join("missing");
+        for path in [&denied, &failed] {
+            std::fs::write(path, "keep me").unwrap();
+        }
+        let paths = [&denied, &missing, &failed]
+            .map(|p| p.to_string_lossy().into_owned())
+            .to_vec();
+        let mut calls = Vec::new();
+        let result = trash_entries_with(paths, |path| {
+            calls.push(path.to_owned());
+            if Path::new(path) == denied {
+                Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied).into())
+            } else {
+                Err(trash::Error::Unknown {
+                    description: "opaque failure".into(),
+                }
+                .into())
+            }
+        });
+        assert_eq!(result.ok, 0);
+        assert_eq!(result.errors.len(), 3);
+        assert_eq!(&*result.errors[0].error.code, code::FS_PERMISSION);
+        assert_eq!(&*result.errors[1].error.code, code::FS_NOT_FOUND);
+        assert_eq!(&*result.errors[2].error.code, code::TRASH_FAILED);
+        assert_eq!(
+            calls.len(),
+            2,
+            "missing entry never reaches the trash library"
+        );
+        for path in [&denied, &failed] {
+            assert_eq!(std::fs::read_to_string(path).unwrap(), "keep me");
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn broken_symlink_is_an_existing_trashable_entry() {
+        let root =
+            std::env::temp_dir().join(format!("hortcmd-trash-link-{}", crate::net::unique_id()));
+        std::fs::create_dir(&root).unwrap();
+        let link = root.join("link");
+        std::os::unix::fs::symlink(root.join("absent"), &link).unwrap();
+        let result = trash_entries_with(vec![link.to_string_lossy().into_owned()], |_| Ok(()));
+        assert_eq!(result.ok, 1);
+        assert!(result.errors.is_empty());
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

@@ -219,6 +219,8 @@ pub mod code {
     pub const FS_IN_USE: &str = "fs.inUse";
     pub const FS_IO: &str = "fs.io";
     pub const FS_INVALID_NAME: &str = "fs.invalidName";
+    pub const TRASH_FAILED: &str = "trash.failed";
+    pub const TRASH_FINDER_FAILED: &str = "trash.finderFailed";
     pub const FS_TOO_LARGE: &str = "fs.tooLarge";
 
     // --- transfers ---
@@ -302,6 +304,8 @@ pub mod code {
         FS_IO,
         FS_INVALID_NAME,
         FS_TOO_LARGE,
+        TRASH_FAILED,
+        TRASH_FINDER_FAILED,
         TRANSFER_JOURNAL_LIMIT,
         TRANSFER_JOURNAL_UNAVAILABLE,
         TRANSFER_CHECKSUM,
@@ -436,7 +440,7 @@ from_library_error!(tauri::Error, code::INTERNAL_UNEXPECTED);
 from_library_error!(russh::Error, code::NET_PROTOCOL);
 from_library_error!(russh::keys::Error, code::NET_AUTH);
 from_library_error!(opener::OpenError, code::FS_IO);
-from_library_error!(trash::Error, code::FS_IO);
+mod trash_error;
 #[cfg(target_os = "macos")]
 from_library_error!(plist::Error, code::FS_IO);
 

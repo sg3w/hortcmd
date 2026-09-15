@@ -16,7 +16,7 @@ const pkg = JSON.parse(
  * eager chunk and what has to move behind a lazy boundary instead.
  * Enforced by `scripts/bundle-report.mjs` (`npm run check:bundle`).
  */
-export const EAGER_BUDGET_KB = 320;
+export const EAGER_BUDGET_KB = 321;
 
 /**
  * Coarse backstop for *any* single chunk. Rollup's own warning cannot

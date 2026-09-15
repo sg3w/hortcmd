@@ -19,6 +19,8 @@ export const ERROR_CODES = [
   "fs.inUse",
   "fs.io",
   "fs.invalidName",
+  "trash.failed",
+  "trash.finderFailed",
   "fs.tooLarge",
   "transfer.journalLimit",
   "transfer.journalUnavailable",

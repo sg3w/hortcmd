@@ -1,0 +1,19 @@
+# TICKET-276: Load feature translations with their lazy UI
+
+## Problem
+
+Ticket 086's two new bilingual error messages grow the eager entry from 319.8 to
+320.5 KiB. Its documented budget rises to 321 KiB to keep immediate operation-error
+messages available. The shared dictionary also contains feature-only translations
+whose dialogs already load lazily; future feature growth will consume this small
+remaining margin again.
+
+## Requirements
+
+- Identify translations used exclusively by lazy features and load them alongside
+  those features. Keep core operation/error messages immediately available.
+- Preserve compile-time key checking, German/English completeness and runtime
+  language switching; avoid duplicate dictionaries or a flash of untranslated keys.
+- Compare entry size and total eager bytes before/after. Do not merely move the
+  same eagerly loaded bytes into a different named chunk to evade the entry limit.
+- Add focused localization/loading regressions and run npm run check.

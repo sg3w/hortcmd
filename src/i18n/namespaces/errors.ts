@@ -29,6 +29,8 @@ export const errors = ns(
     "error.fs.noSpace": "Nicht genug Speicherplatz",
     "error.fs.inUse": "Wird gerade verwendet",
     "error.fs.io": "Lese-/Schreibfehler",
+    "error.trash.failed": "Papierkorb fehlgeschlagen. Prüfe, ob der Eintrag noch vorhanden und zugänglich ist. Es erfolgt keine endgültige Löschung.",
+    "error.trash.finderFailed": "Finder konnte den Eintrag nicht in den Papierkorb verschieben. Prüfe Finder und gegebenenfalls Systemeinstellungen → Datenschutz & Sicherheit → Automation. Die Ursache ist nicht eindeutig.",
     "error.fs.invalidName": "Ungültiger Name",
     "error.fs.tooLarge": "Zu groß",
 
@@ -131,6 +133,8 @@ export const errors = ns(
     "error.fs.noSpace": "Not enough space",
     "error.fs.inUse": "Currently in use",
     "error.fs.io": "Read/write error",
+    "error.trash.failed": "Trash operation failed. Check that the entry still exists and is accessible. No permanent deletion is attempted.",
+    "error.trash.finderFailed": "Finder could not move the entry to Trash. Check Finder and, if needed, System Settings → Privacy & Security → Automation. The cause is uncertain.",
     "error.fs.invalidName": "Invalid name",
     "error.fs.tooLarge": "Too large",
 

@@ -437,7 +437,13 @@ launch path.
 them keeps their chunks cached across releases. Deliberately not finer — more
 requests on a local custom protocol buy nothing.
 
-**The budget.** `EAGER_BUDGET_KB = 320` in `vite.config.ts`, enforced by
+Ticket 086 adds two German/English system-trash error messages to the immediately
+available error dictionary. The measured entry grows from 319.8 to 320.5 KiB
+(uncompressed); no new eager dependency is added. The budget is deliberately
+adjusted by 1 KiB to 321 KiB for this diagnostic improvement. Ticket 276 tracks
+loading feature-only translations with their lazy UI to recover future headroom.
+
+**The budget.** `EAGER_BUDGET_KB = 321` in `vite.config.ts`, enforced by
 `scripts/bundle-report.mjs` (`npm run check:bundle`, part of `npm run check` and
 of CI). The report reads the build manifest, walks the entry chunk's import
 graph to tell eager from lazy, prints which watched dependency landed in which

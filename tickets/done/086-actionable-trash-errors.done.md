@@ -31,3 +31,15 @@ trash failures even when the underlying error supplies a more specific cause.
 Follow the requested sequence through 065. The observed failure preserves the
 source file and is displayed to the user; no data-loss workaround is required.
 Successful native trash disposal remains an unverified part of ticket 249.
+
+## Completion
+
+Replaced blanket FS_IO conversion with evidence-based trash error mapping.
+Added local entry metadata checks without following symlinks, localized Finder
+and generic trash guidance, and regressions for per-item failures, retained files,
+redaction and the German/English error dialog without permanent-delete fallback.
+See `docs/trash-errors.md`; controlled native verification is tracked in 275.
+Validation: targeted Rust/UI regressions and `npm run check`.
+
+The measured bilingual-message growth (319.8 → 320.5 KiB entry) is documented in
+Concept.md with a 321 KiB budget. Translation loading follow-up: ticket 276.

@@ -140,3 +140,20 @@ for (const [key, command] of [["F5", "copy_entries"], ["F6", "move_entries"]] as
     }));
   });
 }
+
+it.each(["de", "en"] as const)("shows actionable trash failures without permanent-delete fallback in %s", async language => {
+  const { runtime, user } = setup(language);
+  const error: AppError = { version: 1, code: "trash.finderFailed", params: {}, op: "trash",
+    provider: "local", retryable: false, action: null, detail: "private native diagnostic",
+    id: "trash-error-test" };
+  runtime.setCommand("trash_entries", () => ({ ok: 0, errors: [{ item: "/src/marked.txt", error }] }));
+  await user.keyboard("{F8}");
+  await waitFor(() => expect(screen.getByRole("button", { name: translate("op.trash.button") })).toHaveFocus());
+  await user.keyboard("{Enter}");
+  const dialog = await screen.findByRole("dialog", { name: translate("op.errors") });
+  expect(dialog).toHaveTextContent(translate("error.trash.finderFailed"));
+  expect(dialog).toHaveTextContent("/src/marked.txt");
+  expect(dialog).not.toHaveTextContent("private native diagnostic");
+  expect(runtime.calls.filter(c => c.cmd === "trash_entries")).toHaveLength(1);
+  expect(runtime.calls.some(c => c.cmd === "delete_entries")).toBe(false);
+});
