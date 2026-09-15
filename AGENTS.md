@@ -60,6 +60,10 @@ Each ticket must be implemented on its own Git branch, created from the current
 local `main` before starting work. Name it `codex/ticket-<number>-<short-description>`.
 Keep changes scoped to that ticket; use a separate branch for each additional ticket.
 
+When a ticket is complete, rename its file from `<number>-<description>.md` to
+`<number>-<description>.done.md` and move it into `tickets/done/`. Update references
+to the ticket's path and include the move in the ticket's completion commit.
+
 After completing a ticket and passing `npm run check`, create a local Git commit
 containing only the changes for that ticket. Switch to `main`, merge the ticket
 branch into it, and remain on `main` until starting the next ticket. If resolving
