@@ -30,6 +30,8 @@ Implemented and in use:
 - **Remote locations**: SFTP, FTP/FTPS, SMB and WebDAV, browsed and transferred
   through the same UI as local folders — see the [provider support](#provider-support)
   matrix for exactly which actions each one offers.
+- **A local command line** with captured output, exit codes and cancellation.
+  Enter executes; Escape clears the input. See [command-line behavior](docs/command-line.md).
 - **An SSH terminal** on an SFTP connection, sharing its authenticated session.
 - **Credentials** in the OS keychain, or optionally in a portable KeePass
   (`.kdbx`) file.

@@ -60,7 +60,7 @@ jwalk = "0.9"
 keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 russh = "0.53"       # SSH-Client (reines Rust, async) für den SFTP-Provider
 russh-sftp = "2.4.0" # SFTP-Client über einen russh-Kanal
-tokio = { version = "1", features = ["rt-multi-thread", "io-util", "net", "sync", "time", "macros", "fs"] }
+tokio = { version = "1", features = ["rt-multi-thread", "io-util", "net", "sync", "time", "macros", "fs", "process"] }
 # FTP/FTPS (synchron, Rustls mit Plattform-Zertifikatsprüfung). `deprecated` liefert
 # `connect_secure_implicit` — implizites FTPS (Port 990) verlangt Ticket 025.
 suppaftp = { version = "6.2.0", features = ["rustls", "deprecated"] }
@@ -97,6 +97,7 @@ windows = { version = "0.58", features = [
 # Unix-spezifische Rechte-Funktionen (Besitzer, Extended Attributes, ACL).
 # Auf Windows nicht verfügbar → dort liefert das Backend leere/None-Werte.
 [target.'cfg(unix)'.dependencies]
+libc = "0.2"
 xattr = "1"          # Extended Attributes lesen
 uzers = "0.12"       # uid/gid ↔ Benutzer-/Gruppennamen auflösen
 exacl = "0.12"       # ACL (Access Control Lists) lesen
@@ -107,7 +108,6 @@ exacl = "0.12"       # ACL (Access Control Lists) lesen
 objc2 = "0.6.4"
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSString", "NSDictionary", "NSData", "NSGeometry"] }
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSWorkspace", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSGraphicsContext", "NSGraphics"] }
-libc = "0.2"        # Cached mount-table metadata (getfsstat/MNT_NOWAIT)
 plist = "1"          # Binär-plist lesen/schreiben (Finder-Tags)
 
 [dev-dependencies]

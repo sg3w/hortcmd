@@ -22,3 +22,11 @@ with an explicit unavailable explanation so it does not advertise working input.
 
 After the requested sequence through 065. This is an unfinished feature, separate
 from the core file-operation keyboard workflows of ticket 249.
+
+## Completion
+
+Implemented typed Rust start/status/cancel commands, bounded stdout/stderr, a
+single active process, shell-specific execution in the captured local directory,
+and compact lazy-loaded frontend controls with keyboard ownership guards.
+Behavior and shortcuts: `docs/command-line.md`. Native platform follow-up: 274.
+Validation: Rust execution tests, frontend keyboard tests and `npm run check`.

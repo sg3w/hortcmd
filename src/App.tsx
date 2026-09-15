@@ -3,7 +3,7 @@
 // Initializes drives, start directories, and applies the theme.
 // ============================================================
 
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type MouseEvent } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useDrives } from "@/store/driveStore";
 import { useDriveFallback } from "@/features/panel/useDriveFallback";
@@ -55,6 +55,8 @@ import { useFileColorVars } from "@/store/fileColorRules";
 import { useRefresh } from "@/features/panel/useRefresh";
 
 import { McpRuntime } from "@/features/settings/McpRuntime";
+
+const CommandLine = lazy(() => import("@/features/commandLine/CommandLine"));
 
 export default function App() {
   useRefresh();
@@ -302,15 +304,7 @@ export default function App() {
       {/* Kommandozeile */}
       <div className="flex flex-shrink-0 items-center gap-1.5 border-t border-edge bg-panel px-2 py-1">
         <span className="font-mono text-[12px] text-exec">{activePath || "~"}</span>
-        <input
-          aria-label={t("command.input")}
-          title={t("command.unavailable")}
-          disabled
-          type="text"
-          spellCheck={false}
-          autoComplete="off"
-          className="min-w-0 flex-1 bg-transparent font-mono text-[12px] text-text outline-none"
-        />
+        <Suspense fallback={null}><CommandLine path={activePath} /></Suspense>
         {/* Minimierte Transfers erscheinen hier in der Statusleiste */}
         <TransferTray />
       </div>

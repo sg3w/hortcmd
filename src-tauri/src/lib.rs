@@ -75,7 +75,11 @@ pub fn run() {
             }
             Ok(())
         })
+        .manage(commands::command_line::CommandLine::default())
         .invoke_handler(tauri::generate_handler![
+            commands::command_line::command_start,
+            commands::command_line::command_status,
+            commands::command_line::command_cancel,
             vfs::caps::location_capabilities,
             vfs::location::vfs_location,
             mcp::commands::mcp_status,
