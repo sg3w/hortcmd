@@ -49,7 +49,10 @@ function installStorage(): void {
   for (const target of [globalThis, globalThis.window]) {
     if (!target) continue;
     const host = target as unknown as { localStorage?: Storage };
-    if (!host.localStorage || !(host.localStorage instanceof MemoryStorage)) {
+    // Inspect without invoking Node's native storage getter, which warns when
+    // no --localstorage-file was supplied. Tests use only the in-memory store.
+    const descriptor = Object.getOwnPropertyDescriptor(host, "localStorage");
+    if (!(descriptor?.value instanceof MemoryStorage)) {
       Object.defineProperty(host, "localStorage", {
         value: new MemoryStorage(),
         configurable: true,
