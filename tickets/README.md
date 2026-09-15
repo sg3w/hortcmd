@@ -26,7 +26,7 @@ work and supporting tasks remain deferred. Renumbering does not complete tickets
 | 050 | [221](221-dependency-and-license-governance.md) | Dependency and license governance |
 | 051 | [222](222-signed-reproducible-releases-and-updates.md) | Signed releases and safe updates |
 | 052 | [223](223-performance-benchmarks-and-budgets.md) | Performance benchmarks and budgets |
-| 074 | [224](224-vitest-module-mock-hoisting.md) | Test mock maintenance |
+| 074 | [224](done/224-vitest-module-mock-hoisting.done.md) | Test mock maintenance |
 | 046 | [225](225-safe-archive-extraction.md) | Remaining archive platform/security audit; implementation already present |
 | 043 | [249](249-accessibility-and-localization-quality.md) | Accessibility and localization quality; previously moved |
 

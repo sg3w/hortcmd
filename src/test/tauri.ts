@@ -43,7 +43,6 @@ type Listener = (event: { payload: unknown }) => void;
 const listeners = new Map<string, Set<Listener>>();
 let commands: Record<string, CommandImpl> = {};
 let calls: InvokeCall[] = [];
-let wired = false;
 
 const INTERNALS = "__TAURI_INTERNALS__";
 
@@ -73,15 +72,11 @@ async function listen(name: string, cb: Listener) {
 }
 
 /** Makes `@tauri-apps/api/*` resolve to the harness instead of the real thing. */
-function wireModules(): void {
-  if (wired) return;
-  wired = true;
-  vi.mock("@tauri-apps/api/core", () => ({ invoke, Channel: class<T> {
-    // Commands can stream typed batches through the same callback as Tauri.
-    onmessage: (message: T) => void = () => {};
-  } }));
-  vi.mock("@tauri-apps/api/event", () => ({ listen }));
-}
+vi.mock("@tauri-apps/api/core", () => ({ invoke, Channel: class<T> {
+  // Commands can stream typed batches through the same callback as Tauri.
+  onmessage: (message: T) => void = () => {};
+} }));
+vi.mock("@tauri-apps/api/event", () => ({ listen }));
 
 /**
  * Runs the test against a Tauri runtime whose commands answer from
@@ -90,7 +85,6 @@ function wireModules(): void {
 export function useTauri(options: {
   commands?: Record<string, CommandImpl>;
 } = {}): TauriHarness {
-  wireModules();
   commands = { ...options.commands };
   calls = [];
   (globalThis as Record<string, unknown>)[INTERNALS] = { invoke };

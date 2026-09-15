@@ -31,3 +31,10 @@ Vitest release will reject this pattern.
 Follow-up after the originally requested 041–065 sequence. Current Vitest 4 executes the
 mocks correctly; this does not prevent accessibility work. Found while testing
 249 after dependency update 073.
+
+## Completion
+- Both Tauri module mocks are declared at module scope. Removed wireModules and
+  its misleading wired flag; explicit useDemo/useTauri modes remain intact.
+- Existing adapter and event suites continue to check fallback/native behavior,
+  missing-command errors and listener cleanup.
+- Validation: npm run check, with no nested-mock warnings.
