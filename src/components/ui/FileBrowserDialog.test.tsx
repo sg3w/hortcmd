@@ -5,7 +5,7 @@ import axe from "axe-core";
 import { useTauri } from "@/test/tauri";
 import { dir, file } from "@/test/fixtures";
 import { translate, useSettings } from "@/store/settingsStore";
-import { openFileBrowser } from "@/store/fileBrowserStore";
+import { openFileBrowser, useFileBrowser } from "@/store/fileBrowserStore";
 import { FileBrowserDialog } from "./FileBrowserDialog";
 
 vi.mock("@/ipc/invoke", async importOriginal => ({
@@ -48,3 +48,42 @@ for (const mode of ["file", "folder"] as const) {
     await waitFor(() => expect(trigger).toHaveFocus());
   });
 }
+
+it.each(["pick", "cancel"] as const)("preserves a chained picker and returns focus only after its %s", async finish => {
+  useTauri({ commands: {
+    list_drives: () => [],
+    list_dir: ({ path }) => ({ path, entries: [file(path === "/first" ? "first.txt" : "second.txt")] }),
+  } });
+  const second = vi.fn();
+  const first = vi.fn(() => {
+    expect(useFileBrowser.getState().request).toBeNull();
+    openFileBrowser({ title: "Second picker", selectMode: "file", initialPath: "/second", onPick: second });
+  });
+  render(<><button onClick={() => openFileBrowser({
+    title: "First picker", selectMode: "file", initialPath: "/first", onPick: first,
+  })}>Start</button><FileBrowserDialog /></>);
+  const user = userEvent.setup();
+  const trigger = screen.getByRole("button", { name: "Start" });
+  await user.click(trigger);
+  await user.dblClick(await screen.findByRole("option", { name: /first.txt/ }));
+  expect(first).toHaveBeenCalledExactlyOnceWith("/first/first.txt");
+  const dialog = await screen.findByRole("dialog", { name: "Second picker" });
+  await screen.findByRole("option", { name: /second.txt/ });
+  expect(screen.queryByRole("option", { name: /first.txt/ })).not.toBeInTheDocument();
+  expect(second).not.toHaveBeenCalled();
+  expect(dialog).toContainElement(document.activeElement as HTMLElement);
+  expect(trigger).not.toHaveFocus();
+  const list = screen.getByRole("listbox");
+  for (let i = 0; i < 10 && document.activeElement !== list; i++) await user.tab();
+  expect(list).toHaveFocus();
+  if (finish === "pick") {
+    await user.keyboard("{End}{Enter}");
+    expect(second).toHaveBeenCalledExactlyOnceWith("/second/second.txt");
+  } else {
+    await user.keyboard("{Escape}");
+    expect(second).not.toHaveBeenCalled();
+  }
+  await waitFor(() => expect(trigger).toHaveFocus());
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(useFileBrowser.getState().request).toBeNull();
+});

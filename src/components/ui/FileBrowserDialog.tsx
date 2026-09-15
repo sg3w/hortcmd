@@ -129,8 +129,10 @@ export function FileBrowserDialog() {
 
   const pick = (full: string) => {
     if (!request) return;
-    request.onPick(full);
+    const onPick = request.onPick;
+    // Close first so a callback can open the next picker without losing it.
     close();
+    onPick(full);
   };
 
   const confirm = () => {
