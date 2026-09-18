@@ -21,7 +21,21 @@ pub fn list_plugins(
     window: tauri::WebviewWindow,
 ) -> Result<Vec<PluginRecord>, String> {
     trusted(&window)?;
-    registry::discover(&root(&app)?)
+    let mut records = registry::discover(&root(&app)?)?;
+    let state = app.state::<crate::plugins::broker::PluginBroker>();
+    let grants = state
+        .grants
+        .lock()
+        .map_err(|_| "Plugin grants unavailable")?;
+    for record in &mut records {
+        if record.manifest.is_some() {
+            if let Some(permissions) = grants.get(&record.id) {
+                record.active = true;
+                record.granted = permissions.clone();
+            }
+        }
+    }
+    Ok(records)
 }
 
 use crate::plugins::{
@@ -125,4 +139,15 @@ pub fn plugin_native_start(
 ) -> Result<PluginInstance, String> {
     trusted(&window)?;
     crate::plugins::native_host::start(&app, &root(&app)?, &plugin)
+}
+
+#[tauri::command]
+pub fn plugin_launch(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    plugin: String,
+    button: String,
+) -> Result<PluginInstance, String> {
+    trusted(&window)?;
+    crate::plugins::launch::launch(&app, &root(&app)?, &plugin, &button)
 }

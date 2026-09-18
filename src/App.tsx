@@ -54,7 +54,9 @@ import { useFileColorVars } from "@/store/fileColorRules";
 
 import { useRefresh } from "@/features/panel/useRefresh";
 
-import { McpRuntime } from "@/features/settings/McpRuntime";
+const McpRuntime = lazy(() => import("@/features/settings/McpRuntime").then(module => ({default: module.McpRuntime})));
+
+const PluginCommandBar = lazy(() => import("@/features/plugins/PluginCommandBar"));
 
 const CommandLine = lazy(() => import("@/features/commandLine/CommandLine"));
 
@@ -249,6 +251,7 @@ export default function App() {
 
       {/* Commandbar (Sonderfunktionen + Ansichtsumschalter) */}
       <CommandBar />
+      <Suspense fallback={null}><PluginCommandBar /></Suspense>
 
       {/* Zwei-Fenster-Bereich (Splitter verschiebbar) */}
       <main ref={mainRef} className="flex min-h-0 flex-1">
@@ -311,7 +314,7 @@ export default function App() {
 
       <FunctionBar />
 
-      <McpRuntime />
+      <Suspense fallback={null}><McpRuntime /></Suspense>
       <OperationDialogs />
       <TransferWindow />
       <ConnectionAnnouncements />

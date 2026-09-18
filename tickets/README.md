@@ -1,7 +1,7 @@
 # Ticket organization
 
-All tickets below 100 and tickets 100–102 have been completed.
-The remaining **35 open tickets run from 103 to 137**. Their relative order
+All tickets below 100 and tickets 100–103 have been completed.
+The remaining **34 open tickets run from 104 to 137**. Their relative order
 and scope are unchanged. Dependencies and references use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
@@ -19,7 +19,7 @@ tickets with higher numbers. Do not reuse those numbers for new work.
 | 201 | [100](done/100-plugin-api-contract.done.md) | Plugin API & manifest (contract first) |
 | 202 | [101](done/101-js-plugin-host.done.md) | JS plugin host (sandboxed WebviewWindow) |
 | 203 | [102](done/102-native-plugin-host.done.md) | Native Rust plugin host (dynamic library) |
-| 204 | [103](103-plugin-commandbar.md) | Plugin command bar & colorful icons |
+| 204 | [103](done/103-plugin-commandbar.done.md) | Plugin command bar & colorful icons |
 | 205 | [104](104-plugin-context-handoff.md) | Context handoff to plugins |
 | 206 | [105](105-plugin-actions-events.md) | Mediated actions & events |
 | 207 | [106](106-plugin-management.md) | Plugin management (settings) |

@@ -7,6 +7,8 @@ use ts_rs::TS;
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub struct PluginRecord {
+    pub active: bool,
+    pub granted: Vec<super::manifest::PluginPermission>,
     pub id: String,
     pub manifest: Option<PluginManifest>,
     pub error: Option<String>,
@@ -54,11 +56,15 @@ pub fn discover(root: &Path) -> Result<Vec<PluginRecord>, String> {
         };
         records.push(match result {
             Ok(manifest) => PluginRecord {
+                active: false,
+                granted: vec![],
                 id,
                 manifest: Some(manifest),
                 error: None,
             },
             Err(error) => PluginRecord {
+                active: false,
+                granted: vec![],
                 id,
                 manifest: None,
                 error: Some(error),

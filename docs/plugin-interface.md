@@ -197,3 +197,21 @@ Tests compile a real C library, verify allowed and denied callbacks, reject an
 incompatible ABI, crash a helper deliberately, and close a hung handler. These
 process tests run on Unix without a GUI. Windows requires native verification of
 DLL packaging and process behavior; the platform entry and transport are shared.
+
+## Command bar
+
+TICKET-103 adds a separate, horizontally scrollable plugin bar below the core
+command bar. It is absent when no active plugin contributes permitted buttons.
+Buttons show both plugin ownership and a colorful icon. SVG icons are rendered
+only as image sources, never as application DOM markup.
+
+A click sends the plugin ID and declared button ID to the backend. The backend
+reloads and validates the manifest, checks active grants and resolves the declared
+action itself. The frontend cannot substitute an arbitrary action. openWindow
+opens or focuses the JS window. A command queues a command event for an existing
+JS instance; if none exists, a JS plugin with ui:window may open its window first.
+A JS plugin without ui:window must have an open view before a command is sent.
+Native command buttons start or reuse the helper. Events wait for readiness.
+
+Optional plugin and MCP controls load behind React lazy boundaries. The existing
+325 KiB entry-chunk budget remains unchanged.

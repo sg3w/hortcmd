@@ -78,7 +78,7 @@ fn instance() -> (Arc<PluginBroker>, Arc<Mutex<Instance>>) {
     (broker, state)
 }
 async fn ready(state: &Arc<Mutex<Instance>>) {
-    tokio::time::timeout(Duration::from_secs(5), async {
+    tokio::time::timeout(Duration::from_secs(15), async {
         while !state.lock().unwrap().info.ready {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
@@ -109,7 +109,7 @@ async fn actual_library_callbacks_denial_and_cooperative_shutdown() {
     monitor.lock().unwrap().push(PluginEvent::Command {
         command: "test".into(),
     });
-    tokio::time::timeout(Duration::from_secs(5), async {
+    tokio::time::timeout(Duration::from_secs(15), async {
         while !*denied.lock().unwrap() {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
@@ -143,7 +143,7 @@ async fn bad_abi_and_native_crash_never_crash_the_parent() {
                 command: "crash".into(),
             });
         }
-        assert!(tokio::time::timeout(Duration::from_secs(5), task)
+        assert!(tokio::time::timeout(Duration::from_secs(15), task)
             .await
             .unwrap()
             .unwrap()

@@ -8,6 +8,7 @@ import { ns } from "./ns";
 
 export const settings = ns(
   {
+  "plugins.title": "Plugins",
   "plugins.loading": "Loading plugin…",
   "plugins.failed": "Plugin unavailable. The built-in view remains available.",
   "mcp.title": "MCP-Schnittstelle",
@@ -168,6 +169,7 @@ export const settings = ns(
     "Veröffentlicht unter der MIT-Lizenz. © 2026 Jörg Hammel.",
   },
   {
+  "plugins.title": "Plugins",
   "plugins.loading": "Loading plugin…",
   "plugins.failed": "Plugin unavailable. The built-in view remains available.",
   "mcp.title": "MCP interface",

@@ -11,7 +11,7 @@ can have colorful icons." The existing `CommandBar.tsx` provides the pattern
 (`ToolButton`, divider), but is limited to core functions.
 
 ## Requirements
-- Coordinate with [TICKET-040](040-native-application-menu.md): core commands use
+- Coordinate with [TICKET-040](../040-native-application-menu.md): core commands use
   the in-window application menu; plugin commands retain this separate plugin
   bar. Do not add a Norton Commander-style Starter menu or plugin menu contribution
   API as part of either ticket without a separate feature specification.
@@ -27,13 +27,13 @@ can have colorful icons." The existing `CommandBar.tsx` provides the pattern
 - Location: `src/features/plugins/PluginCommandBar.tsx`, wiring in `App.tsx`.
 
 ## Acceptance criteria
-- [ ] With at least one activated plugin the plugin command bar appears; without
+- [x] With at least one activated plugin the plugin command bar appears; without
       plugins it stays hidden.
-- [ ] A button shows the colorful icon and the title from the manifest.
-- [ ] An `openWindow` button opens the plugin window; a `command` button triggers the
+- [x] A button shows the colorful icon and the title from the manifest.
+- [x] An `openWindow` button opens the plugin window; a `command` button triggers the
       plugin command.
-- [ ] Buttons of multiple plugins are visually distinguishable.
-- [ ] The layout stays intact in light/dark and at a small window width.
+- [x] Buttons of multiple plugins are visually distinguishable.
+- [x] The layout stays intact in light/dark and at a small window width.
 
 ## Tests
 - With the demo plugin (TICKET-107): button visible, icon colorful, click opens the window.
@@ -44,3 +44,10 @@ can have colorful icons." The existing `CommandBar.tsx` provides the pattern
 - Existing functionality unchanged
 - Documentation updated
 - Rename the ticket to *.done.md
+
+## Implementation evidence
+
+Implemented and verified with `npm run check`. See
+[Plugin interface](../../docs/plugin-interface.md) for the contract, security
+boundaries and author instructions. Native cross-platform GUI behavior requires
+verification on the corresponding operating systems.

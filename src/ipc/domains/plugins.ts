@@ -11,3 +11,4 @@ export const pluginPoll = (id: string) => invoke<PluginEvent[]>("plugin_poll", {
 export const pluginClose = (id: string) => invoke<void>("plugin_close", {id});
 export const pluginAssetUrl = (id: string) => /Windows/.test(navigator.userAgent)
   ? `http://hortplugin.localhost/${id}/_entry` : `hortplugin://localhost/${id}/_entry`;
+export const pluginLaunch = (plugin: string, button: string) => invoke<PluginInstance>("plugin_launch", {plugin, button});

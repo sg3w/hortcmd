@@ -14,3 +14,5 @@ pub fn navigation_allowed(url: &tauri::Url) -> bool {
 pub mod native_abi;
 pub mod native_host;
 pub mod native_worker;
+
+pub mod launch;
