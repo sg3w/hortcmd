@@ -218,6 +218,10 @@ export function startNextQueued(): void {
 
 /** Removes a still-waiting transfer from the queue (cancel before start). */
 export function dequeueTransfer(id: string): void {
+  if(id.startsWith("plugin-")) {
+    void import("@/ipc/domains/plugins").then(module=>module.pluginTransferCancel(id)).catch(error=>reportErrors([{item:"",error:ipcError(error)}]));
+    useTransfers.getState().remove(id);return;
+  }
   queuedParams.delete(id);
   if (hasTauri) {
     const persisted = persistedIntents.get(id) ?? Promise.resolve(true);

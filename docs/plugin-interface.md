@@ -248,3 +248,38 @@ Rust. The embedded renderer uses the same bridge as a separate window. The core
 retains its preview for a missing match, failure or readiness timeout; for folders
 without a renderer it explains that the folder remains available in the pane.
 PHP is displayed as source text and is never executed.
+
+## Mediated actions and events
+
+Both runtimes use the same permission-checked broker. `fs:list`, `fs:read`, and
+`fs:preview` use the commander's filesystem services. Reads are limited to
+256 KiB per request; `fs:write` accepts at most 256 KiB and uses the core
+create-only write operation. `op:open` navigates a directory and never launches
+an executable. Paths must be absolute local paths or supported VFS locations.
+PHP files are read as source text; the host never executes PHP.
+
+`op:copy` and `op:move` return `{operationId, status: "awaiting-confirmation"}`.
+The normal transfer dialog performs preflight review before the backend starts
+the operation. Cancellation, queuing, progress, recovery and verification reuse
+the core transfer system. Moving additionally requires `fs:write`. Each request
+captures the current speed limit in KiB/s (zero means unlimited); the engine
+receives bytes/s. `op:limit` reads or changes that limit. Closing or deactivating
+the originating instance cancels its pending and running transfers.
+
+Subscribe with `events:subscribe` and `event: "selection"` or `"transfer"`;
+unsubscribe with `events:unsubscribe`. Selection additionally requires
+`read:context`. Transfer events expose operation ID, status and byte count,
+without source paths. Context updates and intermediate progress are coalesced
+in the bounded event queue. `notify` displays a message in the commander.
+
+```js
+await hortcmd.request({type: "events:subscribe", event: "transfer"});
+hortcmd.onEvent(event => {
+  if (event.type === "transfer") console.log(event.operationId, event.status);
+});
+const pending = await hortcmd.request({
+  type: "op:copy", sources: ["/absolute/source.txt"],
+  destination: "/absolute/destination"
+});
+// The user reviews the transfer in the commander before any copy starts.
+```

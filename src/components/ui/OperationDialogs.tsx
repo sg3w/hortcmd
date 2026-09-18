@@ -160,9 +160,7 @@ function ConfirmDialog() {
               autoFocus
               disabled={undoClass === null || preflight.blocked}
               onClick={() => {
-                const onConfirm = confirm?.onConfirm;
-                closeDialogs();
-                onConfirm?.(preflight.plan ?? undefined);
+                useOps.getState().confirmDialog(preflight.plan ?? undefined);
               }}
               className={cn(
                 "rounded px-3 py-1 text-[13px] text-white",

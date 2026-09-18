@@ -45,6 +45,9 @@ pub fn run() {
             commands::plugins::list_plugins,
             commands::plugins::plugin_open,
             commands::plugins::plugin_workspace,
+            commands::plugins::plugin_ui_poll,
+            commands::plugins::plugin_transfer_start,
+            commands::plugins::plugin_transfer_cancel,
             commands::plugins::plugin_preview,
             commands::plugins::plugin_launch,
             commands::plugins::plugin_native_start,
@@ -201,6 +204,7 @@ pub fn run() {
                     allowed
                 })
                 .build()?;
+            plugins::events::attach(app.handle());
             menu::install(app.handle())?;
             commands::fs::drives::start(app.handle().clone());
             mcp::confirm::attach(app.handle().clone());

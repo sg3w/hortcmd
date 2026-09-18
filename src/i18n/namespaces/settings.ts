@@ -10,6 +10,7 @@ export const settings = ns(
   {
   "plugins.tabs": "Plugin views",
   "plugins.folderFallback": "No plugin folder preview is available. Browse the folder in the file pane.",
+  "plugins.message": "{message}",
   "plugins.title": "Plugins",
   "plugins.loading": "Loading plugin…",
   "plugins.failed": "Plugin unavailable. The built-in view remains available.",
@@ -173,6 +174,7 @@ export const settings = ns(
   {
   "plugins.tabs": "Plugin views",
   "plugins.folderFallback": "No plugin folder preview is available. Browse the folder in the file pane.",
+  "plugins.message": "{message}",
   "plugins.title": "Plugins",
   "plugins.loading": "Loading plugin…",
   "plugins.failed": "Plugin unavailable. The built-in view remains available.",

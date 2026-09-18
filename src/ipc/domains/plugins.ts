@@ -16,3 +16,8 @@ export const pluginLaunch = (plugin: string, button: string) => invoke<PluginIns
 import type { PluginWorkspace } from "../bindings/PluginWorkspace";
 export const pluginWorkspace = (workspace: PluginWorkspace) => hasTauri ? invoke<void>("plugin_workspace", {workspace}) : Promise.resolve();
 export const pluginPreview = (path: string, side: "left" | "right") => hasTauri ? invoke<PluginInstance | null>("plugin_preview", {path, side}) : Promise.resolve(null);
+import type { PluginUiState } from "../bindings/PluginUiState";
+import type { RecoverySettings } from "../bindings/RecoverySettings";
+export const pluginUiPoll = () => invoke<PluginUiState>("plugin_ui_poll");
+export const pluginTransferStart = (id:string,settings:RecoverySettings,review:string) => invoke<void>("plugin_transfer_start",{id,settings,review});
+export const pluginTransferCancel = (id:string) => invoke<void>("plugin_transfer_cancel",{id});

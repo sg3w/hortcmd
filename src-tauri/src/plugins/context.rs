@@ -141,7 +141,21 @@ pub fn bind_view(
     Ok(())
 }
 pub fn publish(broker: &PluginBroker, workspace: PluginWorkspace) -> Result<(), String> {
-    let workspace = workspace.normalize()?;
+    let mut workspace = workspace.normalize()?;
+    {
+        let mut pending = broker
+            .limit_override
+            .lock()
+            .map_err(|_| "Plugin limit unavailable")?;
+        if let Some(value) = *pending {
+            if workspace.left.copy_limit == value && workspace.right.copy_limit == value {
+                *pending = None;
+            } else {
+                workspace.left.copy_limit = value;
+                workspace.right.copy_limit = value;
+            }
+        }
+    }
     let previous = broker
         .workspace
         .lock()
@@ -155,6 +169,14 @@ pub fn publish(broker: &PluginBroker, workspace: PluginWorkspace) -> Result<(), 
         let mut instance = instance.lock().map_err(|_| "Plugin instance unavailable")?;
         if instance.info.closed {
             continue;
+        }
+        if instance
+            .subscriptions
+            .contains(&super::protocol::PluginSubscription::Selection)
+        {
+            if let Some(data) = value(&instance, Some(&workspace)) {
+                instance.push(PluginEvent::Context { data });
+            }
         }
         if matches!(instance.binding, ContextBinding::Pane(_)) {
             let next = path(&instance, Some(&workspace));
@@ -215,6 +237,8 @@ mod tests {
         let manifest: PluginManifest = serde_json::from_value(serde_json::json!({"id":"org.test.context", "name":"Test", "version":"1.0.0", "description":"Test", "author":"Test", "apiVersion":1,"runtime":"js","entry":"index.html","icon":"🌈","permissions":["read:context"]})).unwrap();
         Instance {
             binding: ContextBinding::Current,
+            subscriptions: vec![],
+            transfers: vec![],
             info: PluginInstance {
                 id: "test".into(),
                 plugin_id: manifest.id.clone(),

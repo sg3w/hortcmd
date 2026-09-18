@@ -111,6 +111,8 @@ pub fn create(
     let entry = entry.ok_or("Missing plugin entry")?.to_string();
     let mut instance = Instance {
         binding: Default::default(),
+        subscriptions: vec![],
+        transfers: vec![],
         info: info.clone(),
         manifest,
         root,

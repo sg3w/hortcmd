@@ -11,6 +11,7 @@ import type { LucideIcon } from "lucide-react";
 import type { CollisionReq, Preview } from "@/ipc/bindings";
 
 export interface ConfirmRequest {
+  onCancel?: () => void;
   preflight?: PreflightRequest;
   undo?: UndoRequest;
   title: string;
@@ -60,13 +61,14 @@ interface OpsStore {
   requestConfirm: (r: ConfirmRequest) => void;
   requestPrompt: (r: PromptRequest) => void;
   closeDialogs: () => void;
+  confirmDialog: (plan?: OperationPlan) => void;
   pushCollision: (c: CollisionReq) => void;
   shiftCollision: () => void;
   setPreview: (p: PreviewState | null) => void;
   setForceClose: (v: boolean) => void;
 }
 
-export const useOps = create<OpsStore>((set) => ({
+export const useOps = create<OpsStore>((set, get) => ({
   busy: false,
   confirm: null,
   prompt: null,
@@ -75,9 +77,10 @@ export const useOps = create<OpsStore>((set) => ({
   forceClose: false,
 
   setBusy: (busy) => set({ busy }),
-  requestConfirm: (confirm) => set({ confirm }),
+  requestConfirm: (confirm) => { const previous=get().confirm; set({confirm}); if(previous !== confirm) previous?.onCancel?.(); },
   requestPrompt: (prompt) => set({ prompt }),
-  closeDialogs: () => set({ confirm: null, prompt: null }),
+  closeDialogs: () => { const previous=get().confirm; set({confirm:null,prompt:null}); previous?.onCancel?.(); },
+  confirmDialog: plan => { const previous=get().confirm; set({confirm:null,prompt:null}); previous?.onConfirm(plan); },
   pushCollision: (c) => set((s) => ({ collisions: [...s.collisions, c] })),
   shiftCollision: () => set((s) => ({ collisions: s.collisions.slice(1) })),
   setPreview: (preview) => set({ preview }),

@@ -89,13 +89,18 @@ pub fn plugin_info(
     Ok(info)
 }
 #[tauri::command]
-pub fn plugin_request(
+pub async fn plugin_request(
+    app: tauri::AppHandle,
     window: tauri::WebviewWindow,
-    state: tauri::State<'_, PluginBroker>,
     id: String,
     request: PluginRequest,
 ) -> Result<serde_json::Value, String> {
-    state.control(&id, window.label(), request)
+    let caller = window.label().to_string();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::plugins::actions::dispatch(&app, &id, &caller, request)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 pub fn plugin_poll(
@@ -185,4 +190,33 @@ pub async fn plugin_preview(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub fn plugin_ui_poll(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, PluginBroker>,
+) -> Result<crate::plugins::actions::PluginUiState, String> {
+    trusted(&window)?;
+    crate::plugins::actions::poll(&state)
+}
+#[tauri::command]
+pub async fn plugin_transfer_start(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    id: String,
+    settings: crate::commands::fs::transfer::recovery::types::RecoverySettings,
+    review: String,
+) -> Result<(), String> {
+    trusted(&window)?;
+    crate::plugins::transfers::start(&app, &id, settings, review).await
+}
+#[tauri::command]
+pub fn plugin_transfer_cancel(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, PluginBroker>,
+    id: String,
+) -> Result<(), String> {
+    trusted(&window)?;
+    crate::plugins::transfers::cancel(&state, &id)
 }

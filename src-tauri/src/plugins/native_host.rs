@@ -59,8 +59,9 @@ pub fn spawn(executable: &Path, library: &Path) -> Result<tokio::process::Child,
 pub async fn supervise(
     mut child: tokio::process::Child,
     instance: Arc<Mutex<Instance>>,
-    dispatch: impl Fn(PluginRequest) -> Result<Value, String>,
+    dispatch: impl Fn(PluginRequest) -> Result<Value, String> + Send + Sync + 'static,
 ) -> Result<(), String> {
+    let dispatch = Arc::new(dispatch);
     let mut reader = BufReader::new(child.stdout.take().ok_or("Missing native stdout")?);
     let mut writer = child.stdin.take().ok_or("Missing native stdin")?;
     let mut idle = false;
@@ -96,7 +97,19 @@ pub async fn supervise(
             match message["type"].as_str() {
                 Some("request") => {
                     let request = serde_json::from_value(message["request"].clone()).map_err(|e| format!("Invalid native request: {e}"))?;
-                    let response = match dispatch(request) { Ok(value) => json!({"value":value}), Err(error) => json!({"error":error}) };
+                    let callback=dispatch.clone();
+                    let mut work=tokio::task::spawn_blocking(move || callback(request));
+                    let expires=Instant::now()+Duration::from_secs(15);
+                    let result=loop {
+                        tokio::select! {
+                            result=&mut work=>break result.map_err(|e|e.to_string())?,
+                            _=tokio::time::sleep(Duration::from_millis(50))=>{
+                                if instance.lock().map_err(|_|"Native state unavailable")?.info.closed {return Ok(());}
+                                if Instant::now()>expires {return Err("Native broker request timed out".into());}
+                            }
+                        }
+                    };
+                    let response=match result {Ok(value)=>json!({"value":value}),Err(error)=>json!({"error":error})};
                     send(&mut writer, response).await?;
                 }
                 Some("ready") if !initialized && message["abiVersion"] == ABI_VERSION => {
@@ -110,7 +123,7 @@ pub async fn supervise(
         }
     }.await;
     if let Ok(mut state) = instance.lock() {
-        state.info.closed = true;
+        state.stop();
     }
     // Give cooperative shutdown a short grace period, then always reap the child.
     if tokio::time::timeout(Duration::from_millis(300), child.wait())
@@ -201,6 +214,8 @@ pub fn start(app: &tauri::AppHandle, root: &Path, plugin: &str) -> Result<Plugin
     }
     let mut state = Instance {
         binding: Default::default(),
+        subscriptions: vec![],
+        transfers: vec![],
         info: info.clone(),
         manifest,
         root,
@@ -222,9 +237,7 @@ pub fn start(app: &tauri::AppHandle, root: &Path, plugin: &str) -> Result<Plugin
         let callback_app = app.clone();
         let callback_id = id.clone();
         let result = supervise(child, instance, move |request| {
-            callback_app
-                .state::<PluginBroker>()
-                .control(&callback_id, "main", request)
+            super::actions::dispatch(&callback_app, &callback_id, "main", request)
         })
         .await;
         if let Err(error) = result {

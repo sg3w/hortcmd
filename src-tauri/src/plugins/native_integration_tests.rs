@@ -54,6 +54,8 @@ fn instance() -> (Arc<PluginBroker>, Arc<Mutex<Instance>>) {
     })).unwrap();
     let state = Arc::new(Mutex::new(Instance {
         binding: Default::default(),
+        subscriptions: vec![],
+        transfers: vec![],
         info: PluginInstance {
             id: "test".into(),
             plugin_id: manifest.id.clone(),

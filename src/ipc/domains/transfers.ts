@@ -90,6 +90,7 @@ export function startPack(id: string, sources: string[], destZip: string): void 
 
 /** Cancels a running transfer. */
 export function cancelTransfer(id: string): void {
+  if(hasTauri && id.startsWith("plugin-")) { void invoke("plugin_transfer_cancel",{id}); return; }
   if (!hasTauri) {
     demo.demoCancelled.add(id);
     return;

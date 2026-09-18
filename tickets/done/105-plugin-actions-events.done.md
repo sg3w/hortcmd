@@ -26,12 +26,12 @@ the handoff/use of **copy operations** including a **limit**.
 - Applies identically to JS (101) and native (102) plugins.
 
 ## Acceptance criteria
-- [ ] A plugin with `op:copy` starts a copy operation that appears in the normal
+- [x] A plugin with `op:copy` starts a copy operation that appears in the normal
       transfer progress of the commander.
-- [ ] The configured copy limit is respected for plugin-triggered operations.
-- [ ] A plugin with `events:transfer` receives progress/completion events.
-- [ ] A plugin with `events:selection` receives selection/path changes.
-- [ ] Every action/subscription without a matching permission is rejected.
+- [x] The configured copy limit is respected for plugin-triggered operations.
+- [x] A plugin with `events:transfer` receives progress/completion events.
+- [x] A plugin with `events:selection` receives selection/path changes.
+- [x] Every action/subscription without a matching permission is rejected.
 
 ## Tests
 - The demo plugin (TICKET-107) starts a copy; progress visible, limit takes effect.
@@ -43,3 +43,10 @@ the handoff/use of **copy operations** including a **limit**.
 - Existing functionality unchanged
 - Documentation updated
 - Rename the ticket to *.done.md
+
+## Implementation evidence
+
+Implemented and verified with `npm run check`. See
+[Plugin interface](../../docs/plugin-interface.md) for the contract, security
+boundaries and author instructions. Native cross-platform GUI behavior requires
+verification on the corresponding operating systems.
