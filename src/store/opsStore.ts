@@ -45,12 +45,14 @@ export interface PromptRequest {
   onSubmit: (value: string, checked: boolean) => void;
 }
 
+type PreviewState = Preview & {path?: string; side?: "left" | "right"; folder?: boolean};
+
 interface OpsStore {
   busy: boolean;
   confirm: ConfirmRequest | null;
   prompt: PromptRequest | null;
   collisions: CollisionReq[]; // Warteschlange offener Namenskonflikte
-  preview: Preview | null;
+  preview: PreviewState | null;
   /** Window closing was intercepted during running transfers (TICKET-004). */
   forceClose: boolean;
 
@@ -60,7 +62,7 @@ interface OpsStore {
   closeDialogs: () => void;
   pushCollision: (c: CollisionReq) => void;
   shiftCollision: () => void;
-  setPreview: (p: Preview | null) => void;
+  setPreview: (p: PreviewState | null) => void;
   setForceClose: (v: boolean) => void;
 }
 

@@ -44,6 +44,8 @@ pub fn run() {
         Box::new(tauri::generate_handler![
             commands::plugins::list_plugins,
             commands::plugins::plugin_open,
+            commands::plugins::plugin_workspace,
+            commands::plugins::plugin_preview,
             commands::plugins::plugin_launch,
             commands::plugins::plugin_native_start,
             commands::plugins::plugin_info,

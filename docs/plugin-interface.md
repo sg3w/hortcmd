@@ -215,3 +215,36 @@ Native command buttons start or reuse the helper. Events wait for readiness.
 
 Optional plugin and MCP controls load behind React lazy boundaries. The existing
 325 KiB entry-chunk budget remains unchanged.
+
+## Context, previews and pane tabs
+
+TICKET-104 publishes typed snapshots from the main UI and canonicalizes all paths
+in Rust. Window/native instances follow the active pane on context:get. Path-bound
+tabs follow the pane that opened them, even when the other pane becomes active.
+Preview instances retain their requested file/folder path. Visual-only tabs
+receive no path or context, including from context:get. Without read:context,
+view:open omits both path and context and context:get is denied.
+
+Context includes the cursor file, selected full VFS locations, pane side and the
+copy limit in KiB/s (zero means unlimited). Optional copyOperation is a handoff,
+not an instruction to perform a transfer. The trusted UI can publish one through
+the publishContext helper before launching a plugin. This snapshot never grants
+filesystem permissions. Archive members do not currently have VFS addresses in
+this contract: while inside an archive the context describes its container and
+has an empty member selection, rather than inventing potentially dangerous paths.
+
+Each new instance queues view:open; the SDK receives it after view:ready. Pane
+navigation queues view:path for path-bound tabs. Queued path changes are coalesced.
+Workspace snapshots are limited to 256 KiB and 4096 selection/copy entries.
+view:close is advisory on teardown; plugins cannot veto host cleanup.
+
+The pane tab bar offers **Plugin views** for active tab contributions. A singleton
+contribution reuses its existing instance and owning pane. Inactive tabs stay
+mounted, so returning to a folder tab does not destroy plugin state. A failed view
+is removed and the folder remains usable. Dynamic view:title updates its caption.
+
+F3 resolves active preview contributions by kind, extension/MIME and priority in
+Rust. The embedded renderer uses the same bridge as a separate window. The core
+retains its preview for a missing match, failure or readiness timeout; for folders
+without a renderer it explains that the folder remains available in the pane.
+PHP is displayed as source text and is never executed.

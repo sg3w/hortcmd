@@ -199,7 +199,8 @@ pub fn start(app: &tauri::AppHandle, root: &Path, plugin: &str) -> Result<Plugin
             .map_err(|_| "Native process registry unavailable")?
             .insert(id.clone(), pid);
     }
-    let instance = Arc::new(Mutex::new(Instance {
+    let mut state = Instance {
+        binding: Default::default(),
         info: info.clone(),
         manifest,
         root,
@@ -207,7 +208,14 @@ pub fn start(app: &tauri::AppHandle, root: &Path, plugin: &str) -> Result<Plugin
         permissions,
         events: VecDeque::new(),
         created: Instant::now(),
-    }));
+    };
+    let workspace = broker
+        .workspace
+        .lock()
+        .map_err(|_| "Plugin context unavailable")?
+        .clone();
+    super::context::initialize(&mut state, workspace.as_ref());
+    let instance = Arc::new(Mutex::new(state));
     instances.insert(id.clone(), instance.clone());
     let app = app.clone();
     tauri::async_runtime::spawn(async move {

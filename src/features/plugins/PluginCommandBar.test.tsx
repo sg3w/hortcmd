@@ -18,13 +18,13 @@ describe("plugin command bar", () => {
     useDemo();
     const {unmount} = await show();
     expect(screen.queryByRole("button")).not.toBeInTheDocument(); unmount();
-    useTauri({commands:{list_plugins: () => [plugin(false)]}});
+    useTauri({commands:{plugin_workspace:() => {}, list_plugins: () => [plugin(false)]}});
     const {usePlugins} = await show();
     await waitFor(() => expect(usePlugins.getState().records).toHaveLength(1));
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
   it("shows the colorful icon and sends only the declared contribution id", async () => {
-    const harness = useTauri({commands:{list_plugins:() => [plugin()], plugin_launch:() => ({})}});
+    const harness = useTauri({commands:{plugin_workspace:() => {}, list_plugins:() => [plugin()], plugin_launch:() => ({})}});
     const {usePlugins} = await show();
     fireEvent.click(await screen.findByRole("button", {name:"Inspect"}));
     await waitFor(() => expect(harness.calls.some(c => c.cmd === "plugin_launch")).toBe(true));
@@ -35,7 +35,7 @@ describe("plugin command bar", () => {
     await waitFor(() => expect(screen.queryByRole("button")).not.toBeInTheDocument());
   });
   it("displays backend launch errors without discarding the commander UI", async () => {
-    useTauri({commands:{list_plugins:() => [plugin()], plugin_launch:() => {throw new Error("Permission denied");}}});
+    useTauri({commands:{plugin_workspace:() => {}, list_plugins:() => [plugin()], plugin_launch:() => {throw new Error("Permission denied");}}});
     await show();
     fireEvent.click(await screen.findByRole("button", {name:"Inspect"}));
     expect(await screen.findByRole("alert")).toHaveTextContent("Permission denied");

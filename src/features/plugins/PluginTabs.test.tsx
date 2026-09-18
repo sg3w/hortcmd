@@ -1,0 +1,20 @@
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { expect, it, vi } from "vitest";
+import { useTauri } from "@/test/tauri";
+it("keeps an inactive tab mounted and closes its backend instance on removal", async () => {
+  const harness = useTauri({commands:{plugin_poll:()=>[],plugin_close:()=>{}}});
+  vi.resetModules();
+  const {default: PluginTabs}=await import("./PluginTabs");
+  const {default: PluginPaneView}=await import("./PluginPaneView");
+  const {usePlugins}=await import("./pluginsStore");
+  usePlugins.getState().addView({side:"left", title:"Inspector",instance:{id:"view",pluginId:"org.test.views",viewId:"inspector",title:"Inspector",windowLabel:"main",ready:false,closed:false},contribution:{id:"inspector",title:"Inspector",icon:"🌈",entry:null,surface:"pane",path:"active",closable:true,singleton:true}});
+  render(<><PluginTabs side="left"/><PluginPaneView side="left"/></>);
+  const frame=screen.getByTitle("Inspector");
+  act(()=>usePlugins.getState().activateView("left",null));
+  expect(frame).toBeInTheDocument(); expect(frame).not.toBeVisible();
+  expect(harness.calls.some(c=>c.cmd === "plugin_close")).toBe(false);
+  fireEvent.click(screen.getByRole("tab",{name:"Inspector"})); expect(frame).toBeVisible();
+  fireEvent.keyDown(screen.getByRole("tab",{name:"Inspector"}),{key:"Delete"});
+  await waitFor(()=>expect(harness.calls.some(c=>c.cmd === "plugin_close")).toBe(true));
+  expect(screen.queryByTitle("Inspector")).not.toBeInTheDocument();
+});

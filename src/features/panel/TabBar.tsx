@@ -5,11 +5,14 @@
 // scrollbar) to shift the tab bar horizontally.
 // ============================================================
 
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Package, Plus, X } from "lucide-react";
 import { usePanes, type Side } from "@/store/panesStore";
 import { useT } from "@/store/settingsStore";
 import { cn } from "@/lib/cn";
+
+import { usePlugins } from "@/features/plugins/pluginsStore";
+const PluginTabs = lazy(() => import("@/features/plugins/PluginTabs"));
 
 function basename(path: string): string {
   if (!path || path === "/") return "/";
@@ -18,6 +21,8 @@ function basename(path: string): string {
 }
 
 export function TabBar({ side }: { side: Side }) {
+  const activePlugin = usePlugins(s => s.activeView[side]);
+  const folderView = () => usePlugins.getState().activateView(side,null);
   const tabs = usePanes((s) => s[side].tabs);
   const activeTab = usePanes((s) => s[side].activeTab);
   const paneActive = usePanes((s) => s.active === side);
@@ -59,7 +64,7 @@ export function TabBar({ side }: { side: Side }) {
     const state = usePanes.getState()[side];
     document.getElementById(`${side}-tab-${state.tabs[state.activeTab].id}`)?.focus();
   });
-  const close = (index: number) => { closeTab(side, index); focusActive(); };
+  const close = (index: number) => { folderView(); closeTab(side, index); focusActive(); };
 
   const scrollStrip = (delta: number) =>
     stripRef.current?.scrollBy({
@@ -93,7 +98,7 @@ export function TabBar({ side }: { side: Side }) {
         className="flex min-w-0 flex-1 items-stretch gap-0.5 overflow-x-hidden"
       >
         {tabs.map((tab, i) => {
-          const isActive = i === activeTab;
+          const isActive = i === activeTab && !activePlugin;
           // In einem Archiv: Paket-Icon + Archivname statt des inneren Pfads.
           const label = tab.archive ? basename(tab.archive) : basename(tab.path);
           return (
@@ -117,7 +122,7 @@ export function TabBar({ side }: { side: Side }) {
                 aria-controls={`${side}-files`}
                 aria-keyshortcuts="Delete"
                 tabIndex={isActive ? 0 : -1}
-                onClick={() => selectTab(side, i)}
+                onClick={() => { folderView(); selectTab(side, i); }}
                 onKeyDown={event => {
                   let next = i;
                   switch (event.key) {
@@ -130,7 +135,7 @@ export function TabBar({ side }: { side: Side }) {
                     default: return;
                   }
                   event.preventDefault(); event.stopPropagation();
-                  selectTab(side, next); focusActive();
+                  folderView(); selectTab(side, next); focusActive();
                 }}
                 className="flex min-w-0 items-center gap-1"
               >
@@ -165,6 +170,8 @@ export function TabBar({ side }: { side: Side }) {
         })}
       </div>
 
+      <Suspense fallback={null}><PluginTabs side={side} /></Suspense>
+
       {canRight && (
         <button
           title={t("tab.scrollRight")}
@@ -177,7 +184,7 @@ export function TabBar({ side }: { side: Side }) {
 
       <button
         title={t("tab.new")}
-        onClick={() => void addTab(side).then(focusActive)}
+        onClick={() => { folderView(); void addTab(side).then(focusActive); }}
         className="flex shrink-0 items-center rounded px-1.5 text-dim hover:bg-accent-dim hover:text-text"
       >
         <Plus size={13} />

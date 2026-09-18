@@ -15,6 +15,7 @@ export function PluginFrame({id, title, onFailure, onTitle}: {
   useEffect(() => {
     const generation = lifetime.current.generation + 1;
     lifetime.current = {id, generation};
+    const child = frame.current?.contentWindow;
     let live = true; let busy = 0; let polling = false;
     setReady(false); setFailed(false);
     const fail = () => {
@@ -48,6 +49,7 @@ export function PluginFrame({id, title, onFailure, onTitle}: {
       } catch { fail(); } finally { polling = false; }
     }, 150);
     return () => {
+      child?.postMessage({channel:"hortcmd:event",event:{type:"view:close",instanceId:id}}, "*");
       live = false; clearTimeout(timer); clearInterval(interval); window.removeEventListener("message", receive);
       queueMicrotask(() => {
         if (lifetime.current.id !== id || lifetime.current.generation === generation) void pluginClose(id).catch(() => {});

@@ -24,6 +24,7 @@ pub struct PluginInstance {
     pub closed: bool,
 }
 pub struct Instance {
+    pub binding: super::context::ContextBinding,
     pub info: PluginInstance,
     pub manifest: PluginManifest,
     pub root: PathBuf,
@@ -50,6 +51,11 @@ impl Instance {
         Ok(())
     }
     pub fn push(&mut self, event: PluginEvent) {
+        // Path changes supersede queued path changes for this instance.
+        if matches!(event, PluginEvent::Path { .. }) {
+            self.events
+                .retain(|e| !matches!(e, PluginEvent::Path { .. }));
+        }
         if self.events.len() == 128 {
             self.events.pop_front();
         }
@@ -58,6 +64,7 @@ impl Instance {
 }
 #[derive(Default)]
 pub struct PluginBroker {
+    pub workspace: Mutex<Option<super::context::PluginWorkspace>>,
     pub native_processes: Mutex<BTreeMap<String, u32>>,
     pub instances: Mutex<BTreeMap<String, Arc<Mutex<Instance>>>>,
     pub grants: Mutex<BTreeMap<String, Vec<PluginPermission>>>,
@@ -108,10 +115,19 @@ impl PluginBroker {
         caller: &str,
         request: PluginRequest,
     ) -> Result<serde_json::Value, String> {
+        let workspace = self
+            .workspace
+            .lock()
+            .map_err(|_| "Plugin context unavailable")?
+            .clone();
         let instance = self.instance(id, caller)?;
         let mut instance = instance.lock().map_err(|_| "Plugin instance unavailable")?;
         instance.authorize(&request)?;
         match request {
+            PluginRequest::Context => {
+                serde_json::to_value(super::context::value(&instance, workspace.as_ref()))
+                    .map_err(|e| e.to_string())
+            }
             PluginRequest::Ping => Ok(serde_json::json!("pong")),
             PluginRequest::Ready => {
                 instance.info.ready = true;
@@ -153,6 +169,7 @@ mod tests {
         })).unwrap();
         let broker = PluginBroker::default();
         let instance = Instance {
+            binding: Default::default(),
             info: PluginInstance {
                 id: "session".into(),
                 plugin_id: manifest.id.clone(),

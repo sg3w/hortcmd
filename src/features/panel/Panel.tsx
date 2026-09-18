@@ -3,7 +3,7 @@
 // status. Encapsulates the open logic (folder navigation / ".." up).
 // ============================================================
 
-import { useRef, useState, type MouseEvent } from "react";
+import { lazy, Suspense, useRef, useState, type MouseEvent } from "react";
 import type { Drive } from "@/ipc/bindings";
 import { usePanes, type Side } from "@/store/panesStore";
 import { openEntry } from "@/features/commander/navigate";
@@ -18,12 +18,16 @@ import { FileTable } from "./FileTable";
 import { DirTree } from "./DirTree";
 import { FileContextMenu } from "@/components/ui/FileContextMenu";
 
+import { usePlugins } from "@/features/plugins/pluginsStore";
+const PluginPaneView = lazy(() => import("@/features/plugins/PluginPaneView"));
+
 interface Props {
   side: Side;
   drives: Drive[];
 }
 
 export function Panel({ side, drives }: Props) {
+  const pluginView = usePlugins(s => s.activeView[side]);
   const tabId = usePanes(s => s[side].tabs[s[side].activeTab].id);
   const active = usePanes((s) => s.active === side);
   const showTree = usePanes((s) => s[side].viewMode === "tree");
@@ -67,7 +71,8 @@ export function Panel({ side, drives }: Props) {
       )}
     >
       <TabBar side={side} />
-      <div role="tabpanel" id={`${side}-files`} aria-labelledby={`${side}-tab-${tabId}`} className="flex min-h-0 flex-1 flex-col">
+      <Suspense fallback={null}><PluginPaneView side={side} /></Suspense>
+      <div hidden={!!pluginView} role="tabpanel" id={`${side}-files`} aria-labelledby={`${side}-tab-${tabId}`} className={pluginView ? "hidden" : "flex min-h-0 flex-1 flex-col"}>
       <DriveSelect side={side} drives={drives} />
       <PathBar side={side} />
       {showTree ? (

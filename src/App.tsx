@@ -56,6 +56,7 @@ import { useRefresh } from "@/features/panel/useRefresh";
 
 const McpRuntime = lazy(() => import("@/features/settings/McpRuntime").then(module => ({default: module.McpRuntime})));
 
+const PluginRuntime = lazy(() => import("@/features/plugins/PluginRuntime"));
 const PluginCommandBar = lazy(() => import("@/features/plugins/PluginCommandBar"));
 
 const CommandLine = lazy(() => import("@/features/commandLine/CommandLine"));
@@ -251,7 +252,7 @@ export default function App() {
 
       {/* Commandbar (Sonderfunktionen + Ansichtsumschalter) */}
       <CommandBar />
-      <Suspense fallback={null}><PluginCommandBar /></Suspense>
+      <Suspense fallback={null}><PluginCommandBar /><PluginRuntime /></Suspense>
 
       {/* Zwei-Fenster-Bereich (Splitter verschiebbar) */}
       <main ref={mainRef} className="flex min-h-0 flex-1">

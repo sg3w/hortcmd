@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { pluginLaunch } from "@/ipc/domains/plugins";
 import { useT } from "@/store/settingsStore";
 import { usePlugins } from "./pluginsStore";
+import { publishContext } from "./context";
 import { PluginIcon } from "./PluginIcon";
 
 export default function PluginCommandBar() {
@@ -15,7 +16,7 @@ export default function PluginCommandBar() {
   if (!active.length) return null;
   const launch = async (plugin: string, button: string) => {
     setBusy(`${plugin}:${button}`); setError(null);
-    try { await pluginLaunch(plugin, button); } catch (error) { setError(String(error)); } finally { setBusy(null); }
+    try { await publishContext(); await pluginLaunch(plugin, button); } catch (error) { setError(String(error)); } finally { setBusy(null); }
   };
   return <div className="shrink-0 border-b border-edge bg-header">
     <div role="group" aria-label={t("plugins.title")} className="flex items-center gap-2 overflow-x-auto px-2 py-1">

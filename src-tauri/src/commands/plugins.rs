@@ -44,6 +44,7 @@ use crate::plugins::{
     protocol::{PluginEvent, PluginRequest},
 };
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn plugin_open(
     app: tauri::AppHandle,
@@ -52,9 +53,19 @@ pub fn plugin_open(
     plugin: String,
     view: Option<String>,
     separate: bool,
+    side: crate::plugins::protocol::PluginSide,
+    path: Option<String>,
 ) -> Result<PluginInstance, String> {
     trusted(&window)?;
-    let instance = js_host::create(&state, &root(&app)?, &plugin, view.as_deref(), separate)?;
+    let instance = js_host::create(
+        &state,
+        &root(&app)?,
+        &plugin,
+        view.as_deref(),
+        separate,
+        side,
+        path.as_deref(),
+    )?;
     if separate {
         if let Err(error) = js_host::open_window(&app, &instance) {
             state.close(&instance.id);
@@ -150,4 +161,28 @@ pub fn plugin_launch(
 ) -> Result<PluginInstance, String> {
     trusted(&window)?;
     crate::plugins::launch::launch(&app, &root(&app)?, &plugin, &button)
+}
+
+#[tauri::command]
+pub fn plugin_workspace(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, PluginBroker>,
+    workspace: crate::plugins::context::PluginWorkspace,
+) -> Result<(), String> {
+    trusted(&window)?;
+    crate::plugins::context::publish(&state, workspace)
+}
+#[tauri::command]
+pub async fn plugin_preview(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    path: String,
+    side: crate::plugins::protocol::PluginSide,
+) -> Result<Option<PluginInstance>, String> {
+    trusted(&window)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::plugins::views::preview(&app, &root(&app)?, &path, side)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }

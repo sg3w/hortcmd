@@ -26,11 +26,11 @@ is the core of what a plugin needs to do meaningful work.
 - Sensitive data only to plugins with the matching permission; nothing shared implicitly.
 
 ## Acceptance criteria
-- [ ] A plugin with `read:context` receives a correct `PluginContext` on open
+- [x] A plugin with `read:context` receives a correct `PluginContext` on open
       (path, folder path, file path, selection, side, copy limit).
-- [ ] The plugin can retrieve the context updated on request.
-- [ ] A passed copy operation arrives fully (source/target) at the plugin.
-- [ ] Without `read:context` no context is delivered.
+- [x] The plugin can retrieve the context updated on request.
+- [x] A passed copy operation arrives fully (source/target) at the plugin.
+- [x] Without `read:context` no context is delivered.
 
 ## Tests
 - The demo plugin (TICKET-107) shows the current path/file path; after navigating in the
@@ -42,3 +42,10 @@ is the core of what a plugin needs to do meaningful work.
 - Existing functionality unchanged
 - Documentation updated
 - Rename the ticket to *.done.md
+
+## Implementation evidence
+
+Implemented and verified with `npm run check`. See
+[Plugin interface](../../docs/plugin-interface.md) for the contract, security
+boundaries and author instructions. Native cross-platform GUI behavior requires
+verification on the corresponding operating systems.

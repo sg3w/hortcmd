@@ -2,7 +2,7 @@
 use super::manifest::PluginPermission;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
 #[ts(export, export_to = "../../src/ipc/bindings/")]
 pub enum PluginSide {

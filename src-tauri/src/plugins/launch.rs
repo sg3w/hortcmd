@@ -42,7 +42,15 @@ pub fn launch(
         .ok_or("Unknown plugin button")?;
     match &button.action {
         PluginAction::OpenWindow => {
-            let info = js_host::create(&broker, root, plugin, None, true)?;
+            let info = js_host::create(
+                &broker,
+                root,
+                plugin,
+                None,
+                true,
+                super::protocol::PluginSide::Left,
+                None,
+            )?;
             if let Err(error) = js_host::open_window(app, &info) {
                 broker.close(&info.id);
                 return Err(error);
@@ -66,7 +74,15 @@ pub fn launch(
                 match running {
                     Some(info) => info,
                     None if permissions.contains(&PluginPermission::Window) => {
-                        let info = js_host::create(&broker, root, plugin, None, true)?;
+                        let info = js_host::create(
+                            &broker,
+                            root,
+                            plugin,
+                            None,
+                            true,
+                            super::protocol::PluginSide::Left,
+                            None,
+                        )?;
                         if let Err(error) = js_host::open_window(app, &info) {
                             broker.close(&info.id);
                             return Err(error);

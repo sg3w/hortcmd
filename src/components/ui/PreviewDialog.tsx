@@ -5,7 +5,7 @@
 // ============================================================
 
 import { useDialogFocusReturn } from "./useDialogFocusReturn";
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { FileText, Image as ImageIcon, Binary, Info, X } from "lucide-react";
 import { useOps } from "@/store/opsStore";
@@ -25,6 +25,8 @@ import { openExternal } from "@/ipc/client";
 import { cn } from "@/lib/cn";
 import { markDialogKey } from "@/lib/keys";
 
+const PluginPreview = lazy(() => import("@/features/plugins/PluginPreview"));
+
 export function PreviewDialog() {
   const returnFocus = useDialogFocusReturn();
   const preview = useOps((s) => s.preview);
@@ -39,13 +41,15 @@ export function PreviewDialog() {
   );
 
   const [mode, setMode] = useState<PreviewMode>(def);
+  const [showPlugin, setShowPlugin] = useState(true);
   const [showExif, setShowExif] = useState(false);
 
   // Reset the mode to the default when the file changes.
   useEffect(() => {
     setMode(def);
+    setShowPlugin(true);
     setShowExif(false);
-  }, [preview?.name, def]);
+  }, [preview?.name, preview?.path, def]);
 
   const KindIcon = isImage ? ImageIcon : hasHex ? Binary : FileText;
   const ext = preview ? extNameOf(preview.name) : "";
@@ -80,7 +84,7 @@ export function PreviewDialog() {
                   <button
                     key={m}
                     aria-pressed={mode === m}
-                    onClick={() => setMode(m)}
+                    onClick={() => {setMode(m); setShowPlugin(false);}}
                     className={cn(
                       "px-2.5 py-0.5 text-[12px]",
                       mode === m
@@ -115,7 +119,8 @@ export function PreviewDialog() {
           </Dialog.Title>
 
           <div className="flex min-h-0 flex-1">
-            <div className="min-h-0 flex-1 overflow-auto bg-bg">
+            <div className="flex min-h-0 flex-1 flex-col overflow-auto bg-bg">
+              <Suspense fallback={<PreviewBody mode={mode} text={text} hex={preview.hex} ext={ext} name={preview.name} />}><PluginPreview path={preview.path} side={preview.side} enabled={showPlugin}>
               {isImage ? (
                 <div className="flex h-full items-center justify-center p-4">
                   <img
@@ -127,6 +132,7 @@ export function PreviewDialog() {
               ) : (
                 <PreviewBody mode={mode} text={text} hex={preview.hex} ext={ext} name={preview.name} />
               )}
+              </PluginPreview></Suspense>
             </div>
 
             {/* EXIF panel */}

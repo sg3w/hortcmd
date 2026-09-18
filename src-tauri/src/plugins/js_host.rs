@@ -17,6 +17,8 @@ pub fn create(
     plugin: &str,
     view: Option<&str>,
     window: bool,
+    side: super::protocol::PluginSide,
+    path: Option<&str>,
 ) -> Result<PluginInstance, String> {
     if !valid_id(plugin) {
         return Err("Invalid plugin id".into());
@@ -107,18 +109,26 @@ pub fn create(
         closed: false,
     };
     let entry = entry.ok_or("Missing plugin entry")?.to_string();
-    instances.insert(
-        id,
-        Arc::new(Mutex::new(Instance {
-            info: info.clone(),
-            manifest,
-            root,
-            entry,
-            permissions,
-            events: VecDeque::new(),
-            created: std::time::Instant::now(),
-        })),
-    );
+    let mut instance = Instance {
+        binding: Default::default(),
+        info: info.clone(),
+        manifest,
+        root,
+        entry,
+        permissions,
+        events: VecDeque::new(),
+        created: std::time::Instant::now(),
+    };
+    if view.is_some() {
+        super::context::bind_view(&mut instance, side, path)?;
+    }
+    let workspace = broker
+        .workspace
+        .lock()
+        .map_err(|_| "Plugin context unavailable")?
+        .clone();
+    super::context::initialize(&mut instance, workspace.as_ref());
+    instances.insert(id, Arc::new(Mutex::new(instance)));
     Ok(info)
 }
 
@@ -234,23 +244,58 @@ mod tests {
             "runtime":"js", "entry":"index.html", "icon":"🌈", "permissions":["ui:window"]
         }).to_string()).unwrap();
         let broker = PluginBroker::default();
-        assert!(create(&broker, &root, "org.test.host", None, true).is_err());
+        assert!(create(
+            &broker,
+            &root,
+            "org.test.host",
+            None,
+            true,
+            super::super::protocol::PluginSide::Left,
+            None
+        )
+        .is_err());
         broker
             .grants
             .lock()
             .unwrap()
             .insert("org.test.host".into(), vec![]);
-        assert!(create(&broker, &root, "org.test.host", None, true).is_err());
+        assert!(create(
+            &broker,
+            &root,
+            "org.test.host",
+            None,
+            true,
+            super::super::protocol::PluginSide::Left,
+            None
+        )
+        .is_err());
         broker
             .grants
             .lock()
             .unwrap()
             .insert("org.test.host".into(), vec![PluginPermission::Window]);
-        let info = create(&broker, &root, "org.test.host", None, true).unwrap();
+        let info = create(
+            &broker,
+            &root,
+            "org.test.host",
+            None,
+            true,
+            super::super::protocol::PluginSide::Left,
+            None,
+        )
+        .unwrap();
         assert_eq!(
-            create(&broker, &root, "org.test.host", None, true)
-                .unwrap()
-                .id,
+            create(
+                &broker,
+                &root,
+                "org.test.host",
+                None,
+                true,
+                super::super::protocol::PluginSide::Left,
+                None
+            )
+            .unwrap()
+            .id,
             info.id
         );
         let uri = format!("hortplugin://localhost/{}/_entry", info.id)
