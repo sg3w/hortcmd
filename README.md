@@ -44,7 +44,7 @@ The **MCP server** is implemented under [TICKET-041](tickets/done/041-mcp-interf
 with final integration acceptance still in progress. It is disabled by default;
 see [MCP setup and verification](docs/mcp.md). The **plugin system**
 contract and discovery ([TICKET-100](tickets/done/100-plugin-api-contract.done.md))
-and isolated JS hosting are implemented; native hosting, integration and management
+and isolated JS/native hosting are implemented; integration and management
 follow in the remaining plugin tickets. See the
 [Plugin interface](docs/plugin-interface.md).
 
@@ -274,8 +274,8 @@ or protocol telemetry is labeled as unavailable. See
 notes, test evidence and native platform follow-ups.
 
 **Plugins:** the manifest contract and isolated JS host are implemented. Execution
-requires an active permission grant; plugin management and the native host follow
-in the remaining tickets. See [Plugin interface](docs/plugin-interface.md) for
+requires an active permission grant; plugin management follows in the remaining
+tickets. Native libraries run in a helper process with full user privileges. See [Plugin interface](docs/plugin-interface.md) for
 the broker and containment boundary.
 
 The optional MCP endpoint binds only to loopback and requires its keychain-backed

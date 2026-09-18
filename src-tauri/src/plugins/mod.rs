@@ -10,3 +10,7 @@ pub fn navigation_allowed(url: &tauri::Url) -> bool {
         || url.scheme() == "hortplugin"
         || (url.scheme() == "http" && url.host_str() == Some("hortplugin.localhost"))
 }
+
+pub mod native_abi;
+pub mod native_host;
+pub mod native_worker;

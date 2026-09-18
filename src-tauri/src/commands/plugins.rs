@@ -116,3 +116,13 @@ pub fn plugin_close(
     }
     Ok(())
 }
+
+#[tauri::command]
+pub fn plugin_native_start(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    plugin: String,
+) -> Result<PluginInstance, String> {
+    trusted(&window)?;
+    crate::plugins::native_host::start(&app, &root(&app)?, &plugin)
+}

@@ -14,6 +14,10 @@ default-run = "hortcmd"
 name = "hortcmd-mcp"
 path = "src/bin/hortcmd-mcp.rs"
 
+[[test]]
+name = "native_plugins"
+path = "src/plugins/native_integration_tests.rs"
+
 [lib]
 name = "hortcmd_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
@@ -25,6 +29,7 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+libloading = "0.7.4"
 unicode-normalization = "0.1"
 archive-budget = { path = "../vendor/archive-budget" }
 cap-std = "4.0.3"

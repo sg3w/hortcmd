@@ -2538,6 +2538,7 @@ dependencies = [
  "keepass",
  "keyring",
  "libc",
+ "libloading",
  "md-5 0.10.6",
  "notify",
  "objc2",

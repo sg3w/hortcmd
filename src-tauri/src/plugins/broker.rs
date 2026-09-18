@@ -58,6 +58,7 @@ impl Instance {
 }
 #[derive(Default)]
 pub struct PluginBroker {
+    pub native_processes: Mutex<BTreeMap<String, u32>>,
     pub instances: Mutex<BTreeMap<String, Arc<Mutex<Instance>>>>,
     pub grants: Mutex<BTreeMap<String, Vec<PluginPermission>>>,
 }
@@ -125,6 +126,18 @@ impl PluginBroker {
                 Ok(serde_json::Value::Null)
             }
             _ => Err("Broker action is not available".into()),
+        }
+    }
+}
+
+impl Drop for PluginBroker {
+    fn drop(&mut self) {
+        if let Ok(instances) = self.instances.lock() {
+            for instance in instances.values() {
+                if let Ok(mut instance) = instance.lock() {
+                    instance.info.closed = true;
+                }
+            }
         }
     }
 }

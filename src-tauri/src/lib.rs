@@ -44,6 +44,7 @@ pub fn run() {
         Box::new(tauri::generate_handler![
             commands::plugins::list_plugins,
             commands::plugins::plugin_open,
+            commands::plugins::plugin_native_start,
             commands::plugins::plugin_info,
             commands::plugins::plugin_request,
             commands::plugins::plugin_poll,
@@ -236,8 +237,10 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("Fehler beim Start der Tauri-Anwendung")
-        .run(|_, event| {
+        .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                use tauri::Manager;
+                plugins::native_host::shutdown(&app.state::<plugins::broker::PluginBroker>());
                 net::session::shutdown();
             }
         });

@@ -159,3 +159,41 @@ on another open request for the same plugin. Up to 32 instances may coexist.
 
 SDK typings are in `src/features/plugins/pluginApi.ts`; payload types are generated
 from `src-tauri/src/plugins/protocol.rs`.
+
+## Native helper and C ABI
+
+TICKET-102 loads native libraries in a dedicated child process. The installed
+commander executable is started with an internal helper flag before any Tauri
+initialization; no separate sidecar installation is required. The main process
+validates the manifest and grants before launching it. Native code retains the
+user's OS privileges: only the crash boundary is isolated.
+
+Use [hortcmd_plugin.h](plugins/hortcmd_plugin.h) or the equivalent Rust layouts in
+`src-tauri/src/plugins/native_abi.rs`. Export the C symbol hortcmd_plugin_v1,
+returning a stable table with ABI version 1 and its exact struct size. The table
+provides initialize, event and shutdown. Wrong versions, missing symbols and
+failed initialization reject the instance. Library names use .dylib, .so or .dll
+in the appropriate manifest platform entry.
+
+Initialize receives a host table with a request callback. Send a UTF-8 JSON
+PluginRequest and receive UTF-8 JSON containing either value or error. All
+buffers are caller-owned; no Rust String, Vec, trait object or allocator ownership
+crosses the boundary. Allocate 1 MiB for the result. A negative return indicates
+transport failure; -2 means insufficient output capacity. Never retry a mutation
+just because its response did not fit. Host calls must run synchronously on the
+initialize/event thread; background-thread callbacks are rejected. Do not retain
+input event pointers after the event function returns.
+
+The helper and core exchange bounded newline-delimited JSON over private pipes.
+Only one event is in flight at a time. Initialization and event handling have a
+10-second deadline; closing an instance permits 300 ms for cooperative shutdown
+before termination. Every helper is reaped. Application exit also terminates
+registered helpers. A library panic/abort, invalid ABI pointer, invalid wire
+message or pipe failure can terminate the helper without taking down the core.
+Long work should be split into short event handlers; this ABI does not support
+blocking callbacks or background calls into the broker.
+
+Tests compile a real C library, verify allowed and denied callbacks, reject an
+incompatible ABI, crash a helper deliberately, and close a hung handler. These
+process tests run on Unix without a GUI. Windows requires native verification of
+DLL packaging and process behavior; the platform entry and transport are shared.
