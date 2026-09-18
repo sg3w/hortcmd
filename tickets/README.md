@@ -1,8 +1,8 @@
 # Ticket organization
 
 All tickets below 100 and tickets 100–107 have been completed.
-Tickets 128, 137 and the discovered issues 300–301 and 303–304 are also complete. There are
-**28 open tickets**: 108–127 and 129–136. Dependencies use the current paths.
+Tickets 125, 128, 137 and the discovered issues 300–301 and 303–304 are also complete. There are
+**27 open tickets**: 108–124, 126–127 and 129–136. Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
 filenames ending in `.done.md`. This also applies to previously completed support
@@ -41,7 +41,7 @@ tickets with higher numbers. Do not reuse those numbers for new work.
 | 257 | [122](122-remote-index-stable-content-capabilities.md) | Prove remote no-follow and stable-content reads for optional indexing |
 | 259 | [123](123-vfs-native-provider-path-conformance.md) | Verify native Windows/Linux VFS provider paths |
 | 260 | [124](124-removable-media-native-verification.md) | Removable-media hardware and platform verification |
-| 261 | [125](125-index-search-session-restore.md) | Indexsuche nach Dialog-Unmount konsistent wiederherstellen |
+| 261 | [125](done/125-index-search-session-restore.done.md) | Restore the index search dialog within the session |
 | 262 | [126](126-archive-navigation-history.md) | Archiv-Orte im Navigationsverlauf erhalten |
 | 263 | [127](127-native-paired-comparison-verification.md) | Native Prüfung der doppelten Vergleichsliste |
 | 264 | [128](done/128-rename-dialog-structured-errors.done.md) | Strukturierte Batch-Fehler im Umbenennen-Dialog anzeigen |
@@ -77,5 +77,5 @@ historical references while active links use the current filenames.
 ## Current implementation batch
 
 Requested: 20 additional code tickets, excluding Windows/Linux-specific work.
-Completed in this batch: **128, 137, 300, 107, 301, 303, 304 (7 of 20)**. New findings are recorded above.
+Completed in this batch: **128, 137, 300, 107, 301, 303, 304, 125 (8 of 20)**. New findings are recorded above.
 

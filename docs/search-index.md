@@ -37,6 +37,25 @@ address. Profile deletion or edits erase both open scopes and locked encrypted
 snapshots, including interrupted-write files. Reconnect generations force a new
 reconciliation and old results remain labelled stale/incomplete meanwhile.
 
+## Search dialog session
+
+Reopening the index dialog from the same initial root restores its selected scope,
+creation preferences, query filters, last result page and query status for the
+current application session. The snapshot is kept only in memory; passwords are
+never included. Opening from another initial root starts a fresh dialog session.
+
+Cached results and errors remain hidden until the backend confirms the selected
+scope is still available with the same root and policy. Changing scopes, locking
+or removing a scope, changing its policy/root, or losing permitted offline access
+clears its results and content query. Unlocking does not revive those results.
+Reopening never automatically submits a search. Existing approved crawl scheduling
+continues according to the scope state described above.
+
+Closing or stopping a query cancels its request and preserves a cancelled status.
+Late query, creation and control responses cannot overwrite a closed dialog or a
+new selection. Completed queries revalidate the scope before displaying results.
+The retained result page remains bounded by the existing 200-hit query limit.
+
 ## Bounds, checkpoints and freshness
 
 One crawler and at most four queries run at once, with no unbounded request queue.
