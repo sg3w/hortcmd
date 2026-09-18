@@ -44,7 +44,8 @@ The **MCP server** is implemented under [TICKET-041](tickets/done/041-mcp-interf
 with final integration acceptance still in progress. It is disabled by default;
 see [MCP setup and verification](docs/mcp.md). The **plugin system**
 contract and discovery ([TICKET-100](tickets/done/100-plugin-api-contract.done.md))
-are implemented; execution and management remain planned. See the
+and isolated JS hosting are implemented; native hosting, integration and management
+follow in the remaining plugin tickets. See the
 [Plugin interface](docs/plugin-interface.md).
 
 ## Tech stack
@@ -272,12 +273,11 @@ or protocol telemetry is labeled as unavailable. See
 [transport security](docs/transport-security.md) for the complete policy, migration
 notes, test evidence and native platform follow-ups.
 
-**Not implemented:**
+**Plugins:** the manifest contract and isolated JS host are implemented. Execution
+requires an active permission grant; plugin management and the native host follow
+in the remaining tickets. See [Plugin interface](docs/plugin-interface.md) for
+the broker and containment boundary.
 
-- **Plugins** ([TICKET-100](tickets/done/100-plugin-api-contract.done.md) …
-  [TICKET-107](tickets/107-reference-demo-plugin.md)) —
-  there is no plugin host, no loader, and no extension point. Nothing in this
-  repository executes third-party code.
 The optional MCP endpoint binds only to loopback and requires its keychain-backed
 bearer token, enabled capability tiers and allowed roots. Writes require in-app
 approval by default. See [MCP security and configuration](docs/mcp.md).

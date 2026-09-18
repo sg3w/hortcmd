@@ -8,6 +8,8 @@ import { ns } from "./ns";
 
 export const settings = ns(
   {
+  "plugins.loading": "Loading plugin…",
+  "plugins.failed": "Plugin unavailable. The built-in view remains available.",
   "mcp.title": "MCP-Schnittstelle",
   "mcp.hint": "Nur freigegebene Ordner sind erreichbar. Schreiben und Löschen sind standardmäßig gesperrt.",
   "mcp.error": "MCP-Anfrage fehlgeschlagen. Einstellungen und Schlüsselbund prüfen.",
@@ -166,6 +168,8 @@ export const settings = ns(
     "Veröffentlicht unter der MIT-Lizenz. © 2026 Jörg Hammel.",
   },
   {
+  "plugins.loading": "Loading plugin…",
+  "plugins.failed": "Plugin unavailable. The built-in view remains available.",
   "mcp.title": "MCP interface",
   "mcp.hint": "Only allowed folders are reachable. Writing and deletion are disabled by default.",
   "mcp.error": "MCP request failed. Check settings and the credential store.",

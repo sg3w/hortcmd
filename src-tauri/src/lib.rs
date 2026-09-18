@@ -40,45 +40,14 @@ fn is_trusted_origin(url: &tauri::Url) -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        // The window carries the full Commander menu; macOS additionally
-        // gets a reduced native menu (TICKET-040).
-        .setup(|app| {
-            // The main window is declared in `tauri.conf.json` with
-            // `"create": false` and built here instead, because the
-            // navigation policy (TICKET-030) can only be attached while
-            // the WebView is being created.
-            let config = app
-                .config()
-                .app
-                .windows
-                .first()
-                .cloned()
-                .ok_or("Kein Fenster in tauri.conf.json konfiguriert")?;
-            tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
-                // Navigation boundary of the WebView. Only the app
-                // document loads here; a blocked attempt is noted in
-                // development with the URL alone — never with page or
-                // file contents.
-                .on_navigation(|url| {
-                    let allowed = is_trusted_origin(url);
-                    if !allowed && cfg!(debug_assertions) {
-                        eprintln!("[hortcmd] Navigation blockiert: {}", url);
-                    }
-                    allowed
-                })
-                .build()?;
-            menu::install(app.handle())?;
-            commands::fs::drives::start(app.handle().clone());
-            mcp::confirm::attach(app.handle().clone());
-            if let Err(error) = mcp::server::configure(&mcp::config()) {
-                eprintln!("MCP startup failed: {}", error.code);
-            }
-            Ok(())
-        })
-        .manage(commands::command_line::CommandLine::default())
-        .invoke_handler(tauri::generate_handler![
+    let handler: Box<dyn Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync> =
+        Box::new(tauri::generate_handler![
             commands::plugins::list_plugins,
+            commands::plugins::plugin_open,
+            commands::plugins::plugin_info,
+            commands::plugins::plugin_request,
+            commands::plugins::plugin_poll,
+            commands::plugins::plugin_close,
             commands::command_line::command_start,
             commands::command_line::command_status,
             commands::command_line::command_cancel,
@@ -181,7 +150,90 @@ pub fn run() {
             net::terminal::ssh_resize,
             net::terminal::ssh_close,
             menu::set_menu_language,
-        ])
+        ]);
+    tauri::Builder::default()
+        .manage(plugins::broker::PluginBroker::default())
+        .register_uri_scheme_protocol("hortplugin", |context, request| {
+            use tauri::Manager;
+            plugins::js_host::response(
+                &context
+                    .app_handle()
+                    .state::<plugins::broker::PluginBroker>(),
+                request.uri(),
+            )
+        })
+        .on_window_event(|window, event| {
+            use tauri::Manager;
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                window
+                    .state::<plugins::broker::PluginBroker>()
+                    .close_window(window.label());
+            }
+        })
+        // The window carries the full Commander menu; macOS additionally
+        // gets a reduced native menu (TICKET-040).
+        .setup(|app| {
+            // The main window is declared in `tauri.conf.json` with
+            // `"create": false` and built here instead, because the
+            // navigation policy (TICKET-030) can only be attached while
+            // the WebView is being created.
+            let config = app
+                .config()
+                .app
+                .windows
+                .first()
+                .cloned()
+                .ok_or("Kein Fenster in tauri.conf.json konfiguriert")?;
+            tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
+                // Navigation boundary of the WebView. Only the app
+                // document loads here; a blocked attempt is noted in
+                // development with the URL alone — never with page or
+                // file contents.
+                .on_navigation(|url| {
+                    let allowed = plugins::navigation_allowed(url);
+                    if !allowed && cfg!(debug_assertions) {
+                        eprintln!("[hortcmd] Navigation blockiert: {}", url);
+                    }
+                    allowed
+                })
+                .build()?;
+            menu::install(app.handle())?;
+            commands::fs::drives::start(app.handle().clone());
+            mcp::confirm::attach(app.handle().clone());
+            if let Err(error) = mcp::server::configure(&mcp::config()) {
+                eprintln!("MCP startup failed: {}", error.code);
+            }
+            Ok(())
+        })
+        .manage(commands::command_line::CommandLine::default())
+        .invoke_handler(move |invoke| {
+            // A plugin wrapper has only the instance-scoped bridge. All other
+            // application commands remain exclusive to the main window.
+            if !invoke
+                .message
+                .webview_ref()
+                .url()
+                .is_ok_and(|url| is_trusted_origin(&url))
+            {
+                invoke
+                    .resolver
+                    .reject("IPC requires the trusted application document");
+                return true;
+            }
+            let label = invoke.message.webview_ref().label();
+            if label != "main"
+                && !matches!(
+                    invoke.message.command(),
+                    "plugin_info" | "plugin_request" | "plugin_poll" | "plugin_close"
+                )
+            {
+                invoke
+                    .resolver
+                    .reject("Command unavailable to plugin windows");
+                return true;
+            }
+            handler(invoke)
+        })
         .build(tauri::generate_context!())
         .expect("Fehler beim Start der Tauri-Anwendung")
         .run(|_, event| {

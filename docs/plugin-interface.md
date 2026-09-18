@@ -119,3 +119,43 @@ the protection boundary; install only trusted native code.
 Neither host treats a view, context snapshot, cached result or plugin-provided
 path as authorization for a destructive operation. Existing core validation,
 provider capabilities and operation controls remain authoritative.
+
+## JavaScript host and SDK
+
+TICKET-101 implements dedicated plugin windows and the shared embedded-frame host.
+UI launchers, context and management are delivered by subsequent tickets. Opening
+an instance requires an active grant; discovery alone never starts a plugin.
+
+A JS entry is an HTML document. Package JavaScript/CSS libraries alongside it (no
+CDN), using paths relative to the package root. The asset server rejects links and
+traversal and limits each asset to 2 MiB. Frames use `sandbox="allow-scripts"`
+without same-origin, forms, popups or top navigation. The asset response has its
+own restrictive CSP; the main document keeps its existing script policy.
+
+The host injects the following API before plugin scripts run:
+
+```js
+const unsubscribe = hortcmd.onEvent(event => {
+  if (event.type === "view:open") {
+    document.querySelector("#path").textContent = event.data.path ?? "";
+  }
+});
+await hortcmd.request({type: "view:ready"});
+console.log(await hortcmd.request({type: "ping"})); // "pong"
+```
+
+Use textContent for source displays, including PHP. A request returns a promise;
+rejected requests throw an Error. The SDK allows at most 32 outstanding requests
+and times them out after 15 seconds. Send view:ready within 10 seconds. A load
+failure, readiness timeout, revoked/closed instance or broken bridge removes the
+frame; callers retain the built-in view as fallback. Cleanup removes listeners,
+queued events and package access. Event queues retain at most 128 events.
+
+Only messages from the exact opaque-origin child frame reach the broker. Plugin
+window wrappers can invoke only instance-scoped bridge commands; they cannot call
+ordinary file, network, settings or administrative commands. The native broker
+also rejects an instance owned by a different window. A separate window is reused
+on another open request for the same plugin. Up to 32 instances may coexist.
+
+SDK typings are in `src/features/plugins/pluginApi.ts`; payload types are generated
+from `src-tauri/src/plugins/protocol.rs`.

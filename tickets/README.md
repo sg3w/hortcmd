@@ -1,9 +1,8 @@
 # Ticket organization
 
-All tickets that were open below 100 have been completed. Ticket 100 is complete.
-The remaining **37 open tickets are numbered consecutively from 101 to 137**, preserving their previous
-relative order and scope. Renumbering does not complete or change the scope of a
-ticket. Dependencies and current references use the new numbers.
+All tickets below 100 and tickets 100–101 have been completed.
+The remaining **36 open tickets run from 102 to 137**. Their relative order
+and scope are unchanged. Dependencies and references use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
 filenames ending in `.done.md`. This also applies to previously completed support
@@ -18,7 +17,7 @@ tickets with higher numbers. Do not reuse those numbers for new work.
 | Previous number | Current ticket | Scope |
 | --- | --- | --- |
 | 201 | [100](done/100-plugin-api-contract.done.md) | Plugin API & manifest (contract first) |
-| 202 | [101](101-js-plugin-host.md) | JS plugin host (sandboxed WebviewWindow) |
+| 202 | [101](done/101-js-plugin-host.done.md) | JS plugin host (sandboxed WebviewWindow) |
 | 203 | [102](102-native-plugin-host.md) | Native Rust plugin host (dynamic library) |
 | 204 | [103](103-plugin-commandbar.md) | Plugin command bar & colorful icons |
 | 205 | [104](104-plugin-context-handoff.md) | Context handoff to plugins |

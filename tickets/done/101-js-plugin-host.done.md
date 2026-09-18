@@ -24,12 +24,12 @@ window infrastructure from TICKET-002 (`src/features/dialogWindow/`,
   `src/features/plugins/pluginApi.ts`.
 
 ## Acceptance criteria
-- [ ] A minimal "hello" JS plugin opens in its own window and renders.
-- [ ] The plugin can send an allowed broker message via the SDK shim and receive a
+- [x] A minimal "hello" JS plugin opens in its own window and renders.
+- [x] The plugin can send an allowed broker message via the SDK shim and receive a
       response.
-- [ ] A message without a matching permission is rejected by the broker (error to the plugin).
-- [ ] No direct Tauri `invoke` is available in the plugin window.
-- [ ] The main window stays unaffected when a plugin window crashes/closes.
+- [x] A message without a matching permission is rejected by the broker (error to the plugin).
+- [x] No direct Tauri `invoke` is available in the plugin window.
+- [x] The main window stays unaffected when a plugin window crashes/closes.
 
 ## Tests
 - "Hello" plugin: window opens, ping/pong via the broker works.
@@ -41,3 +41,10 @@ window infrastructure from TICKET-002 (`src/features/dialogWindow/`,
 - Existing functionality unchanged
 - Documentation updated
 - Rename the ticket to *.done.md
+
+## Implementation evidence
+
+Implemented and verified with `npm run check`. See
+[Plugin interface](../../docs/plugin-interface.md) for the contract, security
+boundaries and author instructions. Native cross-platform GUI behavior requires
+verification on the corresponding operating systems.
