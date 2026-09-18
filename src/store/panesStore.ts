@@ -45,7 +45,7 @@ import {
   archivePassword,
   isPasswordError,
   promptArchivePassword,
-  PW_WRONG,
+  isWrongPassword,
 } from "@/features/commander/archivePw";
 
 // The pane vocabulary stays importable from here: every caller uses
@@ -365,11 +365,11 @@ export const usePanes = create<PanesStore>((set, get) => ({
     try {
       res = await listArchive(archive, inner, archivePassword(archive));
     } catch (e) {
-      if (!applyRequest(target, t => ({ ...t, loading: false, loadError: String(e) }))) return;
+      if (!applyRequest(target, t => ({ ...t, loading: false, loadError: asAppError(e) ?? String(e) }))) return;
       const msg = String(e);
-      if (isPasswordError(msg)) {
+      if (isPasswordError(e)) {
         // Encrypted archive: ask for the password and load again.
-        promptArchivePassword(archive, msg.includes(PW_WRONG), () => {
+        promptArchivePassword(archive, isWrongPassword(e), () => {
           const current = panelOf(get(), side);
           if (current.id === target.id && current.request === target.request) void get().loadArchive(side, archive, inner);
         });

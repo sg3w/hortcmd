@@ -1,7 +1,7 @@
 # Ticket organization
 
 All tickets below 100 and tickets 100–107 have been completed.
-Tickets 125, 128, 137 and the discovered issues 300–301 and 303–304 are also complete. There are
+Tickets 125, 128, 137 and the discovered issues 300–301 and 303–305 are also complete. There are
 **27 open tickets**: 108–124, 126–127 and 129–136. Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
@@ -74,8 +74,10 @@ historical references while active links use the current filenames.
 
 - [304](done/304-sftp-file-type-discriminants.done.md): special SFTP files can be misclassified as directories.
 
+- [305](done/305-archive-password-error-dispatch.done.md): preserve structured archive password errors for password prompts.
+
 ## Current implementation batch
 
 Requested: 20 additional code tickets, excluding Windows/Linux-specific work.
-Completed in this batch: **128, 137, 300, 107, 301, 303, 304, 125 (8 of 20)**. New findings are recorded above.
+Completed in this batch: **128, 137, 300, 107, 301, 303, 304, 125, 305 (9 of 20)**. New findings are recorded above.
 
