@@ -62,4 +62,4 @@ policy may require the displayed system-Copy fallback, which reports refusal
 rather than claiming success. No Windows/Linux-only verification was undertaken.
 
 The existing shared clipboard helper's silent-failure bug was recorded separately
-as [TICKET-301](../301-clipboard-write-failure-reporting.md).
+as [TICKET-301](301-clipboard-write-failure-reporting.done.md).

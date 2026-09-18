@@ -1,3 +1,4 @@
+import { notify } from "@/store/noticeStore";
 import { openOpposite } from "@/features/commander/navigate";
 import { formatShortcut } from "@/lib/shortcut";
 // ============================================================
@@ -163,12 +164,12 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
   // Full paths of the target set (selection or right-clicked entry).
   const onCopyPath = () => {
     const paths = targetPaths(side);
-    if (paths.length) void writeClipboard(paths.join("\n"));
+    if (paths.length) void writeClipboard(paths.join("\n")).catch(error => notify(side, "sel.copyError", {err:String(error)}, "error"));
   };
   // Only the file/folder names of the target set.
   const onCopyName = () => {
     const names = targetPaths(side).map(baseName);
-    if (names.length) void writeClipboard(names.join("\n"));
+    if (names.length) void writeClipboard(names.join("\n")).catch(error => notify(side, "sel.copyError", {err:String(error)}, "error"));
   };
 
   const item = (

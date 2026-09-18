@@ -17,3 +17,16 @@ cannot display their existing error notifications.
 - Cover modern success, fallback success, denial and thrown failure with tests.
 - Keep clipboard contents out of error messages and diagnostics.
 - Run `npm run check`.
+
+
+## Implementation evidence
+
+The helper resolves only after confirmed modern or fallback success and rejects
+refusal with a content-free error. Its temporary textarea is removed in all
+cases; invoking focus and text selection are restored where still available.
+Context menus, export and properties handle the rejection visibly, while the
+existing mark commands retain their error notification path.
+
+`npm run check` passed. Focused tests exercise modern success, unavailable/denied
+modern APIs, fallback success, false/throwing/absent fallback, temporary-node
+cleanup, selection/focus restoration and sensitive-content exclusion.

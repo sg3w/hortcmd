@@ -270,9 +270,14 @@ export function PropertiesDialog() {
   };
 
   const copy = async (value: string, tag: string) => {
-    await writeClipboard(value);
-    setCopied(tag);
-    setTimeout(() => setCopied((c) => (c === tag ? null : c)), 1200);
+    try {
+      await writeClipboard(value);
+      setCopied(tag);
+      setTimeout(() => setCopied((c) => (c === tag ? null : c)), 1200);
+    } catch (error) {
+      setCopied(null);
+      setError(t("sel.copyError").replace("{err}", String(error)));
+    }
   };
 
   // The rule that colors this entry in the file list. Same registry and the

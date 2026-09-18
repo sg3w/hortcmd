@@ -188,8 +188,12 @@ export function ExportDialog() {
   };
 
   const copyToClipboard = async () => {
-    await writeClipboard(fullText);
-    setStatus({ ok: true, text: t("export.copied") });
+    try {
+      await writeClipboard(fullText);
+      setStatus({ ok: true, text: t("export.copied") });
+    } catch (error) {
+      setStatus({ ok: false, text: t("sel.copyError").replace("{err}", String(error)) });
+    }
   };
 
   const writeTo = async (target: string, overwrite: boolean) => {

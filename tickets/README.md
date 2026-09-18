@@ -1,8 +1,8 @@
 # Ticket organization
 
 All tickets below 100 and tickets 100–107 have been completed.
-Tickets 128, 137 and the discovered issue 300 are also complete. There are
-**29 open tickets**: 108–127, 129–136 and 301. Dependencies use the current paths.
+Tickets 128, 137 and the discovered issues 300–301 are also complete. There are
+**28 open tickets**: 108–127 and 129–136. Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
 filenames ending in `.done.md`. This also applies to previously completed support
@@ -68,9 +68,10 @@ historical references while active links use the current filenames.
 
 - [300](done/300-rename-request-lifecycle.done.md): batch-rename request errors, duplicate submissions and stale completions.
 
+- [301](done/301-clipboard-write-failure-reporting.done.md): shared clipboard writes silently succeed after refusal.
+
 ## Current implementation batch
 
 Requested: 20 additional code tickets, excluding Windows/Linux-specific work.
-Completed in this batch: **128, 137, 300, 107 (4 of 20)**. New findings are recorded above.
+Completed in this batch: **128, 137, 300, 107, 301 (5 of 20)**. New findings are recorded above.
 
-- [301](301-clipboard-write-failure-reporting.md): shared clipboard writes silently succeed after refusal.
