@@ -152,6 +152,10 @@ cannot drift from the code.
 
 ## Security
 
+**SFTP packet bounds.** Incoming SFTP packets are capped at 1 MiB before the
+client library allocates their payload. Oversized frames close the affected SFTP
+stream. See [packet bounds and compatibility](docs/sftp-packet-bounds.md).
+
 **SSH host keys** (TICKET-028). Every SSH connection — SFTP browsing and the
 integrated terminal, which share one session — authenticates the *server*
 before a password, key signature or agent signature is sent. The presented key

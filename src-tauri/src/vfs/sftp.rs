@@ -56,7 +56,11 @@ async fn connect_async(
         .request_subsystem(true, "sftp")
         .await
         .map_err(|e| AppError::from(format!("SFTP-Subsystem fehlgeschlagen: {}", e)))?;
-    let sftp = SftpSession::new(channel.into_stream())
+    let guarded = super::sftp_frames::BoundedSftpStream::new(
+        channel.into_stream(),
+        super::sftp_frames::MAX_PACKET_BYTES,
+    );
+    let sftp = SftpSession::new(guarded)
         .await
         .map_err(|e| AppError::from(format!("SFTP-Sitzung fehlgeschlagen: {}", e)))?;
 

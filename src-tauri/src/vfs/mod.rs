@@ -26,6 +26,7 @@ mod provider_path;
 pub mod stream_path;
 pub use stream_path::StreamPath;
 pub mod sftp;
+mod sftp_frames;
 pub mod smb;
 pub mod webdav;
 

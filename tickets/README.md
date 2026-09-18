@@ -1,7 +1,7 @@
 # Ticket organization
 
 All tickets below 100 and tickets 100–107 have been completed.
-Tickets 128, 137 and the discovered issues 300–301 are also complete. There are
+Tickets 128, 137 and the discovered issues 300–301 and 303 are also complete. There are
 **28 open tickets**: 108–127 and 129–136. Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
@@ -70,8 +70,10 @@ historical references while active links use the current filenames.
 
 - [301](done/301-clipboard-write-failure-reporting.done.md): shared clipboard writes silently succeed after refusal.
 
+- [303](done/303-sftp-incoming-packet-memory-bound.done.md): bound incoming SFTP packet allocation before reading the body.
+
 ## Current implementation batch
 
 Requested: 20 additional code tickets, excluding Windows/Linux-specific work.
-Completed in this batch: **128, 137, 300, 107, 301 (5 of 20)**. New findings are recorded above.
+Completed in this batch: **128, 137, 300, 107, 301, 303 (6 of 20)**. New findings are recorded above.
 
