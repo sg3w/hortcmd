@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Path tools</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<main>
+  <h1>🧭 Path tools</h1>
+  <p>Inspect the active pane. Copy requests use the commander's review and transfer limits.</p>
+  <button id="refresh" type="button">Refresh context</button>
+  <dl>
+    <dt>Pane</dt><dd id="side">Unavailable</dd>
+    <dt>Current path</dt><dd id="path">Unavailable</dd>
+    <dt>Folder path</dt><dd id="folder">Unavailable</dd>
+    <dt>File path</dt><dd id="file">None</dd>
+    <dt>Copy limit</dt><dd id="limit">Unavailable</dd>
+    <dt>Selection</dt><dd><ul id="selection"></ul></dd>
+  </dl>
+  <label>Path to copy <input id="clipboard-path" readonly></label>
+  <button id="copy-path" type="button" disabled>Copy path</button>
+  <form id="copy-form">
+    <label>Destination folder <input id="destination" required placeholder="Absolute path or VFS address"></label>
+    <button id="copy-selection" type="submit" disabled>Copy selection to destination</button>
+  </form>
+  <p id="status" role="status" aria-live="polite"></p>
+</main>
+<script src="app.js"></script>
+</body></html>

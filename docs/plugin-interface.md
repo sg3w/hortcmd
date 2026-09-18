@@ -5,8 +5,8 @@
 API version 1 defines one broker protocol for JavaScript views and native plugins.
 Tickets 100–106 implement discovery, isolated JavaScript views, native helper
 processes, command buttons, context, mediated actions/events and local plugin
-management. Reference plugins and the storage analyzer remain separate work
-(TICKET-107 and TICKET-108).
+management. Installable reference plugins are provided by TICKET-107; the storage
+analyzer remains separate work (TICKET-108).
 
 PHP is source text, never executable server code. A future Apple Photos provider
 will be read-only: browse and copy out, with no import, delete or mutation.
@@ -374,3 +374,10 @@ permission persistence, changed-package revocation and settings dialogs.
 Native integration tests run locally on the host platform. Interactive desktop
 rendering and Windows/Linux native integration still need platform smoke tests;
 a passing browser component test does not substitute for those checks.
+
+## Installable reference packages
+
+[Reference plugin instructions](../plugins/README.md) describe Path tools, a
+JavaScript context/copy example, and Native hello, a dependency-free Rust library.
+Both use the normal installer and explicit activation workflow. Their source,
+package-level tests and native subprocess coverage serve as author templates.

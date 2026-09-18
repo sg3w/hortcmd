@@ -180,3 +180,87 @@ async fn closing_a_hung_handler_terminates_and_reaps_the_helper() {
         .unwrap()
         .unwrap();
 }
+
+#[tokio::test]
+async fn reference_rust_plugin_installs_and_calls_the_granted_broker() {
+    use hortcmd_lib::plugins::{management, package::Staging, protocol::PluginRequest};
+    let temporary = Staging::new(&std::env::temp_dir()).unwrap();
+    let source = temporary.path().join("source");
+    let installed = temporary.path().join("installed");
+    std::fs::create_dir(&source).unwrap();
+    let library = if cfg!(target_os = "macos") {
+        "native_hello.dylib"
+    } else {
+        "native_hello.so"
+    };
+    let examples = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugins/native-hello");
+    assert!(Command::new("rustc")
+        .args(["--edition=2021", "--crate-type=cdylib", "-C", "panic=abort"])
+        .arg(examples.join("lib.rs"))
+        .arg("-o")
+        .arg(source.join(library))
+        .status()
+        .unwrap()
+        .success());
+    std::fs::copy(examples.join("plugin.json"), source.join("plugin.json")).unwrap();
+    let (broker, state) = instance();
+    let id = management::install(&broker, &installed, &source, None).unwrap();
+    let record = management::records(&broker, &installed).unwrap().remove(0);
+    assert!(!record.active);
+    management::activate(
+        &broker,
+        &installed,
+        &id,
+        record.fingerprint.as_ref().unwrap(),
+    )
+    .unwrap();
+    {
+        let mut instance = state.lock().unwrap();
+        instance.manifest = record.manifest.unwrap();
+        instance.info.plugin_id = id.clone();
+        instance.permissions = instance.manifest.permissions.clone();
+    }
+    let child = native_host::spawn(
+        std::path::Path::new(env!("CARGO_BIN_EXE_hortcmd")),
+        &installed.join(&id).join(library),
+    )
+    .unwrap();
+    let callback_broker = broker.clone();
+    let (sent, received) = tokio::sync::oneshot::channel();
+    let sent = Mutex::new(Some(sent));
+    let worker = tokio::spawn(native_host::supervise(
+        child,
+        state.clone(),
+        move |request| {
+            let instance = callback_broker.instance("test", "main")?;
+            instance.lock().unwrap().authorize(&request)?;
+            if let PluginRequest::Notify { message } = request {
+                if let Some(sent) = sent.lock().unwrap().take() {
+                    let _ = sent.send(message);
+                }
+                Ok(serde_json::Value::Null)
+            } else {
+                callback_broker.control("test", "main", request)
+            }
+        },
+    ));
+    ready(&state).await;
+    state.lock().unwrap().push(PluginEvent::Command {
+        command: "hello".into(),
+    });
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(5), received)
+            .await
+            .unwrap()
+            .unwrap(),
+        "Hello from the native Rust helper."
+    );
+    management::deactivate(&broker, &installed, &id, false).unwrap();
+    assert!(tokio::time::timeout(Duration::from_secs(2), worker)
+        .await
+        .unwrap()
+        .unwrap()
+        .is_ok());
+    management::deactivate(&broker, &installed, &id, true).unwrap();
+    assert!(management::records(&broker, &installed).unwrap().is_empty());
+}

@@ -1,0 +1,15 @@
+{
+  "apiVersion": 1,
+  "id": "org.hortcmd.path-tools",
+  "name": "Path tools",
+  "version": "1.0.0",
+  "description": "Inspect the active pane context and request a reviewed copy.",
+  "author": "hortcmd contributors",
+  "runtime": "js",
+  "entry": "index.html",
+  "icon": "🧭",
+  "permissions": ["read:context", "op:copy", "ui:window", "ui:commandbar", "notify"],
+  "contributes": {
+    "commandbar": [{"id":"open","title":"Path tools","icon":"🧭","action":{"type":"openWindow"}}]
+  }
+}

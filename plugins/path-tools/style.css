@@ -1,0 +1,9 @@
+:root {color-scheme:light dark;font:16px/1.5 system-ui,sans-serif}
+body {margin:0;padding:1.25rem}main {max-width:48rem;margin:auto}
+h1 {font-size:1.5rem}dt {font-weight:bold}dd {margin:0 0 .75rem;overflow-wrap:anywhere}
+ul {margin:0;padding-left:1.5rem}label {display:block;margin-top:1rem}
+input {box-sizing:border-box;width:100%;font:inherit;padding:.4rem}
+button {font:inherit;padding:.4rem .7rem;margin:.4rem 0;cursor:pointer;min-height:2.75rem}
+button:disabled {cursor:default}button:focus-visible,input:focus-visible {outline:3px solid Highlight;outline-offset:2px}
+#status {min-height:3rem;overflow-wrap:anywhere}
+@media (forced-colors:active) {button,input {border:1px solid ButtonText}}

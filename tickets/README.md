@@ -1,8 +1,8 @@
 # Ticket organization
 
-All tickets below 100 and tickets 100–106 have been completed.
+All tickets below 100 and tickets 100–107 have been completed.
 Tickets 128, 137 and the discovered issue 300 are also complete. There are
-**29 open tickets**: 107–127 and 129–136. Dependencies use the current paths.
+**29 open tickets**: 108–127, 129–136 and 301. Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
 filenames ending in `.done.md`. This also applies to previously completed support
@@ -23,7 +23,7 @@ tickets with higher numbers. Do not reuse those numbers for new work.
 | 205 | [104](done/104-plugin-context-handoff.done.md) | Context handoff to plugins |
 | 206 | [105](done/105-plugin-actions-events.done.md) | Mediated actions & events |
 | 207 | [106](done/106-plugin-management.done.md) | Plugin management (settings) |
-| 208 | [107](107-reference-demo-plugin.md) | Reference/demo plugin(s) |
+| 208 | [107](done/107-reference-demo-plugin.done.md) | Reference/demo plugin(s) |
 | 209 | [108](108-folder-storage-usage-visualizer.md) | First functional plugin — folder storage-usage visualizer |
 | 220 | [109](109-redacted-diagnostics-and-support-bundle.md) | Add redacted diagnostics and an exportable support bundle |
 | 221 | [110](110-dependency-and-license-governance.md) | Establish dependency, vulnerability, and license governance |
@@ -71,4 +71,6 @@ historical references while active links use the current filenames.
 ## Current implementation batch
 
 Requested: 20 additional code tickets, excluding Windows/Linux-specific work.
-Completed in this batch: **128, 137, 300 (3 of 20)**. New findings are recorded above.
+Completed in this batch: **128, 137, 300, 107 (4 of 20)**. New findings are recorded above.
+
+- [301](301-clipboard-write-failure-reporting.md): shared clipboard writes silently succeed after refusal.

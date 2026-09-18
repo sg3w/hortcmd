@@ -80,3 +80,20 @@ fn folder_links_are_rejected_without_installing() {
     assert!(install(&PluginBroker::default(), &root, &source, None).is_err());
     assert!(registry::discover(&root).unwrap().is_empty());
 }
+
+#[test]
+fn reference_javascript_package_is_installable_and_contributions_require_activation() {
+    let temporary = super::super::package::Staging::new(&std::env::temp_dir()).unwrap();
+    let root = temporary.path().join("plugins");
+    let broker = PluginBroker::default();
+    let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugins/path-tools");
+    let id = install(&broker, &root, &source, None).unwrap();
+    let record = records(&broker, &root).unwrap().remove(0);
+    assert!(!record.active);
+    let manifest = record.manifest.unwrap();
+    assert_eq!(manifest.contributes.commandbar[0].id, "open");
+    activate(&broker, &root, &id, record.fingerprint.as_ref().unwrap()).unwrap();
+    assert!(records(&broker, &root).unwrap()[0].active);
+    deactivate(&broker, &root, &id, true).unwrap();
+    assert!(records(&broker, &root).unwrap().is_empty());
+}

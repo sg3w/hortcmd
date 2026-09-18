@@ -1,0 +1,14 @@
+import { spawnSync } from "node:child_process";
+import { mkdirSync, copyFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+const root = fileURLToPath(new URL(".", import.meta.url));
+const extension = {darwin:"dylib",linux:"so",win32:"dll"}[process.platform];
+if (!extension) throw new Error("Unsupported native platform");
+const output = join(root,"dist","org.hortcmd.native-hello");
+mkdirSync(output,{recursive:true});
+const build = spawnSync("rustc",["--edition=2021","--crate-type=cdylib","-C","panic=abort","-O",join(root,"lib.rs"),"-o",join(output,`native_hello.${extension}`)],{stdio:"inherit"});
+if (build.error) throw build.error;
+if (build.status !== 0) process.exit(build.status ?? 1);
+copyFileSync(join(root,"plugin.json"),join(output,"plugin.json"));
+console.log(`Install this folder in Settings → Plugins: ${output}`);

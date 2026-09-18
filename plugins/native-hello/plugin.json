@@ -1,0 +1,13 @@
+{
+  "apiVersion": 1,
+  "id": "org.hortcmd.native-hello",
+  "name": "Native hello",
+  "version": "1.0.0",
+  "description": "A minimal Rust library exercising the native broker ABI.",
+  "author": "hortcmd contributors",
+  "runtime": "native",
+  "entry": {"macos":"native_hello.dylib","linux":"native_hello.so","windows":"native_hello.dll"},
+  "icon": "👋",
+  "permissions": ["ui:commandbar", "notify"],
+  "contributes": {"commandbar":[{"id":"hello","title":"Native hello","icon":"👋","action":{"type":"command","command":"hello"}}]}
+}
