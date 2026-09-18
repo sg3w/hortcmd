@@ -10,7 +10,7 @@ import "@/i18n/namespaces/exporting";
 // can be resized with the mouse at the bottom right.
 // ============================================================
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   CaseSensitive,
@@ -22,7 +22,9 @@ import {
 } from "lucide-react";
 import { panelOf, usePanes, type Row } from "@/store/panesStore";
 import { useRenameDialog } from "@/store/renameStore";
-import { describeItemErrors } from "@/store/errorText";
+import { ipcError } from "@/lib/appError";
+import type { AppError } from "@/ipc/bindings/AppError";
+import { describeErrorFull, describeItemErrors } from "@/store/errorText";
 import { useOps } from "@/store/opsStore";
 import { useT } from "@/store/settingsStore";
 import { renameBatch } from "@/ipc/client";
@@ -56,6 +58,13 @@ const MIN_H = 420;
 export function RenameDialog() {
   const side = useRenameDialog((s) => s.side);
   const close = useRenameDialog((s) => s.close);
+  const revision = useRenameDialog(s => s.revision);
+  const pending = useRef(false);
+  const mounted = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const [requestError, setRequestError] = useState<AppError | null>(null);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => { setRequestError(null); }, [revision]);
   const t = useT();
 
   // Snapshot of the active list taken when the dialog opens.
@@ -72,7 +81,7 @@ export function RenameDialog() {
       selectedCount,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [side]);
+  }, [side, revision]);
 
   const [rules, setRules] = useState<RenameRules>(DEFAULT_RULES);
   const [onlySelected, setOnlySelected] = useState(false);
@@ -114,23 +123,28 @@ export function RenameDialog() {
       .map((p) => [p.from, p.to] as [string, string]);
     if (!items.length) return;
 
-    const res = await renameBatch(snapshot.dir, items);
-
-    // Refresh the affected windows showing this folder.
-    const s = usePanes.getState();
-    (["left", "right"] as const).forEach((sd) => {
-      if (panelOf(s, sd).path === snapshot.dir) void s.refresh(sd);
-    });
-
-    const message = describeItemErrors(res.errors).slice(0, 12).join("\n");
-    if (message) {
-      useOps.getState().requestConfirm({
-        title: t("op.errors"),
-        message,
-        onConfirm: () => {},
+    if (pending.current) return;
+    pending.current = true; setBusy(true); setRequestError(null);
+    const current = () => mounted.current && useRenameDialog.getState().revision === revision;
+    try {
+      const res = await renameBatch(snapshot.dir, items);
+      // A completed operation still refreshes its folder after the dialog closes.
+      const state = usePanes.getState();
+      (["left", "right"] as const).forEach(sd => {
+        if (panelOf(state, sd).path === snapshot.dir) void state.refresh(sd);
       });
+      if (!current()) return;
+      const message = describeItemErrors(res.errors).slice(0, 12).join("\n");
+      if (message) useOps.getState().requestConfirm({
+        title: t("op.errors"), message, onConfirm: () => {},
+      });
+      close();
+    } catch (cause) {
+      if (current()) setRequestError(ipcError(cause));
+    } finally {
+      pending.current = false;
+      if (mounted.current) setBusy(false);
     }
-    close();
   };
 
   return (
@@ -149,8 +163,9 @@ export function RenameDialog() {
     >
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4">
             <p className="text-sm text-dim">{t("undo.conditional")}</p>
+            {requestError && <p role="alert" className="text-sm text-red-400">{describeErrorFull(requestError)}</p>}
             {/* Configuration – compact, wraps when needed. */}
-            <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
+            <fieldset disabled={busy} className="flex flex-wrap items-start gap-x-6 gap-y-4">
               <Section label={t("export.scope")}>
                 <div className="flex flex-col gap-1.5">
                   <Radio
@@ -284,7 +299,7 @@ export function RenameDialog() {
                   </div>
                 </div>
               </Section>
-            </div>
+            </fieldset>
 
             {/* Preview (full width, fills the remaining space). */}
             <div className="flex min-h-0 flex-1 flex-col">
@@ -359,7 +374,7 @@ export function RenameDialog() {
               </button>
               <button
                 onClick={apply}
-                disabled={!!error || changed === 0}
+                disabled={busy || !!error || changed === 0}
                 className="flex items-center gap-1.5 rounded bg-accent px-3 py-1 text-[13px] text-white hover:brightness-110 disabled:opacity-40"
               >
                 <Replace size={14} />

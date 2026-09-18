@@ -19,4 +19,4 @@ English, unchanged rename arguments and both-pane refresh, and empty or
 cancellation-only results. Required gate: `npm run check`.
 
 The separately discovered request-lifetime issue is recorded in
-[TICKET-300](../300-rename-request-lifecycle.md).
+[TICKET-300](300-rename-request-lifecycle.done.md).

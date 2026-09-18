@@ -23,3 +23,15 @@ The same callback can close a newly reopened dialog after an older request ends.
 - A rejected request produces a visible localized error without an unhandled rejection.
 - Closing/reopening prevents the old request from closing the new dialog.
 - `npm run check` passes.
+
+
+## Implementation evidence
+
+A synchronous in-flight guard prevents duplicate requests; controls remain disabled
+until completion. Rejections use structured localized errors in the existing
+rename dialog and preserve the plan. A dialog revision identifies each opening,
+so late completion cannot close or overwrite a newer dialog. Completed filesystem
+changes still refresh affected panes.
+
+`npm run check` passed. Deferred component tests cover duplicate clicks, rejection
+and retry, completion after reopen, and a stale rejection after reopen.

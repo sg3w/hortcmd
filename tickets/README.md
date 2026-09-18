@@ -1,8 +1,8 @@
 # Ticket organization
 
 All tickets below 100 and tickets 100–106 have been completed.
-Tickets 128 and 137 are also complete. There are **30 open tickets**: 107–127, 129–136,
-and the newly discovered issue 300. Dependencies use the current paths.
+Tickets 128, 137 and the discovered issue 300 are also complete. There are
+**29 open tickets**: 107–127 and 129–136. Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
 filenames ending in `.done.md`. This also applies to previously completed support
@@ -66,9 +66,9 @@ historical references while active links use the current filenames.
 
 ## Newly discovered issues
 
-- [300](300-rename-request-lifecycle.md): batch-rename request errors, duplicate submissions and stale completions.
+- [300](done/300-rename-request-lifecycle.done.md): batch-rename request errors, duplicate submissions and stale completions.
 
 ## Current implementation batch
 
 Requested: 20 additional code tickets, excluding Windows/Linux-specific work.
-Completed in this batch: **128, 137 (2 of 20)**. New findings are recorded above.
+Completed in this batch: **128, 137, 300 (3 of 20)**. New findings are recorded above.
