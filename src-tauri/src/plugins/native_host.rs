@@ -144,6 +144,11 @@ pub async fn supervise(
 }
 
 pub fn start(app: &tauri::AppHandle, root: &Path, plugin: &str) -> Result<PluginInstance, String> {
+    let broker = app.state::<PluginBroker>();
+    let _management = broker
+        .management
+        .lock()
+        .map_err(|_| "Plugin management unavailable")?;
     if !valid_id(plugin) {
         return Err("Invalid plugin id".into());
     }

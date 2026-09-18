@@ -11,7 +11,7 @@ preview/packer plugins). Without management, the plugin system stays unusable.
 ## Requirements
 - Keep plugin management reachable through **Konfiguration → Einstellungen… →
   Plugins**, using the existing settings dialog and the menu architecture in
-  [TICKET-040](040-native-application-menu.md). No separate Starter menu; plugin
+  [TICKET-040](../040-native-application-menu.md). No separate Starter menu; plugin
   execution entry points remain in the plugin command bar (TICKET-103).
 - Build out the **"Plugins"** category in `SettingsDialog.tsx`: list of detected plugins
   (from `list_plugins`, TICKET-100) with name, version, icon, runtime, status.
@@ -27,12 +27,12 @@ preview/packer plugins). Without management, the plugin system stays unusable.
   see TICKET-102).
 
 ## Acceptance criteria
-- [ ] Detected plugins are listed with metadata and status.
-- [ ] A plugin can be activated/deactivated; the state survives a restart.
-- [ ] On activation the requested permissions are shown and must be confirmed;
+- [x] Detected plugins are listed with metadata and status.
+- [x] A plugin can be activated/deactivated; the state survives a restart.
+- [x] On activation the requested permissions are shown and must be confirmed;
       without confirmation the plugin stays inactive.
-- [ ] Uninstalling removes the plugin and its contributions (the command bar clears).
-- [ ] For native plugins, the grant dialog points out the full process privileges.
+- [x] Uninstalling removes the plugin and its contributions (the command bar clears).
+- [x] For native plugins, the grant dialog points out the full process privileges.
 
 ## Tests
 - Install the demo plugin (TICKET-107), activate it (confirm permissions), the button
@@ -44,3 +44,10 @@ preview/packer plugins). Without management, the plugin system stays unusable.
 - Existing functionality unchanged
 - Documentation updated (Concept.md §9 Plugins)
 - Rename the ticket to *.done.md
+
+## Implementation evidence
+
+Implemented and verified with `npm run check`. See
+[Plugin interface](../../docs/plugin-interface.md) for the contract, security
+boundaries and author instructions. Native cross-platform GUI behavior requires
+verification on the corresponding operating systems.

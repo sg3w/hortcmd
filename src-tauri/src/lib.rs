@@ -43,6 +43,9 @@ pub fn run() {
     let handler: Box<dyn Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync> =
         Box::new(tauri::generate_handler![
             commands::plugins::list_plugins,
+            commands::plugins::plugin_install,
+            commands::plugins::plugin_activate,
+            commands::plugins::plugin_deactivate,
             commands::plugins::plugin_open,
             commands::plugins::plugin_workspace,
             commands::plugins::plugin_ui_poll,

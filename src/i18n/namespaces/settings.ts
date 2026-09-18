@@ -6,8 +6,44 @@
 
 import { ns } from "./ns";
 
+const pluginManagementText = {
+  "plugins.desktop": "Plugin management is available in the desktop application.",
+  "plugins.installHint": "Install a local folder or ZIP containing plugin.json at its root. To update, enter the new package path and select Update on the installed plugin.",
+  "plugins.source": "Local folder or ZIP path",
+  "plugins.install": "Install",
+  "plugins.refresh": "Refresh",
+  "plugins.empty": "No plugins installed.",
+  "plugins.invalid": "Invalid",
+  "plugins.active": "Active",
+  "plugins.inactive": "Inactive",
+  "plugins.deactivate": "Deactivate",
+  "plugins.activate": "Activate",
+  "plugins.update": "Update",
+  "plugins.uninstall": "Uninstall",
+  "plugins.grantTitle": "Approve plugin permissions",
+  "plugins.cancel": "Cancel",
+  "plugins.approve": "Approve and activate",
+  "plugins.grantHint": "Only approve plugins you trust. Activation grants every permission listed below. Updates require a new approval.",
+  "plugins.nativeWarning": "Native plugins run in a helper process with your full operating-system privileges. The helper isolates crashes, but is not a security sandbox. Native code can access files and the network directly, beyond these broker permissions.",
+  "plugins.noPermissions": "No broker permissions requested.",
+  "plugins.removeHint": "Remove this installed package and revoke its permissions? Running plugin instances and their transfers will be stopped.",
+  "plugins.perm.context": "Read the current folder, selection and copy context.",
+  "plugins.perm.read": "Read files, directories and previews through connected filesystems.",
+  "plugins.perm.write": "Create files and allow moving source files.",
+  "plugins.perm.copy": "Request copy or move operations for user review.",
+  "plugins.perm.limit": "Read and change the global transfer speed limit.",
+  "plugins.perm.selection": "Subscribe to selection and folder changes.",
+  "plugins.perm.transfer": "Observe transfer IDs, progress and completion.",
+  "plugins.perm.window": "Open a separate plugin window.",
+  "plugins.perm.commandbar": "Add buttons to the plugin command bar.",
+  "plugins.perm.preview": "Provide file and folder previews.",
+  "plugins.perm.tab": "Add plugin tabs.",
+  "plugins.perm.notify": "Display notifications.",
+} as const;
+
 export const settings = ns(
   {
+  ...pluginManagementText,
   "plugins.tabs": "Plugin views",
   "plugins.folderFallback": "No plugin folder preview is available. Browse the folder in the file pane.",
   "plugins.message": "{message}",
@@ -172,6 +208,7 @@ export const settings = ns(
     "Veröffentlicht unter der MIT-Lizenz. © 2026 Jörg Hammel.",
   },
   {
+  ...pluginManagementText,
   "plugins.tabs": "Plugin views",
   "plugins.folderFallback": "No plugin folder preview is available. Browse the folder in the file pane.",
   "plugins.message": "{message}",

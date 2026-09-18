@@ -37,6 +37,7 @@ import { OperationsForm } from "./settings/operations";
 import { ProgramsForm } from "./settings/programs";
 import { ViewForm } from "./settings/view";
 
+import { PluginManagement } from "@/features/plugins/PluginManagement";
 import { McpForm } from "@/features/settings/McpForm";
 
 const MIN_FRAC = 0.25; // 1:3
@@ -86,6 +87,7 @@ export function SettingsDialog() {
       Icon: HardDriveDownload,
     },
     { id: "programs", label: t("settings.cat.programs"), Icon: AppWindow },
+    { id: "plugins", label: t("plugins.title"), Icon: AppWindow },
     { id: "mcp", label: t("mcp.title"), Icon: AppWindow },
     { id: "favorites", label: t("settings.cat.favorites"), Icon: Star },
   ];
@@ -177,6 +179,7 @@ export function SettingsDialog() {
               {category === "operations" && <OperationsForm />}
               {category === "programs" && <ProgramsForm />}
               {category === "favorites" && <FavoritesForm />}
+              {category === "plugins" && <PluginManagement />}
               {category === "mcp" && <McpForm />}
             </div>
           </div>

@@ -21,3 +21,6 @@ import type { RecoverySettings } from "../bindings/RecoverySettings";
 export const pluginUiPoll = () => invoke<PluginUiState>("plugin_ui_poll");
 export const pluginTransferStart = (id:string,settings:RecoverySettings,review:string) => invoke<void>("plugin_transfer_start",{id,settings,review});
 export const pluginTransferCancel = (id:string) => invoke<void>("plugin_transfer_cancel",{id});
+export const pluginInstall = (source:string,update:string|null=null) => invoke<string>("plugin_install",{source,update});
+export const pluginActivate = (plugin:string,fingerprint:string) => invoke<void>("plugin_activate",{plugin,fingerprint});
+export const pluginDeactivate = (plugin:string,remove=false) => invoke<void>("plugin_deactivate",{plugin,remove});

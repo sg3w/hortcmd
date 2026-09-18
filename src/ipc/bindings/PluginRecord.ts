@@ -2,4 +2,4 @@
 import type { PluginManifest } from "./PluginManifest";
 import type { PluginPermission } from "./PluginPermission";
 
-export type PluginRecord = { active: boolean, granted: Array<PluginPermission>, id: string, manifest: PluginManifest | null, error: string | null, };
+export type PluginRecord = { fingerprint?: string, active: boolean, granted: Array<PluginPermission>, id: string, manifest: PluginManifest | null, error: string | null, };

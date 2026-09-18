@@ -20,6 +20,10 @@ pub fn create(
     side: super::protocol::PluginSide,
     path: Option<&str>,
 ) -> Result<PluginInstance, String> {
+    let _management = broker
+        .management
+        .lock()
+        .map_err(|_| "Plugin management unavailable")?;
     if !valid_id(plugin) {
         return Err("Invalid plugin id".into());
     }

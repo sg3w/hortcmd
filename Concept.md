@@ -814,8 +814,12 @@ The versioned manifest, broker messages and threat model are specified in
 [Plugin interface](docs/plugin-interface.md). PHP previews display source; they
 do not execute PHP. Native libraries run only in a dedicated helper process.
 
-- Installed plugins ⏳ · updates ⏳ · preview plugins ⏳ · packer plugins ⏳
-  *(requires the plugin system)*
+- Implemented in tickets 100–106: local folder/ZIP installation, updates,
+  permission approval, activation/deactivation, uninstall, command buttons,
+  JS previews/tabs/windows and native helper processes. Grants survive restart
+  and are invalidated by package changes.
+- Reference plugins (107), storage analyzer (108), packer/provider extensions
+  and a future read-only Apple Photos provider remain separate work.
 
 ### MCP interface
 - Implemented: server on/off, port, token (keychain), independent capability tiers,
@@ -1237,7 +1241,8 @@ The *design* those changes settled is described where it belongs, in §3–§9.
       separator included — is only rendered when at least one connection is
       actually `connected`. The in-window **Netz** menu offers the same action
       (TICKET-040).
-- [ ] **Plugin system**: **define the API early**, then Rust/JS plugins,
+- [ ] **Plugin extensions**: the API and Rust/JS hosts (100–106) are implemented;
+      remaining work includes the reference plugin (107),
       context-menu/preview/column/archive extensions, scripting (JS)
       *(broken down in ticket series `tickets/100`–`107`: 100 API/manifest contract →
       101 JS host, 102 native Rust host → 103 plugin command bar/colored icons →

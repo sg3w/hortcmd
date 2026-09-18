@@ -81,6 +81,7 @@ impl Instance {
 }
 #[derive(Default)]
 pub struct PluginBroker {
+    pub management: Mutex<()>,
     pub limit_override: Mutex<Option<u32>>,
     pub pending: Mutex<BTreeMap<String, super::transfers::PendingTransfer>>,
     pub ui: Mutex<VecDeque<super::actions::PluginUiEvent>>,

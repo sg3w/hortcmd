@@ -1,7 +1,7 @@
 # Ticket organization
 
-All tickets below 100 and tickets 100–105 have been completed.
-The remaining **32 open tickets run from 106 to 137**. Their relative order
+All tickets below 100 and tickets 100–106 have been completed.
+The remaining **31 open tickets run from 107 to 137**. Their relative order
 and scope are unchanged. Dependencies and references use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
@@ -22,7 +22,7 @@ tickets with higher numbers. Do not reuse those numbers for new work.
 | 204 | [103](done/103-plugin-commandbar.done.md) | Plugin command bar & colorful icons |
 | 205 | [104](done/104-plugin-context-handoff.done.md) | Context handoff to plugins |
 | 206 | [105](done/105-plugin-actions-events.done.md) | Mediated actions & events |
-| 207 | [106](106-plugin-management.md) | Plugin management (settings) |
+| 207 | [106](done/106-plugin-management.done.md) | Plugin management (settings) |
 | 208 | [107](107-reference-demo-plugin.md) | Reference/demo plugin(s) |
 | 209 | [108](108-folder-storage-usage-visualizer.md) | First functional plugin — folder storage-usage visualizer |
 | 220 | [109](109-redacted-diagnostics-and-support-bundle.md) | Add redacted diagnostics and an exportable support bundle |

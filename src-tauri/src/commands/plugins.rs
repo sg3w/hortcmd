@@ -1,5 +1,5 @@
 //! Plugin IPC accepts calls from the trusted application window only.
-use crate::plugins::registry::{self, PluginRecord};
+use crate::plugins::registry::PluginRecord;
 use tauri::Manager;
 
 pub fn trusted(window: &tauri::WebviewWindow) -> Result<(), String> {
@@ -16,26 +16,19 @@ pub fn root(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
         .map_err(|e| e.to_string())
 }
 #[tauri::command]
-pub fn list_plugins(
+pub async fn list_plugins(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
 ) -> Result<Vec<PluginRecord>, String> {
     trusted(&window)?;
-    let mut records = registry::discover(&root(&app)?)?;
-    let state = app.state::<crate::plugins::broker::PluginBroker>();
-    let grants = state
-        .grants
-        .lock()
-        .map_err(|_| "Plugin grants unavailable")?;
-    for record in &mut records {
-        if record.manifest.is_some() {
-            if let Some(permissions) = grants.get(&record.id) {
-                record.active = true;
-                record.granted = permissions.clone();
-            }
-        }
-    }
-    Ok(records)
+    tauri::async_runtime::spawn_blocking(move || {
+        let records =
+            crate::plugins::management::records(&app.state::<PluginBroker>(), &root(&app)?)?;
+        close_orphan_windows(&app);
+        Ok(records)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 use crate::plugins::{
@@ -46,10 +39,9 @@ use crate::plugins::{
 
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
-pub fn plugin_open(
+pub async fn plugin_open(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
-    state: tauri::State<'_, PluginBroker>,
     plugin: String,
     view: Option<String>,
     separate: bool,
@@ -57,22 +49,29 @@ pub fn plugin_open(
     path: Option<String>,
 ) -> Result<PluginInstance, String> {
     trusted(&window)?;
-    let instance = js_host::create(
-        &state,
-        &root(&app)?,
-        &plugin,
-        view.as_deref(),
-        separate,
-        side,
-        path.as_deref(),
-    )?;
-    if separate {
-        if let Err(error) = js_host::open_window(&app, &instance) {
-            state.close(&instance.id);
-            return Err(error);
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<PluginBroker>();
+
+        crate::plugins::management::records(&state, &root(&app)?)?;
+        let instance = js_host::create(
+            &state,
+            &root(&app)?,
+            &plugin,
+            view.as_deref(),
+            separate,
+            side,
+            path.as_deref(),
+        )?;
+        if separate {
+            if let Err(error) = js_host::open_window(&app, &instance) {
+                state.close(&instance.id);
+                return Err(error);
+            }
         }
-    }
-    Ok(instance)
+        Ok(instance)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 pub fn plugin_info(
@@ -148,24 +147,34 @@ pub fn plugin_close(
 }
 
 #[tauri::command]
-pub fn plugin_native_start(
+pub async fn plugin_native_start(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
     plugin: String,
 ) -> Result<PluginInstance, String> {
     trusted(&window)?;
-    crate::plugins::native_host::start(&app, &root(&app)?, &plugin)
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::plugins::management::records(&app.state::<PluginBroker>(), &root(&app)?)?;
+        crate::plugins::native_host::start(&app, &root(&app)?, &plugin)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-pub fn plugin_launch(
+pub async fn plugin_launch(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
     plugin: String,
     button: String,
 ) -> Result<PluginInstance, String> {
     trusted(&window)?;
-    crate::plugins::launch::launch(&app, &root(&app)?, &plugin, &button)
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::plugins::management::records(&app.state::<PluginBroker>(), &root(&app)?)?;
+        crate::plugins::launch::launch(&app, &root(&app)?, &plugin, &button)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -186,6 +195,7 @@ pub async fn plugin_preview(
 ) -> Result<Option<PluginInstance>, String> {
     trusted(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
+        crate::plugins::management::records(&app.state::<PluginBroker>(), &root(&app)?)?;
         crate::plugins::views::preview(&app, &root(&app)?, &path, side)
     })
     .await
@@ -219,4 +229,81 @@ pub fn plugin_transfer_cancel(
 ) -> Result<(), String> {
     trusted(&window)?;
     crate::plugins::transfers::cancel(&state, &id)
+}
+
+#[tauri::command]
+pub async fn plugin_install(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    source: String,
+    update: Option<String>,
+) -> Result<String, String> {
+    trusted(&window)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::plugins::management::install(
+            &app.state::<PluginBroker>(),
+            &root(&app)?,
+            std::path::Path::new(&source),
+            update.as_deref(),
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+pub async fn plugin_activate(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    plugin: String,
+    fingerprint: String,
+) -> Result<(), String> {
+    trusted(&window)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::plugins::management::activate(
+            &app.state::<PluginBroker>(),
+            &root(&app)?,
+            &plugin,
+            &fingerprint,
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+pub async fn plugin_deactivate(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    plugin: String,
+    remove: bool,
+) -> Result<(), String> {
+    trusted(&window)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::plugins::management::deactivate(
+            &app.state::<PluginBroker>(),
+            &root(&app)?,
+            &plugin,
+            remove,
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn close_orphan_windows(app: &tauri::AppHandle) {
+    let broker = app.state::<PluginBroker>();
+    let labels: Vec<_> = broker
+        .instances
+        .lock()
+        .map(|instances| {
+            instances
+                .values()
+                .filter_map(|instance| instance.lock().ok().map(|i| i.info.window_label.clone()))
+                .collect()
+        })
+        .unwrap_or_default();
+    for (label, window) in app.webview_windows() {
+        if label.starts_with("plugin-") && !labels.contains(&label) {
+            let _ = window.close();
+        }
+    }
 }

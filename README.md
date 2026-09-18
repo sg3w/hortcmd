@@ -273,10 +273,12 @@ or protocol telemetry is labeled as unavailable. See
 [transport security](docs/transport-security.md) for the complete policy, migration
 notes, test evidence and native platform follow-ups.
 
-**Plugins:** the manifest contract and isolated JS host are implemented. Execution
-requires an active permission grant; plugin management follows in the remaining
-tickets. Native libraries run in a helper process with full user privileges. See [Plugin interface](docs/plugin-interface.md) for
-the broker and containment boundary.
+**Plugins:** manage local folder/ZIP packages in Configuration → Settings →
+Plugins. Tickets 100–106 provide command buttons, JavaScript windows/previews/tabs,
+context and permission-checked actions/events. Activation requires explicit
+permission approval; updates revoke previous grants. Native libraries run in a
+helper process with full user privileges. See [Plugin interface](docs/plugin-interface.md)
+for manifests, SDK examples, the native ABI and installation instructions.
 
 The optional MCP endpoint binds only to loopback and requires its keychain-backed
 bearer token, enabled capability tiers and allowed roots. Writes require in-app

@@ -3,9 +3,10 @@
 ## Status and scope
 
 API version 1 defines one broker protocol for JavaScript views and native plugins.
-The contract and discovery are implemented in TICKET-100. Execution, integration
-and management follow in TICKET-101 through TICKET-106. The reference plugins and
-storage analyzer remain separate work (TICKET-107 and TICKET-108).
+Tickets 100–106 implement discovery, isolated JavaScript views, native helper
+processes, command buttons, context, mediated actions/events and local plugin
+management. Reference plugins and the storage analyzer remain separate work
+(TICKET-107 and TICKET-108).
 
 PHP is source text, never executable server code. A future Apple Photos provider
 will be read-only: browse and copy out, with no import, delete or mutation.
@@ -122,9 +123,9 @@ provider capabilities and operation controls remain authoritative.
 
 ## JavaScript host and SDK
 
-TICKET-101 implements dedicated plugin windows and the shared embedded-frame host.
-UI launchers, context and management are delivered by subsequent tickets. Opening
-an instance requires an active grant; discovery alone never starts a plugin.
+JavaScript plugins use dedicated plugin windows or the shared embedded-frame
+host for previews and pane tabs. Opening an instance requires an active grant;
+discovery alone never starts a plugin.
 
 A JS entry is an HTML document. Package JavaScript/CSS libraries alongside it (no
 CDN), using paths relative to the package root. The asset server rejects links and
@@ -283,3 +284,93 @@ const pending = await hortcmd.request({
 });
 // The user reviews the transfer in the commander before any copy starts.
 ```
+
+
+## Installation, updates and permission management
+
+Open **Configuration → Settings → Plugins**. Enter an absolute local folder or
+ZIP path and choose **Install**. `plugin.json` must be directly at the package
+root (without an enclosing folder in a ZIP). No marketplace, downloads or
+package scripts run during installation. Packages are staged and validated
+before publication; links, special files, traversal and platform-incompatible
+entries are rejected. Limits are 4,096 entries, 16 directory levels and 256 MiB
+of extracted file content. Keep assets below the separate 2 MiB serving limit.
+
+New installations are inactive. **Activate** displays the declared permissions;
+**Approve and activate** grants all listed permissions. Cancel leaves the plugin
+inactive. Native approval explicitly explains that a helper is not a security
+sandbox. The UI presents name, version, author, runtime, status and validation
+errors. Active plugins contribute their declared buttons, previews and tabs.
+
+Approvals persist in the hidden .state.json file inside the plugins folder in
+the application data directory.
+They are bound to a SHA-256 digest of the package paths and contents. The host
+loads approvals on discovery and revalidates them before launching views or
+commands. Changed packages require a fresh review. This detects changes between
+uses; it is not protection against an attacker already controlling the user's
+account or native plugins modifying files while a view is running.
+
+For an **Update**, enter the new package path and choose Update beside the
+installed plugin. Its ID must match and its numeric `major.minor.patch` version
+must increase. Updates stop instances, revoke old grants and require activation
+again. If publication fails, the old directory is restored but remains inactive.
+**Deactivate** preserves package files and revokes grants; **Uninstall** confirms
+removal of the installed package. Both stop instances and their owned transfers.
+Uninstall does not remove unrelated files a plugin created through approved
+filesystem operations.
+
+## Author workflow and supported extensions
+
+1. Create a folder containing `plugin.json`, an HTML entry and local assets.
+2. Declare only the permissions needed by the contribution. For a source preview,
+   request `read:context`, `read:fs` and `ui:preview` as in the manifest above.
+3. Register event listeners, then send `view:ready`. Render source with
+   `textContent`, never by injecting the file's markup into the plugin document.
+4. Install the folder in Settings and approve its permissions. Open a matching
+   file preview, plugin tab or declared command button.
+5. To distribute a change, increment the manifest version and install it with
+   Update. No build-time dependency on the commander's frontend is needed.
+
+Example source reader inside a packaged HTML document:
+
+```html
+<pre id="source"></pre>
+<script>
+hortcmd.onEvent(async event => {
+  if (event.type !== "view:open" || !event.data.path) return;
+  try {
+    const result = await hortcmd.request({
+      type: "fs:read", path: event.data.path,
+      maxBytes: 262144, encoding: "utf8"
+    });
+    document.querySelector("#source").textContent = result.content;
+  } catch (error) {
+    document.querySelector("#source").textContent = String(error);
+  }
+});
+hortcmd.request({type: "view:ready"});
+</script>
+```
+
+Native authors implement the versioned C ABI in
+[hortcmd_plugin.h](plugins/hortcmd_plugin.h) and supply a library per supported
+platform. See the native helper section for buffer ownership and threading.
+The integration fixture under `src-tauri/src/plugins/fixtures/` illustrates a
+small compiled library and is exercised as an actual helper subprocess in tests.
+
+Current extension surfaces are command buttons, separate JS windows, previews,
+pane tabs and broker actions/events. A Swift/PhotoKit filesystem provider, archive
+providers, columns and context-menu extensions are not part of this API release.
+Future Apple Photos access must remain read-only: browse and copy out only.
+
+## Validation
+
+Each of tickets 100–106 is checked with `npm run check`: formatting, strict
+Clippy, Rust tests, generated IPC bindings, architecture/documentation/UI checks,
+TypeScript, Vitest, production build and bundle budget. Tests cover denied
+permissions, manifest validation, bridge ownership, native ABI rejection and
+crash/timeout isolation, context/view lifecycle, transfer review, package import,
+permission persistence, changed-package revocation and settings dialogs.
+Native integration tests run locally on the host platform. Interactive desktop
+rendering and Windows/Linux native integration still need platform smoke tests;
+a passing browser component test does not substitute for those checks.

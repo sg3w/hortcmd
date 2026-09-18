@@ -25,3 +25,6 @@ pub mod events;
 pub mod transfers;
 
 pub mod filesystem;
+
+pub mod management;
+pub mod package;
