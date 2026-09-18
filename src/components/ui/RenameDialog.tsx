@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { panelOf, usePanes, type Row } from "@/store/panesStore";
 import { useRenameDialog } from "@/store/renameStore";
+import { describeItemErrors } from "@/store/errorText";
 import { useOps } from "@/store/opsStore";
 import { useT } from "@/store/settingsStore";
 import { renameBatch } from "@/ipc/client";
@@ -119,8 +120,8 @@ export function RenameDialog() {
       if (panelOf(s, sd).path === snapshot.dir) void s.refresh(sd);
     });
 
-    if (res.errors.length) {
-      const message = res.errors.slice(0, 12).join("\n");
+    const message = describeItemErrors(res.errors).slice(0, 12).join("\n");
+    if (message) {
       useOps.getState().requestConfirm({
         title: t("op.errors"),
         message,

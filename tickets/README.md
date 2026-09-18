@@ -1,8 +1,8 @@
 # Ticket organization
 
 All tickets below 100 and tickets 100–106 have been completed.
-The remaining **31 open tickets run from 107 to 137**. Their relative order
-and scope are unchanged. Dependencies and references use the current paths.
+Ticket 128 is also complete. There are **31 open tickets**: 107–127, 129–137,
+and the newly discovered issue 300. Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
 filenames ending in `.done.md`. This also applies to previously completed support
@@ -44,7 +44,7 @@ tickets with higher numbers. Do not reuse those numbers for new work.
 | 261 | [125](125-index-search-session-restore.md) | Indexsuche nach Dialog-Unmount konsistent wiederherstellen |
 | 262 | [126](126-archive-navigation-history.md) | Archiv-Orte im Navigationsverlauf erhalten |
 | 263 | [127](127-native-paired-comparison-verification.md) | Native Prüfung der doppelten Vergleichsliste |
-| 264 | [128](128-rename-dialog-structured-errors.md) | Strukturierte Batch-Fehler im Umbenennen-Dialog anzeigen |
+| 264 | [128](done/128-rename-dialog-structured-errors.done.md) | Strukturierte Batch-Fehler im Umbenennen-Dialog anzeigen |
 | 265 | [129](129-windows-linux-native-file-icons.md) | Native Dateisymbole unter Windows und Linux |
 | 266 | [130](130-native-icon-gui-verification.md) | Native GUI-Prüfung der Dateisymbole ergänzen |
 | 267 | [131](131-zip-lzma-framing-conformance.md) | ZIP-LZMA-Framing mit externen Archiven prüfen |
@@ -63,3 +63,7 @@ Older history may describe the prior scheduling: 056 became 209 (now 108),
 074 became [224](done/224-vitest-module-mock-hoisting.done.md), which is already
 completed and retains that number. The table above preserves the identity of
 historical references while active links use the current filenames.
+
+## Newly discovered issues
+
+- [300](300-rename-request-lifecycle.md): batch-rename request errors, duplicate submissions and stale completions.
