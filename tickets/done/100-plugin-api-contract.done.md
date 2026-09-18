@@ -99,26 +99,26 @@ window), **104** (feeding `path`/context into a running view), **106** (granting
 `ui:preview`/`ui:tab` at install time) and **107** (the demo plugin gains a preview
 renderer and a path-bound tab, which is what proves the contract).
 Embedded views remain part of 101. Number 108 is assigned to the first functional
-plugin, the [storage-usage analyzer](108-folder-storage-usage-visualizer.md).
+plugin, the [storage-usage analyzer](../108-folder-storage-usage-visualizer.md).
 If embedded views need a separate ticket, allocate an unused plugin-series number.
 
 ## Acceptance criteria
-- [ ] The manifest schema is typed in Rust and available in the frontend via ts-rs.
-- [ ] `list_plugins` finds plugin folders, parses/validates manifests, and reports
+- [x] The manifest schema is typed in Rust and available in the frontend via ts-rs.
+- [x] `list_plugins` finds plugin folders, parses/validates manifests, and reports
       errors (missing fields, unknown permissions, incompatible `apiVersion`) clearly.
-- [ ] The permission model (capability strings, default-deny) is fixed as a type + docs.
-- [ ] The broker protocol (commands/events + required permissions) is documented.
-- [ ] **View contributions** (`preview[]`, `tabs[]`) are part of the schema and the
+- [x] The permission model (capability strings, default-deny) is fixed as a type + docs.
+- [x] The broker protocol (commands/events + required permissions) is documented.
+- [x] **View contributions** (`preview[]`, `tabs[]`) are part of the schema and the
       generated bindings, including match rules, `priority` and the
       path-bound/purely-visual distinction (`path: "active" | "none"`).
-- [ ] Validation rejects: a view contribution on a `native` plugin, a missing `entry`
+- [x] Validation rejects: a view contribution on a `native` plugin, a missing `entry`
       file, a duplicate view `id`, an unknown `kind`/`surface`, and a view
       contribution without `ui:preview`/`ui:tab` in `permissions[]`.
-- [ ] The docs state that the built-in preview stays the fallback and that a failing
+- [x] The docs state that the built-in preview stays the fallback and that a failing
       view never breaks the pane or the preview dialog.
-- [ ] A Markdown document describes the plugin manifest and the threat model,
+- [x] A Markdown document describes the plugin manifest and the threat model,
       including the containment of embedded views.
-- [ ] **No** plugin is loaded or executed.
+- [x] **No** plugin is loaded or executed.
 
 ## Tests
 - `list_plugins` against a folder with (a) a valid, (b) an invalid, and
@@ -137,3 +137,10 @@ If embedded views need a separate ticket, allocate an unused plugin-series numbe
 - Existing functionality unchanged
 - Documentation updated (Concept.md + manifest/threat-model docs)
 - Rename the ticket to *.done.md
+
+## Implementation notes
+
+API version 1 is implemented in the Rust plugin modules and generated TypeScript
+bindings. See [Plugin interface](../../docs/plugin-interface.md). Native libraries
+will run in a helper process (user decision); process isolation is not an OS sandbox.
+PHP rendering means source display only. No plugin code executes in this ticket.

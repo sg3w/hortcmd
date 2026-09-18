@@ -11,6 +11,7 @@ pub mod errors;
 mod mcp;
 mod menu;
 mod net;
+pub mod plugins;
 mod vfs;
 
 /// Origins the main window may hold (TICKET-030). In a packaged build
@@ -77,6 +78,7 @@ pub fn run() {
         })
         .manage(commands::command_line::CommandLine::default())
         .invoke_handler(tauri::generate_handler![
+            commands::plugins::list_plugins,
             commands::command_line::command_start,
             commands::command_line::command_status,
             commands::command_line::command_cancel,

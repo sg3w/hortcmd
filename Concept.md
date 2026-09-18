@@ -809,6 +809,11 @@ is organized into the following categories. Legend: **✅ present · ⏳ planned
   "Drop host key…" action live in the connection manager; TICKET-028)*
 
 ### Plugins
+
+The versioned manifest, broker messages and threat model are specified in
+[Plugin interface](docs/plugin-interface.md). PHP previews display source; they
+do not execute PHP. Native libraries run only in a dedicated helper process.
+
 - Installed plugins ⏳ · updates ⏳ · preview plugins ⏳ · packer plugins ⏳
   *(requires the plugin system)*
 

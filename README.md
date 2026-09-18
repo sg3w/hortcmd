@@ -43,7 +43,9 @@ Implemented and in use:
 The **MCP server** is implemented under [TICKET-041](tickets/done/041-mcp-interface.done.md),
 with final integration acceptance still in progress. It is disabled by default;
 see [MCP setup and verification](docs/mcp.md). The **plugin system**
-([TICKET-100](tickets/100-plugin-api-contract.md)–107) remains planned.
+contract and discovery ([TICKET-100](tickets/done/100-plugin-api-contract.done.md))
+are implemented; execution and management remain planned. See the
+[Plugin interface](docs/plugin-interface.md).
 
 ## Tech stack
 
@@ -272,7 +274,7 @@ notes, test evidence and native platform follow-ups.
 
 **Not implemented:**
 
-- **Plugins** ([TICKET-100](tickets/100-plugin-api-contract.md) …
+- **Plugins** ([TICKET-100](tickets/done/100-plugin-api-contract.done.md) …
   [TICKET-107](tickets/107-reference-demo-plugin.md)) —
   there is no plugin host, no loader, and no extension point. Nothing in this
   repository executes third-party code.
