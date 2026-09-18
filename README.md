@@ -152,6 +152,11 @@ cannot drift from the code.
 
 ## Security
 
+**SFTP entry types.** File types use the complete mode discriminator. Sockets,
+FIFOs and devices are not treated as directories; unknown or missing type bits
+never authorize directory traversal. Resolved links retain their link-level
+permissions and icon while their target determines the displayed size/type.
+
 **SFTP packet bounds.** Incoming SFTP packets are capped at 1 MiB before the
 client library allocates their payload. Oversized frames close the affected SFTP
 stream. See [packet bounds and compatibility](docs/sftp-packet-bounds.md).

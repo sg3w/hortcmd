@@ -27,6 +27,7 @@ pub mod stream_path;
 pub use stream_path::StreamPath;
 pub mod sftp;
 mod sftp_frames;
+pub(crate) mod sftp_metadata;
 pub mod smb;
 pub mod webdav;
 

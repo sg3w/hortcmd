@@ -11,8 +11,9 @@
 // file handles.
 // ============================================================
 
+use super::sftp_metadata::{self, EntryKind};
 use super::{Provider, Stat};
-use crate::commands::fs::dir::{DirEntry, DirListing};
+use crate::commands::fs::dir::DirListing;
 use crate::errors::{AppError, AppResult};
 use crate::net::hostkey::ConnectError;
 use crate::net::session::runtime;
@@ -165,8 +166,7 @@ impl Provider for SftpProvider {
                 continue;
             }
             let attrs = item.metadata();
-            let mode = attrs.permissions.unwrap_or(0);
-            let is_symlink = attrs.is_symlink();
+            let is_symlink = sftp_metadata::kind(&attrs) == Some(EntryKind::Symlink);
             // SFTP `READDIR` attributes are link-level, exactly like a local
             // `lstat`: a symlink to a directory would arrive with `is_dir =
             // false` and the target string's length as its size (TICKET-018).
@@ -180,36 +180,7 @@ impl Provider for SftpProvider {
             } else {
                 None
             };
-            // Three cases, and only the first two were handled: a
-            // resolved symlink answers from its target, a broken link
-            // falls back to the link's own attributes and stays a 0-byte
-            // file — and a plain entry, which has no target at all,
-            // answers from its own attributes. Reading `target` alone
-            // made *every* ordinary directory arrive as a file (found by
-            // the protocol harness, ticket 038).
-            let is_dir = match &target {
-                Some(t) => t.is_dir(),
-                None => !is_symlink && attrs.is_dir(),
-            };
-            let size = match &target {
-                _ if is_dir => 0,
-                Some(t) => t.size.unwrap_or(0),
-                None if is_symlink => 0,
-                None => attrs.size.unwrap_or(0),
-            };
-            entries.push(DirEntry {
-                hidden: name.starts_with('.'),
-                readonly: mode != 0 && mode & 0o200 == 0,
-                executable: !is_dir && mode & 0o111 != 0,
-                name,
-                is_dir,
-                is_symlink,
-                size,
-                modified: attrs.mtime.unwrap_or(0) as u64,
-                // Link-level, so the frontend still renders `l` and the
-                // symlink colour rule.
-                mode: attrs.permissions,
-            });
+            entries.push(sftp_metadata::listing_entry(name, &attrs, target.as_ref()));
         }
 
         // Return the full address so the pane keeps its remote context;
@@ -226,10 +197,7 @@ impl Provider for SftpProvider {
         let attrs = runtime()
             .block_on(self.sftp().metadata(p(path)))
             .map_err(to_io)?;
-        Ok(Stat {
-            is_dir: attrs.is_dir(),
-            len: attrs.size.unwrap_or(0),
-        })
+        Ok(sftp_metadata::stat(&attrs))
     }
 
     fn exists(&self, path: &crate::vfs::StreamPath) -> bool {
@@ -356,7 +324,7 @@ fn remove_dir_all_async<'a>(
                 continue;
             }
             let child = path.join(name)?;
-            if item.metadata().is_dir() {
+            if sftp_metadata::kind(&item.metadata()) == Some(EntryKind::Directory) {
                 remove_dir_all_async(sftp, child).await?;
             } else {
                 sftp.remove_file(p(&child)).await.map_err(to_io)?;
