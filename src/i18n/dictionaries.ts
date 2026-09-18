@@ -20,20 +20,20 @@ import { recovery } from "./namespaces/recovery";
 import { chrome } from "./namespaces/chrome";
 import { compare } from "./namespaces/compare";
 import { errors } from "./namespaces/errors";
-import { exporting } from "./namespaces/exporting";
+import type { exporting } from "./namespaces/exporting";
 import { net } from "./namespaces/net";
 import { persist } from "./namespaces/persist";
 import { operations } from "./namespaces/operations";
-import { preview } from "./namespaces/preview";
+import type { preview } from "./namespaces/preview";
 import { properties } from "./namespaces/properties";
-import { rename } from "./namespaces/rename";
+import type { rename } from "./namespaces/rename";
 import { search } from "./namespaces/search";
 import { settings } from "./namespaces/settings";
 
 export type Lang = "de" | "en";
 
-/** Every namespace, in the order they are merged. */
-const NAMESPACES = [
+/** Core and mixed-use namespaces needed before any dialog opens. */
+const CORE_NAMESPACES = [
   preflight,
   undo,
   recovery,
@@ -44,56 +44,17 @@ const NAMESPACES = [
   search,
   compare,
   properties,
-  rename,
-  exporting,
-  preview,
   settings,
   persist,
 ] as const;
 
-export const DICT = {
-  de: {
-    ...preflight.de,
-    ...undo.de,
-    ...recovery.de,    ...chrome.de,
-    ...errors.de,
-    ...operations.de,
-    ...net.de,
-    ...search.de,
-    ...compare.de,
-    ...properties.de,
-    ...rename.de,
-    ...exporting.de,
-    ...preview.de,
-    ...settings.de,
-    ...persist.de,
-  },
-  en: {
-    ...preflight.en,
-    ...undo.en,
-    ...recovery.en,    ...chrome.en,
-    ...errors.en,
-    ...operations.en,
-    ...net.en,
-    ...search.en,
-    ...compare.en,
-    ...properties.en,
-    ...rename.en,
-    ...exporting.en,
-    ...preview.en,
-    ...settings.en,
-    ...persist.en,
-  },
-} as const;
+/** The key union includes unloaded features without importing their values. */
+type Keys<T> = T extends {de: infer D} ? keyof D : never;
+export type TransKey = Keys<(typeof CORE_NAMESPACES)[number]>
+  | keyof typeof rename.de | keyof typeof exporting.de | keyof typeof preview.de;
 
-export type TransKey = keyof (typeof DICT)["de"];
+export { DICT } from "./registry";
+import { registerTranslations } from "./registry";
+for (const namespace of CORE_NAMESPACES) registerTranslations(namespace);
 
-/**
- * The namespaces as a list, for the test that checks no two of them
- * claim the same key — a duplicate would be silently won by whichever
- * is spread last.
- */
-export const ALL_NAMESPACES: readonly {
-  de: Record<string, string>;
-  en: Record<string, string>;
-}[] = NAMESPACES;
+export { CORE_NAMESPACES };

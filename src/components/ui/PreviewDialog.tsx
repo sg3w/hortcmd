@@ -1,3 +1,4 @@
+import "@/i18n/namespaces/preview";
 // ============================================================
 // File preview (F3). Modes per format:
 //   image (+ EXIF) · rendered markdown · syntax highlighting ·

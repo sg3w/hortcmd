@@ -1,3 +1,4 @@
+import "@/i18n/namespaces/exporting";
 // ============================================================
 // "Export file list" dialog: configures scope, format, fields and
 // options, shows a live preview and writes the result via the backend

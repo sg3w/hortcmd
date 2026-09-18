@@ -128,6 +128,11 @@ for (const name of ["xterm", "highlight.js", "marked"]) {
   }
 }
 
+// Feature-only translation keys must remain outside the complete eager graph.
+for (const key of ["rename.apply", "export.scope", "preview.exif.none"]) {
+  if (eagerSource.includes(key)) problems.push(`lazy translation "${key}" is back in the eager graph`);
+}
+
 if (problems.length) {
   console.error("bundle-report: budget exceeded\n");
   for (const p of problems) console.error(`  - ${p}`);

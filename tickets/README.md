@@ -1,7 +1,7 @@
 # Ticket organization
 
 All tickets below 100 and tickets 100–106 have been completed.
-Ticket 128 is also complete. There are **31 open tickets**: 107–127, 129–137,
+Tickets 128 and 137 are also complete. There are **30 open tickets**: 107–127, 129–136,
 and the newly discovered issue 300. Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
@@ -53,7 +53,7 @@ tickets with higher numbers. Do not reuse those numbers for new work.
 | 273 | [134](134-jsdom-canvas-test-diagnostic.md) | Fehlende Canvas-Unterstützung im Frontend-Testaufbau klären |
 | 274 | [135](135-command-line-native-verification.md) | Native Windows/Linux command-line verification |
 | 275 | [136](136-native-trash-error-verification.md) | Verify native trash errors and refused Finder automation |
-| 276 | [137](137-lazy-feature-translations.md) | Load feature translations with their lazy UI |
+| 276 | [137](done/137-lazy-feature-translations.done.md) | Load feature translations with their lazy UI |
 
 ## Earlier moves
 
@@ -67,3 +67,8 @@ historical references while active links use the current filenames.
 ## Newly discovered issues
 
 - [300](300-rename-request-lifecycle.md): batch-rename request errors, duplicate submissions and stale completions.
+
+## Current implementation batch
+
+Requested: 20 additional code tickets, excluding Windows/Linux-specific work.
+Completed in this batch: **128, 137 (2 of 20)**. New findings are recorded above.

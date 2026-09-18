@@ -1,3 +1,4 @@
+import "@/i18n/namespaces/exporting";
 // ============================================================
 // "Save/load selection" dialog (TICKET-059).
 //

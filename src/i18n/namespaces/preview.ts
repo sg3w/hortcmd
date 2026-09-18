@@ -1,3 +1,4 @@
+import { registerTranslations } from "../registry";
 // ============================================================
 // File preview (TICKET-035).
 //
@@ -30,3 +31,5 @@ export const preview = ns(
   "preview.exif.none": "No EXIF data available.",
   },
 );
+
+registerTranslations(preview);

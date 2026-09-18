@@ -1,3 +1,4 @@
+import { registerTranslations } from "../registry";
 // ============================================================
 // Batch rename (TICKET-035).
 //
@@ -72,3 +73,5 @@ export const rename = ns(
   "rename.apply": "Rename",
   },
 );
+
+registerTranslations(rename);

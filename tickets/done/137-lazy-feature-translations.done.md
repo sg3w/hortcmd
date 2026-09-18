@@ -17,3 +17,21 @@ remaining margin again.
 - Compare entry size and total eager bytes before/after. Do not merely move the
   same eagerly loaded bytes into a different named chunk to evade the entry limit.
 - Add focused localization/loading regressions and run npm run check.
+
+
+## Implementation evidence
+
+Rename, file-list export/selection, and preview namespaces now register both
+languages with their lazy feature modules before rendering. The core imports
+only their types, retaining the complete checked TransKey union. Mixed-use
+namespaces and operation/error text remain eager. There is one runtime registry,
+not a second copy of feature dictionaries.
+
+Before: entry 323.7 KiB, complete eager graph 799.2 KiB.
+After: entry 316.8 KiB, complete eager graph 792.2 KiB.
+The 325 KiB entry budget is unchanged. The bundle gate now also checks that
+representative feature-only keys are absent from the entire eager import graph.
+
+`npm run check` passed, including 702 frontend tests. Focused regressions verify
+that text is absent before feature loading, present before the loader resolves,
+and switches language without fetching again or displaying untranslated keys.

@@ -440,8 +440,12 @@ requests on a local custom protocol buy nothing.
 Ticket 086 adds two German/English system-trash error messages to the immediately
 available error dictionary. The measured entry grows from 319.8 to 320.5 KiB
 (uncompressed); no new eager dependency is added. The budget is deliberately
-adjusted by 1 KiB to 321 KiB for this diagnostic improvement. Ticket 137 tracks
-loading feature-only translations with their lazy UI to recover future headroom.
+adjusted by 1 KiB to 321 KiB for this diagnostic improvement. Ticket 137 now loads rename, export/selection and preview text with their lazy
+components. Both languages register before rendering; type-only imports keep
+all keys checked without loading the dictionaries. Core error text remains eager.
+The measured entry falls from 323.7 to 316.8 KiB and the complete eager graph
+from 799.2 to 792.2 KiB. The bundle gate checks feature-only keys across every
+eager chunk, preventing a cosmetic chunk rename from bypassing this boundary.
 
 Ticket 096 adds localized connection-monitor controls and status announcements,
 plus refresh handling when a connection returns. The measured entry is 322.5 KiB;

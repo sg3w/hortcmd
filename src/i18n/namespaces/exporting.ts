@@ -1,3 +1,4 @@
+import { registerTranslations } from "../registry";
 // ============================================================
 // Exporting (TICKET-035).
 //
@@ -123,3 +124,5 @@ export const exporting = ns(
   "selfile.error": "{err}",
   },
 );
+
+registerTranslations(exporting);

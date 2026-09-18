@@ -9,7 +9,11 @@
 // ============================================================
 
 import { describe, expect, it } from "vitest";
-import { ALL_NAMESPACES, DICT } from "./dictionaries";
+import { CORE_NAMESPACES, DICT } from "./dictionaries";
+import { rename } from "./namespaces/rename";
+import { exporting } from "./namespaces/exporting";
+import { preview } from "./namespaces/preview";
+const ALL_NAMESPACES = [...CORE_NAMESPACES, rename, exporting, preview];
 
 describe("language parity", () => {
   it("has the same keys in German and English", () => {

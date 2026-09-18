@@ -1,3 +1,5 @@
+import "@/i18n/namespaces/rename";
+import "@/i18n/namespaces/exporting";
 // ============================================================
 // "Batch rename" dialog: name scheme with placeholders, counter,
 // search/replace (optionally regex) and letter case, with live preview
