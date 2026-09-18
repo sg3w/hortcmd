@@ -458,6 +458,14 @@ npm run check:bundle      # chunk composition and the eager budget
 Rust first: it is the slowest half, and a broken backend makes the frontend
 result meaningless.
 
+The lazy-dialog import test loads real xterm, whose color helper probes a 1px
+canvas at module initialization. Only during that terminal import, a local test
+adapter returns `null` from `getContext`, modelling an unavailable browser
+context. It restores the method immediately afterward. This import check does
+not test pixel rendering; terminal keyboard/screen-reader behavior has its own
+component tests. No console filter or accessibility rule is disabled for the
+canvas probe.
+
 **Layout.** Tests live beside the module they cover (`src/lib/path.test.ts`,
 `src/store/panesStore.test.ts`, …). `src/test/` holds only the shared
 machinery: `setup.ts` (localStorage shim plus the reset of DOM, timers, mocks,

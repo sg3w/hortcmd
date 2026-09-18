@@ -1,8 +1,8 @@
 # Ticket organization
 
 All tickets below 100 and tickets 100–107 have been completed.
-Tickets 125–126, 128, 137 and the discovered issues 300–301 and 303–306 are also complete. There are
-**26 open tickets**: 108–124, 127 and 129–136. Dependencies use the current paths.
+Tickets 125–126, 128, 134, 137 and the discovered issues 300–301 and 303–306 are also complete. There are
+**25 open tickets**: 108–124, 127, 129–133 and 135–136. Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
 filenames ending in `.done.md`. This also applies to previously completed support
@@ -50,7 +50,7 @@ tickets with higher numbers. Do not reuse those numbers for new work.
 | 267 | [131](131-zip-lzma-framing-conformance.md) | ZIP-LZMA-Framing mit externen Archiven prüfen |
 | 268 | [132](132-archive-budget-upstream-migration.md) | Lokale Archiv-Budgetpatches upstream ersetzen |
 | 270 | [133](133-atomic-provider-staging-ownership.md) | Reserve provider staging entries atomically and verify ownership |
-| 273 | [134](134-jsdom-canvas-test-diagnostic.md) | Fehlende Canvas-Unterstützung im Frontend-Testaufbau klären |
+| 273 | [134](done/134-jsdom-canvas-test-diagnostic.done.md) | Isolate the missing canvas diagnostic in frontend tests |
 | 274 | [135](135-command-line-native-verification.md) | Native Windows/Linux command-line verification |
 | 275 | [136](136-native-trash-error-verification.md) | Verify native trash errors and refused Finder automation |
 | 276 | [137](done/137-lazy-feature-translations.done.md) | Load feature translations with their lazy UI |
@@ -81,5 +81,5 @@ historical references while active links use the current filenames.
 ## Current implementation batch
 
 Requested: 20 additional code tickets, excluding Windows/Linux-specific work.
-Completed in this batch: **128, 137, 300, 107, 301, 303, 304, 125, 305, 126, 306 (11 of 20)**. New findings are recorded above.
+Completed in this batch: **128, 137, 300, 107, 301, 303, 304, 125, 305, 126, 306, 134 (12 of 20)**. New findings are recorded above.
 

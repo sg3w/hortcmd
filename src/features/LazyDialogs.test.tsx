@@ -10,6 +10,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { useDemo } from "@/test/tauri";
 
 vi.mock("@/ipc/client", () => ({
   hasTauri: false,
@@ -36,6 +37,7 @@ const { LazyDialogs } = await import("./LazyDialogs");
 const { useUi } = await import("@/store/uiStore");
 
 beforeEach(() => {
+  useDemo();
   vi.useRealTimers();
 });
 
@@ -63,8 +65,20 @@ describe("opening one", () => {
 describe("the declared boundaries", () => {
   it("every loader resolves to a component", async () => {
     for (const [id, load] of Object.entries(LAZY)) {
-      const mod = await load();
-      expect(typeof mod.default, id).toBe("function");
+      // xterm probes a 1px canvas while its real module is imported. This
+      // loader test does not render a terminal. Model an unavailable context
+      // (the browser API's null result) instead of jsdom's noisy missing method.
+      // Keep the adapter local to this import; other tests retain native APIs.
+      const context = id === "terminal"
+        ? vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null)
+        : null;
+      try {
+        const mod = await load();
+        expect(typeof mod.default, id).toBe("function");
+        if (context) expect(context).toHaveBeenCalledWith("2d", { willReadFrequently: true });
+      } finally {
+        context?.mockRestore();
+      }
     }
   });
 
