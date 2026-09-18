@@ -89,3 +89,25 @@ Streaming regression tests use a fake store where `/a/b` and `/a//b` name
 different resources. They exercise preflight traversal, verified copy, failed
 publication and rollback, reopened journals and MCP containment. No live remote
 server or Windows/Linux native matrix was run for this ticket.
+
+## Pane navigation history
+
+Each tab retains a session-only back/forward history. A place contains its path
+and an optional archive container, so two archives with the same inner path are
+distinct. Normal archive opening, inner-folder navigation, leaving through the
+parent row and opening a place in the opposite pane all record destinations.
+Successful navigation after going back discards the forward branch; refreshing
+the same place does not duplicate it.
+
+Back/forward reloads the recorded place through the appropriate backend command.
+The history position changes only when that request succeeds. Failed or
+superseded requests preserve the committed place and history. An encrypted
+archive can ask for its password again; retry retains the requested history
+position, while cancelling the prompt leaves the current position intact.
+Passwords never become part of a history entry.
+
+Legacy string entries in a running session are interpreted as ordinary folders
+and converted to structured places on the next successful navigation. The saved
+workspace layout still stores folder paths only and restores an archive tab to
+its containing folder after restart. It never persisted the back/forward stack,
+so no persisted schema change or on-disk history migration is required.

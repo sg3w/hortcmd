@@ -32,9 +32,9 @@ for(const side of ["left","right"] as const) {
     expect(panelOf(usePanes.getState(),side)).toEqual(before);
     expect(usePanes.getState().active).toBe(side);
     expect(usePanes.getState()[other].tabs.map(t=>t.path)).toEqual([path,"/untouched"]);
-    expect(panelOf(usePanes.getState(),other)).toMatchObject({sort:{key:"size",asc:false},filter:"",selected:new Set(),history:["/before",path]});
+    expect(panelOf(usePanes.getState(),other)).toMatchObject({sort:{key:"size",asc:false},filter:"",selected:new Set(),history:[{ path: "/before", archive: null }, { path, archive: null }]});
     await openOpposite(side);
-    expect(panelOf(usePanes.getState(),other).history).toEqual(["/before",path]);
+    expect(panelOf(usePanes.getState(),other).history).toEqual([{ path: "/before", archive: null }, { path, archive: null }]);
     usePanes.getState().goBack(other);
     await waitFor(()=>expect(panelOf(usePanes.getState(),other).path).toBe("/before"));
     expect(runtime.calls.every(c=>["list_dir","location_capabilities"].includes(c.cmd))).toBe(true);

@@ -39,7 +39,7 @@ it("ignores a navigation response that arrives after a newer destination", async
   (await request("/second")).resolve(listing("/second")); await second;
   (await request("/first")).resolve(listing("/first")); await first;
   expect(panelOf(usePanes.getState(), "left").path).toBe("/second");
-  expect(panelOf(usePanes.getState(), "left").history).toEqual(["/second"]);
+  expect(panelOf(usePanes.getState(), "left").history).toEqual([{ path: "/second", archive: null }]);
 });
 
 it("delivers a result to its original tab after switching and closing other tabs", async () => {

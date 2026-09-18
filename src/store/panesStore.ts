@@ -11,6 +11,7 @@
 // ============================================================
 
 import { create } from "zustand";
+import { historyLocation, recordNavigation, type HistoryNavigation } from "./panes/history";
 import { asAppError } from "@/lib/appError";
 import type { RefreshStatus } from "@/ipc/bindings/RefreshStatus";
 import type { RefreshSubscription } from "@/ipc/bindings/RefreshSubscription";
@@ -79,8 +80,8 @@ interface PanesStore {
 
   // Navigation (active tab)
   /** Load a folder; `record` (default true) adds it to the history. */
-  loadDir: (side: Side, path: string, record?: boolean) => Promise<void>;
-  loadArchive: (side: Side, archive: string, inner: string) => Promise<void>;
+  loadDir: (side: Side, path: string, record?: HistoryNavigation) => Promise<void>;
+  loadArchive: (side: Side, archive: string, inner: string, record?: HistoryNavigation) => Promise<void>;
   goBack: (side: Side) => void;
   goForward: (side: Side) => void;
   /** Re-read the current folder, preserving cursor/selection (watcher).
@@ -300,14 +301,6 @@ export const usePanes = create<PanesStore>((set, get) => ({
     let res;
     try { res = await listDir(path); } catch (error) { requestFailed(target, error); return; }
     const applied = applyRequest(target, (t) => {
-        let history = t.history;
-        let historyIndex = t.historyIndex;
-        // Put the new folder into the history (discard the forward branch);
-        // don't duplicate the same path (e.g. a refresh).
-        if (record && res.path !== history[historyIndex]) {
-          history = [...history.slice(0, historyIndex + 1), res.path];
-          historyIndex = history.length - 1;
-        }
         return {
           ...t,
           path: res.path,
@@ -328,12 +321,11 @@ export const usePanes = create<PanesStore>((set, get) => ({
           snapshot: null,
           compareHidden: null,
           git: null,
-          history,
-          historyIndex,
+          ...recordNavigation(t, { path: res.path, archive: null }, record),
         };
       });
     if (!applied) return;
-    if (record) pushRecent(res.path);
+    if (record === true) pushRecent(res.path);
     if (panelOf(get(), side).id !== target.id) return;
     get().clearCompareFilter();
     get().loadGit(side);
@@ -344,9 +336,9 @@ export const usePanes = create<PanesStore>((set, get) => ({
     const t = panelOf(s, side);
     if (t.historyIndex <= 0) return;
     const idx = t.historyIndex - 1;
-    const target = t.history[idx];
-    set(withActiveTab(get(), side, (tt) => ({ ...tt, historyIndex: idx })));
-    void s.loadDir(side, target, false);
+    const target = historyLocation(t.history[idx]);
+    if (target.archive !== null) void s.loadArchive(side, target.archive, target.path, idx);
+    else void s.loadDir(side, target.path, idx);
   },
 
   goForward: (side) => {
@@ -354,12 +346,12 @@ export const usePanes = create<PanesStore>((set, get) => ({
     const t = panelOf(s, side);
     if (t.historyIndex >= t.history.length - 1) return;
     const idx = t.historyIndex + 1;
-    const target = t.history[idx];
-    set(withActiveTab(get(), side, (tt) => ({ ...tt, historyIndex: idx })));
-    void s.loadDir(side, target, false);
+    const target = historyLocation(t.history[idx]);
+    if (target.archive !== null) void s.loadArchive(side, target.archive, target.path, idx);
+    else void s.loadDir(side, target.path, idx);
   },
 
-  loadArchive: async (side, archive, inner) => {
+  loadArchive: async (side, archive, inner, record = true) => {
     const target = beginRequest(side, true)!;
     let res;
     try {
@@ -371,7 +363,7 @@ export const usePanes = create<PanesStore>((set, get) => ({
         // Encrypted archive: ask for the password and load again.
         promptArchivePassword(archive, isWrongPassword(e), () => {
           const current = panelOf(get(), side);
-          if (current.id === target.id && current.request === target.request) void get().loadArchive(side, archive, inner);
+          if (current.id === target.id && current.request === target.request) void get().loadArchive(side, archive, inner, record);
         });
         return;
       }
@@ -389,6 +381,9 @@ export const usePanes = create<PanesStore>((set, get) => ({
         loadError: null,
         path: res.path,
         archive,
+        freshness: "current",
+        refreshError: null,
+        ...recordNavigation(t, { path: res.path, archive }, record),
         raw: res.entries,
         filter: "",
         entries: rebuildEntries(res.entries, res.path, t.sort, true),

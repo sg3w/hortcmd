@@ -13,6 +13,7 @@
 // ============================================================
 
 import type { AppError, DirEntry, GitStatus } from "@/ipc/bindings";
+import type { HistoryEntry } from "./history";
 import { splitName } from "@/lib/format";
 import { isRoot } from "@/lib/path";
 import { useSettings } from "../settingsStore";
@@ -73,7 +74,7 @@ export interface TabState {
   /** Git status of the folder (null = not loaded yet / disabled). */
   git: GitStatus | null;
   /** Navigation history of this tab (back/forward). */
-  history: string[];
+  history: HistoryEntry[];
   historyIndex: number;
 }
 
@@ -111,7 +112,7 @@ export function newTab(path = ""): TabState {
     snapshot: null,
     compareHidden: null,
     git: null,
-    history: path ? [path] : [],
+    history: path ? [{ path, archive: null }] : [],
     historyIndex: path ? 0 : -1,
   };
 }
