@@ -13,6 +13,7 @@
 import { create } from "zustand";
 import { historyLocation, recordNavigation, type HistoryNavigation } from "./panes/history";
 import { asAppError } from "@/lib/appError";
+import { describeErrorFull } from "./errorText";
 import type { RefreshStatus } from "@/ipc/bindings/RefreshStatus";
 import type { RefreshSubscription } from "@/ipc/bindings/RefreshSubscription";
 import type { DirListing, GitStatus } from "@/ipc/bindings";
@@ -358,7 +359,6 @@ export const usePanes = create<PanesStore>((set, get) => ({
       res = await listArchive(archive, inner, archivePassword(archive));
     } catch (e) {
       if (!applyRequest(target, t => ({ ...t, loading: false, loadError: asAppError(e) ?? String(e) }))) return;
-      const msg = String(e);
       if (isPasswordError(e)) {
         // Encrypted archive: ask for the password and load again.
         promptArchivePassword(archive, isWrongPassword(e), () => {
@@ -369,7 +369,7 @@ export const usePanes = create<PanesStore>((set, get) => ({
       }
       useOps.getState().requestConfirm({
         title: translate("archive.error"),
-        message: msg,
+        message: describeErrorFull(e),
         danger: true,
         onConfirm: () => {},
       });

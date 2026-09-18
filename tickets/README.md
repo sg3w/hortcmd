@@ -1,7 +1,7 @@
 # Ticket organization
 
 All tickets below 100 and tickets 100–107 have been completed.
-Tickets 125–126, 128, 137 and the discovered issues 300–301 and 303–305 are also complete. There are
+Tickets 125–126, 128, 137 and the discovered issues 300–301 and 303–306 are also complete. There are
 **26 open tickets**: 108–124, 127 and 129–136. Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
@@ -76,8 +76,10 @@ historical references while active links use the current filenames.
 
 - [305](done/305-archive-password-error-dispatch.done.md): preserve structured archive password errors for password prompts.
 
+- [306](done/306-archive-listing-error-presentation.done.md): present structured archive listing failures correctly.
+
 ## Current implementation batch
 
 Requested: 20 additional code tickets, excluding Windows/Linux-specific work.
-Completed in this batch: **128, 137, 300, 107, 301, 303, 304, 125, 305, 126 (10 of 20)**. New findings are recorded above.
+Completed in this batch: **128, 137, 300, 107, 301, 303, 304, 125, 305, 126, 306 (11 of 20)**. New findings are recorded above.
 
