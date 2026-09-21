@@ -334,13 +334,16 @@ mod tests {
         assert!(failure().unwrap().is(code::ARCHIVE_LIMIT));
     }
     #[test]
-    fn legacy_zip_lzma_input_is_consumed_once() {
+    fn zip_lzma_input_is_consumed_once() {
         let original = vec![b'a'; 40_000];
         let options = xz2::stream::LzmaOptions::new_preset(1).unwrap();
         let stream = xz2::stream::Stream::new_lzma_encoder(&options).unwrap();
         let mut encoder = xz2::write::XzEncoder::new_stream(Vec::new(), stream);
         encoder.write_all(&original).unwrap();
-        let encoded = encoder.finish().unwrap();
+        let alone = encoder.finish().unwrap();
+        let mut encoded = vec![4, 3, 5, 0];
+        encoded.extend_from_slice(&alone[..5]);
+        encoded.extend_from_slice(&alone[13..]);
         let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
         writer
             .start_file(
@@ -352,6 +355,8 @@ mod tests {
         writer.write_all(&encoded).unwrap();
         let mut bytes = writer.finish().unwrap().into_inner();
         let central = bytes.windows(4).position(|b| b == b"PK\x01\x02").unwrap();
+        bytes[6..8].copy_from_slice(&2u16.to_le_bytes());
+        bytes[central + 8..central + 10].copy_from_slice(&2u16.to_le_bytes());
         bytes[8..10].copy_from_slice(&14u16.to_le_bytes());
         bytes[central + 10..central + 12].copy_from_slice(&14u16.to_le_bytes());
         bytes[14..18].copy_from_slice(&crc(&original).to_le_bytes());

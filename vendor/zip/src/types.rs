@@ -442,6 +442,8 @@ pub struct ZipFileData {
     pub is_utf8: bool,
     /// True if the file uses a data-descriptor section
     pub using_data_descriptor: bool,
+    /// Whether ZIP LZMA data requires an end-of-stream marker (general-purpose bit 1).
+    pub lzma_has_eos: bool,
     /// Compression method used to store the file
     pub compression_method: crate::compression::CompressionMethod,
     /// Compression level to store the file
@@ -653,6 +655,7 @@ impl ZipFileData {
             version_made_by: DEFAULT_VERSION,
             encrypted: options.encrypt_with.is_some(),
             using_data_descriptor: false,
+            lzma_has_eos: false,
             is_utf8: !file_name.is_ascii(),
             compression_method,
             compression_level: options.compression_level,
@@ -737,6 +740,7 @@ impl ZipFileData {
             version_made_by: version_made_by as u8,
             encrypted,
             using_data_descriptor,
+            lzma_has_eos: flags & 2 != 0,
             is_utf8,
             compression_method,
             compression_level: None,
@@ -782,7 +786,13 @@ impl ZipFileData {
         };
         let encrypted_bit: u16 = if self.encrypted { 1u16 << 0 } else { 0 };
 
-        utf8_bit | encrypted_bit
+        let lzma_bit =
+            if self.compression_method == crate::CompressionMethod::LZMA && self.lzma_has_eos {
+                2
+            } else {
+                0
+            };
+        utf8_bit | encrypted_bit | lzma_bit
     }
 
     fn clamp_size_field(&self, field: u64) -> u32 {
@@ -1123,6 +1133,7 @@ mod test {
             version_made_by: 0,
             encrypted: false,
             using_data_descriptor: false,
+            lzma_has_eos: false,
             is_utf8: true,
             compression_method: crate::compression::CompressionMethod::Stored,
             compression_level: None,

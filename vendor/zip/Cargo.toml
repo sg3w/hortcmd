@@ -97,7 +97,7 @@ deflate-zopfli = [
     "zopfli",
     "_deflate-any",
 ]
-lzma = ["lzma-rs/stream"]
+lzma = ["dep:xz2"]
 nt-time = ["dep:nt-time"]
 unreserved = []
 xz = ["dep:xz2"]
@@ -168,11 +168,6 @@ optional = true
 
 [dependencies.indexmap]
 version = "2"
-
-[dependencies.lzma-rs]
-version = "0.3"
-optional = true
-default-features = false
 
 [dependencies.memchr]
 version = "2.7"

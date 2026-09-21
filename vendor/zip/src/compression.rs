@@ -239,7 +239,12 @@ impl<R: io::BufRead> io::Read for Decompressor<R> {
 }
 
 impl<R: io::BufRead> Decompressor<R> {
-    pub fn new(reader: R, compression_method: CompressionMethod) -> crate::result::ZipResult<Self> {
+    pub fn new(
+        reader: R,
+        compression_method: CompressionMethod,
+        _size: u64,
+        _lzma_has_eos: bool,
+    ) -> crate::result::ZipResult<Self> {
         Ok(match compression_method {
             CompressionMethod::Stored => Decompressor::Stored(reader),
             #[cfg(feature = "_deflate-any")]
@@ -259,9 +264,9 @@ impl<R: io::BufRead> Decompressor<R> {
                 Decompressor::Zstd(decoder)
             }
             #[cfg(feature = "lzma")]
-            CompressionMethod::Lzma => {
-                Decompressor::Lzma(Box::new(crate::read::lzma::LzmaDecoder::new(reader)))
-            }
+            CompressionMethod::Lzma => Decompressor::Lzma(Box::new(
+                crate::read::lzma::LzmaDecoder::new(reader, _size, _lzma_has_eos),
+            )),
             #[cfg(feature = "xz")]
             CompressionMethod::Xz => Decompressor::Xz(xz2::bufread::XzDecoder::new_stream(
                 reader,

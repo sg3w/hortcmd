@@ -71,8 +71,8 @@ vendor/archive-budget. Source changes are limited to:
   (dictionary reservations), aes256sha256.rs (bounded KDF, cancellation and correct
   direct-key salt copying).
 - zip: read.rs (central metadata), spec.rs (ZIP64 counts/extensions), compression.rs
-  (XZ/Zstd windows and checks), read/lzma.rs (memory/output bounds, consume input once,
-  finish buffered output at EOF).
+  (XZ/Zstd windows and checks), read/lzma.rs (ZIP method-14 framing, bounded liblzma
+  decoding, consume input once, finish buffered output at EOF), types.rs (EOS flag).
 - tar: archive.rs (entry/sparse-record accounting), entry.rs (extension-body limits).
 
 The local API belongs to the backend's dependency boundary, contains no UI/IPC
@@ -83,11 +83,11 @@ fixtures. TICKET-132 tracks upstream migration/patch retirement.
 
 Two existing defects surfaced during this work. The root dependency did not enable
 7z AES support despite advertising passwords; the feature is now enabled and tested.
-The ZIP-LZMA adapter neither consumed buffered input nor finished the decoder's
-pending output; both are corrected to make the bounded adapter usable. TICKET-131
-tracks independent ZIP-LZMA framing/conformance with externally generated archives;
-the adapter's legacy LZMA-alone framing is not claimed to cover all standard ZIP
-method-14 inputs.
+The earlier ZIP-LZMA patch fixed input consumption and pending output. Ticket 131
+also corrects its method-14 framing and end-marker handling; see
+[ZIP-LZMA conformance](zip-lzma.md). The adapter uses the already pinned xz2/liblzma
+backend with a 64 MiB decoder memory limit and the existing 8 MiB pending-output
+limit. The unused lzma-rs dependency is removed.
 
 ## Tests
 

@@ -963,3 +963,6 @@ mod tests {
         assert!(error.is(code::CANCELLED));
     }
 }
+
+#[cfg(test)]
+mod zip_lzma_tests;

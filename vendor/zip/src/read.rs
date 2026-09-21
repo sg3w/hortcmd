@@ -437,12 +437,19 @@ pub(crate) fn make_crypto_reader<'a>(
 pub(crate) fn make_reader(
     compression_method: CompressionMethod,
     crc32: u32,
+    size: u64,
+    lzma_has_eos: bool,
     reader: CryptoReader,
 ) -> ZipResult<ZipFileReader> {
     let ae2_encrypted = reader.is_ae2_encrypted();
 
     Ok(ZipFileReader::Compressed(Box::new(Crc32Reader::new(
-        Decompressor::new(io::BufReader::new(reader), compression_method)?,
+        Decompressor::new(
+            io::BufReader::new(reader),
+            compression_method,
+            size,
+            lzma_has_eos,
+        )?,
         crc32,
         ae2_encrypted,
     ))))
@@ -1131,7 +1138,13 @@ impl<R: Read + Seek> ZipArchive<R> {
 
         Ok(ZipFile {
             data: Cow::Borrowed(data),
-            reader: make_reader(data.compression_method, data.crc32, crypto_reader)?,
+            reader: make_reader(
+                data.compression_method,
+                data.crc32,
+                data.uncompressed_size,
+                data.lzma_has_eos,
+                crypto_reader,
+            )?,
         })
     }
 
@@ -1329,6 +1342,7 @@ fn central_header_to_zip_file_inner<R: Read>(
         version_made_by: version_made_by as u8,
         encrypted,
         using_data_descriptor,
+        lzma_has_eos: flags & 2 != 0,
         is_utf8,
         compression_method: CompressionMethod::parse_from_u16(compression_method),
         compression_level: None,
@@ -1918,11 +1932,19 @@ pub fn read_zipfile_from_stream<R: Read>(reader: &mut R) -> ZipResult<Option<Zip
 
     let result_crc32 = result.crc32;
     let result_compression_method = result.compression_method;
+    let result_size = result.uncompressed_size;
+    let result_lzma_has_eos = result.lzma_has_eos;
     let crypto_reader = make_crypto_reader(&result, limit_reader, None, None)?;
 
     Ok(Some(ZipFile {
         data: Cow::Owned(result),
-        reader: make_reader(result_compression_method, result_crc32, crypto_reader)?,
+        reader: make_reader(
+            result_compression_method,
+            result_crc32,
+            result_size,
+            result_lzma_has_eos,
+            crypto_reader,
+        )?,
     }))
 }
 
