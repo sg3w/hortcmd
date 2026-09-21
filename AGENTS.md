@@ -56,19 +56,23 @@ Avoid:
 
 ## Development
 
-Each ticket must be implemented on its own Git branch, created from the current
-local `main` before starting work. Name it `codex/ticket-<number>-<short-description>`.
-Keep changes scoped to that ticket; use a separate branch for each additional ticket.
+Follow this workflow for every ticket, in order:
 
-When a ticket is complete, rename its file from `<number>-<description>.md` to
-`<number>-<description>.done.md` and move it into `tickets/done/`. Update references
-to the ticket's path and include the move in the ticket's completion commit.
+1. Start from the current local `main` and create a dedicated branch named
+   `codex/ticket-<number>-<short-description>`. Never combine multiple tickets
+   on one implementation branch.
+2. Implement only that ticket and pass `npm run check`.
+3. Rename the completed ticket from `<number>-<description>.md` to
+   `<number>-<description>.done.md`, move it into `tickets/done/`, and update
+   references to its path.
+4. Create a local Git commit containing the ticket's changes and its move to
+   `tickets/done/`. A ticket is not complete without this commit.
+5. Switch back to `main`, merge the completed ticket branch locally, and remain
+   on `main` until starting the next ticket. If conflict resolution changes
+   code, run `npm run check` again on the merged result.
 
-After completing a ticket and passing `npm run check`, create a local Git commit
-containing only the changes for that ticket. Switch to `main`, merge the ticket
-branch into it, and remain on `main` until starting the next ticket. If resolving
-merge conflicts changes the code, run `npm run check` again on the merged result.
-Do not merge unfinished tickets. Do not push commits or branches.
+Keep unfinished work on its own branch or worktree; never merge it into `main`
+or mark its ticket as done. Do not push commits, branches, or tags.
 
 Check after changes — one command, the same one CI runs:
 
