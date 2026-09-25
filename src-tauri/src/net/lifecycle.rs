@@ -459,9 +459,13 @@ pub fn probe_transport(host: &str, port: u16) -> Result<(), ConnFailure> {
             Err(e) => last = e.to_string(),
         }
     }
-    Err(ConnFailure::new(
+    Err(ConnFailure::from_error(
         FailureKind::Unreachable,
-        format!("{} nicht erreichbar: {}", target, last),
+        AppError::new(code::NET_UNREACHABLE)
+            .op("connect")
+            .with("host", bare)
+            .action(ErrorAction::Retry)
+            .detail(format!("{} nicht erreichbar: {}", target, last)),
     ))
 }
 
@@ -768,8 +772,13 @@ mod tests {
     #[test]
     fn a_refused_port_is_unreachable() {
         // Port 0 is never listening; the probe must not hang on it.
-        let err = probe_transport("127.0.0.1", 9).unwrap_err();
-        assert_eq!(err.kind, FailureKind::Unreachable);
+        for host in ["127.0.0.1", "http://127.0.0.1/"] {
+            let err = probe_transport(host, 0).unwrap_err();
+            assert_eq!(err.kind, FailureKind::Unreachable);
+            assert!(err.error.is(code::NET_UNREACHABLE));
+            let wire = serde_json::to_value(&err.error).unwrap();
+            assert_eq!(wire["params"]["host"], "127.0.0.1");
+        }
     }
 
     #[test]

@@ -31,3 +31,9 @@ reachable`.
 - Test: connect to a host with a closed/filtered port; assert the surfaced
   error message includes the actual host, not the literal placeholder.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Failed TCP attempts now return NET_UNREACHABLE with the normalized host parameter and retry action. The refused-port regression verifies serialized hostname parameters for both plain and URL-style input.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.
