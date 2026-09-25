@@ -236,6 +236,13 @@ describe("settings validation", () => {
     expect(repairs.any).toBe(true);
   });
 
+  it("normalizes legacy association keys and records collisions", () => {
+    const { value, repairs } = load({ ...V0, associations: { ".LOG": "p1", log: "p1", ".": "p1", constructor: "p1" } }, 1);
+    expect(value.associations).toEqual({ log: "p1", constructor: "p1" });
+    expect(repairs.fields).toEqual(expect.arrayContaining(["associations..LOG", "associations.log", "associations.."]));
+    expect(load(value, 1).repairs.any).toBe(false);
+  });
+
   it("caps lists so a stored loop cannot fill the quota", () => {
     const favorites = Array.from({ length: 5000 }, (_, i) => ({
       name: `f${i}`,

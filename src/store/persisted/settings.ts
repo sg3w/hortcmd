@@ -235,7 +235,7 @@ export function validateSettings(
     // An association pointing at a program that is gone opens nothing
     // and cannot be seen in the settings — it is a dangling reference,
     // and dropping it is the only outcome the user could have wanted.
-    associations: record(
+    associations: normalizeAssociations(record(
       s.associations,
       (v) => {
         if (typeof v !== "string" || !programIds.has(v)) return null;
@@ -244,7 +244,7 @@ export function validateSettings(
       "associations",
       r,
       MAX_ASSOCIATIONS,
-    ),
+    ), r),
     defaultEditor: str(s.defaultEditor, "", "defaultEditor", r, MAX_PATH),
     editorTrigger: oneOf(s.editorTrigger, EDITOR_TRIGGERS, "shiftF4", "editorTrigger", r),
   };
@@ -268,7 +268,11 @@ export function normalizeAssociations(
     }
     if (key !== ext) r.note(`associations.${ext}`);
     // First wins, so a normalization collision is deterministic.
-    if (!(key in out)) out[key] = id;
+    if (Object.prototype.hasOwnProperty.call(out, key)) {
+      r.note(`associations.${ext}`);
+    } else {
+      Object.defineProperty(out, key, { value: id, enumerable: true, writable: true, configurable: true });
+    }
   }
   return out;
 }

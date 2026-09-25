@@ -32,3 +32,9 @@ weight, appearing lost to the user even though nothing flagged a repair.
   key (e.g. `.LOG`); assert it's normalized and matches `programForExtension`
   lookups afterward.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Settings validation now normalizes association extensions, reports repairs and deterministic first-wins collisions, and preserves keys that match inherited object properties. Rehydration regression coverage verifies normalized keys and idempotent validation.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.
