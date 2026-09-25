@@ -328,3 +328,18 @@ it("shows unavailable health checks without claiming active monitoring", () => {
   expect(rowControls(status({ phase: "connected", monitor: "unsupported" })).status)
     .toEqual({ key: "net.monitor.unsupported" });
 });
+
+describe("refreshing a pane whose connection came back", () => {
+  it("matches the pane path by authority, not by a rebuilt prefix", async () => {
+    const { usePanes } = await import("@/store/panesStore");
+    const refresh = vi.fn();
+    usePanes.setState(s => ({
+      refresh,
+      left: { ...s.left, activeTab: 0, tabs: [{ ...s.left.tabs[0], path: "sftp://U@Host:22/srv/data" }] },
+      right: { ...s.right, activeTab: 0, tabs: [{ ...s.right.tabs[0], path: "sftp://u@other:22/srv" }] },
+    }));
+    useNet.setState({ connections: [status({ phase: "disconnected" })] });
+    useNet.getState().applyStates([status({ phase: "connected" })]);
+    expect(refresh.mock.calls.map(c => c[0])).toEqual(["left"]);
+  });
+});
