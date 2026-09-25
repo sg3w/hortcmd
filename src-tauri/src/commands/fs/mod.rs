@@ -24,6 +24,7 @@ mod drives_native;
 pub mod file;
 pub mod filecompare;
 pub mod git;
+mod glob;
 pub mod listings;
 pub mod preview;
 mod process_lock;

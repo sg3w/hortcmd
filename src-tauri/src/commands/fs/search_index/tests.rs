@@ -557,3 +557,17 @@ fn unrelated_listing_cache_changes_preserve_index_freshness_and_pagination() {
         "the fallback freshness interval still applies"
     );
 }
+
+#[test]
+fn indexed_globs_support_the_same_alternatives_as_live_search() {
+    let pattern = glob("*.txt;*.md report?.csv", false).unwrap();
+    for name in ["readme.TXT", "notes.md", "report1.csv"] {
+        assert!(pattern.is_match(name));
+    }
+    for name in ["notes.md.bak", "report12.csv", "photo.png"] {
+        assert!(!pattern.is_match(name));
+    }
+    assert!(glob("[draft].txt", true).unwrap().is_match("[draft].txt"));
+    assert!(!glob("*.TXT", true).unwrap().is_match("readme.txt"));
+    assert!(glob(&"a".repeat(1025), false).is_err());
+}

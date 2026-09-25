@@ -2,7 +2,7 @@
 
 All tickets below 100 and tickets 100–110 have been completed.
 Tickets 125–126, 128, 131, 134, 137 and the discovered issues 300–301 and 303–316 are also complete. There are
-**48 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
+**47 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
 issues 317–377 (excluding completed tickets listed below). Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
@@ -126,7 +126,7 @@ Correctness (frontend):
 [368](368-drive-select-redundant-refresh.md).
 
 Reuse/efficiency cleanup:
-[360](360-glob-to-regex-duplicated-converters.md), [361](361-crawler-bytes-recomputed-on-step.md),
+[360](done/360-glob-to-regex-duplicated-converters.done.md), [361](361-crawler-bytes-recomputed-on-step.md),
 [362](362-mtime-of-triplicated.md), [363](363-icon-mount-table-no-batch-cache.md),
 [364](364-archive-is-link-mode-duplicated.md), [367](367-net-store-duplicated-authority-logic.md).
 
@@ -232,3 +232,5 @@ policy-valid disposition. No advisory exceptions were added by this backlog upda
 - [357](done/357-run-mkdir-silent-failure.done.md): completed and verified.
 
 - [358](done/358-extract-no-confirm-double-submit-guard.done.md): completed and verified.
+
+- [360](done/360-glob-to-regex-duplicated-converters.done.md): completed and verified.

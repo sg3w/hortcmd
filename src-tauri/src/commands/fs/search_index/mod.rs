@@ -38,10 +38,7 @@ pub(super) fn glob(pattern: &str, sensitive: bool) -> AppResult<regex::Regex> {
     if pattern.len() > 1024 {
         return Err(bad("index pattern limit"));
     }
-    let pattern = regex::escape(pattern)
-        .replace("\\*", ".*")
-        .replace("\\?", ".");
-    regex::RegexBuilder::new(&format!("^(?:{pattern})$"))
+    regex::RegexBuilder::new(&super::glob::pattern(pattern))
         .case_insensitive(!sensitive)
         .size_limit(1024 * 1024)
         .build()

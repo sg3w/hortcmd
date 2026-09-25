@@ -143,32 +143,7 @@ impl Limits {
 
 /// Converts a glob pattern (`*`, `?`, multiple separated by space/`;`) to regex.
 fn glob_to_regex(pattern: &str, case_sensitive: bool) -> AppResult<regex::Regex> {
-    let parts: Vec<String> = pattern
-        .split([';', ' ', '\t'])
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(|g| {
-            let mut out = String::new();
-            for ch in g.chars() {
-                match ch {
-                    '*' => out.push_str(".*"),
-                    '?' => out.push('.'),
-                    c if ".+^${}()|[]\\".contains(c) => {
-                        out.push('\\');
-                        out.push(c);
-                    }
-                    c => out.push(c),
-                }
-            }
-            out
-        })
-        .collect();
-    let body = if parts.is_empty() {
-        ".*".to_string()
-    } else {
-        parts.join("|")
-    };
-    build_regex(&format!("^(?:{})$", body), case_sensitive)
+    build_regex(&super::glob::pattern(pattern), case_sensitive)
 }
 
 fn build_regex(pattern: &str, case_sensitive: bool) -> AppResult<regex::Regex> {

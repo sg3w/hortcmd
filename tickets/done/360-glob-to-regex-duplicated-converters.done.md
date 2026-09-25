@@ -29,3 +29,9 @@ module family.
   add a test covering the previously-divergent behavior (multi-pattern glob)
   for whichever call site gains it.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Live and indexed search now use one anchored glob converter with the same wildcard and multiple-pattern semantics. Indexed search retains its length and regex allocation limits. Regressions cover alternatives, literal metacharacters, case sensitivity and oversized patterns.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.
