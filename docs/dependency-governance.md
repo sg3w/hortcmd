@@ -71,6 +71,8 @@ The first live scan on 2026-09-25 found 18 Rust findings and no npm findings.
 Existing Rust release blockers include h2, quick-xml (two versions/two advisories),
 rsa (two versions), russh, russh-cryptovec, rustls, suppaftp and time, plus six
 unmaintained-crate findings. The generated audit report carries IDs and versions.
+The [remediation backlog](../tickets/README.md#rust-advisory-remediation-2026-09-25)
+maps all 18 findings to tickets 369–377.
 These need remediation/justified narrowly scoped mitigation before release; this
 governance ticket does not certify the existing dependency graph vulnerability-free.
 

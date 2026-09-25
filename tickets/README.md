@@ -2,8 +2,8 @@
 
 All tickets below 100 and tickets 100–110 have been completed.
 Tickets 125–126, 128, 131, 134, 137 and the discovered issues 300–301 and 303–316 are also complete. There are
-**73 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
-issues 317–368. Dependencies use the current paths.
+**82 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
+issues 317–377. Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
 filenames ending in `.done.md`. This also applies to previously completed support
@@ -139,3 +139,26 @@ Completed in this batch: **128, 137, 300, 107, 301, 303, 304, 125, 305, 126, 306
 ## Review-fix batch (2026-09-25)
 
 Completed: 307, 308, 309, 310, 311, 312, 313, 314, 315, 316.
+
+## Rust advisory remediation (2026-09-25)
+
+Nine open remediation tickets cover all **18** crate/version/advisory findings
+from ticket 110’s audit, without duplicate ownership. Related versions/advisories
+are grouped where they share an upstream fix. P1/P2 are backlog priorities, not
+CVSS ratings. Tickets 376–377 cover maintenance findings.
+
+| Ticket | Remediation | Findings |
+| --- | --- | --- |
+| [369](369-h2-empty-data-frame-resource-exhaustion.md) | Upgrade h2 to bound empty HTTP/2 DATA frames | 1 |
+| [370](370-rustls-handshake-encryption-level-boundaries.md) | Upgrade rustls to enforce TLS handshake encryption levels | 1 |
+| [371](371-quick-xml-parser-resource-exhaustion.md) | Remove both quick-xml denial-of-service vulnerabilities from both dependency lines | 4 |
+| [372](372-russh-and-cryptovec-allocation-bounds.md) | Fix SSH transport and CryptoVec allocation bounds | 2 |
+| [373](373-rsa-marvin-timing-side-channel.md) | Remediate or prove mitigation for both RSA Marvin findings | 2 |
+| [374](374-suppaftp-control-channel-command-injection.md) | Prevent FTP control-channel command injection | 1 |
+| [375](375-time-parser-stack-exhaustion.md) | Remove the time parser stack-exhaustion finding | 1 |
+| [376](376-replace-unmaintained-proc-macro-error.md) | Replace the unmaintained proc-macro-error dependency | 1 |
+| [377](377-replace-unmaintained-unic-dependency-family.md) | Replace the five unmaintained rust-unic crates | 5 |
+
+Use each ticket’s pinned audit evidence and verification criteria. Refresh the
+audit before implementation; releases remain blocked until all findings have a
+policy-valid disposition. No advisory exceptions were added by this backlog update.
