@@ -115,7 +115,7 @@ fn status_of(l: Option<&Meta>, r: Option<&Meta>) -> &'static str {
 
 /// Compares level by level and sends each directory batch immediately
 /// over the channel to the frontend (streaming), before descending into
-/// subfolders. `count` counts the already-sent entries; on
+/// subfolders using an explicit stack. `count` counts the already-sent entries; on
 /// reaching `MAX_ENTRIES` it aborts. Returns `true` = limit
 /// reached (result truncated).
 pub(crate) fn walk_compare(
@@ -126,72 +126,74 @@ pub(crate) fn walk_compare(
     channel: &dyn Fn(Vec<DiffEntry>),
     count: &mut usize,
 ) -> AppResult<bool> {
-    let ljoin = if rel.is_empty() {
-        lroot.to_path_buf()
-    } else {
-        lroot.join(rel)
-    };
-    let rjoin = if rel.is_empty() {
-        rroot.to_path_buf()
-    } else {
-        rroot.join(rel)
-    };
-    let (lfiles, lsubs) = read_level(&ljoin, !rel.is_empty())?;
-    let (rfiles, rsubs) = read_level(&rjoin, !rel.is_empty())?;
-
-    // Compare the files of this level (names of both sides, sorted).
-    let mut names: BTreeSet<&String> = BTreeSet::new();
-    names.extend(lfiles.keys());
-    names.extend(rfiles.keys());
-
-    let mut batch = Vec::new();
-    let mut limit_hit = false;
-    for name in names {
-        if *count >= MAX_ENTRIES {
-            limit_hit = true;
-            break;
-        }
-        let l = lfiles.get(name);
-        let r = rfiles.get(name);
-        let (left_size, left_modified) = l.copied().unwrap_or((0, 0));
-        let (right_size, right_modified) = r.copied().unwrap_or((0, 0));
-        let child_rel = if rel.is_empty() {
-            name.clone()
+    let mut pending = vec![rel.to_owned()];
+    while let Some(rel) = pending.pop() {
+        let ljoin = if rel.is_empty() {
+            lroot.to_path_buf()
         } else {
-            format!("{}/{}", rel, name)
+            lroot.join(&rel)
         };
-        batch.push(DiffEntry {
-            rel: child_rel,
-            name: name.clone(),
-            left: l.is_some(),
-            right: r.is_some(),
-            left_size,
-            right_size,
-            left_modified,
-            right_modified,
-            status: status_of(l, r).to_string(),
-        });
-        *count += 1;
-    }
-    if !batch.is_empty() {
-        channel(batch);
-    }
-    if limit_hit || *count >= MAX_ENTRIES {
-        return Ok(true);
-    }
+        let rjoin = if rel.is_empty() {
+            rroot.to_path_buf()
+        } else {
+            rroot.join(&rel)
+        };
+        let (lfiles, lsubs) = read_level(&ljoin, !rel.is_empty())?;
+        let (rfiles, rsubs) = read_level(&rjoin, !rel.is_empty())?;
 
-    if recursive {
-        let mut subs: BTreeSet<&String> = BTreeSet::new();
-        subs.extend(lsubs.iter());
-        subs.extend(rsubs.iter());
-        for sub in subs {
+        // Compare the files of this level (names of both sides, sorted).
+        let mut names: BTreeSet<&String> = BTreeSet::new();
+        names.extend(lfiles.keys());
+        names.extend(rfiles.keys());
+
+        let mut batch = Vec::new();
+        let mut limit_hit = false;
+        for name in names {
+            if *count >= MAX_ENTRIES {
+                limit_hit = true;
+                break;
+            }
+            let l = lfiles.get(name);
+            let r = rfiles.get(name);
+            let (left_size, left_modified) = l.copied().unwrap_or((0, 0));
+            let (right_size, right_modified) = r.copied().unwrap_or((0, 0));
             let child_rel = if rel.is_empty() {
-                sub.clone()
+                name.clone()
             } else {
-                format!("{}/{}", rel, sub)
+                format!("{}/{}", rel, name)
             };
-            if walk_compare(lroot, rroot, &child_rel, recursive, channel, count)? {
-                return Ok(true);
+            batch.push(DiffEntry {
+                rel: child_rel,
+                name: name.clone(),
+                left: l.is_some(),
+                right: r.is_some(),
+                left_size,
+                right_size,
+                left_modified,
+                right_modified,
+                status: status_of(l, r).to_string(),
+            });
+            *count += 1;
+        }
+        if !batch.is_empty() {
+            channel(batch);
+        }
+        if limit_hit || *count >= MAX_ENTRIES {
+            return Ok(true);
+        }
+
+        if recursive {
+            let mut subs: BTreeSet<&String> = BTreeSet::new();
+            subs.extend(lsubs.iter());
+            subs.extend(rsubs.iter());
+            // Push in reverse so popping preserves the existing sorted DFS order.
+            for sub in subs.into_iter().rev() {
+                let child_rel = if rel.is_empty() {
+                    sub.clone()
+                } else {
+                    format!("{}/{}", rel, sub)
+                };
+                pending.push(child_rel);
             }
         }
     }
@@ -549,6 +551,66 @@ mod paired_safety_tests {
         fs::create_dir(&path).unwrap();
         Temp(path)
     }
+    #[cfg(unix)]
+    #[test]
+    fn deep_comparison_uses_bounded_call_stack() {
+        let t = temp();
+        let left = t.0.join("left");
+        let right = t.0.join("right");
+        fs::create_dir(&left).unwrap();
+        fs::create_dir(&right).unwrap();
+        let mut current = left.clone();
+        for _ in 0..256 {
+            current.push("d");
+            fs::create_dir(&current).unwrap();
+        }
+        fs::write(current.join("leaf"), "contents").unwrap();
+        let result = std::thread::Builder::new()
+            .stack_size(128 * 1024)
+            .spawn(move || {
+                let mut count = 0;
+                let truncated = walk_compare(&left, &right, "", true, &|_| {}, &mut count)?;
+                Ok::<_, AppError>((count, truncated))
+            })
+            .unwrap()
+            .join()
+            .unwrap()
+            .unwrap();
+        assert_eq!(result, (1, false));
+    }
+
+    #[test]
+    fn iterative_comparison_preserves_sorted_depth_first_batches() {
+        let t = temp();
+        let left = t.0.join("left");
+        let right = t.0.join("right");
+        fs::create_dir_all(left.join("a/nested")).unwrap();
+        fs::create_dir_all(left.join("b")).unwrap();
+        fs::create_dir(&right).unwrap();
+        for name in ["root", "a/file", "a/nested/file", "b/file"] {
+            fs::write(left.join(name), "x").unwrap();
+        }
+        let seen = std::cell::RefCell::new(Vec::new());
+        let mut count = 0;
+        assert!(!walk_compare(
+            &left,
+            &right,
+            "",
+            true,
+            &|batch| {
+                seen.borrow_mut()
+                    .extend(batch.into_iter().map(|entry| entry.rel));
+            },
+            &mut count
+        )
+        .unwrap());
+        assert_eq!(
+            seen.into_inner(),
+            ["root", "a/file", "a/nested/file", "b/file"]
+        );
+        assert_eq!(count, 4);
+    }
+
     #[test]
     fn vanished_entries_and_iteration_errors_do_not_discard_siblings() {
         let t = temp();

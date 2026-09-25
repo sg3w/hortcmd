@@ -27,3 +27,9 @@ hard crash instead of a `Result`.
   levels, within filesystem path-length limits where possible); assert the
   command returns an error/result rather than crashing the process.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Directory comparison now traverses an explicit work stack instead of recursive Rust calls, preserving sorted depth-first batches and existing entry limits. A 256-level filesystem regression completes on a 128 KiB thread stack (within macOS path limits), and a separate regression verifies traversal order.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.
