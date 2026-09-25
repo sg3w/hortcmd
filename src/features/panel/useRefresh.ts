@@ -6,6 +6,11 @@ import { useNet } from "@/features/net/netStore";
 /** UI ownership and visibility only; policy, paths and scheduling live in Rust. */
 export function useRefresh() {
   useEffect(() => {
+    // One snapshot of profiles and connections for the whole app: the
+    // pickers that show them are mounted once per pane, and each of them
+    // asking would issue the same two calls twice (TICKET-368). Later
+    // changes arrive through the store, not through another fetch.
+    void useNet.getState().refresh();
     if (!hasTauri()) return;
     let disposed = false;
     let running = false;
