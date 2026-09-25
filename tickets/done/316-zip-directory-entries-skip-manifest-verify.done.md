@@ -35,3 +35,16 @@ fails closed.
   case that mutates a ZIP's directory entries between preflight and extract;
   assert extraction fails closed like the tar/7z equivalent.
 - `npm run check`.
+
+## Implementation
+
+ZIP directory entries now verify name, directory kind, declared size and link
+mode against the preflight manifest before staging, including unselected entries.
+Tests rewrite the ZIP after preflight with an injected directory or an implicit
+parent changed to an explicit entry; both fail closed and leave existing output
+untouched. This closes the directory metadata bypass, not arbitrary same-metadata
+content mutation (which the manifest does not authenticate).
+
+Validation: the full `npm run check` passed with `RUST_TEST_THREADS=1`. The
+parallel run passed the new ZIP test but hit an existing timestamp-based temporary
+directory collision in comparison tests; serialization avoids that fixture race.

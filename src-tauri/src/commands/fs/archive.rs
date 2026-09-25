@@ -800,6 +800,58 @@ mod tests {
     }
 
     #[test]
+    fn zip_directory_changes_after_preflight_are_rejected() {
+        fn write_zip(path: &Path, extra: Option<&str>) {
+            let mut zip = ZipWriter::new(File::create(path).unwrap());
+            let options = SimpleFileOptions::default();
+            zip.add_directory("approved/", options).unwrap();
+            if let Some(extra) = extra {
+                zip.add_directory(extra, options).unwrap();
+            }
+            zip.start_file("implicit/file.txt", options).unwrap();
+            zip.write_all(b"payload").unwrap();
+            zip.finish().unwrap();
+        }
+        for extra in ["injected/", "implicit/"] {
+            for selected_only in [false, true] {
+                let root = tmp_dir("zip-directory-change");
+                let archive = root.join("changed.zip");
+                let destination = root.join("output");
+                fs::create_dir(&destination).unwrap();
+                fs::write(destination.join("existing"), b"keep").unwrap();
+                write_zip(&archive, None);
+                let manifest =
+                    preflight(archive.to_str().unwrap(), &None, safety::Limits::default()).unwrap();
+                // The extraction pass reopens the archive. Neither a new name nor
+                // a newly explicit directory may bypass preflight accounting.
+                write_zip(&archive, Some(extra));
+                let mut stage = staging::Stage::new(&destination).unwrap();
+                let targets = if selected_only {
+                    HashSet::from(["approved".to_owned()])
+                } else {
+                    HashSet::new()
+                };
+                let error = extract_zip(
+                    archive.to_str().unwrap(),
+                    "",
+                    manifest,
+                    &targets,
+                    &mut stage,
+                    &None,
+                    &mut progress(),
+                )
+                .unwrap_err();
+                assert!(error.is(code::ARCHIVE_CORRUPT));
+                assert_eq!(error.op.as_deref(), Some("extract-changed"));
+                stage.cleanup().unwrap();
+                assert_eq!(fs::read(destination.join("existing")).unwrap(), b"keep");
+                assert_eq!(fs::read_dir(&destination).unwrap().count(), 1);
+                fs::remove_dir_all(root).unwrap();
+            }
+        }
+    }
+
+    #[test]
     fn zip_traversal_and_duplicates_fail_before_output() {
         for names in [
             ["safe", "../outside"],

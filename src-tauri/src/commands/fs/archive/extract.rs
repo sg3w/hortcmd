@@ -160,6 +160,13 @@ pub(super) fn extract_zip(
     for i in 0..zip.len() {
         let e = zip.by_index_raw(i).map_err(AppError::from)?;
         if e.is_dir() {
+            let mode = e.unix_mode().unwrap_or(0) & 0o170000;
+            manifest.verify(
+                e.name(),
+                true,
+                e.size(),
+                mode != 0 && mode != 0o100000 && mode != 0o040000,
+            )?;
             if let Some(rel) = match_target(e.name(), base, all, targets) {
                 dest.directory(&rel, &manifest.limits)?;
             }
