@@ -8,43 +8,78 @@ use objc2_app_kit::{
     NSBitmapImageFileType, NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSWorkspace,
 };
 use objc2_foundation::{NSDictionary, NSPoint, NSRect, NSSize, NSString};
-use std::path::{Component, Path};
+use std::{
+    cell::OnceCell,
+    collections::HashMap,
+    path::{Component, Path, PathBuf},
+};
 
-fn local_icon_path(request: &FileIconRequest) -> Option<&str> {
-    if request.is_symlink {
-        return None;
-    }
-    let raw = request.path.as_deref()?;
-    let path = Path::new(raw);
-    if !path.is_absolute() || path.components().any(|p| matches!(p, Component::ParentDir)) {
-        return None;
-    }
-    // Cached kernel mount metadata; never contact a network mount for its icon.
-    let mounts = super::super::drives_native::icon_mounts()?;
-    let mount = mounts
-        .iter()
-        .filter(|m| path.starts_with(&m.drive.mount))
-        .max_by_key(|m| m.drive.mount.len())?;
-    if mount.remote {
-        return None;
-    }
-    // Do not resolve links, even if the frontend's listing metadata is stale.
-    for ancestor in path.ancestors().collect::<Vec<_>>().into_iter().rev() {
-        if std::fs::symlink_metadata(ancestor)
-            .ok()?
-            .file_type()
-            .is_symlink()
-        {
-            return None;
-        }
-    }
-    Some(raw)
+/// Metadata is reused only within one bounded worker batch, never across calls.
+#[derive(Default)]
+pub(super) struct Batch {
+    mounts: OnceCell<Option<Vec<super::super::drives_native::Mount>>>,
+    parents: HashMap<PathBuf, bool>,
 }
 
-pub(super) fn render(request: &FileIconRequest) -> Option<String> {
+impl Batch {
+    fn local_icon_path<'a>(&mut self, request: &'a FileIconRequest) -> Option<&'a str> {
+        self.local_icon_path_with(request, |path| {
+            std::fs::symlink_metadata(path)
+                .ok()
+                .map(|meta| meta.file_type().is_symlink())
+        })
+    }
+
+    fn local_icon_path_with<'a>(
+        &mut self,
+        request: &'a FileIconRequest,
+        mut is_link: impl FnMut(&Path) -> Option<bool>,
+    ) -> Option<&'a str> {
+        if request.is_symlink {
+            return None;
+        }
+        let raw = request.path.as_deref()?;
+        let path = Path::new(raw);
+        if !path.is_absolute() || path.components().any(|p| matches!(p, Component::ParentDir)) {
+            return None;
+        }
+        // Lazily fetch the mount table once; type-only batches need no lookup.
+        let mounts = self
+            .mounts
+            .get_or_init(super::super::drives_native::icon_mounts)
+            .as_ref()?;
+        let mount = mounts
+            .iter()
+            .filter(|m| path.starts_with(&m.drive.mount))
+            .max_by_key(|m| m.drive.mount.len())?;
+        if mount.remote {
+            return None;
+        }
+        if let Some(parent) = path.parent() {
+            let clean = self.parents.entry(parent.to_path_buf()).or_insert_with(|| {
+                parent
+                    .ancestors()
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .all(|ancestor| is_link(ancestor) == Some(false))
+            });
+            if !*clean {
+                return None;
+            }
+        }
+        // Always inspect the requested entry itself, including stale link flags.
+        if is_link(path) != Some(false) {
+            return None;
+        }
+        Some(raw)
+    }
+}
+
+pub(super) fn render(request: &FileIconRequest, batch: &mut Batch) -> Option<String> {
     autoreleasepool(|_| {
         let workspace = NSWorkspace::sharedWorkspace();
-        let image = if let Some(path) = local_icon_path(request) {
+        let image = if let Some(path) = batch.local_icon_path(request) {
             workspace.iconForFile(&NSString::from_str(path))
         } else {
             let kind = if request.is_dir {
@@ -93,6 +128,66 @@ pub(super) fn render(request: &FileIconRequest) -> Option<String> {
 mod tests {
     use super::*;
     #[test]
+    fn a_batch_reuses_ancestors_but_checks_each_leaf_and_refuses_remote_paths() {
+        use super::super::super::{dir::Drive, drives_native::Mount};
+        fn batch() -> Batch {
+            let batch = Batch::default();
+            let mounts = vec![
+                Mount {
+                    drive: Drive {
+                        name: "local".into(),
+                        mount: "/".into(),
+                        total: 0,
+                        free: 0,
+                    },
+                    remote: false,
+                },
+                Mount {
+                    drive: Drive {
+                        name: "remote".into(),
+                        mount: "/remote".into(),
+                        total: 0,
+                        free: 0,
+                    },
+                    remote: true,
+                },
+            ];
+            assert!(batch.mounts.set(Some(mounts)).is_ok());
+            batch
+        }
+        let calls = std::cell::Cell::new(0);
+        let mut stat = |path: &Path| {
+            calls.set(calls.get() + 1);
+            Some(path.ends_with("link"))
+        };
+        let mut batch_one = batch();
+        let mut req = FileIconRequest {
+            id: "test".into(),
+            name: "a".into(),
+            path: Some("/local/dir/a".into()),
+            is_dir: false,
+            is_symlink: false,
+            pixels: 28,
+        };
+        assert!(batch_one.local_icon_path_with(&req, &mut stat).is_some());
+        assert_eq!(calls.get(), 4);
+        req.path = Some("/local/dir/b".into());
+        assert!(batch_one.local_icon_path_with(&req, &mut stat).is_some());
+        assert_eq!(calls.get(), 5);
+        req.path = Some("/local/dir/link".into());
+        assert!(batch_one.local_icon_path_with(&req, &mut stat).is_none());
+        assert_eq!(calls.get(), 6);
+        req.path = Some("/remote/file".into());
+        assert!(batch_one.local_icon_path_with(&req, &mut stat).is_none());
+        assert_eq!(calls.get(), 6);
+        req.path = Some("/local/dir/a".into());
+        assert!(batch().local_icon_path_with(&req, &mut stat).is_some());
+        assert_eq!(calls.get(), 10);
+        req.path = Some("/local/link/file".into());
+        assert!(batch_one.local_icon_path_with(&req, &mut stat).is_none());
+    }
+
+    #[test]
     #[ignore = "native Workspace custom-icon integration and benchmark; macOS only"]
     fn native_custom_and_benchmark() {
         let root = std::env::temp_dir().join(format!("hortcmd-icons-{}", std::process::id()));
@@ -115,7 +210,7 @@ mod tests {
             is_symlink: false,
             pixels: 80,
         };
-        let before = render(&request).unwrap();
+        let before = render(&request, &mut Batch::default()).unwrap();
         let workspace = NSWorkspace::sharedWorkspace();
         let custom =
             workspace.iconForFile(&NSString::from_str("/System/Applications/TextEdit.app"));
@@ -124,11 +219,11 @@ mod tests {
             &NSString::from_str(file.to_str().unwrap()),
             objc2_app_kit::NSWorkspaceIconCreationOptions::empty()
         ));
-        let after = render(&request).unwrap();
+        let after = render(&request, &mut Batch::default()).unwrap();
         assert_ne!(before, after, "individual icon must be honored");
         let mut link = request.clone();
         link.is_symlink = true;
-        assert!(local_icon_path(&link).is_none());
+        assert!(Batch::default().local_icon_path(&link).is_none());
         if let Ok(output) = std::env::var("HORTCMD_ICON_PROBE_OUTPUT") {
             std::fs::write(
                 output,
@@ -149,7 +244,7 @@ mod tests {
                 std::fs::write(&path, []).unwrap();
                 req.path = Some(path.to_str().unwrap().into());
                 req.pixels = 28;
-                total += render(&req).unwrap().len();
+                total += render(&req, &mut Batch::default()).unwrap().len();
             }
             eprintln!(
                 "96 local icons pass {pass}: {:?}, {total} transport bytes",
@@ -170,7 +265,7 @@ mod tests {
                 is_symlink: false,
                 pixels,
             };
-            let image = render(&req).expect("native icon");
+            let image = render(&req, &mut Batch::default()).expect("native icon");
             let bytes = STANDARD.decode(image.split_once(',').unwrap().1).unwrap();
             assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n");
             assert_eq!(

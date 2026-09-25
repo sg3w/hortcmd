@@ -27,3 +27,9 @@ batch size for work whose result is identical within one batch/directory.
 - Existing icon tests continue to pass; optionally a test/benchmark showing
   reduced syscall count for a batch of icons from the same directory.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+The macOS icon worker now owns metadata for one batch: the mount table is fetched lazily once and parent-chain checks are reused for sibling requests. Every leaf is still checked, remote mounts are refused, and nothing survives into the next batch. A mocked metadata regression verifies reduced lookup counts and retained refusal behavior without native GUI testing.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

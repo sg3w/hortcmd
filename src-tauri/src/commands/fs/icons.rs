@@ -34,7 +34,11 @@ pub async fn file_icons(requests: Vec<FileIconRequest>) -> Vec<FileIconResult> {
     };
     tauri::async_runtime::spawn_blocking(move || {
         let _permit = permit;
-        requests.into_iter().map(render).collect()
+        let mut batch = IconBatch::default();
+        requests
+            .into_iter()
+            .map(|request| render(request, &mut batch))
+            .collect()
     })
     .await
     .unwrap_or_default()
@@ -44,7 +48,13 @@ fn fallback(id: String) -> FileIconResult {
     FileIconResult { id, image: None }
 }
 
-fn render(request: FileIconRequest) -> FileIconResult {
+#[derive(Default)]
+struct IconBatch {
+    #[cfg(target_os = "macos")]
+    native: macos::Batch,
+}
+
+fn render(request: FileIconRequest, _batch: &mut IconBatch) -> FileIconResult {
     if !(12..=128).contains(&request.pixels)
         || request.id.len() > 8192
         || request.name.len() > 1024
@@ -53,7 +63,7 @@ fn render(request: FileIconRequest) -> FileIconResult {
         return fallback(request.id);
     }
     #[cfg(target_os = "macos")]
-    let image = macos::render(&request);
+    let image = macos::render(&request, &mut _batch.native);
     #[cfg(not(target_os = "macos"))]
     let image = None;
     FileIconResult {
@@ -80,7 +90,7 @@ mod tests {
     }
     #[test]
     fn invalid_sizes_fall_back() {
-        assert!(render(request()).image.is_none());
+        assert!(render(request(), &mut IconBatch::default()).image.is_none());
     }
     #[tokio::test]
     async fn rejects_unbounded_batches() {

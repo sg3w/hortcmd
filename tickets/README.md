@@ -2,7 +2,7 @@
 
 All tickets below 100 and tickets 100–110 have been completed.
 Tickets 125–126, 128, 131, 134, 137 and the discovered issues 300–301 and 303–316 are also complete. There are
-**45 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
+**44 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
 issues 317–377 (excluding completed tickets listed below). Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
@@ -127,7 +127,7 @@ Correctness (frontend):
 
 Reuse/efficiency cleanup:
 [360](done/360-glob-to-regex-duplicated-converters.done.md), [361](done/361-crawler-bytes-recomputed-on-step.done.md),
-[362](done/362-mtime-of-triplicated.done.md), [363](363-icon-mount-table-no-batch-cache.md),
+[362](done/362-mtime-of-triplicated.done.md), [363](done/363-icon-mount-table-no-batch-cache.done.md),
 [364](364-archive-is-link-mode-duplicated.md), [367](367-net-store-duplicated-authority-logic.md).
 
 ## Current implementation batch
@@ -238,3 +238,5 @@ policy-valid disposition. No advisory exceptions were added by this backlog upda
 - [361](done/361-crawler-bytes-recomputed-on-step.done.md): completed and verified.
 
 - [362](done/362-mtime-of-triplicated.done.md): completed and verified.
+
+- [363](done/363-icon-mount-table-no-batch-cache.done.md): completed and verified.
