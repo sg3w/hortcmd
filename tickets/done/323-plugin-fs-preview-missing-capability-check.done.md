@@ -32,3 +32,9 @@ restriction `fs:read` still enforces.
 - Test with a mocked provider whose capability set has `Browse` but not
   `Preview`; assert `fs:preview` is refused the same way `fs:read` would be.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Plugin fs:preview now requires the Preview capability before reading the file. A browse-only capability fixture refuses both preview and read requests; a normal local preview still succeeds.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

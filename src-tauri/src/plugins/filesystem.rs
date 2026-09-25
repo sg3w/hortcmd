@@ -16,6 +16,13 @@ use serde_json::{json, Value};
 use std::io::Read;
 const MAX_READ: u32 = 256 * 1024;
 pub fn execute(request: &PluginRequest) -> Result<Value, String> {
+    execute_with_capabilities(request, caps::require)
+}
+
+fn execute_with_capabilities(
+    request: &PluginRequest,
+    require: impl Fn(&str, Capability) -> crate::errors::AppResult<()>,
+) -> Result<Value, String> {
     match request {
         PluginRequest::Read {
             path,
@@ -26,7 +33,7 @@ pub fn execute(request: &PluginRequest) -> Result<Value, String> {
                 return Err("Read limit must be 1 to 262144 bytes".into());
             }
             validate_path(path)?;
-            caps::require(path, Capability::Preview).map_err(|e| e.to_string())?;
+            require(path, Capability::Preview).map_err(|e| e.to_string())?;
             let (provider, resolved) = vfs::resolve(path).map_err(|e| e.to_string())?;
             let mut bytes = Vec::new();
             provider
@@ -45,7 +52,7 @@ pub fn execute(request: &PluginRequest) -> Result<Value, String> {
         }
         PluginRequest::List { path } => {
             validate_path(path)?;
-            caps::require(path, Capability::Browse).map_err(|e| e.to_string())?;
+            require(path, Capability::Browse).map_err(|e| e.to_string())?;
             let listing = tauri::async_runtime::block_on(fs::dir::list_dir(path.clone(), None))
                 .map_err(|e| e.to_string())?;
             if listing.entries.len() > 10000 {
@@ -55,6 +62,7 @@ pub fn execute(request: &PluginRequest) -> Result<Value, String> {
         }
         PluginRequest::Preview { path } => {
             validate_path(path)?;
+            require(path, Capability::Preview).map_err(|e| e.to_string())?;
             serde_json::to_value(
                 fs::preview::read_preview(path.clone(), MAX_READ).map_err(|e| e.to_string())?,
             )
@@ -76,6 +84,37 @@ pub fn execute(request: &PluginRequest) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn browse_only_capabilities_refuse_preview_and_read_before_io() {
+        let root =
+            std::env::temp_dir().join(format!("hortcmd-preview-caps-{}", crate::net::unique_id()));
+        std::fs::create_dir(&root).unwrap();
+        let path = root.join("canary.txt").to_string_lossy().into_owned();
+        std::fs::write(&path, "preview would otherwise succeed").unwrap();
+        let browse_only = |_: &str, cap: Capability| {
+            if cap == Capability::Browse {
+                Ok(())
+            } else {
+                Err(crate::errors::AppError::new(
+                    crate::errors::code::CAPABILITY_UNSUPPORTED,
+                ))
+            }
+        };
+        for request in [
+            PluginRequest::Preview { path: path.clone() },
+            PluginRequest::Read {
+                path: path.clone(),
+                max_bytes: MAX_READ,
+                encoding: PluginEncoding::Utf8,
+            },
+        ] {
+            let error = execute_with_capabilities(&request, browse_only).unwrap_err();
+            assert!(error.contains(crate::errors::code::CAPABILITY_UNSUPPORTED));
+        }
+        assert!(execute(&PluginRequest::Preview { path }).is_ok());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn bounded_reads_and_core_create_only_writes() {
         let root =
