@@ -30,3 +30,9 @@ fine.
   `compare_dirs` still returns a result for the rest of the tree instead of
   erroring out entirely.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Directory comparison skips individual enumeration/stat failures and retains readable siblings. Root-level open errors still propagate. A deterministic regression enumerates a file, deletes it before stat, injects an iteration error, and verifies that the remaining file and subdirectory survive.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

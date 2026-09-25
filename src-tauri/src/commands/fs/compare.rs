@@ -54,18 +54,25 @@ fn read_level(
     dir: &Path,
     missing_ok: bool,
 ) -> AppResult<(BTreeMap<String, Meta>, BTreeSet<String>)> {
-    let mut files = BTreeMap::new();
-    let mut subdirs = BTreeSet::new();
     let rd = match fs::read_dir(dir) {
         Ok(rd) => rd,
         Err(e) if missing_ok && e.kind() == std::io::ErrorKind::NotFound => {
-            return Ok((files, subdirs))
+            return Ok((BTreeMap::new(), BTreeSet::new()))
         }
         Err(e) => return Err(e.into()),
     };
-    for entry in rd {
-        let entry = entry?;
-        let meta = entry.metadata()?;
+    Ok(read_entries(rd))
+}
+
+fn read_entries(
+    entries: impl IntoIterator<Item = std::io::Result<fs::DirEntry>>,
+) -> (BTreeMap<String, Meta>, BTreeSet<String>) {
+    let mut files = BTreeMap::new();
+    let mut subdirs = BTreeSet::new();
+    for entry in entries {
+        // A failed item does not invalidate the successfully read siblings.
+        let Ok(entry) = entry else { continue };
+        let Ok(meta) = entry.metadata() else { continue };
         if meta.file_type().is_symlink() {
             continue;
         }
@@ -82,7 +89,7 @@ fn read_level(
             files.insert(name, (meta.len(), mtime));
         }
     }
-    Ok((files, subdirs))
+    (files, subdirs)
 }
 
 fn status_of(l: Option<&Meta>, r: Option<&Meta>) -> &'static str {
@@ -542,6 +549,29 @@ mod paired_safety_tests {
         fs::create_dir(&path).unwrap();
         Temp(path)
     }
+    #[test]
+    fn vanished_entries_and_iteration_errors_do_not_discard_siblings() {
+        let t = temp();
+        fs::write(t.0.join("vanished"), b"gone").unwrap();
+        fs::write(t.0.join("survivor"), b"keep").unwrap();
+        fs::create_dir(t.0.join("subfolder")).unwrap();
+        let entries: Vec<_> = fs::read_dir(&t.0).unwrap().collect();
+        // Directory enumeration succeeded; stat now observes a concurrent unlink.
+        fs::remove_file(t.0.join("vanished")).unwrap();
+        let entries = std::iter::once(Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "unreadable directory entry",
+        )))
+        .chain(entries);
+        let (files, subdirs) = read_entries(entries);
+        assert_eq!(
+            files.keys().map(String::as_str).collect::<Vec<_>>(),
+            ["survivor"]
+        );
+        assert_eq!(files["survivor"].0, 4);
+        assert_eq!(subdirs.into_iter().collect::<Vec<_>>(), ["subfolder"]);
+    }
+
     #[test]
     fn missing_metadata_and_read_errors_are_not_equal() {
         assert_eq!(status_of(Some(&(10, 0)), Some(&(10, 0))), "different");
