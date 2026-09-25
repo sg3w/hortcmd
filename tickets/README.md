@@ -2,7 +2,7 @@
 
 All tickets below 100 and tickets 100–110 have been completed.
 Tickets 125–126, 128, 131, 134, 137 and the discovered issues 300–301 and 303–316 are also complete. There are
-**63 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
+**62 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
 issues 317–377 (excluding completed tickets listed below). Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
@@ -108,7 +108,7 @@ Correctness (backend):
 [331](done/331-net-save-profile-monitor-stopped-before-validation.done.md), [332](done/332-probe-transport-missing-host-param.done.md),
 [333](done/333-monitor-unsupported-state-latched.done.md), [334](done/334-keepass-unlock-state-divergence.done.md),
 [335](done/335-cancel-token-map-orphan-leak.done.md), [339](339-smb-ensure-share-race-condition.md),
-[340](340-webdav-list-dot-dotdot-not-filtered.md), [341](341-smb-shares-error-generic-code.md),
+[340](done/340-webdav-list-dot-dotdot-not-filtered.done.md), [341](341-smb-shares-error-generic-code.md),
 [342](342-mcp-mutex-lock-expect-poison-panic.md), [343](343-dir-size-blocking-call-not-spawn-blocking.md),
 [344](344-finder-tags-dead-fallback-code.md), [345](345-git-status-canonicalize-fallback-scope-widening.md),
 [346](346-dir-size-cancel-token-leak.md), [347](347-dir-size-generic-not-a-directory-error.md),
@@ -202,3 +202,5 @@ policy-valid disposition. No advisory exceptions were added by this backlog upda
 - [337](done/337-index-ipc-missing-hastauri-guard.done.md): completed and verified.
 
 - [338](done/338-use-tauri-hastauri-not-reactive.done.md): completed and verified.
+
+- [340](done/340-webdav-list-dot-dotdot-not-filtered.done.md): completed and verified.

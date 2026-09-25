@@ -27,3 +27,9 @@ the three sibling protocols and a needless surprise entry in the listing.
 - Test: a WebDAV PROPFIND response containing a `.`/`..`-named href; assert
   it's filtered from the returned listing.
 - `npm run test:harness` (WebDAV), `npm run check`.
+
+## Resolution (2026-09-25)
+
+WebDAV directory listings skip decoded names equal to dot or dot-dot. A loopback HTTP PROPFIND regression covers literal, encoded, and absolute dot hrefs while preserving hidden folders and once-decoded literal percent names. The protocol harness was run against fresh disposable fixtures before and after this change: both runs had 10 passes and the same 12 existing failures, with no new failing tests. All disposable servers were removed.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

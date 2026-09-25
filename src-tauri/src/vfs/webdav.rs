@@ -275,6 +275,9 @@ impl Provider for WebdavProvider {
                 continue;
             }
             let name = name_of(&href);
+            if name == "." || name == ".." {
+                continue;
+            }
             if name.is_empty() {
                 return Err(AppError::from(
                     "empty WebDAV entry name cannot be traversed",
@@ -591,6 +594,95 @@ impl Drop for WebdavWriter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn listing_filters_literal_and_encoded_dot_entries_from_propfind() {
+        use std::io::{BufRead, BufReader};
+        use std::net::TcpListener;
+        use std::time::Duration;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let response = [
+            "/root/", "/root/./", "/root/../", "/root/%2e/", "/root/%2E%2E/",
+            "http://dav.test/root/..", "/root/.hidden/", "/root/normal/", "/root/%252e/",
+        ].into_iter().map(|href| format!(
+            "<D:response><D:href>{href}</D:href><D:propstat><D:prop><D:resourcetype><D:collection/></D:resourcetype></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>"
+        )).collect::<String>();
+        let body = format!(
+            "<?xml version=\"1.0\"?><D:multistatus xmlns:D=\"DAV:\">{response}</D:multistatus>"
+        );
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            socket
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            socket
+                .set_write_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut reader = BufReader::new(&mut socket);
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            assert!(line.starts_with("PROPFIND /root "));
+            let mut length = 0;
+            loop {
+                line.clear();
+                assert!(reader.read_line(&mut line).unwrap() > 0);
+                if line == "\r\n" {
+                    break;
+                }
+                if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                    length = value.trim().parse::<usize>().unwrap();
+                }
+            }
+            reader.read_exact(&mut vec![0; length]).unwrap();
+            write!(socket, "HTTP/1.1 207 Multi-Status\r\nContent-Type: application/xml\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+        });
+        let profile = Profile {
+            id: "webdav-dot-test".into(),
+            name: "test".into(),
+            protocol: "webdav".into(),
+            host: "http://127.0.0.1".into(),
+            port,
+            user: "test".into(),
+            auth: "anonymous".into(),
+            key_path: None,
+            start_path: "/root".into(),
+            security: Default::default(),
+            monitor: None,
+        };
+        let base = format!("http://127.0.0.1:{port}");
+        let agent = reqwest_dav::re_exports::reqwest::Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
+        let client = ClientBuilder::new()
+            .set_host(base.clone())
+            .set_auth(Auth::Anonymous)
+            .set_agent(agent)
+            .build()
+            .unwrap();
+        let provider = WebdavProvider {
+            health_path: "/root".into(),
+            security: crate::net::security::TransportInfo::connected(&profile, false),
+            key: profile.connection_key(),
+            base,
+            client,
+        };
+        let listing = provider.list("/root").unwrap();
+        server.join().unwrap();
+        assert_eq!(
+            listing
+                .entries
+                .iter()
+                .map(|entry| entry.name.as_str())
+                .collect::<Vec<_>>(),
+            [".hidden", "normal", "%2e"]
+        );
+        assert!(listing.entries[0].hidden);
+        assert!(listing.entries.iter().all(|entry| entry.is_dir));
+    }
 
     #[test]
     fn spool_collisions_preserve_existing_files_and_retry() {
