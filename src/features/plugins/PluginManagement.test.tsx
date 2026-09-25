@@ -26,3 +26,10 @@ it("reports installation failures and confirms uninstall",async()=>{
   await waitFor(()=>expect(screen.getByText("No plugins installed.")).toBeInTheDocument());
   expect(harness.calls.find(c=>c.cmd==="plugin_deactivate")?.args).toEqual({plugin:record.id,remove:true});
 });
+it("renders a typed plugin failure as a localized sentence",async()=>{
+  const record=plugin();
+  useTauri({commands:{list_plugins:()=>[record],plugin_install:()=>{throw {version:1,code:"fs.permission",params:{},id:"plugin-install",op:null,provider:null,retryable:false,action:null,detail:"denied by the operating system"};}}});
+  await show();fireEvent.change(screen.getByRole("textbox"),{target:{value:"/tmp/plugin.zip"}});fireEvent.click(screen.getByRole("button",{name:"Install"}));
+  const alert=await screen.findByRole("alert");
+  expect(alert).toHaveTextContent("Keine Berechtigung");expect(alert).not.toHaveTextContent("denied by the operating system");
+});

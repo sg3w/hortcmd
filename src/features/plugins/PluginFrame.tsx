@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { pluginAssetUrl, pluginClose, pluginInfo, pluginPoll, pluginRequest } from "@/ipc/domains/plugins";
 import type { PluginRequest } from "@/ipc/bindings/PluginRequest";
 import { useT } from "@/store/settingsStore";
+import { describeErrorFull } from "@/store/errorText";
 
 export function PluginFrame({id, title, onFailure, onTitle}: {
   id: string; title: string; onFailure?: () => void; onTitle?: (title: string) => void;
@@ -37,7 +38,7 @@ export function PluginFrame({id, title, onFailure, onTitle}: {
         if (data.request.type === "view:title") callbacks.current.onTitle?.(data.request.title);
         if (data.request.type === "view:requestClose") fail();
       } catch (error) {
-        if (live) frame.current?.contentWindow?.postMessage({channel:"hortcmd:response", id:data.id, error:String(error)}, "*");
+        if (live) frame.current?.contentWindow?.postMessage({channel:"hortcmd:response", id:data.id, error:describeErrorFull(error)}, "*");
       } finally { busy--; }
     };
     window.addEventListener("message", receive);
