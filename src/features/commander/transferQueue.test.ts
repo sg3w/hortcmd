@@ -24,6 +24,7 @@ interface StartCall {
 }
 
 const started: StartCall[] = [];
+const extracted: string[] = [];
 
 vi.mock("@/ipc/client", () => ({
   hasTauri: () => false,
@@ -41,7 +42,7 @@ vi.mock("@/ipc/client", () => ({
   ) => {
     started.push({ op, id, sources, dest, limit, verify, bufKb, threads, safe, checkSpace });
   },
-  startExtract: () => {},
+  startExtract: (id: string) => { extracted.push(id); },
   startPack: () => {},
   deleteEntries: () => Promise.resolve({ ok: 0, errors: [] }),
   trashEntries: () => Promise.resolve({ ok: 0, errors: [] }),
@@ -59,7 +60,7 @@ vi.mock("@/ipc/client", () => ({
       scheme: "local",
       store_id: "local",
       connected: true,
-      caps: ["browse", "copyFrom", "copyTo", "move", "create", "deletePermanent"],
+      caps: ["browse", "copyFrom", "copyTo", "move", "create", "deletePermanent", "archiveExtractFrom", "archiveExtractTo"],
     }),
 }));
 
@@ -105,6 +106,7 @@ function place(): void {
 
 beforeEach(async () => {
   started.length = 0;
+  extracted.length = 0;
   await loadCaps("/src");
   await loadCaps("/dst");
   place();
@@ -211,5 +213,50 @@ describe("settings are snapshotted at request time", () => {
     expect(released.verify).toBe(true);
     expect(released.limit).toBe(100 * 1024);
     expect(released.threads).toBe(4);
+  });
+});
+
+describe("extraction serialization", () => {
+  function extract() {
+    usePanes.setState(s => ({ left: { ...s.left, tabs: [{ ...s.left.tabs[0], archive: "/source.zip", path: "/" }] } }));
+    requestCopy("left");
+  }
+  function done(id: string) {
+    useTransfers.getState().finish({ id, op: "extract", ok: 1, errors: [], cancelled: false, mode: "safe" });
+    startNextQueued();
+  }
+  it.each([true, false])("serializes repeated extraction with queueTransfers=%s", queueTransfers => {
+    useSettings.setState({ queueTransfers });
+    extract(); extract(); extract();
+    const [first, second, third] = useTransfers.getState().transfers;
+    expect(extracted).toEqual([first.id]);
+    expect(second.queued).toBe(true);
+    expect(third.queued).toBe(true);
+    startNextQueued();
+    expect(extracted).toEqual([first.id]);
+    done(first.id);
+    expect(extracted).toEqual([first.id, second.id]);
+    done(second.id);
+    expect(extracted).toEqual([first.id, second.id, third.id]);
+    done(third.id);
+  });
+  it("cancels a queued extraction without launching it", async () => {
+    const { dequeueTransfer } = await import("./fileOps");
+    extract(); extract();
+    const [first, second] = useTransfers.getState().transfers;
+    dequeueTransfer(second.id);
+    done(first.id);
+    expect(extracted).toEqual([first.id]);
+  });
+  it("releases the queue while an extraction waits for a password", async () => {
+    const { handleExtractDone } = await import("./fileOps");
+    extract(); extract();
+    const [first, second] = useTransfers.getState().transfers;
+    const error = { version: 1, id: "password", code: "archive.passwordRequired", params: {}, op: null, provider: null, retryable: false, action: null, detail: null };
+    expect(handleExtractDone({ id: first.id, op: "extract", ok: 0, errors: [{ item: "source.zip", error }], cancelled: false, mode: "safe" })).toBe(true);
+    expect(extracted).toEqual([first.id, second.id]);
+    expect(useOps.getState().prompt?.password).toBe(true);
+    useOps.getState().closeDialogs();
+    done(second.id);
   });
 });

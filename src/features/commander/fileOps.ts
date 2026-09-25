@@ -116,7 +116,7 @@ function reportErrors(errors: ItemError[]): void {
 
 // ----- Copy queue: process operations one after another -----
 
-interface QueuedParams {
+interface CopyParams {
   op: "copy" | "move";
   sources: string[];
   dest: string;
@@ -128,18 +128,19 @@ interface QueuedParams {
   safe: boolean;
   checkSpace?: boolean;
 }
+type QueuedParams = CopyParams | { op: "extract"; request: ExtractReq };
 /** Parameters of waiting (not yet started) transfers per id. */
 const queuedParams = new Map<string, QueuedParams>();
 const persistedIntents = new Map<string, Promise<boolean>>();
 
-/** Whether a copy/move operation is currently active (not waiting/done). */
+/** Whether a copy, move or extract is currently active (not waiting/done). */
 function hasActiveTransfer(exceptId?: string): boolean {
   return useTransfers
     .getState()
     .transfers.some(
       (t) =>
         t.id !== exceptId &&
-        (t.op === "copy" || t.op === "move") &&
+        (t.op === "copy" || t.op === "move" || t.op === "extract") &&
         !t.done &&
         !t.queued,
     );
@@ -196,6 +197,11 @@ export function startNextQueued(): void {
   if (!params) return;
   queuedParams.delete(next.id);
   useTransfers.getState().setQueued(next.id, false);
+  if (params.op === "extract") {
+    const { archive, base, names, dest } = params.request;
+    startExtract(next.id, archive, base, names, dest, archivePassword(archive));
+    return;
+  }
   const start = () => startTransfer(
     params.op,
     next.id,
@@ -222,8 +228,11 @@ export function dequeueTransfer(id: string): void {
     void import("@/ipc/domains/plugins").then(module=>module.pluginTransferCancel(id)).catch(error=>reportErrors([{item:"",error:ipcError(error)}]));
     useTransfers.getState().remove(id);return;
   }
+  const params = queuedParams.get(id);
   queuedParams.delete(id);
-  if (hasTauri()) {
+  pendingExtracts.delete(id);
+  // A queued extract has not reached the backend or created a journal yet.
+  if (hasTauri() && (params?.op !== "extract" || params.request.journaled)) {
     const persisted = persistedIntents.get(id) ?? Promise.resolve(true);
     void persisted.then(ok => ok ? discardRecovery(id) : undefined).catch(error => reportErrors([{ item: "", error: ipcError(error) }]));
   }
@@ -261,6 +270,7 @@ export function confirmLeftovers(l: Leftovers): void {
 
 /** Pending extract operations (for a password retry after fs-done). */
 interface ExtractReq {
+  journaled: boolean;
   archive: string;
   base: string;
   names: string[];
@@ -275,10 +285,18 @@ function beginExtract(
   names: string[],
   dest: string,
   id = newId(),
+  journaled = false,
 ): void {
-  pendingExtracts.set(id, { archive, base, names, dest });
+  const request = { archive, base, names, dest, journaled };
+  pendingExtracts.set(id, request);
   useTransfers.getState().start("extract", id);
-  startExtract(id, archive, base, names, dest, archivePassword(archive));
+  // Extracts wait for active transfers, even with copy queueing disabled.
+  if (hasActiveTransfer(id)) {
+    queuedParams.set(id, { op: "extract", request });
+    useTransfers.getState().setQueued(id, true);
+  } else {
+    startExtract(id, archive, base, names, dest, archivePassword(archive));
+  }
 }
 
 /**
@@ -303,6 +321,8 @@ export function handleExtractDone(d: OpDone): boolean {
   promptArchivePassword(req.archive, wrong, () => {
     beginExtract(req.archive, req.base, req.names, req.dest);
   });
+  // Waiting for a password (including dismissal) must not strand the queue.
+  startNextQueued();
   return true;
 }
 
@@ -638,7 +658,7 @@ export function runMkdir(side: Side): void {
 export function startRecovered(request: import("@/ipc/bindings/RecoveryLaunch").RecoveryLaunch): void {
   const { id, kind, sources, destination, settings } = request;
   if (kind === "extract") {
-    beginExtract(sources[0], request.base, request.names, destination, id);
+    beginExtract(sources[0], request.base, request.names, destination, id, true);
     return;
   }
   useTransfers.getState().start(kind, id);

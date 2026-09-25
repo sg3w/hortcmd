@@ -34,3 +34,9 @@ for.
 - Test: trigger extraction twice in quick succession on the same archive;
   assert the second request is queued/blocked rather than racing the first.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Extraction now joins the transfer queue and waits for active copy, move or extract work, regardless of the copy-queue preference. Tests cover repeated submission, ordered release, queued cancellation and password prompts. Password waits release other work; recovered queued extracts retain journal-aware cancellation.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.
