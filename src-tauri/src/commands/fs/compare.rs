@@ -14,7 +14,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::UNIX_EPOCH;
 use tauri::ipc::Channel;
 use ts_rs::TS;
 
@@ -80,12 +79,7 @@ fn read_entries(
         if meta.is_dir() {
             subdirs.insert(name);
         } else {
-            let mtime = meta
-                .modified()
-                .ok()
-                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                .map(|d| d.as_secs())
-                .unwrap_or(0);
+            let mtime = super::walk::mtime_of(&meta);
             files.insert(name, (meta.len(), mtime));
         }
     }
@@ -544,7 +538,7 @@ mod paired_safety_tests {
             "hortcmd-compare-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
-                .duration_since(UNIX_EPOCH)
+                .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos()
         ));

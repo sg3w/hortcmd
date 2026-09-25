@@ -15,7 +15,6 @@ use serde::Serialize;
 use std::fs;
 use std::io::Read;
 use std::path::Path;
-use std::time::UNIX_EPOCH;
 use ts_rs::TS;
 
 /// An extended attribute: name, size of the raw value, and – if the
@@ -175,12 +174,7 @@ pub(crate) fn read_file_props(path: String) -> AppResult<FileProps> {
         is_dir: meta.is_dir(),
         is_symlink: meta.file_type().is_symlink(),
         size: meta.len(),
-        modified: meta
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-            .map(|d| d.as_secs())
-            .unwrap_or(0),
+        modified: super::walk::mtime_of(&meta),
         mode,
         uid,
         gid,

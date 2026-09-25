@@ -25,3 +25,9 @@ miss the others.
 
 - `cargo build`/`npm run check` after the refactor; existing walk/compare/
   props tests continue to pass unchanged.
+
+## Resolution (2026-09-25)
+
+Directory comparison and file properties now call walk::mtime_of for the shared Unix-seconds timestamp conversion. The existing conversion behavior and walk/compare/properties tests remain unchanged.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

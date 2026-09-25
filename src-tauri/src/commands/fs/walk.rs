@@ -116,7 +116,7 @@ struct Counters {
     unreadable: AtomicU64,
 }
 
-fn mtime_of(meta: &fs::Metadata) -> u64 {
+pub(crate) fn mtime_of(meta: &fs::Metadata) -> u64 {
     meta.modified()
         .ok()
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
