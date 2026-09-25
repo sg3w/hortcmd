@@ -282,8 +282,8 @@ export const useNet = create<NetState>((set, get) => ({
     for (const side of ["left", "right"] as const) {
       const panes = usePanes.getState();
       const pane = panes[side];
-      const path = pane.tabs[pane.activeTab].path;
-      if (restored.some(c => path.startsWith(`${c.address.split("://")[0]}://${c.key}/`))) {
+      const auth = authorityOf(pane.tabs[pane.activeTab].path);
+      if (auth && restored.some(c => authorityOf(c.address) === auth)) {
         void panes.refresh(side);
       }
     }

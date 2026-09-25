@@ -24,3 +24,16 @@ needs updating in one of the two spots to silently break the other.
 
 - Existing net store tests continue to pass unchanged after the refactor.
 - `npm run check`.
+
+## Resolution (2026-09-26)
+
+`applyStates` now compares `authorityOf(panePath)` with
+`authorityOf(c.address)` instead of rebuilding `scheme://key/` from the
+connection key, so the pane-to-connection match lives in exactly one place and
+follows any future change to the backend's `remote_uri` format. As a side
+effect the match is now case-insensitive like `connectionFor`, so a pane path
+whose host differs only in case is refreshed too. A lifecycle test pins the
+behaviour: a restored connection refreshes the pane on its authority (spelled
+with different case) and leaves a pane on another host alone.
+
+Validation: `npm run check` passed on macOS.
