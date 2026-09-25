@@ -28,3 +28,11 @@ process can write. `net/security.rs`'s `net_set_transport_policy` already uses
   the computed spool path causes the writer to retry with a different name
   rather than writing through it.
 - `npm run check`.
+
+## Implementation
+
+Spools use 128-bit random names, exclusive creation, bounded collision retries,
+and owner-only Unix permissions. Uploads stream from the original open handle
+instead of reopening a replaceable pathname. Tests cover file and symlink
+collisions and retry exhaustion. This prevents pre-planted path redirection; it
+does not isolate the application from another process running as the same user.

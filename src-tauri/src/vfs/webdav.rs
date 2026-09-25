@@ -497,22 +497,39 @@ struct WebdavWriter {
     finished: bool,
 }
 
+/// Reserve a private spool exclusively; never truncate a collision or follow a
+/// pre-existing symlink. Bound retries even if the temporary directory is hostile.
+fn create_spool(
+    mut candidate: impl FnMut() -> io::Result<PathBuf>,
+) -> io::Result<(PathBuf, std::fs::File)> {
+    for _ in 0..16 {
+        let path = candidate()?;
+        let mut options = std::fs::OpenOptions::new();
+        options.create_new(true).read(true).write(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        match options.open(&path) {
+            Ok(file) => return Ok((path, file)),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        "upload spool collisions",
+    ))
+}
+
 impl WebdavWriter {
     fn new(client: Client, path: String) -> io::Result<Self> {
-        let spool_path = std::env::temp_dir().join(format!(
-            "hortcmd-dav-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_nanos())
-                .unwrap_or(0)
-        ));
-        let spool = std::fs::File::options()
-            .create(true)
-            .read(true)
-            .write(true)
-            .truncate(true)
-            .open(&spool_path)?;
+        let (spool_path, spool) = create_spool(|| {
+            let mut random = [0u8; 16];
+            getrandom::fill(&mut random).map_err(io::Error::other)?;
+            Ok(std::env::temp_dir().join(format!("hortcmd-dav-{}", hex::encode(random))))
+        })?;
         Ok(Self {
             client,
             path,
@@ -533,14 +550,12 @@ impl WebdavWriter {
         };
         file.flush()?;
         file.seek(SeekFrom::Start(0))?;
-        drop(file);
 
         let path = self.path.clone();
         let client = self.client.clone();
-        let spool_path = self.spool_path.clone();
         let result = runtime().block_on(async move {
             // Stream the spool file instead of buffering it in memory.
-            let f = tokio::fs::File::open(&spool_path).await.map_err(to_io)?;
+            let f = tokio::fs::File::from_std(file);
             let body = reqwest_dav::re_exports::reqwest::Body::wrap_stream(
                 tokio_util::io::ReaderStream::new(f),
             );
@@ -574,6 +589,38 @@ impl Drop for WebdavWriter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn spool_collisions_preserve_existing_files_and_retry() {
+        let root =
+            std::env::temp_dir().join(format!("hortcmd-spool-test-{}", crate::net::unique_id()));
+        std::fs::create_dir(&root).unwrap();
+        let occupied = root.join("occupied");
+        std::fs::write(&occupied, b"keep").unwrap();
+        let fresh = root.join("fresh");
+        let mut paths = [occupied.clone(), fresh.clone()].into_iter();
+        let (path, mut file) = create_spool(|| Ok(paths.next().unwrap())).unwrap();
+        assert_eq!(path, fresh);
+        file.write_all(b"upload").unwrap();
+        drop(file);
+        assert_eq!(std::fs::read(&occupied).unwrap(), b"keep");
+        assert_eq!(std::fs::read(&fresh).unwrap(), b"upload");
+        assert_eq!(
+            create_spool(|| Ok(occupied.clone())).unwrap_err().kind(),
+            io::ErrorKind::AlreadyExists
+        );
+        #[cfg(unix)]
+        {
+            let link = root.join("link");
+            std::os::unix::fs::symlink(&occupied, &link).unwrap();
+            let mut paths = [link, root.join("after-link")].into_iter();
+            let (_, mut file) = create_spool(|| Ok(paths.next().unwrap())).unwrap();
+            file.write_all(b"safe").unwrap();
+            drop(file);
+            assert_eq!(std::fs::read(&occupied).unwrap(), b"keep");
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn href_name_is_decoded() {
