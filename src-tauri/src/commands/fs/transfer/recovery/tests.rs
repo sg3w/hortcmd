@@ -539,6 +539,7 @@ fn archive_crash_child() {
             },
             &mut prog,
             safety::Limits::default(),
+            &|_| Ok(()),
             Some(&run.0),
         )
         .unwrap();

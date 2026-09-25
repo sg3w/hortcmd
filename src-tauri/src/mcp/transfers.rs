@@ -121,12 +121,18 @@ fn transfer_planned(
 }
 
 pub fn extract(args: &Args) -> AppResult<Value> {
+    extract_with_progress(args, &mut progress("extract"))
+}
+
+fn extract_with_progress(args: &Args, prog: &mut Prog) -> AppResult<Value> {
     use crate::commands::fs::archive::{
         extract::{self, ExtractJob},
         safety::Limits,
     };
     let archive = args.str("path")?;
     let dest_dir = args.str("to")?;
+    let (provider, _) = ScopedProvider::resolve(&dest_dir, args.config)?;
+    let source = std::path::PathBuf::from(&archive);
     let job = ExtractJob {
         archive,
         dest_dir,
@@ -134,8 +140,10 @@ pub fn extract(args: &Args) -> AppResult<Value> {
         names: Vec::new(),
         pw: args.opt_str("password"),
     };
-    let mut prog = progress("extract");
-    let (files, errors) = extract::run(job, &mut prog, Limits::load()?)?;
+    let (files, errors) = extract::run(job, prog, Limits::load()?, &|path| {
+        provider.check(&source.as_path().into())?;
+        provider.check(&path.into()).map_err(AppError::from)
+    })?;
     if !errors.is_empty() || prog.cancelled() {
         return Err(AppError::new(code::FS_IO).detail(serde_json::to_string(&errors)?));
     }
@@ -431,6 +439,85 @@ mod tests {
             2,
             "failed staging is cleaned up"
         );
+    }
+
+    struct RevokeExtraction {
+        mode: &'static str,
+        after_file: bool,
+    }
+    impl ProgressSink for RevokeExtraction {
+        fn progress(&self, report: OpProgress) {
+            if (self.after_file && report.files_done > 0)
+                || (!self.after_file && !report.file_name.is_empty())
+            {
+                LIVE_CONFIG.with(|config| {
+                    let mut config = config.borrow_mut();
+                    match self.mode {
+                        "roots" => config.roots.clear(),
+                        "write" => config.allow_write = false,
+                        "enabled" => config.enabled = false,
+                        _ => unreachable!(),
+                    }
+                });
+            }
+        }
+    }
+
+    #[test]
+    fn extraction_rechecks_live_authorization_and_cleans_private_staging() {
+        use std::io::Write;
+        for mode in ["roots", "write", "enabled"] {
+            for after_file in [false, true] {
+                let f = Fixture::new();
+                let archive = f.0.join("files.zip");
+                let destination = f.0.join("output");
+                std::fs::create_dir(&destination).unwrap();
+                std::fs::write(destination.join("file.txt"), b"old").unwrap();
+                let mut zip = zip::ZipWriter::new(std::fs::File::create(&archive).unwrap());
+                zip.add_directory("empty/", zip::write::SimpleFileOptions::default())
+                    .unwrap();
+                zip.start_file("file.txt", zip::write::SimpleFileOptions::default())
+                    .unwrap();
+                zip.write_all(b"replacement").unwrap();
+                zip.finish().unwrap();
+                let config = f.config();
+                LIVE_CONFIG.with(|current| *current.borrow_mut() = config.clone());
+                let cancel = Arc::new(AtomicBool::new(false));
+                let (output, _receiver) = tokio::sync::mpsc::channel(8);
+                execution::run(
+                    execution::Execution {
+                        cancel: cancel.clone(),
+                        config: live_config,
+                        progress_token: None,
+                        output,
+                    },
+                    || {
+                        let mut prog = progress("extract");
+                        prog.sink = Arc::new(RevokeExtraction { mode, after_file });
+                        let raw = json!({"path": archive, "to": destination});
+                        let error = extract_with_progress(
+                            &Args {
+                                raw: &raw,
+                                config: &config,
+                            },
+                            &mut prog,
+                        )
+                        .unwrap_err();
+                        assert!(error.to_string().contains(code::FS_PERMISSION), "{error}");
+                        assert!(
+                            !prog.cancelled(),
+                            "revocation must abort without a cancel request"
+                        );
+                    },
+                );
+                assert_eq!(std::fs::read(destination.join("file.txt")).unwrap(), b"old");
+                assert_eq!(
+                    std::fs::read_dir(&destination).unwrap().count(),
+                    1,
+                    "private stage must be removed"
+                );
+            }
+        }
     }
 
     #[test]

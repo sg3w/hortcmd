@@ -319,7 +319,13 @@ fn run_extract(
     });
     let (ok, mut errors) = match run.as_ref().map_err(Clone::clone).and_then(|run| {
         safety::Limits::load().and_then(|limits| {
-            extract::run_with_recovery(job, &mut prog, limits, run.as_ref().map(|run| &run.0))
+            extract::run_with_recovery(
+                job,
+                &mut prog,
+                limits,
+                &|_| Ok(()),
+                run.as_ref().map(|run| &run.0),
+            )
         })
     }) {
         Ok(result) => result,
@@ -938,6 +944,7 @@ mod tests {
                 entry_bytes: 1,
                 ..Default::default()
             },
+            &|_| Ok(()),
         )
         .unwrap();
         assert_eq!(ok, 0);

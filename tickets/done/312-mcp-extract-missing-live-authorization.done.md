@@ -35,3 +35,14 @@ continuously re-authorized.
   test, but for extraction: revoke scope mid-extract and assert the operation
   aborts and cleans up its staged output.
 - `npm run check`.
+
+## Implementation
+
+Extraction accepts a live authorization hook, applied to both source and final
+destination before staging, per directory/file, between data chunks and before
+publication. The shared stage revalidates each publication; owned private staging
+can still be rolled back and removed after revocation. No unrelated path gains
+cleanup authority. Tests revoke roots, write permission and MCP enablement during
+file writes and after the final file, without cancellation, and verify unchanged
+existing output and complete staging cleanup. Native UI callers use their existing
+authority. Checks do not claim an atomic transaction with a concurrent policy edit.

@@ -116,11 +116,13 @@ pub(super) fn write_entry(
         if prog.cancelled() {
             return Err(AppError::new(code::CANCELLED));
         }
+        stage.authorize(name)?;
         let n = reader.read(&mut buf).map_err(AppError::from)?;
         if n == 0 {
             break;
         }
         file_done = manifest.charge(file_done, n as u64, file_total)?;
+        stage.authorize(name)?;
         f.write_all(&buf[..n]).map_err(AppError::from)?;
         crate::commands::fs::transfer::recovery::fault("write");
         prog.bytes_done += n as u64;
@@ -393,14 +395,16 @@ pub(crate) fn run(
     job: ExtractJob,
     prog: &mut Prog,
     limits: safety::Limits,
+    check: &dyn Fn(&std::path::Path) -> AppResult<()>,
 ) -> AppResult<(u32, Vec<ItemError>)> {
-    run_with_recovery(job, prog, limits, None)
+    run_with_recovery(job, prog, limits, check, None)
 }
 
 pub(crate) fn run_with_recovery(
     job: ExtractJob,
     prog: &mut Prog,
     limits: safety::Limits,
+    check: &dyn Fn(&std::path::Path) -> AppResult<()>,
     recovery: Option<&crate::commands::fs::transfer::recovery::Handle>,
 ) -> AppResult<(u32, Vec<ItemError>)> {
     let _budget =
@@ -420,6 +424,8 @@ pub(crate) fn run_with_recovery(
         &dest_dir,
         Capability::ArchiveExtractTo,
     )?;
+    check(std::path::Path::new(&archive))?;
+    check(std::path::Path::new(&dest_dir))?;
     let base = inner_prefix(&base_inner);
     let targets: HashSet<String> = names.into_iter().collect();
     check_cancel(&prog.cancel)?;
@@ -439,7 +445,7 @@ pub(crate) fn run_with_recovery(
         Ok(manifest) => manifest,
         Err(error) => return Ok((0, vec![ItemError::new(&archive, error)])),
     };
-    let mut stage = staging::Stage::new_with_recovery(std::path::Path::new(&dest_dir), recovery)?;
+    let mut stage = staging::Stage::new_checked(std::path::Path::new(&dest_dir), recovery, check)?;
     let result = budget::decode(|| match archive_kind(&archive) {
         Some(ArchiveKind::Zip) => {
             extract_zip(&archive, &base, manifest, &targets, &mut stage, &pw, prog)

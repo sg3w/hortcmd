@@ -12,7 +12,8 @@ use std::collections::BTreeSet;
 use std::io;
 use std::path::{Path, PathBuf};
 
-pub struct Stage {
+pub struct Stage<'a> {
+    check: &'a dyn Fn(&Path) -> AppResult<()>,
     recovery: Option<Handle>,
     committed: bool,
     recovery_root: Option<Step>,
@@ -27,13 +28,22 @@ pub struct Stage {
     keep: bool,
 }
 
-impl Stage {
+impl<'a> Stage<'a> {
     #[cfg(test)]
     pub fn new(destination: &Path) -> AppResult<Self> {
         Self::new_with_recovery(destination, None)
     }
 
     pub fn new_with_recovery(destination: &Path, recovery: Option<&Handle>) -> AppResult<Self> {
+        Self::new_checked(destination, recovery, &|_| Ok(()))
+    }
+
+    pub fn new_checked(
+        destination: &Path,
+        recovery: Option<&Handle>,
+        check: &'a dyn Fn(&Path) -> AppResult<()>,
+    ) -> AppResult<Self> {
+        check(destination)?;
         let root = Dir::open_ambient_dir(destination, cap_std::ambient_authority())?;
         let mut random = [0u8; 16];
         getrandom::fill(&mut random).map_err(|_| safety::unsafe_entry())?;
@@ -79,6 +89,7 @@ impl Stage {
         })();
         match result {
             Ok((data, backups)) => Ok(Self {
+                check,
                 recovery: recovery.cloned(),
                 committed: false,
                 recovery_root,
@@ -96,6 +107,12 @@ impl Stage {
                 Err(error.into())
             }
         }
+    }
+
+    /// Revalidate the final location; private staging cleanup retains ownership
+    /// even when authorization to publish into the destination is revoked.
+    pub fn authorize(&self, name: &str) -> AppResult<()> {
+        (self.check)(&self.destination.join(name))
     }
 
     fn parents(&mut self, path: &str) -> AppResult<()> {
@@ -116,6 +133,7 @@ impl Stage {
 
     pub fn directory(&mut self, name: &str, limits: &safety::Limits) -> AppResult<()> {
         let name = safety::path(name, true, limits)?;
+        self.authorize(&name)?;
         self.parents(&name)?;
         self.data.create_dir_all(&name)?;
         self.directories.insert(name);
@@ -124,6 +142,7 @@ impl Stage {
 
     pub fn file(&mut self, name: &str, limits: &safety::Limits) -> AppResult<File> {
         let name = safety::path(name, false, limits)?;
+        self.authorize(&name)?;
         self.parents(&name)?;
         let file = self
             .data
@@ -133,6 +152,7 @@ impl Stage {
     }
 
     fn check_destination(&self, name: &str, directory: bool) -> AppResult<()> {
+        self.authorize(name)?;
         let mut path = PathBuf::new();
         let parts: Vec<_> = Path::new(name).components().collect();
         for (i, component) in parts.iter().enumerate() {
@@ -153,6 +173,7 @@ impl Stage {
     }
 
     pub fn commit(&mut self, cancel: &std::sync::atomic::AtomicBool) -> AppResult<()> {
+        self.authorize("")?;
         // Check every target before moving the first old file aside.
         for name in &self.directories {
             self.check_destination(name, true)?;
@@ -167,6 +188,7 @@ impl Stage {
                 if cancel.load(std::sync::atomic::Ordering::Relaxed) {
                     return Err(AppError::new(crate::errors::code::CANCELLED));
                 }
+                self.authorize(name)?;
                 match self.root.create_dir(name) {
                     Ok(()) => created.push(name),
                     Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
