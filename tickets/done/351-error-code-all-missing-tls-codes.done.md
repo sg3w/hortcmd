@@ -35,3 +35,9 @@ against the documented contract of `ALL` will silently miss these codes.
 - `cargo test codes_are_unique_and_namespaced` after the fix; confirm the
   nine codes are now covered.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Added all nine TLS and certificate constants to code::ALL. The Rust uniqueness/namespace test passes; a source comparison also confirms that all 61 declared error codes occur exactly once in ALL.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.
