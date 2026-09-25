@@ -28,3 +28,9 @@ same `archive_kind()` detector.
 - Test: browse an unsupported archive format via `list_archive`; assert the
   same `ARCHIVE_UNKNOWN_FORMAT` code as `extract` produces.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Archive browsing now uses archive.unknownFormat for unsupported extensions instead of the internal-error string fallback. A list_archive regression browses a local unsupported RAR file and verifies the dedicated code with no report action.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

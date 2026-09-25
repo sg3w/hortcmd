@@ -270,7 +270,7 @@ fn read_archive_inner(
     // browsing an archive that lives on a remote share needs the
     // archive commands routed through the VFS first.
     caps::require(&archive, Capability::ArchiveBrowse)?;
-    let kind = archive_kind(&archive).ok_or_else(|| "Unbekanntes Archivformat".to_string())?;
+    let kind = archive_kind(&archive).ok_or_else(|| AppError::new(code::ARCHIVE_UNKNOWN_FORMAT))?;
     let raw = match kind {
         ArchiveKind::Zip => zip_raw(&archive)?,
         ArchiveKind::Tar | ArchiveKind::TarGz | ArchiveKind::TarXz => {
@@ -659,6 +659,19 @@ mod tests {
         assert!(error.is(code::ARCHIVE_LIMIT));
         assert_eq!(prog.files_total, 0);
         assert_eq!(prog.bytes_total, 0);
+    }
+
+    #[test]
+    fn browsing_unsupported_archive_uses_the_format_error() {
+        let root = tmp_dir("unknown-format");
+        let archive = root.join("unsupported.rar");
+        fs::write(&archive, b"unsupported archive content").unwrap();
+        let error = list_archive(archive.to_string_lossy().into_owned(), String::new(), None)
+            .err()
+            .unwrap();
+        assert!(error.is(code::ARCHIVE_UNKNOWN_FORMAT));
+        assert!(error.action.is_none());
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
