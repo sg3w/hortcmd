@@ -91,7 +91,10 @@ fn eligibility(
     let Some(parent) = target.parent() else {
         return Ok(None);
     };
-    if !parent.is_dir() || parent.canonicalize()? != parent {
+    let Ok(canonical_parent) = parent.canonicalize() else {
+        return Ok(None);
+    };
+    if !parent.is_dir() || canonical_parent != parent {
         return Ok(None);
     }
     if matches!(kind, "rename" | "move") && !durability::same_device(source, parent) {

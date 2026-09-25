@@ -2,8 +2,8 @@
 
 All tickets below 100 and tickets 100–110 have been completed.
 Tickets 125–126, 128, 131, 134, 137 and the discovered issues 300–301 and 303–316 are also complete. There are
-**82 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
-issues 317–377. Dependencies use the current paths.
+**81 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
+issues 317–377 (excluding completed tickets listed below). Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
 filenames ending in `.done.md`. This also applies to previously completed support
@@ -96,7 +96,7 @@ fails on non-ASCII input — verified credential leak),
 Data-safety (transfer/archive/undo/search):
 [313](done/313-discard-staging-remote-destination-noop.done.md), [314](done/314-transfer-commit-rollback-failure-swallowed.done.md),
 [315](done/315-parallel-copy-orphaned-directories.done.md), [316](done/316-zip-directory-entries-skip-manifest-verify.done.md),
-[317](317-undo-eligibility-canonicalize-hard-error.md), [318](318-search-unreadable-files-not-counted.md).
+[317](done/317-undo-eligibility-canonicalize-hard-error.done.md), [318](318-search-unreadable-files-not-counted.md).
 
 Correctness (backend):
 [319](319-smb-remove-dir-all-reparse-point-recursion.md), [320](320-ftp-webdav-missing-connection-timeout.md),
@@ -162,3 +162,7 @@ CVSS ratings. Tickets 376–377 cover maintenance findings.
 Use each ticket’s pinned audit evidence and verification criteria. Refresh the
 audit before implementation; releases remain blocked until all findings have a
 policy-valid disposition. No advisory exceptions were added by this backlog update.
+
+## Code-fix batch (2026-09-25)
+
+- [317](done/317-undo-eligibility-canonicalize-hard-error.done.md): completed and verified.

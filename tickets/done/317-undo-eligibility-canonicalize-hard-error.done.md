@@ -34,3 +34,9 @@ can be created.
   multi-file copy/move batch; assert the batch completes (without undo
   tracking for that item) instead of aborting the remaining files.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Undo eligibility now declines tracking when destination-parent canonicalization fails. A regression covers an unavailable destination parent and subsequent batch items.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

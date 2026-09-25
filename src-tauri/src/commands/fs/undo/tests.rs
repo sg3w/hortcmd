@@ -366,3 +366,44 @@ fn grouped_failure_reports_only_the_restored_members_and_retains_the_rest() {
     fs::remove_file(failed.retained.as_ref().unwrap()).unwrap();
     assert_eq!(history.forget(&failed.id).unwrap().len(), 1);
 }
+
+#[test]
+fn unavailable_parent_declines_tracking_and_later_batch_items_continue() {
+    let (dir, history) = fixture();
+    let source = dir.path().join("source");
+    fs::write(&source, "contents").unwrap();
+    let parent = dir.path().join("destination");
+    fs::create_dir(&parent).unwrap();
+    // The destination disappeared after planning but before the undo probe.
+    fs::remove_dir(&parent).unwrap();
+    assert!(history
+        .prepare_group(
+            "copy",
+            source.to_str().unwrap(),
+            parent.join("first").to_str().unwrap(),
+            Some("batch"),
+            false
+        )
+        .unwrap()
+        .is_none());
+    fs::create_dir(&parent).unwrap();
+    for name in ["first", "second"] {
+        let target = parent.join(name);
+        let pending = history
+            .prepare_group(
+                "copy",
+                source.to_str().unwrap(),
+                target.to_str().unwrap(),
+                Some("batch"),
+                false,
+            )
+            .unwrap();
+        fs::copy(&source, &target).unwrap();
+        if let Some(pending) = pending {
+            pending.finish().unwrap();
+        }
+        assert_eq!(fs::read_to_string(target).unwrap(), "contents");
+    }
+    history.seal("batch").unwrap();
+    assert_eq!(history.preview().unwrap().len(), 2);
+}
