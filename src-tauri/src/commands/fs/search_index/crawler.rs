@@ -7,6 +7,7 @@ use crate::commands::fs::transfer::recovery::types::RecoveryLocation;
 use crate::{errors::AppResult, vfs};
 use sha2::{Digest, Sha256};
 use std::{
+    collections::HashSet,
     io::Read,
     path::{Component, Path},
     sync::atomic::{AtomicBool, Ordering},
@@ -349,32 +350,103 @@ pub fn step(snapshot: &mut Snapshot, cancel: &AtomicBool) -> AppResult<()> {
             }
         };
         snapshot.revision += 1;
-        snapshot.queue.pop_front();
-        let mut weight = bytes(snapshot);
-        for item in rows {
-            if snapshot.rows.len() >= MAX_ROWS
-                || snapshot.queue.len() >= 5000
-                || item.path.split('/').count() > 64
-                || weight >= MAX_BYTES / 2
-            {
-                snapshot.limited = true;
-                snapshot.paused = true;
-                return Ok(());
-            }
-            if item.row.directory && !snapshot.queue.contains(&item.path) {
-                snapshot.queue.push_back(item.path.clone());
-            }
-            weight += item.path.len()
-                + item.row.name.len()
-                + item.row.identity.len()
-                + item.row.content.as_ref().map_or(0, String::len)
-                + 256;
-            snapshot.rows.insert(item.path, item.row);
+        if !insert_rows(snapshot, rows, cancel) {
+            return Ok(());
         }
+        snapshot.queue.pop_front();
     }
     if snapshot.queue.is_empty() && !snapshot.limited {
         snapshot.rows.retain(|_, row| row.seen == snapshot.cycle);
         snapshot.completed = super::now();
     }
     Ok(())
+}
+
+// Keep the current folder queued until every row has been inserted. A cancelled
+// batch can therefore be retried without losing its remaining children.
+fn insert_rows(
+    snapshot: &mut Snapshot,
+    rows: impl IntoIterator<Item = Item>,
+    cancel: &AtomicBool,
+) -> bool {
+    let mut queued: HashSet<String> = snapshot.queue.iter().cloned().collect();
+    let mut weight = bytes(snapshot);
+    for item in rows {
+        if cancel.load(Ordering::Relaxed) {
+            return false;
+        }
+        if snapshot.rows.len() >= MAX_ROWS
+            || snapshot.queue.len() >= 5000
+            || item.path.split('/').count() > 64
+            || weight >= MAX_BYTES / 2
+        {
+            snapshot.limited = true;
+            snapshot.paused = true;
+            return false;
+        }
+        if item.row.directory && queued.insert(item.path.clone()) {
+            weight += item.path.len() + 64;
+            snapshot.queue.push_back(item.path.clone());
+        }
+        if let Some(old) = snapshot.rows.get(&item.path) {
+            weight -= item.path.len()
+                + old.name.len()
+                + old.identity.len()
+                + old.content.as_ref().map_or(0, String::len)
+                + 256;
+        }
+        weight += item.path.len()
+            + item.row.name.len()
+            + item.row.identity.len()
+            + item.row.content.as_ref().map_or(0, String::len)
+            + 256;
+        snapshot.rows.insert(item.path, item.row);
+    }
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wide_insertion_cancels_mid_batch_and_resumes_without_duplicate_queue_entries() {
+        let (_dir, mut snapshot) = super::super::tests::fixture();
+        snapshot
+            .queue
+            .extend((0..3000).map(|i| format!("pending-{i}")));
+        let cancel = AtomicBool::new(false);
+        let items = || {
+            (0..50_000).map(|i| Item {
+                path: format!("child-{i}"),
+                row: Row {
+                    name: format!("child-{i}"),
+                    directory: true,
+                    size: 0,
+                    modified: 0,
+                    identity: String::new(),
+                    content: None,
+                    seen: 1,
+                },
+            })
+        };
+        let mut consumed = 0;
+        let rows = items().inspect(|_| {
+            consumed += 1;
+            if consumed == 1001 {
+                cancel.store(true, Ordering::Relaxed);
+            }
+        });
+        assert!(!insert_rows(&mut snapshot, rows, &cancel));
+        assert_eq!(consumed, 1001);
+        assert_eq!(snapshot.rows.len(), 1000);
+        assert_eq!(snapshot.queue.len(), 4001);
+        assert_eq!(snapshot.queue.front().unwrap(), "");
+        assert!(!snapshot.limited);
+        assert_eq!(snapshot.completed, 0);
+        cancel.store(false, Ordering::Relaxed);
+        assert!(insert_rows(&mut snapshot, items().take(1100), &cancel));
+        assert_eq!(snapshot.rows.len(), 1100);
+        assert_eq!(snapshot.queue.len(), 4101);
+    }
 }

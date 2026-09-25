@@ -42,3 +42,9 @@ starves other scopes of the shared worker permit.
   queue already holds thousands of entries, then cancel mid-scan; assert
   cancellation takes effect promptly.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Per-row insertion now checks cancellation and uses a hash set for queued paths. Cancelled folders remain queued for a safe retry; repeated rows replace their previous byte accounting. A deterministic wide-folder regression cancels after 1,000 insertions with 3,000 pending folders and verifies resumption without duplicate queue entries.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

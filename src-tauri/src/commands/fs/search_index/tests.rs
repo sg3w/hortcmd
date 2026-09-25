@@ -1,11 +1,11 @@
 use super::*;
-struct Temp(std::path::PathBuf);
+pub(super) struct Temp(std::path::PathBuf);
 impl Drop for Temp {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
-fn fixture() -> (Temp, Snapshot) {
+pub(super) fn fixture() -> (Temp, Snapshot) {
     let dir = std::env::temp_dir().join(format!("hortcmd-index-{}", crate::net::unique_id()));
     std::fs::create_dir(&dir).unwrap();
     let location = RecoveryLocation::Local {
