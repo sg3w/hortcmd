@@ -122,6 +122,24 @@ fn update(app: &AppHandle, control: &Control, state: MonitorState) {
     *control.state.lock().unwrap() = state;
     emit_states(app);
 }
+// Reconcile probe support separately from the retry state machine. Transient
+// errors still use the existing consecutive-failure threshold.
+fn reconcile_probe(control: &Control, result: &std::io::Result<crate::vfs::Health>) -> bool {
+    let mut state = control.state.lock().unwrap();
+    let next = if matches!(result, Ok(crate::vfs::Health::Unsupported)) {
+        MonitorState::Unsupported
+    } else if *state == MonitorState::Unsupported {
+        MonitorState::Watching
+    } else {
+        return false;
+    };
+    if *state == next {
+        return false;
+    }
+    *state = next;
+    true
+}
+
 fn retryable(failure: Option<ConnFailure>) -> bool {
     // Unknown protocol/TLS/auth failures require the normal interactive flow.
     failure.is_some_and(|f| matches!(f.kind, FailureKind::Timeout | FailureKind::Unreachable))
@@ -194,8 +212,8 @@ fn supervise(app: AppHandle, profile: Profile, settings: MonitorSettings, contro
             if !control.active() {
                 return;
             }
-            if matches!(result, Ok(crate::vfs::Health::Unsupported)) {
-                update(&app, &control, MonitorState::Unsupported);
+            if reconcile_probe(&control, &result) {
+                emit_states(&app);
             }
             if !failures.lost(&result, provider.transport_alive()) {
                 continue;
@@ -339,6 +357,31 @@ mod supervisor_tests {
     use super::*;
     use crate::vfs::Health;
     use std::cell::Cell;
+    #[test]
+    fn supported_probes_clear_unsupported_without_resetting_retry_accounting() {
+        let control = Control {
+            profile_id: "probe-transition".into(),
+            stop: AtomicBool::new(false),
+            state: Mutex::new(MonitorState::Watching),
+        };
+        let mut failures = ProbeFailures::default();
+        for result in [
+            Ok(Health::Alive),
+            Ok(Health::Busy),
+            Err(std::io::ErrorKind::TimedOut.into()),
+        ] {
+            assert!(reconcile_probe(&control, &Ok(Health::Unsupported)));
+            assert_eq!(*control.state.lock().unwrap(), MonitorState::Unsupported);
+            assert!(!reconcile_probe(&control, &Ok(Health::Unsupported)));
+            assert!(reconcile_probe(&control, &result));
+            assert_eq!(*control.state.lock().unwrap(), MonitorState::Watching);
+            assert!(!reconcile_probe(&control, &result));
+            assert!(!failures.lost(&result, true));
+        }
+        assert!(!failures.lost(&Err(std::io::ErrorKind::TimedOut.into()), true));
+        assert!(failures.lost(&Err(std::io::ErrorKind::TimedOut.into()), true));
+    }
+
     #[test]
     fn every_protocol_uses_bounded_misses_and_backoff_without_replaying_work() {
         for _protocol in ["sftp", "ftp", "ftps", "ftps-implicit", "smb", "webdav"] {

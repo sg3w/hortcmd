@@ -34,3 +34,9 @@ actively monitored.
   browse into a share; assert the monitor state transitions back to
   Watching.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+The shared connection monitor reconciles Unsupported back to Watching when subsequent probes become supported, including Alive, Busy, and transient failures. Unchanged states do not emit duplicate updates. Regression coverage verifies transitions and preserves the consecutive-failure reconnect threshold; no platform-specific provider code was changed.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.
