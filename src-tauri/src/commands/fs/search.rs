@@ -305,23 +305,25 @@ impl<'a> Sink<'a> {
 
 /// Searches a file for the first matching line (content search).
 /// Returns None if the file is binary/too large or nothing matches.
-fn content_match(path: &Path, size: u64, needle: &Needle) -> Option<String> {
+fn content_match(path: &Path, size: u64, needle: &Needle) -> std::io::Result<Option<String>> {
     if size > MAX_CONTENT_BYTES {
-        return None;
+        return Ok(None);
     }
     let mut buf = Vec::new();
-    fs::File::open(path).ok()?.read_to_end(&mut buf).ok()?;
+    fs::File::open(path)?.read_to_end(&mut buf)?;
     if buf.contains(&0) {
-        return None; // binär
+        return Ok(None); // binär
     }
-    let text = std::str::from_utf8(&buf).ok()?;
+    let Ok(text) = std::str::from_utf8(&buf) else {
+        return Ok(None);
+    };
     for (i, line) in text.lines().enumerate() {
         if needle.is_match(line) {
             let trimmed: String = line.trim().chars().take(200).collect();
-            return Some(format!("{}: {}", i + 1, trimmed));
+            return Ok(Some(format!("{}: {}", i + 1, trimmed)));
         }
     }
-    None
+    Ok(None)
 }
 
 /// Content matcher: regex or (case-sensitive/-insensitive) substring.
@@ -363,19 +365,19 @@ impl Needle {
 }
 
 /// SHA-256 of a file (for duplicate detection).
-fn hash_file(path: &Path) -> Option<Vec<u8>> {
+fn hash_file(path: &Path) -> std::io::Result<Vec<u8>> {
     use sha2::{Digest, Sha256};
-    let mut f = fs::File::open(path).ok()?;
+    let mut f = fs::File::open(path)?;
     let mut h = Sha256::new();
     let mut buf = vec![0u8; 256 * 1024];
     loop {
-        let n = f.read(&mut buf).ok()?;
+        let n = f.read(&mut buf)?;
         if n == 0 {
             break;
         }
         h.update(&buf[..n]);
     }
-    Some(h.finalize().to_vec())
+    Ok(h.finalize().to_vec())
 }
 
 fn walk_opts(opts: &SearchOptions, dirs_only: bool) -> WalkOptions {
@@ -399,8 +401,9 @@ pub(crate) fn run_search(
     let needle = Needle::build(&opts)?;
     let mut sink = Sink::new(channel, limits);
     let mut limited = false;
+    let mut unreadable = 0u64;
 
-    let report = match opts.mode.as_str() {
+    let mut report = match opts.mode.as_str() {
         "empty_dirs" => walk_local(&root, &walk_opts(&opts, true), &cancel_flag, |entry| {
             if !entry.is_dir || !entry.dir_empty {
                 return Flow::Continue;
@@ -454,7 +457,7 @@ pub(crate) fn run_search(
                     .push((entry.path, entry.modified));
                 Flow::Continue
             });
-            find_duplicates(by_size, &cancel_flag, &mut sink);
+            find_duplicates(by_size, &cancel_flag, &mut sink, &mut unreadable);
             report
         }
 
@@ -465,8 +468,12 @@ pub(crate) fn run_search(
             }
             let detail = match &needle {
                 Some(nd) => match content_match(&entry.path, entry.size, nd) {
-                    Some(line) => line,
-                    None => return Flow::Continue, // Inhaltssuche ohne Treffer
+                    Ok(Some(line)) => line,
+                    Ok(None) => return Flow::Continue,
+                    Err(_) => {
+                        unreadable += 1;
+                        return Flow::Continue;
+                    }
                 },
                 None => String::new(),
             };
@@ -475,6 +482,7 @@ pub(crate) fn run_search(
         }),
     };
 
+    report.unreadable += unreadable;
     sink.flush();
     let cancelled = report.cancelled || sink.disconnected || cancel_flag.load(Ordering::Relaxed);
     let status = if cancelled {
@@ -503,6 +511,7 @@ fn find_duplicates(
     by_size: HashMap<u64, Vec<(PathBuf, u64)>>,
     cancel_flag: &AtomicBool,
     sink: &mut Sink,
+    unreadable: &mut u64,
 ) {
     let mut group_id = 0u32;
     for (size, group) in by_size {
@@ -515,8 +524,9 @@ fn find_duplicates(
             if cancel_flag.load(Ordering::Relaxed) {
                 return;
             }
-            if let Some(h) = hash_file(&p) {
-                by_hash.entry(h).or_default().push((p, mt));
+            match hash_file(&p) {
+                Ok(h) => by_hash.entry(h).or_default().push((p, mt)),
+                Err(_) => *unreadable += 1,
             }
         }
         for dups in by_hash.into_values() {
@@ -600,6 +610,63 @@ mod tests {
         ));
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn vanished_duplicate_candidate_is_counted_after_enumeration() {
+        let root = tmp("vanished-duplicate");
+        let a = root.join("a");
+        let b = root.join("b");
+        fs::write(&a, b"same").unwrap();
+        fs::write(&b, b"same").unwrap();
+        let candidates = HashMap::from([(4, vec![(a, 0), (b.clone(), 0)])]);
+        fs::remove_file(b).unwrap();
+        let channel = Channel::new(|_| Ok(()));
+        let mut sink = Sink::new(&channel, &Limits::DEFAULT);
+        let mut unreadable = 0;
+        find_duplicates(
+            candidates,
+            &AtomicBool::new(false),
+            &mut sink,
+            &mut unreadable,
+        );
+        assert_eq!(unreadable, 1);
+        assert_eq!(sink.total(), 0);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn content_read_errors_are_partial_but_binary_and_nonmatches_are_not() {
+        let root = tmp("unreadable-content");
+        let file = root.join("file");
+        fs::write(&file, b"needle").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut options = opts("files");
+            options.content = "needle".into();
+            fs::set_permissions(&file, fs::Permissions::from_mode(0o0)).unwrap();
+            if fs::File::open(&file).is_err() {
+                let (summary, hits) = run(&root, options);
+                assert_eq!(summary.status, SearchStatus::Partial);
+                assert_eq!(summary.unreadable, 1);
+                assert!(hits.is_empty());
+            }
+            fs::set_permissions(&file, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        let needle = Needle::Plain {
+            text: "needle".into(),
+            case_sensitive: true,
+        };
+        fs::remove_file(&file).unwrap();
+        assert!(content_match(&file, 6, &needle).is_err());
+        for bytes in [b"other".as_slice(), b"\0needle", &[0xff]] {
+            fs::write(&file, bytes).unwrap();
+            assert!(content_match(&file, bytes.len() as u64, &needle)
+                .unwrap()
+                .is_none());
+        }
+        fs::remove_dir_all(root).unwrap();
     }
 
     fn opts(mode: &str) -> SearchOptions {

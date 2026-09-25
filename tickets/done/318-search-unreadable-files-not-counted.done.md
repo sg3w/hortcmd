@@ -31,3 +31,9 @@ trace, while `SearchStatus` can still report `Complete`.
   the summary reports `Partial` with a non-zero unreadable count instead of
   `Complete`.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Content and duplicate reads now preserve I/O errors and count them in the search summary, producing Partial results. Regression tests cover a vanished duplicate candidate, unreadable content, and binary/nonmatching files.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.
