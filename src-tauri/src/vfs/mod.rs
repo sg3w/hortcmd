@@ -42,6 +42,18 @@ use std::io::{self, Read, Write};
 
 use std::sync::{Arc, OnceLock};
 
+/// The profile's operation timeout, also used by the SMB connection config.
+fn network_timeout(profile: &crate::net::session::Profile) -> std::time::Duration {
+    std::time::Duration::from_secs(u64::from(
+        profile
+            .monitor
+            .clone()
+            .unwrap_or_default()
+            .timeout_seconds
+            .max(1),
+    ))
+}
+
 /// Address scheme. `Local` and `Sftp` are implemented; the remaining
 /// variants are reserved for upcoming providers and are parsed but
 /// not yet resolvable.

@@ -53,3 +53,14 @@ security failures and stale session results. Existing TLS/host-key, transfer
 recovery and shell tests remain part of the regression suite. This evidence is
 from local macOS execution with disposable Linux protocol servers; it does not
 claim native Windows/Linux GUI verification.
+
+## Operation timeouts
+
+FTP/FTPS and WebDAV operations use the profile monitor timeout (10 seconds by
+default), including when monitoring is disabled. FTP sets socket read/write
+timeouts before control greetings and TLS, and on every passive data socket;
+transfer finalization uses the same bounded control connection. Address resolution
+still relies on the platform resolver. WebDAV applies a request deadline including
+response-body consumption, so a transfer taking longer than the configured timeout
+fails even if it continues making progress. Changing the timeout takes effect on
+a fresh connection. No trust or certificate checks are relaxed.

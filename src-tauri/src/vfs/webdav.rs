@@ -39,6 +39,8 @@ fn http_agent(
     let (config, evidence) = crate::net::tls_config::config(profile)?;
     let agent = Client::builder()
         .redirect(redirect::Policy::none())
+        .connect_timeout(super::network_timeout(profile))
+        .timeout(super::network_timeout(profile))
         .use_preconfigured_tls(config)
         .build()
         .map_err(|error| AppError::new(code::NET_TLS).op("tls-client").detail(error))?;

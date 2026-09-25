@@ -128,6 +128,7 @@ custom-protocol = ["tauri/custom-protocol"]
 
 # TICKET-071: backport async SMB read replies while retaining Rust 1.85.1.
 [patch.crates-io]
+suppaftp = { path = "../vendor/suppaftp" }
 smb = { path = "../vendor/smb" }
 
 sevenz-rust = { path = "../vendor/sevenz-rust" }

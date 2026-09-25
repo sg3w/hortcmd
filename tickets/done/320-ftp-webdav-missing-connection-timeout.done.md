@@ -39,3 +39,9 @@ from the profile's monitor settings through `ClientConfig`
   the connection, never respond) and assert the operation fails within the
   configured timeout rather than hanging.
 - `npm run test:harness` (FTP, FTPS, WebDAV), `npm run check`.
+
+## Resolution (2026-09-25)
+
+FTP/FTPS now applies the profile timeout before control greetings/TLS, on passive data sockets, and through transfer finalization. WebDAV has connect and full-request deadlines. The pinned suppaftp patch adds only an implicit-TLS constructor accepting a configured socket; source review and license evidence are retained. Stalled socket tests and the live stalled-peer regression pass for FTP, explicit/implicit FTPS and HTTP/HTTPS WebDAV. The complete protocol suite ran: 10 passed, 12 failed. All 12 failures also reproduced at unchanged baseline c42ca3b (8 passed, 13 failed, including an additional reused-fixture host-key failure); they concern existing WebDAV behavior and obsolete path/security fixtures, not the timeout change. Native Windows/Linux verification is not claimed.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

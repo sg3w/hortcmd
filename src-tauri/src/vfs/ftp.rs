@@ -22,12 +22,46 @@ use crate::commands::fs::dir::{DirEntry, DirListing};
 use crate::errors::{code, AppError, AppResult};
 use crate::net::session::Profile;
 use std::io::{self, Read, Write};
+use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
-use std::time::UNIX_EPOCH;
+use std::time::{Duration, Instant, UNIX_EPOCH};
 use suppaftp::list::File as FtpFile;
 use suppaftp::types::FileType;
-use suppaftp::{RustlsConnector, RustlsFtpStream, Status};
+use suppaftp::{FtpError, RustlsConnector, RustlsFtpStream, Status};
+
+fn timed_stream(address: SocketAddr, timeout: Duration) -> io::Result<TcpStream> {
+    let stream = TcpStream::connect_timeout(&address, timeout)?;
+    set_timeouts(&stream, timeout)?;
+    Ok(stream)
+}
+
+fn set_timeouts(stream: &TcpStream, timeout: Duration) -> io::Result<()> {
+    stream.set_read_timeout(Some(timeout))?;
+    stream.set_write_timeout(Some(timeout))
+}
+
+fn control_stream(address: &str, timeout: Duration) -> io::Result<TcpStream> {
+    let started = Instant::now();
+    let mut last = io::Error::new(io::ErrorKind::AddrNotAvailable, "no FTP address");
+    for address in address.to_socket_addrs()? {
+        let remaining = timeout.saturating_sub(started.elapsed());
+        if remaining.is_zero() {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "FTP connection timeout",
+            ));
+        }
+        match TcpStream::connect_timeout(&address, remaining) {
+            Ok(stream) => {
+                set_timeouts(&stream, timeout)?;
+                return Ok(stream);
+            }
+            Err(error) => last = error,
+        }
+    }
+    Err(last)
+}
 
 /// How TLS is applied to a connection.
 #[derive(Clone, Copy, PartialEq)]
@@ -66,6 +100,7 @@ impl Params {
         } else {
             Some(crate::net::tls_config::config(&self.profile)?)
         };
+        let timeout = super::network_timeout(&self.profile);
         let connector = || -> AppResult<RustlsConnector> {
             let (config, _) = tls.as_ref().ok_or_else(|| AppError::new(code::NET_TLS))?;
             Ok(RustlsConnector::from(Arc::new(config.clone())))
@@ -73,18 +108,18 @@ impl Params {
 
         let mut ftp = match self.tls {
             Tls::Implicit => {
-                let mut s =
-                    RustlsFtpStream::connect_secure_implicit(&addr, connector()?, &self.host)
-                        .map_err(|e| {
-                            tls.as_ref()
-                                .map(|(_, evidence)| evidence.error(&e))
-                                .unwrap_or_else(|| {
-                                    AppError::from(format!(
-                                        "Verbindung zu {} fehlgeschlagen: {}",
-                                        addr, e
-                                    ))
-                                })
-                        })?;
+                let mut s = RustlsFtpStream::connect_secure_implicit_with_stream(
+                    control_stream(&addr, timeout)?,
+                    connector()?,
+                    &self.host,
+                )
+                .map_err(|e| {
+                    tls.as_ref()
+                        .map(|(_, evidence)| evidence.error(&e))
+                        .unwrap_or_else(|| {
+                            AppError::from(format!("Verbindung zu {} fehlgeschlagen: {}", addr, e))
+                        })
+                })?;
                 // `AUTH TLS` (explicit) ends with PBSZ 0 + PROT P inside
                 // suppaftp; the implicit path does not send them at all,
                 // so the control channel is encrypted and every data
@@ -105,13 +140,19 @@ impl Params {
                 s
             }
             _ => {
-                let s = RustlsFtpStream::connect(&addr).map_err(|e| {
-                    tls.as_ref()
-                        .map(|(_, evidence)| evidence.error(&e))
-                        .unwrap_or_else(|| {
-                            AppError::from(format!("Verbindung zu {} fehlgeschlagen: {}", addr, e))
-                        })
-                })?;
+                let s = control_stream(&addr, timeout)
+                    .map_err(FtpError::ConnectionError)
+                    .and_then(RustlsFtpStream::connect_with_stream)
+                    .map_err(|e| {
+                        tls.as_ref()
+                            .map(|(_, evidence)| evidence.error(&e))
+                            .unwrap_or_else(|| {
+                                AppError::from(format!(
+                                    "Verbindung zu {} fehlgeschlagen: {}",
+                                    addr, e
+                                ))
+                            })
+                    })?;
                 if self.tls == Tls::Explicit {
                     s.into_secure(connector()?, &self.host).map_err(|e| {
                         tls.as_ref()
@@ -124,6 +165,9 @@ impl Params {
             }
         };
 
+        ftp = ftp.passive_stream_builder(move |address| {
+            timed_stream(address, timeout).map_err(FtpError::ConnectionError)
+        });
         ftp.login(&self.user, &self.password).map_err(|e| {
             tls.as_ref()
                 .and_then(|(_, evidence)| evidence.failure.lock().ok().and_then(|f| f.clone()))
@@ -548,5 +592,46 @@ impl Write for FtpWriter {
 impl Drop for FtpWriter {
     fn drop(&mut self) {
         let _ = self.finish();
+    }
+}
+
+#[cfg(test)]
+mod timeout_tests {
+    use super::*;
+    #[test]
+    fn stalled_control_greeting_and_data_reads_are_bounded() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let (release, wait) = std::sync::mpsc::channel();
+        let peer = std::thread::spawn(move || {
+            let (_first, _) = listener.accept().unwrap();
+            let (_second, _) = listener.accept().unwrap();
+            let (_third, _) = listener.accept().unwrap();
+            let _ = wait.recv_timeout(Duration::from_secs(5));
+        });
+        let timeout = Duration::from_millis(100);
+        let started = Instant::now();
+        let stream = control_stream(&address.to_string(), timeout).unwrap();
+        assert!(RustlsFtpStream::connect_with_stream(stream).is_err());
+        let mut data = timed_stream(address, timeout).unwrap();
+        assert_eq!(data.write_timeout().unwrap(), Some(timeout));
+        assert!(data.read(&mut [0; 1]).is_err());
+        let config = suppaftp::rustls::ClientConfig::builder_with_provider(Arc::new(
+            suppaftp::rustls::crypto::ring::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .with_root_certificates(suppaftp::rustls::RootCertStore::empty())
+        .with_no_client_auth();
+        let stream = control_stream(&address.to_string(), timeout).unwrap();
+        assert!(RustlsFtpStream::connect_secure_implicit_with_stream(
+            stream,
+            RustlsConnector::from(Arc::new(config)),
+            "localhost",
+        )
+        .is_err());
+        assert!(started.elapsed() < Duration::from_secs(3));
+        release.send(()).unwrap();
+        peer.join().unwrap();
     }
 }

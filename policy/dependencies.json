@@ -3452,6 +3452,14 @@
       "owner": "hortcmd maintainers",
       "reason": "Vendored library only when its feature is enabled. Select AFL alternative, preserve notices/source availability. GPL-only standalone tools are not linked. Full upstream license text and source attribution are included in the generated notices.",
       "expires": "2026-12-24"
+    },
+    {
+      "kind": "source",
+      "key": "cargo:suppaftp@6.3.0",
+      "owner": "hortcmd maintainers",
+      "reason": "Ticket 320: pinned crates.io source with a caller-configured socket API for implicit TLS timeouts. See vendor/suppaftp/HORTCMD-PATCH.md. No dependency, feature or license changes; outstanding advisory remains ticket 374.",
+      "expires": "2026-12-24",
+      "fingerprint": "30eac8f5fb41062ce660c51306a7c262e71610ae01ab762c60143b7d3e9db9f5"
     }
   ],
   "advisoryExceptions": [],

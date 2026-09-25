@@ -567,3 +567,58 @@ fn harness_monitor_roundtrips_and_recovers_after_silence() {
         assert!(replacement.list(&h.service(name).root).is_ok());
     });
 }
+
+/// Established control sessions and new transfer sessions must time out when a
+/// peer stops responding. The guard always resumes the disposable container.
+#[test]
+#[ignore]
+fn harness_stalled_ftp_and_webdav_operations_time_out() {
+    let h = harness_or_skip!("harness_stalled_ftp_and_webdav_operations_time_out");
+    struct Paused<'a> {
+        harness: &'a Harness,
+        container: &'a str,
+    }
+    impl Drop for Paused<'_> {
+        fn drop(&mut self) {
+            assert!(compose(self.harness, &["unpause", self.container]));
+        }
+    }
+    for name in ["ftp", "ftps", "ftpsi", "webdav", "webdavs"] {
+        let mut profile = h.profile(name);
+        profile.monitor = Some(crate::net::session::monitor::MonitorSettings {
+            timeout_seconds: 1,
+            ..Default::default()
+        });
+        let provider = super::connect_raw(&profile, &h.password).unwrap();
+        let service = h.service(name);
+        assert!(compose(&h, &["pause", &service.container]));
+        let paused = Paused {
+            harness: &h,
+            container: &service.container,
+        };
+        let started = Instant::now();
+        assert!(
+            provider.list(&service.root).is_err(),
+            "{name} stalled listing"
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(8),
+            "{name} listing timeout"
+        );
+        let path = crate::vfs::StreamPath::remote(&format!(
+            "{}/tree/readme.txt",
+            service.root.trim_end_matches('/')
+        ))
+        .unwrap();
+        let started = Instant::now();
+        assert!(
+            provider.open_read(&path).is_err(),
+            "{name} stalled transfer session"
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "{name} transfer timeout"
+        );
+        drop(paused);
+    }
+}
