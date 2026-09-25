@@ -30,3 +30,10 @@ ships an unredacted secret straight to the frontend or an MCP client.
 - `cargo build`/`cargo clippy` after the visibility change confirms no
   remaining direct field construction outside the module.
 - `npm run check`.
+
+## Implementation
+
+Parameters and diagnostic details are private, with immutable accessors. External
+callers must use the redacting builders; Serde and ts-rs retain the same wire
+shape. This enforces construction discipline, not generic sanitization of every
+possible secret format. Existing error-contract tests exercise serialization.

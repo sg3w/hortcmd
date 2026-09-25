@@ -535,7 +535,7 @@ mod tests {
         // reconnected, an unsupported capability cannot.
         assert!(err.is(code::CAPABILITY_OFFLINE), "{:?}", err);
         assert_eq!(
-            err.params.get("capability").map(String::as_str),
+            err.params().get("capability").map(String::as_str),
             Some("trash")
         );
     }

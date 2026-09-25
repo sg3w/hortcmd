@@ -304,7 +304,7 @@ mod tests {
             );
             // The offending name travels as a parameter, so the
             // frontend can quote it in either language.
-            assert_eq!(err.params.get("name").map(String::as_str), Some(bad));
+            assert_eq!(err.params().get("name").map(String::as_str), Some(bad));
         }
     }
 

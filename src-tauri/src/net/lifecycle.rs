@@ -719,7 +719,7 @@ mod tests {
         // than a marker inside a sentence.
         let f = ConnFailure::new(FailureKind::Timeout, "zu langsam");
         assert!(f.error.is(code::NET_TIMEOUT));
-        assert_eq!(f.error.detail.as_deref(), Some("zu langsam"));
+        assert_eq!(f.error.diagnostic_detail(), Some("zu langsam"));
         let cancelled = ConnFailure::new(FailureKind::Cancelled, "x");
         assert!(cancelled.error.is(code::CANCELLED));
         assert!(cancelled.error.action.is_none());
@@ -788,7 +788,7 @@ mod tests {
         // WebDAV profiles store `http://host`; the probe resolves `host`.
         let err = probe_transport("http://host.invalid.example.test/", 8080).unwrap_err();
         // The host is a parameter now, not a word in a sentence.
-        let host = err.error.params.get("host").map(String::as_str);
+        let host = err.error.params().get("host").map(String::as_str);
         assert_eq!(host, Some("host.invalid.example.test"));
     }
 

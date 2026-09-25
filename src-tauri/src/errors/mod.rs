@@ -85,7 +85,7 @@ pub struct AppError {
     pub code: Box<str>,
     /// Safe substitutions for the localized message (`{name}`, `{path}`).
     /// Only values the backend knows to be free of secrets get in here.
-    pub params: BTreeMap<String, String>,
+    params: BTreeMap<String, String>,
     /// The operation that failed (`copy`, `connect`, `extract`), when known.
     pub op: Option<Box<str>>,
     /// The provider or scheme it happened on (`sftp`, `local`), when known.
@@ -95,7 +95,7 @@ pub struct AppError {
     /// What the user can do about it.
     pub action: Option<ErrorAction>,
     /// Redacted technical detail — for diagnostics, **not** for display.
-    pub detail: Option<Box<str>>,
+    detail: Option<Box<str>>,
     /// Correlation id: what a user quotes in a report, and what a log
     /// entry is matched against.
     pub id: Box<str>,
@@ -116,6 +116,16 @@ impl AppError {
             detail: None,
             id: correlation_id().into(),
         }
+    }
+
+    /// Read-only parameters; additions must use the redacting builder.
+    pub fn params(&self) -> &BTreeMap<String, String> {
+        &self.params
+    }
+
+    /// Redacted diagnostics for local inspection, never display text.
+    pub fn diagnostic_detail(&self) -> Option<&str> {
+        self.detail.as_deref()
     }
 
     /// Adds a localization parameter. The value is redacted on the way

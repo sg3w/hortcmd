@@ -598,8 +598,8 @@ mod tests {
         let err = scan(&id, &key(KEY_A), std::slice::from_ref(&path)).unwrap_err();
         // The file and the offending line are parameters now, not
         // words in a sentence — the frontend phrases it.
-        assert_eq!(err.params.get("path"), Some(&path.display().to_string()));
-        assert_eq!(err.params.get("lines").map(String::as_str), Some("1"));
+        assert_eq!(err.params().get("path"), Some(&path.display().to_string()));
+        assert_eq!(err.params().get("lines").map(String::as_str), Some("1"));
     }
 
     #[test]
