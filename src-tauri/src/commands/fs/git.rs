@@ -91,6 +91,13 @@ fn classify(code: &str, sub: bool) -> &'static str {
 /// since via the `git` CLI). Runs only on a background thread now, see
 /// [`git_status_watch`].
 pub(crate) fn compute_git_status(path: &str) -> GitStatus {
+    compute_git_status_with(path, |dir| std::fs::canonicalize(dir))
+}
+
+fn compute_git_status_with(
+    path: &str,
+    canonicalize: impl FnOnce(&Path) -> std::io::Result<PathBuf>,
+) -> GitStatus {
     let dir = Path::new(path);
 
     // Determine the repo root; fails → no repo (or no git).
@@ -105,11 +112,13 @@ pub(crate) fn compute_git_status(path: &str) -> GitStatus {
         .filter(|s| !s.is_empty() && s != "HEAD");
 
     // Folder path relative to the repo root (pathspec + prefix for matching).
-    let dir_abs = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
-    let rel = dir_abs
-        .strip_prefix(&top)
-        .map(|p| p.to_string_lossy().replace('\\', "/"))
-        .unwrap_or_default();
+    let Ok(dir_abs) = canonicalize(dir) else {
+        return empty(false);
+    };
+    let Ok(relative) = dir_abs.strip_prefix(&top) else {
+        return empty(false);
+    };
+    let rel = relative.to_string_lossy().replace('\\', "/");
     let prefix = if rel.is_empty() {
         String::new()
     } else {
@@ -295,5 +304,17 @@ mod tests {
             compute_git_status(dir.join("folder").to_str().unwrap()).entries["new.txt"],
             "added"
         );
+        // Git can enter the folder, but a failing realpath must not fall
+        // back to the repository-wide status (which has other dirty files).
+        let folder = dir.join("folder");
+        for canonical in [
+            Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied)),
+            Ok(dir.parent().unwrap().to_path_buf()),
+        ] {
+            let result = compute_git_status_with(folder.to_str().unwrap(), |_| canonical);
+            assert!(!result.is_repo);
+            assert!(result.branch.is_none());
+            assert!(result.entries.is_empty());
+        }
     }
 }

@@ -28,3 +28,9 @@ color-coding in the file list with no indication anything went wrong.
 - Test: simulate a canonicalize failure for a directory git can still chdir
   into; assert git-status output does not silently widen to the whole repo.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Git status now aborts when canonicalization fails or the resolved directory is outside the repository root. A real-repository regression injects permission failure and an out-of-root result, confirming neither exposes repository-wide entries.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.
