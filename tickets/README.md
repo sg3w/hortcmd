@@ -2,7 +2,8 @@
 
 All tickets below 100 and tickets 100–107 have been completed.
 Tickets 125–126, 128, 131, 134, 137 and the discovered issues 300–301 and 303–306 are also complete. There are
-**24 open tickets**: 108–124, 127, 129–130, 132–133 and 135–136. Dependencies use the current paths.
+**86 open tickets**: 108–124, 127, 129–130, 132–133, 135–136 and the discovered
+issues 307–368. Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
 filenames ending in `.done.md`. This also applies to previously completed support
@@ -77,6 +78,57 @@ historical references while active links use the current filenames.
 - [305](done/305-archive-password-error-dispatch.done.md): preserve structured archive password errors for password prompts.
 
 - [306](done/306-archive-listing-error-presentation.done.md): present structured archive listing failures correctly.
+
+## Discovered in the 2026-09-22 full-codebase review
+
+62 findings from a 16-way parallel code review of the entire codebase
+(11 Rust backend areas, 5 frontend areas), covering correctness, security,
+data-safety, efficiency, and reuse. Ordered roughly most-severe first;
+numbers are otherwise unordered within that grouping.
+
+Security/critical:
+[307](307-error-redaction-byte-char-index-mismatch.md) (error redaction silently
+fails on non-ASCII input — verified credential leak),
+[308](308-mcp-error-detail-not-redacted.md), [309](309-apperror-fields-not-encapsulated.md),
+[310](310-connections-dialog-secret-field-leak.md), [311](311-webdav-spool-file-symlink-race.md),
+[312](312-mcp-extract-missing-live-authorization.md).
+
+Data-safety (transfer/archive/undo/search):
+[313](313-discard-staging-remote-destination-noop.md), [314](314-transfer-commit-rollback-failure-swallowed.md),
+[315](315-parallel-copy-orphaned-directories.md), [316](316-zip-directory-entries-skip-manifest-verify.md),
+[317](317-undo-eligibility-canonicalize-hard-error.md), [318](318-search-unreadable-files-not-counted.md).
+
+Correctness (backend):
+[319](319-smb-remove-dir-all-reparse-point-recursion.md), [320](320-ftp-webdav-missing-connection-timeout.md),
+[321](321-vfs-listing-unbounded-memory-allocation.md), [322](322-native-plugin-windows-orphan-process.md),
+[323](323-plugin-fs-preview-missing-capability-check.md), [324](324-checksums-missing-capability-check.md),
+[325](325-selection-save-load-missing-capability-check.md), [326](326-compare-dirs-aborts-on-single-entry-error.md),
+[327](327-filecompare-utf8-truncation-misclassification.md), [328](328-compare-dirs-stack-overflow-recursion.md),
+[329](329-search-index-stale-global-cache-epoch.md), [330](330-search-index-crawler-step-not-cancellable.md),
+[331](331-net-save-profile-monitor-stopped-before-validation.md), [332](332-probe-transport-missing-host-param.md),
+[333](333-monitor-unsupported-state-latched.md), [334](334-keepass-unlock-state-divergence.md),
+[335](335-cancel-token-map-orphan-leak.md), [339](339-smb-ensure-share-race-condition.md),
+[340](340-webdav-list-dot-dotdot-not-filtered.md), [341](341-smb-shares-error-generic-code.md),
+[342](342-mcp-mutex-lock-expect-poison-panic.md), [343](343-dir-size-blocking-call-not-spawn-blocking.md),
+[344](344-finder-tags-dead-fallback-code.md), [345](345-git-status-canonicalize-fallback-scope-widening.md),
+[346](346-dir-size-cancel-token-leak.md), [347](347-dir-size-generic-not-a-directory-error.md),
+[349](349-pack-sources-count-not-bounded-early.md), [350](350-archive-unknown-format-generic-error.md),
+[351](351-error-code-all-missing-tls-codes.md), [352](352-menu-language-apply-failure-silent.md),
+[353](353-probe-transport-unbounded-total-timeout.md).
+
+Correctness (frontend):
+[336](336-fill-params-placeholder-resubstitution.md), [337](337-index-ipc-missing-hastauri-guard.md),
+[338](338-use-tauri-hastauri-not-reactive.md), [348](348-progress-overlay-no-focus-trap.md),
+[354](354-reactive-settings-subscription-bulk-mount.md), [355](355-normalize-associations-dead-code.md),
+[356](356-run-edit-unhandled-rejection.md), [357](357-run-mkdir-silent-failure.md),
+[358](358-extract-no-confirm-double-submit-guard.md), [359](359-rename-preview-case-sensitivity-mismatch.md),
+[365](365-connections-dialog-no-busy-guard.md), [366](366-plugins-ui-raw-error-display.md),
+[368](368-drive-select-redundant-refresh.md).
+
+Reuse/efficiency cleanup:
+[360](360-glob-to-regex-duplicated-converters.md), [361](361-crawler-bytes-recomputed-on-step.md),
+[362](362-mtime-of-triplicated.md), [363](363-icon-mount-table-no-batch-cache.md),
+[364](364-archive-is-link-mode-duplicated.md), [367](367-net-store-duplicated-authority-logic.md).
 
 ## Current implementation batch
 
