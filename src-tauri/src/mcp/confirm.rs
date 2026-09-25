@@ -77,7 +77,7 @@ fn app() -> &'static Mutex<Option<AppHandle>> {
 
 /// Called from the application's setup.
 pub fn attach(handle: AppHandle) {
-    *app().lock().expect("mcp confirm app") = Some(handle);
+    *app().lock().unwrap_or_else(|e| e.into_inner()) = Some(handle);
 }
 
 fn remembered_key(client: &str, tool: &str) -> String {
@@ -89,12 +89,17 @@ pub fn ask(session: &str, client: &str, tool: &str, summary: &str) -> Answer {
     let key = remembered_key(session, tool);
     {
         let (lock, _) = pending();
-        if lock.lock().expect("mcp confirm").remembered.contains(&key) {
+        if lock
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remembered
+            .contains(&key)
+        {
             return Answer::Approved;
         }
     }
 
-    let handle = match app().lock().expect("mcp confirm app").clone() {
+    let handle = match app().lock().unwrap_or_else(|e| e.into_inner()).clone() {
         Some(h) => h,
         // No window means nobody to ask, which is not a reason to
         // proceed. It is a reason to refuse and say so.
@@ -111,12 +116,15 @@ pub fn ask(session: &str, client: &str, tool: &str, summary: &str) -> Answer {
 
     let (lock, cvar) = pending();
     lock.lock()
-        .expect("mcp confirm")
+        .unwrap_or_else(|e| e.into_inner())
         .answers
         .insert(id.clone(), (key, None));
 
     if handle.emit("mcp-confirm", &request).is_err() {
-        lock.lock().expect("mcp confirm").answers.remove(&id);
+        lock.lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .answers
+            .remove(&id);
         return Answer::Unavailable;
     }
 
@@ -134,7 +142,7 @@ pub fn ask(session: &str, client: &str, tool: &str, summary: &str) -> Answer {
         id: id.clone(),
     };
 
-    let mut guard = lock.lock().expect("mcp confirm");
+    let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
     let deadline = std::time::Instant::now() + TIMEOUT;
     loop {
         match guard.answers.get(&id) {
@@ -164,7 +172,7 @@ pub fn ask(session: &str, client: &str, tool: &str, summary: &str) -> Answer {
         }
         let (next, _timeout) = cvar
             .wait_timeout(guard, left.min(Duration::from_millis(200)))
-            .expect("mcp confirm wait");
+            .unwrap_or_else(|e| e.into_inner());
         guard = next;
     }
 }
@@ -172,7 +180,7 @@ pub fn ask(session: &str, client: &str, tool: &str, summary: &str) -> Answer {
 /// The window's answer.
 pub fn answer(id: &str, approved: bool, remember: bool) {
     let (lock, cvar) = pending();
-    let mut guard = lock.lock().expect("mcp confirm");
+    let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
     let Some((key, slot)) = guard.answers.get_mut(id) else {
         return;
     };
@@ -191,7 +199,7 @@ pub fn answer(id: &str, approved: bool, remember: bool) {
 /// Forgets every "allow this tool for this client" of this run.
 pub fn forget_remembered() {
     let (lock, cvar) = pending();
-    let mut state = lock.lock().expect("mcp confirm");
+    let mut state = lock.lock().unwrap_or_else(|e| e.into_inner());
     state.remembered.clear();
     state.answers.clear();
     cvar.notify_all();
@@ -201,7 +209,7 @@ pub fn forget_remembered() {
 pub fn forget_session(session: &str) {
     let prefix = format!("{session}\u{0}");
     let (lock, cvar) = pending();
-    let mut state = lock.lock().expect("mcp confirm");
+    let mut state = lock.lock().unwrap_or_else(|e| e.into_inner());
     state.remembered.retain(|key| !key.starts_with(&prefix));
     state
         .answers

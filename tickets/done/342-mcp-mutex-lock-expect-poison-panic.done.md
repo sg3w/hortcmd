@@ -34,3 +34,9 @@ deliberate choice.
 - `cargo clippy`/`npm run check` after the change; optionally a test that
   poisons one of these mutexes (panic in a locked scope) and asserts a
   subsequent call still succeeds instead of panicking.
+
+## Resolution (2026-09-25)
+
+MCP audit, configuration and confirmation mutexes now recover poisoned state consistently with the rest of the module, including the condition-variable wait path.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

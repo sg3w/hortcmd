@@ -194,7 +194,7 @@ fn state() -> &'static Mutex<McpConfig> {
 
 /// A copy of the current configuration.
 pub fn config() -> McpConfig {
-    state().lock().expect("mcp config").clone()
+    state().lock().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
 /// Replaces the configuration and writes it out.
@@ -240,7 +240,7 @@ pub fn set_config(mut next: McpConfig) -> AppResult<McpConfig> {
             .detail(format!("{}: {}", path.display(), e))
     })?;
 
-    *state().lock().expect("mcp config") = next.clone();
+    *state().lock().unwrap_or_else(|e| e.into_inner()) = next.clone();
     Ok(next)
 }
 

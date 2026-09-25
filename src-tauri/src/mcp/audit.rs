@@ -90,7 +90,7 @@ pub fn record(
         outcome,
         detail: detail.map(|s| crate::errors::redact(&s)),
     };
-    push(&mut log().lock().expect("mcp audit"), entry);
+    push(&mut log().lock().unwrap_or_else(|e| e.into_inner()), entry);
 }
 
 /// The buffer's own rule, apart from the global that holds it.
@@ -109,7 +109,7 @@ fn push(log: &mut VecDeque<McpAuditEntry>, entry: McpAuditEntry) {
 pub fn entries() -> Vec<McpAuditEntry> {
     log()
         .lock()
-        .expect("mcp audit")
+        .unwrap_or_else(|e| e.into_inner())
         .iter()
         .rev()
         .cloned()
@@ -118,7 +118,7 @@ pub fn entries() -> Vec<McpAuditEntry> {
 
 /// Empties the log — offered in the settings beside it.
 pub fn clear() {
-    log().lock().expect("mcp audit").clear();
+    log().lock().unwrap_or_else(|e| e.into_inner()).clear();
 }
 
 #[cfg(test)]
