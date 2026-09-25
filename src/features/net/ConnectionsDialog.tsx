@@ -323,11 +323,15 @@ function ProfileForm({ profile }: { profile: Profile }) {
     setSecret("");
   }, [profile]);
 
-  const set = <K extends keyof Profile>(key: K, value: Profile[K]) =>
+  const set = <K extends keyof Profile>(key: K, value: Profile[K]) => {
+    if (key === "auth") setSecret("");
     setForm((f) => ({ ...f, [key]: value, ...(["host", "port", "user"].includes(key) ? { security: { ...f.security, plaintextAcknowledged: false, certificate: null } } : {}) }));
 
+  };
+
   /** Switching protocol adjusts the port and keeps auth valid. */
-  const setProtocol = (proto: ProtocolId) =>
+  const setProtocol = (proto: ProtocolId) => {
+    setSecret("");
     setForm((f) => {
       const allowed = AUTH_FOR[proto];
       return {
@@ -341,6 +345,8 @@ function ProfileForm({ profile }: { profile: Profile }) {
         auth: allowed.includes(f.auth as AuthId) ? f.auth : allowed[0],
       };
     });
+
+  };
 
   const proto = (form.protocol as ProtocolId) ?? "sftp";
   const auth = form.auth;

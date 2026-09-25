@@ -30,3 +30,10 @@ fix `auth` for the whole test rather than switching it mid-form.
 - New test: fill the password field, switch Auth to "Private key", assert the
   passphrase field is empty.
 - `npm run check`.
+
+## Implementation
+
+Changing authentication method or protocol clears the unsaved secret. Regression
+tests cover switching to private-key authentication and FTPS and confirm that the
+old credential is absent from the save request. This protects form state; existing
+credential-store retention rules remain unchanged.

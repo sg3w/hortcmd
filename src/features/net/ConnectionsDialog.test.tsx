@@ -140,3 +140,15 @@ for (const auth of ["password", "key", "digest"] as const) {
     expect(screen.getByLabelText(translate(auth === "key" ? "net.passphrase" : "net.password"))).toHaveValue("");
   });
 }
+
+it.each(["auth", "protocol"] as const)("clears the entered secret when %s changes", async change => {
+  const { runtime, user } = setup("en", { auth: "password" });
+  await user.keyboard("{Enter}");
+  const group = await screen.findByRole("group", { name: "Example" });
+  await user.click(within(group).getByRole("button", { name: translate("net.edit") }));
+  await user.type(screen.getByLabelText(translate("net.password")), "login-secret");
+  await user.selectOptions(screen.getByLabelText(translate(change === "auth" ? "net.auth" : "net.protocol")), change === "auth" ? "key" : "ftps");
+  expect(screen.getByLabelText(translate(change === "auth" ? "net.passphrase" : "net.password"))).toHaveValue("");
+  await user.click(screen.getByRole("button", { name: translate("net.save") }));
+  await waitFor(() => expect(runtime.calls.find(call => call.cmd === "net_save_profile")?.args).toMatchObject({ secret: null }));
+});
