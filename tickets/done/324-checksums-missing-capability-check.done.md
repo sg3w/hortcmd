@@ -34,3 +34,9 @@ synchronously with no capability gate.
 - Test that `read_file_checksums`/the `checksums` MCP tool refuses a remote
   address the same way `read_file_props` does.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+The shared read_file_checksums service now checks Checksums before resolving or opening a provider, covering both Tauri and MCP callers. Regressions verify capability refusal in both entry paths; existing known checksum vectors pass.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

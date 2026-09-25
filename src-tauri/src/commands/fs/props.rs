@@ -280,6 +280,7 @@ pub fn file_checksums(path: String) -> AppResult<Checksums> {
 
 pub(crate) fn read_file_checksums(path: String) -> AppResult<Checksums> {
     use md5::Digest as _; // shared Digest trait (also for sha1/sha2)
+    caps::require(&path, Capability::Checksums)?;
 
     let (provider, resolved) = crate::vfs::resolve(&path)?;
     let mut file = provider.open_read(&resolved)?;
@@ -316,6 +317,23 @@ mod tests {
         let p = dir.join(name);
         fs::write(&p, content).unwrap();
         p
+    }
+
+    #[test]
+    fn remote_checksum_requests_stop_at_the_capability_gate() {
+        for scheme in ["sftp", "ftp", "webdav"] {
+            let path = format!("{scheme}://checksum-fixture.invalid/file");
+            let error = file_checksums(path.clone()).err().unwrap();
+            assert!(error.is(crate::errors::code::CAPABILITY_OFFLINE));
+            assert_eq!(
+                error.params().get("capability").map(String::as_str),
+                Some("checksums")
+            );
+            assert!(file_props(path)
+                .err()
+                .unwrap()
+                .is(crate::errors::code::CAPABILITY_OFFLINE));
+        }
     }
 
     #[test]

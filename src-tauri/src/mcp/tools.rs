@@ -866,6 +866,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn checksum_tool_cannot_bypass_location_capabilities() {
+        let raw = json!({"path":"sftp://checksum-tool-fixture.invalid/file"});
+        let config = McpConfig::default();
+        let error = checksums(&Args {
+            raw: &raw,
+            config: &config,
+        })
+        .unwrap_err();
+        assert!(error.is(crate::errors::code::CAPABILITY_OFFLINE));
+        assert_eq!(
+            error.params().get("capability").map(String::as_str),
+            Some("checksums")
+        );
+    }
+
+    #[test]
     fn tool_errors_never_export_provider_diagnostics() {
         let error = crate::errors::AppError::new(crate::errors::code::FS_IO)
             .detail(r#"[{"provider":"internal-server","path":"/private/diagnostic"}]"#);
