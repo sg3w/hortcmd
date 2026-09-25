@@ -4,7 +4,6 @@
 // ============================================================
 
 import { onMount } from "@/store/driveStore";
-import { useEffect } from "react";
 import * as Select from "@radix-ui/react-select";
 import {
   Check,
@@ -33,11 +32,6 @@ export function DriveSelect({ side, drives }: Props) {
   const favorites = useSettings((s) => s.favorites);
   const connections = useNet((s) => s.connections);
   const t = useT();
-
-  // Keep the connection list fresh (status may change elsewhere).
-  useEffect(() => {
-    void useNet.getState().refresh();
-  }, []);
 
   const liveConns = connections.filter((c) => c.connected);
 

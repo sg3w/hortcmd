@@ -68,3 +68,17 @@ it("stops polling while hidden, resumes on visibility and tears down subscriptio
   mounted.unmount();
   await waitFor(() => expect(tauri.calls.filter(c => c.cmd === "refresh_subscribe").slice(-1)[0]?.args.subscriptions).toEqual([]));
 });
+
+it("fetches the connection snapshot once for the whole app, not once per pane picker", async () => {
+  tauri.setCommand("net_list_profiles", () => []);
+  tauri.setCommand("net_list_connections", () => []);
+  const mounted = renderHook(() => hook.useRefresh());
+  await waitFor(() => expect(tauri.calls.some(c => c.cmd === "net_list_connections")).toBe(true));
+  const { DriveSelect } = await import("./DriveSelect");
+  const { render } = await import("@testing-library/react");
+  const panels = render(<><DriveSelect side="left" drives={[]}/><DriveSelect side="right" drives={[]}/></>);
+  await act(async () => { await Promise.resolve(); });
+  expect(tauri.calls.filter(c => c.cmd === "net_list_profiles")).toHaveLength(1);
+  expect(tauri.calls.filter(c => c.cmd === "net_list_connections")).toHaveLength(1);
+  panels.unmount(); mounted.unmount();
+});
