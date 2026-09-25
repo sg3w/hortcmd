@@ -37,3 +37,11 @@ redaction bypass, not a crash.
 - New test: `redact_assignments` on a string containing an umlaut/accented
   character before a `password=`/`token=` assignment must strip the secret.
 - `npm run check`.
+
+## Implementation
+
+Assignment redaction uses UTF-8 byte offsets and ASCII-only case folding, with
+merged replacement ranges. Unicode prefixes and values cannot shift the secret
+boundary. This protects the existing recognized assignment shapes; it is not a
+general sanitizer for arbitrary provider text. Regression tests cover umlauts,
+CJK, emoji, expanding Unicode lowercase characters, and overlapping assignments.

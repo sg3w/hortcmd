@@ -521,8 +521,9 @@ const SECRET_WORDS: [&str; 10] = [
 
 /// `password=hunter2`, `token: abc`, `Passwort "x"` → the value replaced.
 fn redact_assignments(text: &str) -> String {
-    let lower = text.to_lowercase();
+    let lower = text.to_ascii_lowercase();
     let mut out = text.to_string();
+    let chars = text.as_bytes();
     // Work from the end so earlier indices stay valid.
     let mut hits: Vec<(usize, usize)> = Vec::new();
     for word in SECRET_WORDS {
@@ -532,8 +533,7 @@ fn redact_assignments(text: &str) -> String {
             from = at + word.len();
             // Skip the separator (`=`, `:`, spaces, quotes).
             let mut j = from;
-            let chars: Vec<char> = text.chars().collect();
-            while j < chars.len() && " \t=:\"'".contains(chars[j]) {
+            while j < chars.len() && b" \t=:\"'".contains(&chars[j]) {
                 j += 1;
             }
             if j == from || j >= chars.len() {
@@ -542,36 +542,42 @@ fn redact_assignments(text: &str) -> String {
             // `Authorization: Bearer abc` — the scheme word is not the
             // secret; the token after it is.
             let mut value_start = j;
-            while j < chars.len() && !" \t\n,;\"')".contains(chars[j]) {
+            while j < chars.len() && !b" \t\n,;\"')".contains(&chars[j]) {
                 j += 1;
             }
-            let first: String = chars[value_start..j].iter().collect();
+            let first = &text[value_start..j];
             if matches!(
                 first.to_lowercase().as_str(),
                 "bearer" | "basic" | "digest" | "token"
             ) {
-                while j < chars.len() && " \t".contains(chars[j]) {
+                while j < chars.len() && b" \t".contains(&chars[j]) {
                     j += 1;
                 }
                 value_start = j;
-                while j < chars.len() && !" \t\n,;\"')".contains(chars[j]) {
+                while j < chars.len() && !b" \t\n,;\"')".contains(&chars[j]) {
                     j += 1;
                 }
             }
             // Already redacted by an earlier pass — leave it be, so
             // repeated redaction stays idempotent.
-            let value: String = chars[value_start..j].iter().collect();
+            let value = &text[value_start..j];
             if j > value_start && value != "***" {
                 hits.push((value_start, j));
             }
         }
     }
     hits.sort_unstable();
-    hits.dedup();
-    for (start, end) in hits.into_iter().rev() {
-        let prefix: String = out.chars().take(start).collect();
-        let suffix: String = out.chars().skip(end).collect();
-        out = format!("{}***{}", prefix, suffix);
+    // Merge overlapping matches before replacing their original byte ranges.
+    let mut ranges: Vec<(usize, usize)> = Vec::new();
+    for (start, end) in hits {
+        if let Some(last) = ranges.last_mut().filter(|last| start <= last.1) {
+            last.1 = last.1.max(end);
+        } else {
+            ranges.push((start, end));
+        }
+    }
+    for (start, end) in ranges.into_iter().rev() {
+        out.replace_range(start..end, "***");
     }
     out
 }

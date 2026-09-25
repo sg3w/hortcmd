@@ -222,3 +222,19 @@ fn the_error_stays_small_enough_for_every_result_to_carry_it() {
         std::mem::size_of::<AppError>()
     );
 }
+
+#[test]
+fn assignments_redact_unicode_without_changing_offsets() {
+    for prefix in ["/Users/jörg/", "é中文🔒", "İ"] {
+        for assignment in ["password", "TOKEN", "apikey"] {
+            let input = format!("{prefix}: {assignment}=sëcret🔑; suffix");
+            let expected = format!("{prefix}: {assignment}=***; suffix");
+            assert_eq!(redact_assignments(&input), expected);
+            assert_eq!(redact_assignments(&expected), expected);
+        }
+    }
+    assert_eq!(
+        redact_assignments("jö: password=token=秘密; apikey=two"),
+        "jö: password=***; apikey=***"
+    );
+}

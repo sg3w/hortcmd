@@ -2,8 +2,8 @@
 
 All tickets below 100 and tickets 100–107 have been completed.
 Tickets 125–126, 128, 131, 134, 137 and the discovered issues 300–301 and 303–306 are also complete. There are
-**86 open tickets**: 108–124, 127, 129–130, 132–133, 135–136 and the discovered
-issues 307–368. Dependencies use the current paths.
+**85 open tickets**: 108–124, 127, 129–130, 132–133, 135–136 and the discovered
+issues 308–368. Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
 filenames ending in `.done.md`. This also applies to previously completed support
@@ -87,7 +87,7 @@ data-safety, efficiency, and reuse. Ordered roughly most-severe first;
 numbers are otherwise unordered within that grouping.
 
 Security/critical:
-[307](307-error-redaction-byte-char-index-mismatch.md) (error redaction silently
+[307](done/307-error-redaction-byte-char-index-mismatch.done.md) (error redaction silently
 fails on non-ASCII input — verified credential leak),
 [308](308-mcp-error-detail-not-redacted.md), [309](309-apperror-fields-not-encapsulated.md),
 [310](310-connections-dialog-secret-field-leak.md), [311](311-webdav-spool-file-symlink-race.md),
@@ -135,3 +135,7 @@ Reuse/efficiency cleanup:
 Requested: 20 additional code tickets, excluding Windows/Linux-specific work.
 Completed in this batch: **128, 137, 300, 107, 301, 303, 304, 125, 305, 126, 306, 134, 131 (13 of 20)**. New findings are recorded above.
 
+
+## Review-fix batch (2026-09-25)
+
+Completed: 307.
