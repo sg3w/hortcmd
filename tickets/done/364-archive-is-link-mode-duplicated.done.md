@@ -29,3 +29,9 @@ to update all four.
 - Existing archive extraction tests continue to pass unchanged after the
   refactor.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+ZIP preflight and both directory/file extraction checks now use one mode predicate; 7z preflight and extraction share one entry predicate built on it. Existing link, special-file and archive extraction tests pass without changing format behavior.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

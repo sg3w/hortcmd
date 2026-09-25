@@ -33,6 +33,18 @@ pub(super) fn match_target(
     }
 }
 
+fn is_link_mode(mode: u32) -> bool {
+    let kind = mode & 0o170000;
+    kind != 0 && kind != 0o100000 && kind != 0o040000
+}
+
+fn sevenz_is_link(entry: &sevenz_rust::SevenZArchiveEntry) -> bool {
+    entry.is_anti_item
+        || (entry.has_windows_attributes
+            && (entry.windows_attributes & 0x400 != 0
+                || is_link_mode(entry.windows_attributes >> 16)))
+}
+
 pub(super) fn preflight(
     archive: &str,
     pw: &Option<String>,
@@ -59,10 +71,7 @@ fn preflight_inner(
             for index in 0..zip.len() {
                 check_cancel(cancel)?;
                 let entry = zip.by_index_raw(index)?;
-                let link = entry.unix_mode().is_some_and(|mode| {
-                    let kind = mode & 0o170000;
-                    kind != 0 && kind != 0o100000 && kind != 0o040000
-                });
+                let link = entry.unix_mode().is_some_and(is_link_mode);
                 manifest.add(entry.name(), entry.is_dir(), entry.size(), link)?;
             }
         }
@@ -86,11 +95,7 @@ fn preflight_inner(
             let meta = budget::seven_meta(archive, pw).map_err(map_7z_err)?;
             for entry in &meta.files {
                 check_cancel(cancel)?;
-                let mode = (entry.windows_attributes >> 16) & 0o170000;
-                let link = entry.is_anti_item
-                    || (entry.has_windows_attributes
-                        && (entry.windows_attributes & 0x400 != 0
-                            || (mode != 0 && mode != 0o100000 && mode != 0o040000)));
+                let link = sevenz_is_link(entry);
                 manifest.add(&entry.name, entry.is_directory, entry.size, link)?;
             }
         }
@@ -160,12 +165,11 @@ pub(super) fn extract_zip(
     for i in 0..zip.len() {
         let e = zip.by_index_raw(i).map_err(AppError::from)?;
         if e.is_dir() {
-            let mode = e.unix_mode().unwrap_or(0) & 0o170000;
             manifest.verify(
                 e.name(),
                 true,
                 e.size(),
-                mode != 0 && mode != 0o100000 && mode != 0o040000,
+                e.unix_mode().is_some_and(is_link_mode),
             )?;
             if let Some(rel) = match_target(e.name(), base, all, targets) {
                 dest.directory(&rel, &manifest.limits)?;
@@ -221,12 +225,12 @@ fn extract_zip_one(
     // Read metadata in its own scope (separate borrow).
     let (name, encrypted, size) = {
         let e = zip.by_index_raw(index).map_err(AppError::from)?;
-        let mode = e.unix_mode().unwrap_or(0) & 0o170000;
+
         manifest.verify(
             e.name(),
             e.is_dir(),
             e.size(),
-            mode != 0 && mode != 0o100000 && mode != 0o040000,
+            e.unix_mode().is_some_and(is_link_mode),
         )?;
         (e.name().to_string(), e.encrypted(), e.size())
     };
@@ -354,11 +358,7 @@ pub(super) fn extract_7z(
             if prog.cancelled() {
                 return Ok(false);
             }
-            let mode = (entry.windows_attributes >> 16) & 0o170000;
-            let link = entry.is_anti_item
-                || (entry.has_windows_attributes
-                    && (entry.windows_attributes & 0x400 != 0
-                        || (mode != 0 && mode != 0o100000 && mode != 0o040000)));
+            let link = sevenz_is_link(entry);
             if let Err(error) = manifest.verify(&entry.name, entry.is_directory, entry.size, link) {
                 errors.push(ItemError::new(&entry.name, error));
                 return Ok(false);
