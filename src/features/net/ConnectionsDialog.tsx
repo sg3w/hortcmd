@@ -11,7 +11,7 @@
 // form keeps them around after submitting.
 // ============================================================
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   KeyRound,
   Loader2,
@@ -309,6 +309,8 @@ function ConnectionRow({
 }
 
 function ProfileForm({ profile }: { profile: Profile }) {
+  const saving = useRef(false);
+  const [busy, setBusy] = useState(false);
   const save = useNet((s) => s.save);
   const cancelEdit = useNet((s) => s.cancelEdit);
   const t = useT();
@@ -353,12 +355,19 @@ function ProfileForm({ profile }: { profile: Profile }) {
   const authMethods = AUTH_FOR[proto] ?? AUTH_FOR.sftp;
   const canSave = form.host.trim() !== "" && form.port > 0;
 
-  const submit = () => {
-    if (!canSave) return;
+  const submit = async () => {
+    if (!canSave || saving.current) return;
+    saving.current = true;
+    setBusy(true);
     const name = form.name.trim() || form.host.trim();
     // Empty means retain; every nonempty secret is an exact replacement.
     const secretToSave = secret === "" ? null : secret;
-    void save({ ...form, name }, secretToSave);
+    try {
+      await save({ ...form, name }, secretToSave);
+    } finally {
+      saving.current = false;
+      setBusy(false);
+    }
   };
 
   return (
@@ -498,7 +507,7 @@ function ProfileForm({ profile }: { profile: Profile }) {
         </button>
         <button
           onClick={submit}
-          disabled={!canSave}
+          disabled={busy || !canSave}
           className="rounded bg-accent px-3 py-1 text-[13px] text-white hover:brightness-110 disabled:opacity-40"
         >
           {t("net.save")}
@@ -514,6 +523,8 @@ function ProfileForm({ profile }: { profile: Profile }) {
  * prompt's job, so nothing typed on this panel is a secret.
  */
 function CredentialStoreForm() {
+  const applying = useRef(false);
+  const [busy, setBusy] = useState(false);
   const cred = useNet((s) => s.cred);
   const setCredBackend = useNet((s) => s.setCredBackend);
   const showPanel = useNet((s) => s.showPanel);
@@ -541,12 +552,18 @@ function CredentialStoreForm() {
   const canApply = !keepass || form.kdbx_path.trim() !== "";
 
   const apply = async () => {
-    if (!canApply) return;
-    const ok = await setCredBackend(form);
-    // Switching to KeePass leaves a locked file — ask for the master
-    // password right away instead of waiting for the next connect.
-    if (ok && keepass) showPanel("unlock");
-    else if (ok) showPanel("list");
+    if (!canApply || applying.current) return;
+    applying.current = true;
+    setBusy(true);
+    try {
+      const ok = await setCredBackend(form);
+      // KeePass starts locked; request its password after switching.
+      if (ok && keepass) showPanel("unlock");
+      else if (ok) showPanel("list");
+    } finally {
+      applying.current = false;
+      setBusy(false);
+    }
   };
 
   return (
@@ -637,7 +654,7 @@ function CredentialStoreForm() {
         </button>
         <button
           onClick={() => void apply()}
-          disabled={!canApply}
+          disabled={busy || !canApply}
           className="rounded bg-accent px-3 py-1 text-[13px] text-white hover:brightness-110 disabled:opacity-40"
         >
           {t("cred.apply")}

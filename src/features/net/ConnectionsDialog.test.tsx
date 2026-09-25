@@ -152,3 +152,29 @@ it.each(["auth", "protocol"] as const)("clears the entered secret when %s change
   await user.click(screen.getByRole("button", { name: translate("net.save") }));
   await waitFor(() => expect(runtime.calls.find(call => call.cmd === "net_save_profile")?.args).toMatchObject({ secret: null }));
 });
+
+it.each(["save", "apply"] as const)("blocks duplicate %s calls and releases the guard after failure", async action => {
+  const { runtime, user, trigger } = setup("en");
+  runtime.setCommand("net_cred_status", () => ({ config: { backend: "keychain", kdbx_path: "", key_file: "", master_in_keychain: false }, unlocked: true, needs_unlock: false }));
+  let reject!: (error: unknown) => void;
+  const pending = new Promise<void>((_, fail) => { reject = fail; });
+  const command = action === "save" ? "net_save_profile" : "net_cred_set_backend";
+  runtime.setCommand(command, () => pending);
+  await user.click(trigger);
+  const group = await screen.findByRole("group", { name: "Example" });
+  if (action === "save") {
+    await user.click(within(group).getByRole("button", { name: translate("net.edit") }));
+  } else {
+    await user.click(screen.getByRole("button", { name: translate("cred.manage") }));
+  }
+  const button = screen.getByRole("button", { name: translate(action === "save" ? "net.save" : "cred.apply") });
+  fireEvent.click(button);
+  fireEvent.click(button);
+  await waitFor(() => expect(runtime.calls.filter(call => call.cmd === command)).toHaveLength(1));
+  expect(button).toBeDisabled();
+  reject(new Error("test refusal"));
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+  await waitFor(() => expect(runtime.calls.filter(call => call.cmd === command)).toHaveLength(2));
+  await waitFor(() => expect(button).toBeEnabled());
+});

@@ -27,3 +27,9 @@ A user double-clicks "Save" (or "Apply") before the first
 - Test: double-click Save/Apply before the IPC call resolves; assert only
   one call fires.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Connection profile Save and credential-store Apply now use immediate in-flight guards and disable their buttons during requests. Finally blocks release both guards on completion. Focused deferred-IPC tests verify duplicate clicks issue one call and failures permit a retry.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.
