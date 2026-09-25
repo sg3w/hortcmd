@@ -33,3 +33,9 @@ unrelated "save failed" error.
   step fails (e.g. mocked credential store failure); assert the monitor is
   still running afterward.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Profile saves complete certificate validation, credential storage, index cleanup, and profile persistence before stopping the monitor or changing the live registry. The regression rejects invalid certificate approval while asserting that the existing provider, saved in-memory profile, and Watching monitor remain intact.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

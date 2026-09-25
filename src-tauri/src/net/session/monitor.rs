@@ -238,6 +238,65 @@ fn supervise(app: AppHandle, profile: Profile, settings: MonitorSettings, contro
 mod tests {
     use super::*;
     #[test]
+    fn failed_profile_validation_preserves_monitor_and_live_provider() {
+        let mut profile = Profile {
+            id: crate::net::unique_id(),
+            name: "monitored".into(),
+            protocol: "sftp".into(),
+            host: "localhost".into(),
+            port: 22,
+            user: "test".into(),
+            auth: "password".into(),
+            key_path: None,
+            start_path: "/".into(),
+            security: Default::default(),
+            monitor: None,
+        };
+        let store = profile.store_id();
+        let provider: Arc<dyn Provider> = Arc::new(crate::vfs::local::LocalProvider);
+        let control = Arc::new(Control {
+            profile_id: profile.id.clone(),
+            stop: AtomicBool::new(false),
+            state: Mutex::new(MonitorState::Watching),
+        });
+        controls()
+            .lock()
+            .unwrap()
+            .insert(store.clone(), control.clone());
+        {
+            let mut reg = registry().lock().unwrap();
+            reg.profiles.push(profile.clone());
+            reg.live.insert(store.clone(), provider.clone());
+        }
+        profile.security.certificate = Some(crate::net::certificate::CertificateTrust {
+            path: "/missing-certificate".into(),
+            fingerprint: String::new(),
+            profile_id: profile.id.clone(),
+            endpoint: "invalid-approval".into(),
+            is_ca: false,
+        });
+        let error = net_save_profile(profile.clone(), None).unwrap_err();
+        assert!(error.is(crate::errors::code::NET_CERTIFICATE_CHANGED));
+        assert!(control.active());
+        assert_eq!(state(&profile), Some(MonitorState::Watching));
+        {
+            let mut reg = registry().lock().unwrap();
+            assert!(Arc::ptr_eq(reg.live.get(&store).unwrap(), &provider));
+            assert!(reg
+                .profiles
+                .iter()
+                .find(|p| p.id == profile.id)
+                .unwrap()
+                .security
+                .certificate
+                .is_none());
+            reg.live.remove(&store);
+            reg.profiles.retain(|p| p.id != profile.id);
+        }
+        stop(&store);
+    }
+
+    #[test]
     fn legacy_defaults_and_limits() {
         let settings: MonitorSettings = serde_json::from_str("{}").unwrap();
         assert!(settings.enabled && settings.auto_reconnect);

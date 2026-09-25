@@ -452,28 +452,29 @@ pub fn net_save_profile(profile: Profile, secret: Option<String>) -> AppResult<(
     profile.authority()?;
     profile.monitor.clone().unwrap_or_default().validate()?;
     let _gate = session_gate().lock().unwrap();
-    monitor::stop_profile(&profile.id);
     crate::vfs::location::VfsLocation::parse(&profile.address())?;
-    crate::commands::fs::cache::invalidate();
     super::certificate::approved_der(&profile)?;
-    lifecycle::cancel_for_profile(&profile.id);
-    // Written before the registry lock: a locked KeePass file fails here,
-    // and the profile list must not be touched when the secret is lost.
+    // Complete fallible work before stopping the monitor or changing the live
+    // registry: a refused save must leave the current connection protected.
     if let Some(s) = &secret {
         credentials::store().set(&profile.id, s)?;
     }
     crate::commands::fs::search_index::delete_profile(&profile.id)?;
+    let mut profiles = registry().lock().unwrap().profiles.clone();
+    match profiles.iter_mut().find(|p| p.id == profile.id) {
+        Some(existing) => *existing = profile.clone(),
+        None => profiles.push(profile.clone()),
+    }
+    store_profiles(&profiles)?;
+    monitor::stop_profile(&profile.id);
+    crate::commands::fs::cache::invalidate();
     let mut reg = registry().lock().unwrap();
     if let Some(existing) = reg.profiles.iter().find(|p| p.id == profile.id) {
         let key = existing.store_id();
-        crate::commands::fs::cache::invalidate();
         reg.live.remove(&key);
     }
-    match reg.profiles.iter_mut().find(|p| p.id == profile.id) {
-        Some(existing) => *existing = profile,
-        None => reg.profiles.push(profile),
-    }
-    store_profiles(&reg.profiles)
+    reg.profiles = profiles;
+    Ok(())
 }
 
 /// Deletes a profile and its stored secret (disconnecting if live).
