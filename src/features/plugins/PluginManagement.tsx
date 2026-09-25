@@ -6,6 +6,7 @@ import type { PluginRecord } from "@/ipc/bindings/PluginRecord";
 import { useT } from "@/store/settingsStore";
 import { PluginIcon } from "./PluginIcon";
 import { usePlugins } from "./pluginsStore";
+import { describeErrorFull } from "@/store/errorText";
 const permissionKeys = {
   "read:context":"plugins.perm.context", "read:fs":"plugins.perm.read",
   "fs:write":"plugins.perm.write", "op:copy":"plugins.perm.copy",
@@ -24,7 +25,7 @@ export function PluginManagement() {
   useEffect(()=>{void refresh();},[refresh]);
   const run=async(action:()=>Promise<unknown>)=> {
     setBusy(true);setError(null);
-    try {await action();} catch(cause) {setError(String(cause));}
+    try {await action();} catch(cause) {setError(describeErrorFull(cause));}
     finally {await refresh();setBusy(false);}
   };
   if(!hasTauri()) return <p>{t("plugins.desktop")}</p>;

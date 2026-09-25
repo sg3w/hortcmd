@@ -4,6 +4,7 @@ import type { PluginRecord } from "@/ipc/bindings/PluginRecord";
 import type { PluginInstance } from "@/ipc/bindings/PluginInstance";
 import type { PluginTabContribution } from "@/ipc/bindings/PluginTabContribution";
 import type { Side } from "@/store/panesStore";
+import { describeErrorFull } from "@/store/errorText";
 export interface PluginTab {instance: PluginInstance; side: Side; contribution: PluginTabContribution; title: string}
 let generation = 0;
 interface PluginsState {
@@ -37,6 +38,6 @@ export const usePlugins = create<PluginsState>((set, get) => ({
         set({records, error:null});
         for (const tab of get().tabs) if (!records.some(r => r.id === tab.instance.pluginId && r.active && r.granted.includes("ui:tab"))) get().closeView(tab.instance.id);
       }
-    } catch (error) { if (current === generation) set({records:[], error:String(error)}); }
+    } catch (error) { if (current === generation) set({records:[], error:describeErrorFull(error)}); }
   },
 }));

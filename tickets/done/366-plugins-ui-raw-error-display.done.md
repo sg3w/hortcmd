@@ -34,3 +34,16 @@ worth fixing now.
 - Test: a plugin install/activate failure; assert the displayed message goes
   through `describeErrorFull` rather than a raw `String(error)`.
 - `npm run check`.
+
+## Resolution (2026-09-26)
+
+All five plugin UI error sites (`pluginsStore.refresh`, `PluginManagement.run`,
+`PluginCommandBar`, `PluginTabs`, `PluginFrame`'s request bridge) now format
+failures with `describeErrorFull` instead of `String(...)`, so typed backend
+errors render in the user's language with the reference-id fallback, and the
+still-untyped `Result<_, String>` plugin commands degrade to the same raw text
+as before. A `PluginManagement` test installs a plugin whose backend call
+rejects with a typed `fs.permission` error and asserts the alert shows the
+localized sentence and not the diagnostics-only `detail`.
+
+Validation: `npm run check` passed on macOS.

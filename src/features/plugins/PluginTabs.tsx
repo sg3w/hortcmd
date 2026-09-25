@@ -6,6 +6,7 @@ import { useT } from "@/store/settingsStore";
 import { usePlugins } from "./pluginsStore";
 import { PluginIcon } from "./PluginIcon";
 import { publishContext } from "./context";
+import { describeErrorFull } from "@/store/errorText";
 export default function PluginTabs({side}: {side: Side}) {
   const state = usePlugins(); const t = useT(); const [error,setError] = useState<string|null>(null);
   const tabs = state.tabs.filter(tab => tab.side === side);
@@ -18,7 +19,7 @@ export default function PluginTabs({side}: {side: Side}) {
       const instance = await pluginOpen(plugin,id,false,side);
       usePlugins.getState().addView({instance,side,contribution:item.view,title:item.view.title});
       usePanes.getState().setActive(usePlugins.getState().tabs.find(t => t.instance.id === instance.id)?.side ?? side);
-    } catch(error) { setError(String(error)); }
+    } catch(error) { setError(describeErrorFull(error)); }
   };
   const activate = (id: string) => { state.activateView(side,id); usePanes.getState().setActive(side); };
   return <>
