@@ -246,7 +246,10 @@ pub fn set_menu_language(app: tauri::AppHandle, lang: String) -> AppResult<()> {
         // muda touches AppKit, which is main-thread only.
         let handle = app.clone();
         app.run_on_main_thread(move || {
-            let _ = imp::apply(&handle, &lang);
+            if let Err(_error) = imp::apply(&handle, &lang) {
+                #[cfg(debug_assertions)]
+                eprintln!("Failed to apply native menu language: {_error}");
+            }
         })
         .map_err(AppError::from)?;
     }

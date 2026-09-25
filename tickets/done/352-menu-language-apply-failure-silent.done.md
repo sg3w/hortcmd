@@ -26,3 +26,9 @@ swallowed-error path.
 
 - `npm run check`; manual confirmation the debug build logs a message if
   `imp::apply` is made to fail (e.g. temporarily).
+
+## Resolution (2026-09-25)
+
+The macOS main-thread menu-language callback now prints an apply failure in debug builds instead of silently discarding it. The full check compiled and validated the macOS path; a live AppKit failure was not manually injected.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.
