@@ -170,7 +170,6 @@ pub async fn index_query(id: String, query: IndexQuery, token: String) -> AppRes
             {
                 return Err(bad("index root changed; approve again"));
             }
-            let observed = epoch();
             scope.dirty.store(false, Ordering::Relaxed);
             let mut scratch = scope.snapshot.clone();
             scratch.rows.clear();
@@ -190,7 +189,6 @@ pub async fn index_query(id: String, query: IndexQuery, token: String) -> AppRes
                 return Err(bad("live scan reached the scope limit"));
             }
             scope.snapshot = scratch;
-            scope.observed = observed;
             scope.save()?;
         }
         let latest_generation = generation(&scope.snapshot.location);

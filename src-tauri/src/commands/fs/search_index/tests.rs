@@ -499,3 +499,61 @@ async fn api_requires_scope_consent_revalidates_roots_and_clears_offline_profile
     delete_profile(profile).unwrap();
     assert!(get(&id).is_err());
 }
+
+#[test]
+fn unrelated_listing_cache_changes_preserve_index_freshness_and_pagination() {
+    let (_root, mut snapshot) = fixture();
+    snapshot.queue.clear();
+    snapshot.completed = now();
+    for name in ["a.txt", "b.txt"] {
+        snapshot.rows.insert(
+            name.into(),
+            Row {
+                name: name.into(),
+                directory: false,
+                size: 1,
+                modified: 1,
+                identity: name.into(),
+                content: None,
+                seen: snapshot.cycle,
+            },
+        );
+    }
+    // A restored persistent scope uses the same freshness decision as an
+    // in-memory scope; no persistence writes are needed for this regression.
+    let mut scope = Scope::new(
+        snapshot,
+        Some(storage::Secret {
+            salt: [1; 16],
+            key: [2; 32],
+        }),
+    );
+    let mut request = query();
+    request.limit = 1;
+    let first = query::test_page(&scope.snapshot, &request).unwrap();
+    request.after = first.next;
+    request.revision = Some(first.revision);
+    let cycle = scope.snapshot.cycle;
+    let (unrelated, _) = fixture();
+    for index in 0..5 {
+        std::fs::write(unrelated.0.join(format!("file-{index}")), "unrelated").unwrap();
+        super::super::cache::invalidate();
+        assert!(
+            !scope.stale(),
+            "another pane's cache epoch must not restart this scope"
+        );
+        assert_eq!(scope.info().state, "snapshot");
+        assert_eq!(scope.snapshot.cycle, cycle);
+        let second = query::test_page(&scope.snapshot, &request).unwrap();
+        assert_eq!(second.revision, first.revision);
+        assert_eq!(second.hits[0].relative, "b.txt");
+    }
+    scope.dirty.store(true, Ordering::Relaxed);
+    assert!(scope.stale());
+    scope.dirty.store(false, Ordering::Relaxed);
+    scope.snapshot.completed = now().saturating_sub(301);
+    assert!(
+        scope.stale(),
+        "the fallback freshness interval still applies"
+    );
+}

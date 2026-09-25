@@ -38,3 +38,9 @@ precisely — this global-epoch check is both redundant and overly broad.
   unrelated folder; assert the index scope does not restart and any in-flight
   paginated query is not invalidated.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Index freshness now follows the indexed scope’s watcher and five-minute reconciliation fallback instead of the global directory-cache epoch. Unrelated file activity preserves snapshot revisions and pagination cursors. Regression coverage verifies unrelated invalidations, stable pagination, root watcher invalidation, and the reconciliation timeout.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

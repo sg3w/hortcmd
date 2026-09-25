@@ -75,8 +75,10 @@ scope instead of treating an incomplete answer as complete. This bounded snapsho
 format targets repeated searches within selected working trees, not an unlimited
 whole-disk database.
 
-Recursive local watch events and application invalidation mark snapshots stale.
-Every five minutes a selected active scope also schedules reconciliation to catch
+Recursive local watch events inside the approved scope mark its snapshot stale.
+Unrelated pane refreshes and the application-wide listing cache do not restart
+indexes or invalidate their pagination revisions. Every five minutes a selected
+active scope also schedules reconciliation to catch
 missed events; remote roots use this bounded polling fallback. Scans reuse unchanged
 local content by file identity/version and remove unseen rows only after completing
 a whole cycle. The directory queue, cycle and version tags persist in checkpoints.

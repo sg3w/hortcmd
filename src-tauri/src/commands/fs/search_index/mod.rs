@@ -52,7 +52,6 @@ struct Scope {
     secret: Option<storage::Secret>,
     dirty: Arc<AtomicBool>,
     _watcher: Option<notify::RecommendedWatcher>,
-    observed: u64,
     pressure: bool,
 }
 fn worker() -> Arc<tokio::sync::Semaphore> {
@@ -60,12 +59,6 @@ fn worker() -> Arc<tokio::sync::Semaphore> {
     WORKER
         .get_or_init(|| Arc::new(tokio::sync::Semaphore::new(1)))
         .clone()
-}
-fn epoch() -> u64 {
-    super::cache::listings()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .ticket()
 }
 fn scopes() -> &'static Mutex<HashMap<String, Arc<Mutex<Scope>>>> {
     static SCOPES: OnceLock<Mutex<HashMap<String, Arc<Mutex<Scope>>>>> = OnceLock::new();
@@ -207,14 +200,11 @@ impl Scope {
             secret,
             dirty,
             _watcher: watcher,
-            observed: epoch(),
             pressure: false,
         }
     }
     fn stale(&self) -> bool {
-        self.dirty.load(Ordering::Relaxed)
-            || epoch() != self.observed
-            || now().saturating_sub(self.snapshot.completed) >= 300
+        self.dirty.load(Ordering::Relaxed) || now().saturating_sub(self.snapshot.completed) >= 300
     }
     fn info(&self) -> IndexInfo {
         let s = &self.snapshot;
@@ -255,7 +245,6 @@ impl Scope {
         self.snapshot.queue = VecDeque::from([String::new()]);
         self.snapshot.limited = false;
         self.snapshot.unreadable = 0;
-        self.observed = epoch();
         self.dirty.store(false, Ordering::Relaxed);
     }
 }
