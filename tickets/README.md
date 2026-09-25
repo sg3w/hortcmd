@@ -2,7 +2,7 @@
 
 All tickets below 100 and tickets 100–110 have been completed.
 Tickets 125–126, 128, 131, 134, 137 and the discovered issues 300–301 and 303–316 are also complete. There are
-**53 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
+**52 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
 issues 317–377 (excluding completed tickets listed below). Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
@@ -114,7 +114,7 @@ Correctness (backend):
 [346](done/346-dir-size-cancel-token-leak.done.md), [347](done/347-dir-size-generic-not-a-directory-error.done.md),
 [349](done/349-pack-sources-count-not-bounded-early.done.md), [350](done/350-archive-unknown-format-generic-error.done.md),
 [351](done/351-error-code-all-missing-tls-codes.done.md), [352](done/352-menu-language-apply-failure-silent.done.md),
-[353](353-probe-transport-unbounded-total-timeout.md).
+[353](done/353-probe-transport-unbounded-total-timeout.done.md).
 
 Correctness (frontend):
 [336](done/336-fill-params-placeholder-resubstitution.done.md), [337](done/337-index-ipc-missing-hastauri-guard.done.md),
@@ -222,3 +222,5 @@ policy-valid disposition. No advisory exceptions were added by this backlog upda
 - [351](done/351-error-code-all-missing-tls-codes.done.md): completed and verified.
 
 - [352](done/352-menu-language-apply-failure-silent.done.md): completed and verified.
+
+- [353](done/353-probe-transport-unbounded-total-timeout.done.md): completed and verified.

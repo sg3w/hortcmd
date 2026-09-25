@@ -33,3 +33,9 @@ host accumulate lingering threads.
 - Test: a host resolving to many unreachable addresses; assert the probe
   completes within `TRANSPORT_TIMEOUT` regardless of address count.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+TCP connection probes now share one deadline across every resolved address, with each attempt capped by the remaining time. Deterministic tests cover 20 dropped addresses, partially or fully consumed resolution time, and success after fast refusals. Existing loopback transport tests pass. Synchronous OS DNS resolution cannot be interrupted; this limitation is now stated explicitly in the timeout documentation.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

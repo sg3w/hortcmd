@@ -31,15 +31,15 @@
 use crate::errors::{code, AppError, ErrorAction};
 use serde::Serialize;
 use std::collections::HashMap;
-use std::net::{TcpStream, ToSocketAddrs};
+use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use ts_rs::TS;
 
-/// How long the bare transport (DNS + TCP) may take. Reaching the port
-/// is the one step every protocol shares, so it is timed uniformly here
-/// rather than per client — most of which cannot express it at all.
+/// Shared deadline for TCP attempts, measured from before DNS resolution.
+/// The synchronous OS resolver cannot be interrupted here; time spent in it
+/// reduces the budget left for connecting once resolution returns.
 pub const TRANSPORT_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Cap on the whole attempt: transport, handshake, authentication, host
@@ -411,14 +411,15 @@ pub fn reconcile(profile_id: &str, live: bool) -> (Phase, Option<String>, Option
 
 // ---------- Transport ----------
 
-/// Reaches the endpoint's port within [`TRANSPORT_TIMEOUT`], so a dead
-/// host fails in 15 seconds with "unreachable" instead of sitting in
-/// whatever default a protocol client happens to use. The probe socket
+/// Probes the endpoint with one [`TRANSPORT_TIMEOUT`] deadline across all
+/// resolved addresses. DNS uses the OS resolver's own timeout; once it
+/// returns, TCP attempts share only the remaining budget. The probe socket
 /// is closed again immediately; the protocol client opens its own.
 ///
 /// `host` may carry a URL scheme (`http://dav.example`) — WebDAV
 /// profiles are stored that way — which is stripped before resolving.
 pub fn probe_transport(host: &str, port: u16) -> Result<(), ConnFailure> {
+    let deadline = Instant::now() + TRANSPORT_TIMEOUT;
     let bare = host
         .split_once("://")
         .map(|(_, rest)| rest)
@@ -449,24 +450,42 @@ pub fn probe_transport(host: &str, port: u16) -> Result<(), ConnFailure> {
         ));
     }
 
-    // Several addresses (IPv6 + IPv4) share the one budget: the limit is
-    // on reaching the endpoint, not on each attempt at it.
-    let each = TRANSPORT_TIMEOUT / addrs.len().min(4) as u32;
-    let mut last = String::new();
-    for addr in &addrs {
-        match TcpStream::connect_timeout(addr, each) {
-            Ok(_) => return Ok(()),
-            Err(e) => last = e.to_string(),
+    connect_addresses(&addrs, deadline, Instant::now, |addr, timeout| {
+        TcpStream::connect_timeout(addr, timeout).map(|_| ())
+    })
+    .map_err(|error| {
+        ConnFailure::from_error(
+            FailureKind::Unreachable,
+            AppError::new(code::NET_UNREACHABLE)
+                .op("connect")
+                .with("host", bare)
+                .action(ErrorAction::Retry)
+                .detail(format!("{} nicht erreichbar: {}", target, error)),
+        )
+    })
+}
+
+/// Clock and connector are supplied so the deadline can be tested without
+/// depending on which network routes happen to drop packets on this machine.
+fn connect_addresses(
+    addrs: &[SocketAddr],
+    deadline: Instant,
+    mut now: impl FnMut() -> Instant,
+    mut connect: impl FnMut(&SocketAddr, Duration) -> std::io::Result<()>,
+) -> std::io::Result<()> {
+    let each = TRANSPORT_TIMEOUT / addrs.len().clamp(1, 4) as u32;
+    let mut last = std::io::Error::from(std::io::ErrorKind::AddrNotAvailable);
+    for addr in addrs {
+        let remaining = deadline.saturating_duration_since(now());
+        if remaining.is_zero() {
+            return Err(std::io::Error::from(std::io::ErrorKind::TimedOut));
+        }
+        match connect(addr, each.min(remaining)) {
+            Ok(()) => return Ok(()),
+            Err(error) => last = error,
         }
     }
-    Err(ConnFailure::from_error(
-        FailureKind::Unreachable,
-        AppError::new(code::NET_UNREACHABLE)
-            .op("connect")
-            .with("host", bare)
-            .action(ErrorAction::Retry)
-            .detail(format!("{} nicht erreichbar: {}", target, last)),
-    ))
+    Err(last)
 }
 
 /// Classifies a protocol client's failure.
@@ -779,6 +798,68 @@ mod tests {
             let wire = serde_json::to_value(&err.error).unwrap();
             assert_eq!(wire["params"]["host"], "127.0.0.1");
         }
+    }
+
+    #[test]
+    fn many_dropped_addresses_share_one_transport_deadline() {
+        use std::cell::Cell;
+        let start = Instant::now();
+        let addrs = vec!["127.0.0.1:9".parse().unwrap(); 20];
+        // Include time already spent resolving: the final attempt must shrink.
+        for prior in [Duration::ZERO, Duration::from_secs(10), TRANSPORT_TIMEOUT] {
+            let elapsed = Cell::new(prior);
+            let mut timeouts = Vec::new();
+            let error = connect_addresses(
+                &addrs,
+                start + TRANSPORT_TIMEOUT,
+                || start + elapsed.get(),
+                |_, timeout| {
+                    assert!(!timeout.is_zero());
+                    timeouts.push(timeout);
+                    elapsed.set(elapsed.get() + timeout);
+                    Err(std::io::Error::from(std::io::ErrorKind::TimedOut))
+                },
+            )
+            .unwrap_err();
+            assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
+            assert_eq!(elapsed.get(), TRANSPORT_TIMEOUT);
+            assert_eq!(timeouts.iter().sum::<Duration>(), TRANSPORT_TIMEOUT - prior);
+            assert_eq!(
+                timeouts.len(),
+                if prior.is_zero() {
+                    4
+                } else if prior == TRANSPORT_TIMEOUT {
+                    0
+                } else {
+                    2
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn fast_failures_leave_time_for_later_addresses() {
+        use std::cell::Cell;
+        let start = Instant::now();
+        let addrs = vec!["127.0.0.1:9".parse().unwrap(); 20];
+        let elapsed = Cell::new(Duration::ZERO);
+        let mut attempts = 0;
+        connect_addresses(
+            &addrs,
+            start + TRANSPORT_TIMEOUT,
+            || start + elapsed.get(),
+            |_, _| {
+                attempts += 1;
+                elapsed.set(elapsed.get() + Duration::from_millis(10));
+                if attempts == 20 {
+                    Ok(())
+                } else {
+                    Err(std::io::Error::from(std::io::ErrorKind::ConnectionRefused))
+                }
+            },
+        )
+        .unwrap();
+        assert_eq!(attempts, 20);
     }
 
     #[test]
