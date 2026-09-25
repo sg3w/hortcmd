@@ -29,3 +29,9 @@ that I/O happens regardless of the 100,000-entry limit.
 - Test: call `create_archive` with a `sources` array larger than
   `limits.entries`; assert it's rejected immediately without per-source I/O.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Archive creation rejects source arrays above the entry limit before resolving the destination or sources. The regression uses invalid addresses and an authorization callback that must not run. An unrelated PluginManagement timing failure passed in isolation and the subsequent full check passed without frontend changes.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

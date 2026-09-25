@@ -47,6 +47,10 @@ pub(crate) fn run_with_recovery(
         return Err(AppError::new(code::VALIDATION_BAD_INPUT)
             .detail("at least one archive source is required"));
     }
+    // Bound caller-supplied roots before any capability or filesystem work.
+    if sources.len() as u64 > limits.entries {
+        return Err(safety::limit());
+    }
     caps::require(destination, Capability::ArchivePackTo)?;
     let (_, destination) = vfs::resolve(destination)?;
     let destination = destination.native()?;

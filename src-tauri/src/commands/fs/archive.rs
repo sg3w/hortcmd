@@ -639,6 +639,29 @@ mod tests {
     }
 
     #[test]
+    fn oversized_source_list_is_rejected_before_path_resolution() {
+        let limits = safety::Limits {
+            entries: 2,
+            ..Default::default()
+        };
+        // These addresses cannot resolve; the count refusal must win before
+        // either path resolution or the per-path authorization callback.
+        let sources = vec!["unknown://source".to_string(); 3];
+        let mut prog = progress();
+        let error = pack::run(
+            &sources,
+            "unknown://destination/archive.zip",
+            &mut prog,
+            limits,
+            &|_| panic!("oversized requests must not reach path authorization"),
+        )
+        .unwrap_err();
+        assert!(error.is(code::ARCHIVE_LIMIT));
+        assert_eq!(prog.files_total, 0);
+        assert_eq!(prog.bytes_total, 0);
+    }
+
+    #[test]
     fn shared_packing_preserves_empty_directories_and_finishes_a_valid_zip() {
         let root = tmp_dir("pack-roundtrip");
         let source = root.join("source");
