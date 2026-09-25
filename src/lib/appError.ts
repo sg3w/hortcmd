@@ -67,10 +67,10 @@ export function fillParams(
   text: string,
   params: Record<string, string | undefined>,
 ): string {
-  return Object.entries(params).reduce(
-    (acc, [k, v]) => (v === undefined ? acc : acc.split(`{${k}}`).join(v)),
-    text,
-  );
+  return text.replace(/\{([^{}]*)\}/g, (placeholder, key: string) => {
+    const value = Object.prototype.hasOwnProperty.call(params, key) ? params[key] : undefined;
+    return value ?? placeholder;
+  });
 }
 
 /** A transport failure can precede a structured backend response. */

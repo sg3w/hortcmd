@@ -37,3 +37,9 @@ pipeline but are unrelated fixes.
   placeholder syntax (e.g. a filename literally named `{message}.txt`);
   assert the output is not corrupted.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Error templates substitute only placeholders in the original text, so inserted filenames and values are never scanned again. Tests cover placeholder-shaped filenames in either parameter order, repeated placeholders, literal replacement syntax, missing and empty values, nonword keys, and inherited property names.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.
