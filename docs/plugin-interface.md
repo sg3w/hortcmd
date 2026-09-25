@@ -381,3 +381,19 @@ a passing browser component test does not substitute for those checks.
 JavaScript context/copy example, and Native hello, a dependency-free Rust library.
 Both use the normal installer and explicit activation workflow. Their source,
 package-level tests and native subprocess coverage serve as author templates.
+
+### Bounded storage scans (API 1 additive requests)
+
+`usage:start { options: UsageOptions }`, `usage:step` and
+`usage:control { action: "pause" | "resume" | "cancel" }` require both `read:fs`
+and `read:context`. Their generated `UsageBatch` responses contain bounded node
+updates; `pending` asks the client to drain remaining updates. Nodes replace prior
+values by ID. Requests and results are reauthorized; only one scan belongs to an
+instance, and closure/deactivation cancels it. Roots must lie within the trusted
+pane folder or the explicit folder supplied by a core launcher. Canonicalization
+alone does not grant access outside that context. Paths are inspected without
+following entry links. No write grant is used.
+
+See [Storage usage](../plugins/storage-usage/README.md) for depth, metric, provider,
+resource and freshness contracts. `sizeMode` records the requested initial metric;
+all supported metric columns are returned so the view can change without rescanning.

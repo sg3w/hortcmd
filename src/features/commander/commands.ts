@@ -1,3 +1,4 @@
+import { storageUsageAvailable, launchStorageUsage } from "@/features/plugins/storageUsage";
 // ============================================================
 // Shared command definition of the application menu (TICKET-040).
 //
@@ -584,6 +585,11 @@ export const COMMANDS = {
   },
 
   // ----- Befehle -----
+  "cmd.storageUsage": {
+    label: "storageUsage.title", dialog: true,
+    run: () => { void launchStorageUsage(); },
+    state: () => ({ ...needs("recursiveSize"), hidden: !storageUsageAvailable() }),
+  },
   "cmd.search": {
     label: "menu.cmd.search",
     dialog: true,
@@ -1244,6 +1250,7 @@ export const MENUS: MenuCategory[] = [
     id: "commands",
     label: "menu.commands",
     nodes: [
+      item("cmd.storageUsage"),
       item("cmd.search"),
       {
         kind: "sub",

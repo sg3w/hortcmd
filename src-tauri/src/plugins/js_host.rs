@@ -84,11 +84,20 @@ pub fn create(
         .map_err(|_| "Plugin registry unavailable")?;
     if singleton {
         for instance in instances.values() {
-            let state = instance.lock().map_err(|_| "Plugin instance unavailable")?;
+            let mut state = instance.lock().map_err(|_| "Plugin instance unavailable")?;
             if state.info.plugin_id == plugin
                 && state.info.view_id == view.unwrap_or("window")
                 && !state.info.closed
             {
+                if let Some(path) = path {
+                    super::actions::validate_path(path)?;
+                    state.binding = super::context::ContextBinding::Preview {
+                        side,
+                        path: path.into(),
+                    };
+                    let workspace = broker.workspace.lock().map_err(|_| "Context unavailable")?;
+                    super::context::initialize(&mut state, workspace.as_ref());
+                }
                 return Ok(state.info.clone());
             }
         }
@@ -114,6 +123,7 @@ pub fn create(
     };
     let entry = entry.ok_or("Missing plugin entry")?.to_string();
     let mut instance = Instance {
+        usage: Default::default(),
         binding: Default::default(),
         subscriptions: vec![],
         transfers: vec![],
@@ -125,6 +135,15 @@ pub fn create(
         events: VecDeque::new(),
         created: std::time::Instant::now(),
     };
+    if view.is_none() {
+        if let Some(path) = path {
+            super::actions::validate_path(path)?;
+            instance.binding = super::context::ContextBinding::Preview {
+                side,
+                path: path.into(),
+            };
+        }
+    }
     if view.is_some() {
         super::context::bind_view(&mut instance, side, path)?;
     }

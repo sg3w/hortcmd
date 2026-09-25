@@ -218,6 +218,7 @@ pub fn start(app: &tauri::AppHandle, root: &Path, plugin: &str) -> Result<Plugin
             .insert(id.clone(), pid);
     }
     let mut state = Instance {
+        usage: Default::default(),
         binding: Default::default(),
         subscriptions: vec![],
         transfers: vec![],

@@ -99,7 +99,7 @@ window), **104** (feeding `path`/context into a running view), **106** (granting
 `ui:preview`/`ui:tab` at install time) and **107** (the demo plugin gains a preview
 renderer and a path-bound tab, which is what proves the contract).
 Embedded views remain part of 101. Number 108 is assigned to the first functional
-plugin, the [storage-usage analyzer](../108-folder-storage-usage-visualizer.md).
+plugin, the [storage-usage analyzer](108-folder-storage-usage-visualizer.done.md).
 If embedded views need a separate ticket, allocate an unused plugin-series number.
 
 ## Acceptance criteria

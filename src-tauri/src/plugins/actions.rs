@@ -70,6 +70,11 @@ pub fn dispatch(
         .map_err(|_| "Plugin instance unavailable")?
         .authorize(&request)?;
     let result = match &request {
+        PluginRequest::UsageStart { .. }
+        | PluginRequest::UsageStep
+        | PluginRequest::UsageControl { .. } => {
+            super::usage::execute(&broker, id, caller, &request)
+        }
         PluginRequest::Read { .. }
         | PluginRequest::List { .. }
         | PluginRequest::Preview { .. }

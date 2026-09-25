@@ -24,6 +24,7 @@ pub struct PluginInstance {
     pub closed: bool,
 }
 pub struct Instance {
+    pub usage: Arc<super::usage::Handle>,
     pub subscriptions: Vec<super::protocol::PluginSubscription>,
     pub transfers: Vec<String>,
     pub binding: super::context::ContextBinding,
@@ -37,6 +38,7 @@ pub struct Instance {
 }
 impl Instance {
     pub fn stop(&mut self) {
+        self.usage.close();
         self.info.closed = true;
         self.events.clear();
         self.subscriptions.clear();
@@ -199,6 +201,7 @@ mod tests {
         })).unwrap();
         let broker = PluginBroker::default();
         let instance = Instance {
+            usage: Default::default(),
             binding: Default::default(),
             subscriptions: vec![],
             transfers: vec![],

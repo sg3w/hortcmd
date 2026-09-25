@@ -53,6 +53,7 @@ fn instance() -> (Arc<PluginBroker>, Arc<Mutex<Instance>>) {
         "runtime":"native", "entry":{"macos":"plugin.dylib", "linux":"plugin.so"}, "icon":"🌈", "permissions":[]
     })).unwrap();
     let state = Arc::new(Mutex::new(Instance {
+        usage: Default::default(),
         binding: Default::default(),
         subscriptions: vec![],
         transfers: vec![],

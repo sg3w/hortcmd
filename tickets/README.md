@@ -1,8 +1,8 @@
 # Ticket organization
 
-All tickets below 100 and tickets 100–107 have been completed.
+All tickets below 100 and tickets 100–108 have been completed.
 Tickets 125–126, 128, 131, 134, 137 and the discovered issues 300–301 and 303–316 are also complete. There are
-**76 open tickets**: 108–124, 127, 129–130, 132–133, 135–136 and the discovered
+**75 open tickets**: 109–124, 127, 129–130, 132–133, 135–136 and the discovered
 issues 317–368. Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
@@ -25,7 +25,7 @@ tickets with higher numbers. Do not reuse those numbers for new work.
 | 206 | [105](done/105-plugin-actions-events.done.md) | Mediated actions & events |
 | 207 | [106](done/106-plugin-management.done.md) | Plugin management (settings) |
 | 208 | [107](done/107-reference-demo-plugin.done.md) | Reference/demo plugin(s) |
-| 209 | [108](108-folder-storage-usage-visualizer.md) | First functional plugin — folder storage-usage visualizer |
+| 209 | [108](done/108-folder-storage-usage-visualizer.done.md) | First functional plugin — folder storage-usage visualizer |
 | 220 | [109](109-redacted-diagnostics-and-support-bundle.md) | Add redacted diagnostics and an exportable support bundle |
 | 221 | [110](110-dependency-and-license-governance.md) | Establish dependency, vulnerability, and license governance |
 | 222 | [111](111-signed-reproducible-releases-and-updates.md) | Produce signed, reproducible releases with safe updates |

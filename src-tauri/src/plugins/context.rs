@@ -236,6 +236,7 @@ mod tests {
     fn instance() -> Instance {
         let manifest: PluginManifest = serde_json::from_value(serde_json::json!({"id":"org.test.context", "name":"Test", "version":"1.0.0", "description":"Test", "author":"Test", "apiVersion":1,"runtime":"js","entry":"index.html","icon":"🌈","permissions":["read:context"]})).unwrap();
         Instance {
+            usage: Default::default(),
             binding: ContextBinding::Current,
             subscriptions: vec![],
             transfers: vec![],

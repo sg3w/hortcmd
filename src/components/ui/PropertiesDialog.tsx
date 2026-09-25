@@ -1,3 +1,5 @@
+import { storageUsageAvailable, launchStorageUsage } from "@/features/plugins/storageUsage";
+import { usePlugins } from "@/features/plugins/pluginsStore";
 // ============================================================
 // "Properties / permissions" dialog (Alt+Enter or context menu).
 // Shows and edits access permissions (chmod), owner/group (chown),
@@ -142,6 +144,7 @@ function useVolume(path: string | null): VolumeInfo | null | undefined {
 
 export function PropertiesDialog() {
   const returnFocus = useDialogFocusReturn();
+  usePlugins(s => s.records);
   const path = usePropsDialog((s) => s.path);
   const gitStatus = usePropsDialog((s) => s.gitStatus);
   const close = usePropsDialog((s) => s.close);
@@ -381,6 +384,7 @@ export function PropertiesDialog() {
                   )}
                 </div>
 
+                {data.is_dir && canSize && storageUsageAvailable() && <button type="button" className="rounded border border-edge px-3 py-2 text-text" onClick={() => void launchStorageUsage(data.path)}>{t("storageUsage.title")} …</button>}
                 {/* Storage of the volume this entry lies on */}
                 <Section label={t("vol.title")}>
                   <Volume vol={volume} t={t} />

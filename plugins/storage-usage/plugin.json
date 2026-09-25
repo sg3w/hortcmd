@@ -1,0 +1,13 @@
+{
+  "apiVersion": 1,
+  "id": "org.hortcmd.storage-usage",
+  "name": "Storage usage",
+  "version": "1.0.0",
+  "description": "Bounded, read-only folder storage treemap and table. Scans run in the Rust broker.",
+  "author": "hortcmd contributors",
+  "runtime": "js",
+  "entry": "index.html",
+  "icon": "▦",
+  "permissions": ["read:context", "read:fs", "ui:window", "ui:commandbar"],
+  "contributes": {"commandbar": [{"id":"open","title":"Analyze storage usage","icon":"▦","action":{"type":"openWindow"}}]}
+}

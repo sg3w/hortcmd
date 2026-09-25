@@ -65,6 +65,14 @@ pub enum PluginRequest {
     Title { title: String },
     #[serde(rename = "view:requestClose")]
     Close,
+    #[serde(rename = "usage:start")]
+    UsageStart {
+        options: super::usage::types::UsageOptions,
+    },
+    #[serde(rename = "usage:step")]
+    UsageStep,
+    #[serde(rename = "usage:control")]
+    UsageControl { action: String },
     #[serde(rename = "fs:read", rename_all = "camelCase")]
     Read {
         path: String,
@@ -111,6 +119,9 @@ impl PluginRequest {
         match self {
             Self::Ping | Self::Ready | Self::Title { .. } | Self::Close => &[],
             Self::Context => &[P::ReadContext],
+            Self::UsageStart { .. } | Self::UsageStep | Self::UsageControl { .. } => {
+                &[P::ReadFs, P::ReadContext]
+            }
             Self::Read { .. } | Self::List { .. } | Self::Preview { .. } | Self::Open { .. } => {
                 &[P::ReadFs]
             }

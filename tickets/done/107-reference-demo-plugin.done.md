@@ -8,7 +8,7 @@ template. Additionally, a minimal native plugin validates the second host.
 
 This ticket provides technical examples and host/API verification. The first
 functional plugin is the storage-usage analyzer in
-[TICKET-108](../108-folder-storage-usage-visualizer.md).
+[TICKET-108](108-folder-storage-usage-visualizer.done.md).
 An API is only proven once a real plugin uses it. The demo plugin bundles
 window, command-bar button with a colorful icon, context handoff, and a mediated
 action into a comprehensible example.

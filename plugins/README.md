@@ -75,3 +75,9 @@ build inputs. Do not run it with an existing user's application identity.
 Interactive clipboard behavior also depends on the platform WebView's user-
 activation policy. The example reports refusal instead of pretending a write
 succeeded. Use the visible selected-path fallback when access is unavailable.
+
+## Storage usage
+
+[Storage usage](storage-usage/README.md) is the first functional JS plugin. Install
+`plugins/storage-usage` through plugin management; it is not enabled by default.
+It provides a bounded Rust-backed folder treemap, table and explicit rescan flow.

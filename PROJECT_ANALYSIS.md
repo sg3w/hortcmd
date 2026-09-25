@@ -171,7 +171,7 @@ instead of failing after invocation.
 
 | Priority | Finding | Impact | Ticket |
 |---|---|---|---|
-| P2 | Recursive folder size has no hierarchical visualization or scan-depth control | Users receive one total but cannot identify the largest branches, while a visual scan needs explicit depth and memory bounds. | [TICKET-108](tickets/108-folder-storage-usage-visualizer.md) |
+| P2 | Recursive folder size has no hierarchical visualization or scan-depth control | Users receive one total but cannot identify the largest branches, while a visual scan needs explicit depth and memory bounds. | [TICKET-108](tickets/done/108-folder-storage-usage-visualizer.done.md) |
 
 ## Recommended order
 

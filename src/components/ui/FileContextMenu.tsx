@@ -1,3 +1,5 @@
+import { storageUsageAvailable, launchStorageUsage } from "@/features/plugins/storageUsage";
+import { usePlugins } from "@/features/plugins/pluginsStore";
 import { notify } from "@/store/noticeStore";
 import { openOpposite } from "@/features/commander/navigate";
 import { formatShortcut } from "@/lib/shortcut";
@@ -71,6 +73,7 @@ interface Props {
 
 export function FileContextMenu({ side, targetRef, children }: Props) {
   const t = useT();
+  usePlugins(s => s.records);
   const setActive = usePanes((s) => s.setActive);
   const hasClip = useClipboard((s) => s.mode !== null && s.names.length > 0);
   const inArchive = usePanes((s) => panelOf(s, side).archive !== null);
@@ -340,6 +343,7 @@ export function FileContextMenu({ side, targetRef, children }: Props) {
             <span>{t("ctx.copyName")}</span>
           </ContextMenu.Item>
           <ContextMenu.Separator className="my-1 h-px bg-edge" />
+          {storageUsageAvailable() && <ContextMenu.Item className={itemCls} disabled={inArchive || !can("recursiveSize")} onSelect={() => void launchStorageUsage(undefined, side)}>{t("storageUsage.title")} …</ContextMenu.Item>}
           {item("pack", "ctx.pack", Package, { disabled: !can("archivePackFrom") })}
           {item("extract", "ctx.extract", PackageOpen, {
             disabled: !can("archiveExtractFrom"),

@@ -1,3 +1,4 @@
+import { usePlugins } from "@/features/plugins/pluginsStore";
 // ============================================================
 // The application menu inside the window (TICKET-040).
 //
@@ -87,6 +88,7 @@ function useMenuStateTick(open: boolean): void {
       useClipboard,
       useHistory,
       useTransfers,
+      usePlugins,
     ];
     const unsubs = stores.map((store) => store.subscribe(() => bump()));
     return () => unsubs.forEach((off) => off());

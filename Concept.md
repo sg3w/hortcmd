@@ -1813,3 +1813,12 @@ RSS/OS CPU quotas. 7z AES support is enabled and tested. Details, provenance and
 limitations: [archive decoder budgets](docs/archive-decoder-budgets.md).
 ZIP-LZMA framing conformance and retirement of local patches are tracked by
 TICKET-131 and TICKET-132.
+
+### Storage usage plugin
+
+The optional [storage usage package](plugins/storage-usage/README.md) presents
+bounded local storage scans through the permission-checked plugin broker. It
+separates logical, allocated and identity-deduplicated metrics, never follows
+links/reparse points, marks partial and stale observations, and enforces depth,
+entry, duration, node and shared memory budgets in Rust. Current remote providers
+lack the required recursive-size/stat capabilities and are explicitly unavailable.
