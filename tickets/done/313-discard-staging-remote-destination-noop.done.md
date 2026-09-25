@@ -41,3 +41,11 @@ identically (`parallel.rs:169,262,269` call the same `discard_staging`).
   failed mid-transfer, macOS recovery path active — assert the remote staging
   entry is removed.
 - `npm run check`.
+
+## Implementation
+
+Journal-owned cleanup is used only for local destinations; remote plans remove
+their unpublished stage through the provider even when journaling is active.
+Tests cover copy/move, file/directory staging, and failed cleanup reporting while
+preserving the source and old destination. Backups are not discarded blindly: a
+failed publication rollback may leave the only original copy there.

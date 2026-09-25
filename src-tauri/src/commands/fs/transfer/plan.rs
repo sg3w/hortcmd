@@ -417,7 +417,13 @@ pub(crate) fn publish(dstp: &dyn Provider, plan: &Plan) -> std::io::Result<()> {
 /// committed. Cleanup problems are reported on their own so they are not
 /// mistaken for the failure that caused them.
 pub(crate) fn discard_staging(dstp: &dyn Provider, plan: &Plan, errors: &mut Vec<ItemError>) {
-    if let Some(step) = &plan.recovery {
+    // Journal cleanup verifies local ownership only. Remote plans must still
+    // use their live provider to remove the unpublished staging entry.
+    if let Some(step) = plan
+        .recovery
+        .as_ref()
+        .filter(|_| dstp.store_id() == "local")
+    {
         if let Err(error) = step.cleanup_unpublished() {
             errors.push(ItemError::new(plan.write_to.display().to_string(), error));
         }

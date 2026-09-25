@@ -240,7 +240,9 @@ impl Provider for Fake {
         if self.fail_remove.lock().unwrap().contains(path) {
             return Err(io::Error::other("remove abgelehnt (Test)"));
         }
-        self.fs.lock().unwrap().dirs.remove(path);
+        let mut fs = self.fs.lock().unwrap();
+        fs.dirs.retain(|entry| !entry.starts_with(path));
+        fs.files.retain(|entry, _| !entry.starts_with(path));
         Ok(())
     }
     fn supports_staging(&self) -> bool {
@@ -1466,7 +1468,11 @@ fn repeated_components_survive_planning_publication_rollback_and_journal_reopen(
         let view = recovery::reconcile::entry(&reopened, &record);
         assert_eq!(
             view.state == RecoveryState::CleanupRequired,
-            failure != "none"
+            failure == "rollback"
+        );
+        assert!(
+            !fake.exists(&stage),
+            "unpublished remote staging is cleaned live"
         );
         // Remote recovery remains conservative: no native fingerprint or guessed deletion.
         assert!(recovery::reconcile::cleanup(&reopened, &record).is_err());
@@ -1603,4 +1609,72 @@ fn actual_storage_full_error_preserves_source_and_old_destination() {
     assert_eq!(fake.get("/src/file").as_deref(), Some("source"));
     assert_eq!(fake.get("/dst/file").as_deref(), Some("old"));
     assert!(!fake.exists(&plan.write_to));
+}
+
+#[test]
+fn remote_staging_is_discarded_even_with_a_recovery_journal() {
+    use super::recovery::{
+        types::{Intent, RecoveryKind, RecoverySettings},
+        Journal,
+    };
+    for kind in [RecoveryKind::Copy, RecoveryKind::Move] {
+        for tree in [false, true] {
+            for remove_fails in [false, true] {
+                let (fake, _connection, prefix) = remote_fixture();
+                let source_uri = format!("{prefix}/src//folder/file.txt");
+                let destination_uri = format!("{prefix}/dst//");
+                let source = fake.path("/src//folder/file.txt");
+                let target = fake.path("/dst//file.txt");
+                fake.write(&source, b"new").unwrap();
+                fake.write(&target, b"old").unwrap();
+                let root = fresh_dir();
+                let journal = Journal::open(&root).unwrap();
+                journal
+                    .enqueue(
+                        "cleanup",
+                        Intent::transfer(
+                            kind.clone(),
+                            &[source_uri],
+                            &destination_uri,
+                            RecoverySettings::default(),
+                        )
+                        .unwrap(),
+                    )
+                    .unwrap();
+                let handle = journal.begin("cleanup").unwrap();
+                let mut plan = Plan::staged(&*fake, target.clone(), true).unwrap();
+                plan.track(&handle, &source, &*fake).unwrap();
+                assert!(plan.recovery.is_some());
+                if tree {
+                    fake.create_dir_all(&plan.write_to).unwrap();
+                    fake.write(&plan.write_to.join("part").unwrap(), b"partial")
+                        .unwrap();
+                } else {
+                    fake.write(&plan.write_to, b"partial").unwrap();
+                }
+                if remove_fails {
+                    fake.fail_remove
+                        .lock()
+                        .unwrap()
+                        .insert(plan.write_to.clone());
+                }
+                let mut errors = Vec::new();
+                super::plan::discard_staging(&*fake, &plan, &mut errors);
+                assert_eq!(fake.exists(&plan.write_to), remove_fails);
+                if tree {
+                    assert_eq!(
+                        fake.exists(&plan.write_to.join("part").unwrap()),
+                        remove_fails
+                    );
+                }
+                assert_eq!(errors.len(), usize::from(remove_fails));
+                if remove_fails {
+                    assert_eq!(errors[0].item, plan.write_to.to_string_lossy());
+                }
+                assert_eq!(fake.get("/dst//file.txt").as_deref(), Some("old"));
+                assert_eq!(fake.get("/src//folder/file.txt").as_deref(), Some("new"));
+                fs::remove_dir_all(root).unwrap();
+            }
+        }
+    }
 }
