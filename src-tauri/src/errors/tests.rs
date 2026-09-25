@@ -64,7 +64,8 @@ fn every_error_carries_a_version_and_a_correlation_id() {
     let a = AppError::new(code::FS_IO);
     let b = AppError::new(code::FS_IO);
     assert_eq!(a.version, ERROR_CONTRACT_VERSION);
-    assert!(a.id.starts_with('e'));
+    assert_eq!(a.id.len(), 32);
+    assert!(a.id.bytes().all(|b| b.is_ascii_hexdigit()));
     assert_ne!(a.id, b.id, "two errors must be distinguishable in a report");
 }
 

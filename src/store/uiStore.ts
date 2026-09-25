@@ -24,6 +24,7 @@ export type SettingsCategory =
   | "programs"
   | "favorites"
   | "mcp"
+  | "diagnostics"
   | "plugins";
 
 interface UiStore {

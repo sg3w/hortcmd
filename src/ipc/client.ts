@@ -45,3 +45,4 @@ export * from "./domains/index";
 export { normalizeLocation } from "./domains/location";
 export { fileIcons } from "./domains/icons";
 export * from "./domains/commandLine";
+export * from "./domains/diagnostics";

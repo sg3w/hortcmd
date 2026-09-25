@@ -544,3 +544,6 @@ Desktop transfer recovery on macOS is documented in [Transfer recovery](docs/tra
 Directory navigation uses a [bounded memory cache](docs/provider-cache.md) with explicit freshness and invalidation.
 
 Search offers an explicitly approved [scoped search index](docs/search-index.md), with optional encrypted checkpoints and content opt-in.
+
+Local diagnostics and explicit support exports are available in Settings →
+Diagnostics. See [privacy, retention and correlation](docs/diagnostics.md).

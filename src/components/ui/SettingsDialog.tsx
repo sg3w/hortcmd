@@ -38,6 +38,7 @@ import { ProgramsForm } from "./settings/programs";
 import { ViewForm } from "./settings/view";
 
 import { PluginManagement } from "@/features/plugins/PluginManagement";
+import { DiagnosticsForm } from "@/features/settings/DiagnosticsForm";
 import { McpForm } from "@/features/settings/McpForm";
 
 const MIN_FRAC = 0.25; // 1:3
@@ -88,6 +89,7 @@ export function SettingsDialog() {
     },
     { id: "programs", label: t("settings.cat.programs"), Icon: AppWindow },
     { id: "plugins", label: t("plugins.title"), Icon: AppWindow },
+    { id: "diagnostics", label: t("diagnostics.title"), Icon: AppWindow },
     { id: "mcp", label: t("mcp.title"), Icon: AppWindow },
     { id: "favorites", label: t("settings.cat.favorites"), Icon: Star },
   ];
@@ -181,6 +183,7 @@ export function SettingsDialog() {
               {category === "favorites" && <FavoritesForm />}
               {category === "plugins" && <PluginManagement />}
               {category === "mcp" && <McpForm />}
+              {category === "diagnostics" && <DiagnosticsForm />}
             </div>
           </div>
 

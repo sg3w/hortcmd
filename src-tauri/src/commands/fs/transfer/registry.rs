@@ -56,6 +56,27 @@ pub(crate) fn resolvers() -> &'static ResolverMap {
 
 pub(crate) static REQ_COUNTER: AtomicU64 = AtomicU64::new(1);
 
+fn correlations() -> &'static Mutex<HashMap<String, String>> {
+    static IDS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+    IDS.get_or_init(Default::default)
+}
+fn diagnostic_control(id: &str, event: crate::diagnostics::Event) {
+    if let Some(correlation) = correlations()
+        .lock()
+        .ok()
+        .and_then(|ids| ids.get(id).cloned())
+    {
+        let _scope = crate::diagnostics::Scope::enter(correlation);
+        crate::diagnostics::emit(
+            crate::diagnostics::Component::Transfer,
+            event,
+            crate::diagnostics::Level::Info,
+            None,
+            Some(id),
+        );
+    }
+}
+
 /// Asks the frontend for the conflict resolution and blocks until the answer.
 /// Reacts to cancel (skip) so the thread never hangs.
 pub(crate) fn ask_collision(
@@ -103,16 +124,44 @@ where
     let pause = Arc::new(AtomicBool::new(false));
     cancels().lock().unwrap().insert(id.clone(), cancel.clone());
     pauses().lock().unwrap().insert(id.clone(), pause.clone());
+    let correlation = crate::diagnostics::current().unwrap_or_else(crate::diagnostics::new_id);
+    if let Ok(mut ids) = correlations().lock() {
+        ids.insert(id.clone(), correlation.clone());
+    }
     std::thread::spawn(move || {
-        f(cancel, pause);
+        let _scope = crate::diagnostics::Scope::enter(correlation);
+        use crate::diagnostics::{emit, Component, Event, Level};
+        emit(
+            Component::Transfer,
+            Event::Started,
+            Level::Info,
+            None,
+            Some(&id),
+        );
+        f(cancel.clone(), pause);
+        emit(
+            Component::Transfer,
+            if cancel.load(Ordering::Relaxed) {
+                Event::Cancelled
+            } else {
+                Event::Finished
+            },
+            Level::Info,
+            None,
+            Some(&id),
+        );
         cancels().lock().unwrap().remove(&id);
         pauses().lock().unwrap().remove(&id);
+        if let Ok(mut ids) = correlations().lock() {
+            ids.remove(&id);
+        }
     });
 }
 
 /// Cancels a running transfer (sets its cancel flag).
 #[tauri::command]
 pub fn cancel_transfer(id: String) {
+    diagnostic_control(&id, crate::diagnostics::Event::Cancelled);
     if let Some(flag) = cancels().lock().unwrap().get(&id) {
         flag.store(true, Ordering::Relaxed);
     }
@@ -125,6 +174,14 @@ pub fn cancel_transfer(id: String) {
 /// Pauses or resumes a running transfer.
 #[tauri::command]
 pub fn pause_transfer(id: String, paused: bool) {
+    diagnostic_control(
+        &id,
+        if paused {
+            crate::diagnostics::Event::Paused
+        } else {
+            crate::diagnostics::Event::Started
+        },
+    );
     if let Some(flag) = pauses().lock().unwrap().get(&id) {
         flag.store(paused, Ordering::Relaxed);
     }

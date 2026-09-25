@@ -240,24 +240,28 @@ pub(crate) fn run_parallel_copy(
                 failed.clone(),
                 errors.clone(),
             );
-            std::thread::spawn(move || loop {
-                if sp.cancelled() {
-                    break;
-                }
-                let i = next.fetch_add(1, Ordering::Relaxed);
-                if i >= tasks.len() {
-                    break;
-                }
-                let task = &tasks[i];
-                match parallel_copy_file(task, sp.as_ref(), tune) {
-                    Ok(()) => {}
-                    Err(e) if e.kind() == ErrorKind::Interrupted => break, // Abbruch
-                    Err(e) => {
-                        failed[task.idx].store(true, Ordering::Relaxed);
-                        errors
-                            .lock()
-                            .unwrap()
-                            .push(ItemError::new(task.src.display().to_string(), e.into()));
+            let correlation = crate::diagnostics::current();
+            std::thread::spawn(move || {
+                let _scope = correlation.map(crate::diagnostics::Scope::enter);
+                loop {
+                    if sp.cancelled() {
+                        break;
+                    }
+                    let i = next.fetch_add(1, Ordering::Relaxed);
+                    if i >= tasks.len() {
+                        break;
+                    }
+                    let task = &tasks[i];
+                    match parallel_copy_file(task, sp.as_ref(), tune) {
+                        Ok(()) => {}
+                        Err(e) if e.kind() == ErrorKind::Interrupted => break, // Abbruch
+                        Err(e) => {
+                            failed[task.idx].store(true, Ordering::Relaxed);
+                            errors
+                                .lock()
+                                .unwrap()
+                                .push(ItemError::new(task.src.display().to_string(), e.into()));
+                        }
                     }
                 }
             })

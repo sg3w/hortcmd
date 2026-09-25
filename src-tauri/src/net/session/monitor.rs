@@ -112,7 +112,11 @@ pub(super) fn start(app: AppHandle, profile: Profile) {
         .lock()
         .unwrap()
         .insert(profile.store_id(), control.clone());
-    std::thread::spawn(move || supervise(app, profile, settings, control));
+    let correlation = crate::diagnostics::current();
+    std::thread::spawn(move || {
+        let _scope = correlation.map(crate::diagnostics::Scope::enter);
+        supervise(app, profile, settings, control);
+    });
 }
 fn update(app: &AppHandle, control: &Control, state: MonitorState) {
     *control.state.lock().unwrap() = state;

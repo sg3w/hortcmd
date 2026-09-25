@@ -7,6 +7,7 @@ mod ipc_contract_tests;
 
 mod commands;
 mod config;
+mod diagnostics;
 pub mod errors;
 mod mcp;
 mod menu;
@@ -42,6 +43,11 @@ fn is_trusted_origin(url: &tauri::Url) -> bool {
 pub fn run() {
     let handler: Box<dyn Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync> =
         Box::new(tauri::generate_handler![
+            diagnostics::diagnostics_status,
+            diagnostics::diagnostics_event,
+            diagnostics::diagnostics_level,
+            diagnostics::diagnostics_clear,
+            diagnostics::diagnostics_export,
             commands::plugins::list_plugins,
             commands::plugins::plugin_install,
             commands::plugins::plugin_activate,
@@ -183,6 +189,7 @@ pub fn run() {
         // The window carries the full Commander menu; macOS additionally
         // gets a reduced native menu (TICKET-040).
         .setup(|app| {
+            diagnostics::initialize();
             // The main window is declared in `tauri.conf.json` with
             // `"create": false` and built here instead, because the
             // navigation policy (TICKET-030) can only be attached while
@@ -197,12 +204,18 @@ pub fn run() {
             tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
                 // Navigation boundary of the WebView. Only the app
                 // document loads here; a blocked attempt is noted in
-                // development with the URL alone — never with page or
+                // development as a typed event, without the URL, page or
                 // file contents.
                 .on_navigation(|url| {
                     let allowed = plugins::navigation_allowed(url);
                     if !allowed && cfg!(debug_assertions) {
-                        eprintln!("[hortcmd] Navigation blockiert: {}", url);
+                        diagnostics::emit(
+                            diagnostics::Component::Backend,
+                            diagnostics::Event::Failed,
+                            diagnostics::Level::Warn,
+                            None,
+                            None,
+                        );
                     }
                     allowed
                 })
@@ -243,6 +256,14 @@ pub fn run() {
                     .reject("Command unavailable to plugin windows");
                 return true;
             }
+            let _scope = diagnostics::ipc_scope(
+                invoke.message.command(),
+                invoke
+                    .message
+                    .headers()
+                    .get("x-hortcmd-correlation")
+                    .and_then(|h| h.to_str().ok()),
+            );
             handler(invoke)
         })
         .build(tauri::generate_context!())

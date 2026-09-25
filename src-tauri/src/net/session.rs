@@ -531,6 +531,13 @@ enum Opened {
 /// here touches the registry: the result travels back to [`net_connect`]
 /// and only `lifecycle::settle` may install it.
 fn run_attempt(attempt: &Attempt, profile: &Profile) -> Result<Opened, ConnFailure> {
+    crate::diagnostics::emit(
+        crate::diagnostics::Component::Provider,
+        crate::diagnostics::Event::Started,
+        crate::diagnostics::Level::Info,
+        None,
+        Some(&profile.address()),
+    );
     attempt.check()?;
     super::security::check(profile).map_err(|e| ConnFailure::new(FailureKind::Protocol, e))?;
 
@@ -602,6 +609,15 @@ fn connect_inner(
     id: String,
     supervisor: Option<Arc<monitor::Control>>,
 ) -> AppResult<ConnectOutcome> {
+    if supervisor.is_some() {
+        crate::diagnostics::emit(
+            crate::diagnostics::Component::Connection,
+            crate::diagnostics::Event::Retried,
+            crate::diagnostics::Level::Info,
+            None,
+            Some(&id),
+        );
+    }
     let gate = session_gate().lock().unwrap();
     if SHUTTING_DOWN.load(std::sync::atomic::Ordering::SeqCst) {
         return Err(AppError::new(crate::errors::code::CANCELLED));
@@ -655,8 +671,29 @@ fn connect_inner(
         // A plain thread, not the shared Tokio runtime: the protocol
         // clients bridge async work through `block_on` internally, which
         // must not run inside a runtime worker.
+        let correlation = crate::diagnostics::current().unwrap_or_else(crate::diagnostics::new_id);
         std::thread::spawn(move || {
+            let _scope = crate::diagnostics::Scope::enter(correlation);
+            use crate::diagnostics::{emit, Component, Event, Level};
+            emit(
+                Component::Connection,
+                Event::Started,
+                Level::Info,
+                None,
+                Some(&profile.id),
+            );
             let outcome = run_attempt(&attempt, &profile);
+            emit(
+                Component::Connection,
+                if outcome.is_ok() {
+                    Event::Finished
+                } else {
+                    Event::Failed
+                },
+                Level::Info,
+                None,
+                Some(&profile.id),
+            );
             // The receiver is gone once the caller hit the overall
             // timeout. Settle regardless — that is what closes a late
             // provider and returns the profile to a stable state.

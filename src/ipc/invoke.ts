@@ -13,7 +13,7 @@
 export const hasTauri =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-type InvokeFn = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
+type InvokeFn = <T>(cmd: string, args?: Record<string, unknown>, options?: { headers: Record<string, string> }) => Promise<T>;
 
 let invokePromise: Promise<InvokeFn> | null = null;
 
@@ -31,5 +31,19 @@ export async function invoke<T>(
   args?: Record<string, unknown>,
 ): Promise<T> {
   const fn = await getInvoke();
-  return fn<T>(cmd, args);
+  if (!/^(copy_entries|move_entries|delete_entries|rename_entry|rename_batch|make_dir|net_connect|net_disconnect|net_cancel_connect|cancel_transfer|pause_transfer|pack_archive|extract_archive|plugin_open|plugin_close)$/.test(cmd)) return fn<T>(cmd, args);
+  let correlation: string;
+  try { correlation = crypto.randomUUID().replaceAll("-", ""); } catch { return fn<T>(cmd, args); }
+  const report = (event: "started" | "finished" | "failed", code?: string) => {
+    try { void fn("diagnostics_event", { correlation, event, code: code ?? null }).catch(() => {}); } catch { /* Diagnostics cannot interrupt an operation. */ }
+  };
+  report("started");
+  try {
+    const result = await fn<T>(cmd, args, { headers: { "x-hortcmd-correlation": correlation } });
+    report("finished");
+    return result;
+  } catch (error) {
+    report("failed", typeof error === "object" && error !== null && "code" in error && typeof error.code === "string" ? error.code : undefined);
+    throw error;
+  }
 }

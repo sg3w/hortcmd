@@ -103,7 +103,7 @@ describe("with a Tauri runtime", () => {
     const client = await freshClient();
 
     await client.netCancelConnect("conn-1");
-    expect(tauri.calls).toEqual<InvokeCall[]>([
+    expect(tauri.calls.filter(c => c.cmd !== "diagnostics_event")).toEqual<InvokeCall[]>([
       { cmd: "net_cancel_connect", args: { attempt: "conn-1" } },
     ]);
   });

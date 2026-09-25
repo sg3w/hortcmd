@@ -121,6 +121,15 @@ pub fn resolve(raw: &str) -> AppResult<(Arc<dyn Provider>, StreamPath)> {
 pub fn resolve_location(
     location: &location::VfsLocation,
 ) -> AppResult<(Arc<dyn Provider>, StreamPath)> {
+    if crate::diagnostics::current().is_some() {
+        crate::diagnostics::emit(
+            crate::diagnostics::Component::Provider,
+            crate::diagnostics::Event::Resolved,
+            crate::diagnostics::Level::Info,
+            None,
+            Some(&location.uri()),
+        );
+    }
     location.validate()?;
     match location.kind() {
         location::LocationPath::Local { path } => {

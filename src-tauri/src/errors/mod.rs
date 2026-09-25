@@ -105,6 +105,15 @@ impl AppError {
     /// A new error with the given code. Everything else is added with
     /// the builder methods, so a call site reads as a description.
     pub fn new(code: &str) -> Self {
+        let id = crate::diagnostics::current().unwrap_or_else(correlation_id);
+        let _scope = crate::diagnostics::Scope::enter(id.clone());
+        crate::diagnostics::emit(
+            crate::diagnostics::Component::Backend,
+            crate::diagnostics::Event::Failed,
+            crate::diagnostics::Level::Error,
+            Some(code),
+            None,
+        );
         AppError {
             version: ERROR_CONTRACT_VERSION,
             code: code.into(),
@@ -114,7 +123,7 @@ impl AppError {
             retryable: false,
             action: None,
             detail: None,
-            id: correlation_id().into(),
+            id: id.into(),
         }
     }
 
@@ -640,18 +649,7 @@ fn redact_pem(text: &str) -> String {
 
 /// Short, unique-enough id for matching a report to a log line.
 fn correlation_id() -> String {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::{SystemTime, UNIX_EPOCH};
-    static N: AtomicU64 = AtomicU64::new(0);
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos() as u64)
-        .unwrap_or(0);
-    format!(
-        "e{:x}{:x}",
-        nanos & 0xffff_ffff,
-        N.fetch_add(1, Ordering::Relaxed) & 0xfff
-    )
+    crate::diagnostics::new_id()
 }
 
 #[cfg(test)]
