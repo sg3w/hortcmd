@@ -49,6 +49,7 @@ struct Fake {
     /// `remove`/`remove_file` fails when the path is in here.
     fail_remove: Mutex<HashSet<crate::vfs::StreamPath>>,
     replaces: bool,
+    fail_backup_rename: AtomicBool,
 }
 
 impl Fake {
@@ -59,6 +60,7 @@ impl Fake {
             fail_rename: Mutex::new(HashSet::new()),
             fail_remove: Mutex::new(HashSet::new()),
             replaces,
+            fail_backup_rename: AtomicBool::new(false),
         })
     }
     fn path(&self, raw: &str) -> crate::vfs::StreamPath {
@@ -215,7 +217,12 @@ impl Provider for Fake {
         Ok(())
     }
     fn rename(&self, from: &crate::vfs::StreamPath, to: &crate::vfs::StreamPath) -> io::Result<()> {
-        if self.fail_rename.lock().unwrap().contains(from) {
+        if self.fail_rename.lock().unwrap().contains(from)
+            || (self.fail_backup_rename.load(AtomicOrdering::Relaxed)
+                && from
+                    .file_name()
+                    .is_some_and(|name| name.to_string_lossy().starts_with(BACKUP_PREFIX)))
+        {
             return Err(io::Error::other("rename abgelehnt (Test)"));
         }
         let mut fs = self.fs.lock().unwrap();
@@ -1676,5 +1683,39 @@ fn remote_staging_is_discarded_even_with_a_recovery_journal() {
                 fs::remove_dir_all(root).unwrap();
             }
         }
+    }
+}
+
+#[test]
+fn failed_move_rollback_names_the_backup_and_prevents_copy_fallback() {
+    for rollback_fails in [false, true] {
+        let fake = Fake::new(false);
+        let source = fake.path("/src/file");
+        let target = fake.path("/dst/file");
+        fake.write(&source, b"new").unwrap();
+        fake.write(&target, b"old").unwrap();
+        fake.fail_rename.lock().unwrap().insert(source.clone());
+        fake.fail_backup_rename
+            .store(rollback_fails, AtomicOrdering::Relaxed);
+        let result = super::plan::try_fast_move(&*fake, &source, &target, true);
+        if rollback_fails {
+            let error = result
+                .expect("rollback failure must stop the move")
+                .unwrap_err();
+            let backups = stale_working_entries(&*fake, &fake.path("/dst"));
+            assert_eq!(backups.len(), 1);
+            let backup = format!("/dst/{}", backups[0]);
+            assert!(error.to_string().contains(&backup), "{error}");
+            assert!(error.to_string().contains("rollback failed"));
+            assert_eq!(fake.get(&backup).as_deref(), Some("old"));
+            assert!(!fake.exists(&target));
+        } else {
+            assert!(
+                result.is_none(),
+                "successful rollback permits the normal fallback"
+            );
+            assert_eq!(fake.get("/dst/file").as_deref(), Some("old"));
+        }
+        assert_eq!(fake.get("/src/file").as_deref(), Some("new"));
     }
 }

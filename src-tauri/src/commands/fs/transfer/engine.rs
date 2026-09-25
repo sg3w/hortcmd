@@ -16,7 +16,9 @@ use crate::vfs::StreamPath;
 use super::copy::{resolve_buf, transfer_one, CopyTuning};
 use super::events::{ItemError, Leftovers, OpDone};
 use super::parallel::run_parallel_copy;
-use super::plan::{commit, free_name, plan_for, publish, stale_working_entries, target_in, Plan};
+use super::plan::{
+    free_name, plan_for, publish, stale_working_entries, target_in, try_fast_move, Plan,
+};
 use super::progress::Prog;
 use super::recovery::{
     self,
@@ -389,15 +391,15 @@ pub(crate) fn run_transfer(
             continue;
         }
 
-        let result = if run.is_none()
-            && remove_source
-            && same_store
-            && commit(&*dstp, src, &plan.target, plan.replace).is_ok()
-        {
-            prog.files_done += files;
-            prog.bytes_done += bytes;
-            prog.emit(&src.to_string_lossy(), *bytes, *bytes, true);
-            Ok(())
+        let fast_move = (run.is_none() && remove_source && same_store)
+            .then(|| try_fast_move(&*dstp, src, &plan.target, plan.replace))
+            .flatten();
+        let result = if let Some(result) = fast_move {
+            result.map(|()| {
+                prog.files_done += files;
+                prog.bytes_done += bytes;
+                prog.emit(&src.to_string_lossy(), *bytes, *bytes, true);
+            })
         } else if plan.native_move {
             // A native rename is one journaled namespace commit. On an ambiguous
             // failure leave recovery records intact; never fall back to copying

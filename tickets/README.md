@@ -2,8 +2,8 @@
 
 All tickets below 100 and tickets 100–107 have been completed.
 Tickets 125–126, 128, 131, 134, 137 and the discovered issues 300–301 and 303–306 are also complete. There are
-**79 open tickets**: 108–124, 127, 129–130, 132–133, 135–136 and the discovered
-issues 314–368. Dependencies use the current paths.
+**78 open tickets**: 108–124, 127, 129–130, 132–133, 135–136 and the discovered
+issues 315–368. Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
 filenames ending in `.done.md`. This also applies to previously completed support
@@ -94,7 +94,7 @@ fails on non-ASCII input — verified credential leak),
 [312](done/312-mcp-extract-missing-live-authorization.done.md).
 
 Data-safety (transfer/archive/undo/search):
-[313](done/313-discard-staging-remote-destination-noop.done.md), [314](314-transfer-commit-rollback-failure-swallowed.md),
+[313](done/313-discard-staging-remote-destination-noop.done.md), [314](done/314-transfer-commit-rollback-failure-swallowed.done.md),
 [315](315-parallel-copy-orphaned-directories.md), [316](316-zip-directory-entries-skip-manifest-verify.md),
 [317](317-undo-eligibility-canonicalize-hard-error.md), [318](318-search-unreadable-files-not-counted.md).
 
@@ -138,4 +138,4 @@ Completed in this batch: **128, 137, 300, 107, 301, 303, 304, 125, 305, 126, 306
 
 ## Review-fix batch (2026-09-25)
 
-Completed: 307, 308, 309, 310, 311, 312, 313.
+Completed: 307, 308, 309, 310, 311, 312, 313, 314.

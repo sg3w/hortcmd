@@ -38,3 +38,11 @@ renamed away.
   failing (mocked provider); assert the returned error names the backup path
   rather than the generic move failure.
 - `npm run check`.
+
+## Implementation
+
+A failed rollback returns a typed I/O error containing both failures and the exact
+backup location. The unjournaled fast-move path treats that error as terminal,
+so copy/delete fallback cannot hide the incident or remove the source. Tests
+verify retained original backup data, unchanged source, diagnostic location, and
+continued fallback eligibility when rollback succeeds.

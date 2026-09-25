@@ -260,6 +260,49 @@ impl Plan {
     }
 }
 
+/// A failed rollback leaves the original destination at this backup. It must
+/// never be treated as a harmless failed rename followed by copy/delete.
+#[derive(Debug)]
+struct RollbackFailed {
+    backup: StreamPath,
+    publish: std::io::Error,
+    rollback: std::io::Error,
+}
+
+impl std::fmt::Display for RollbackFailed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "publication failed: {}; rollback failed: {}; original retained at {}",
+            self.publish,
+            self.rollback,
+            self.backup.display()
+        )
+    }
+}
+impl std::error::Error for RollbackFailed {}
+
+/// `None` permits the ordinary copy fallback only after a recoverable rename
+/// failure. A failed rollback is terminal, with its diagnostic preserved.
+pub(crate) fn try_fast_move(
+    dstp: &dyn Provider,
+    from: &StreamPath,
+    to: &StreamPath,
+    replace: bool,
+) -> Option<std::io::Result<()>> {
+    match commit(dstp, from, to, replace) {
+        Ok(()) => Some(Ok(())),
+        Err(error)
+            if error
+                .get_ref()
+                .is_some_and(|inner| inner.is::<RollbackFailed>()) =>
+        {
+            Some(Err(error))
+        }
+        Err(_) => None,
+    }
+}
+
 /// Publishes `from` under `to`. The old destination survives until the
 /// replacement is in place: either through a documented atomic replace,
 /// or through a backup rename that is undone when the commit fails.
@@ -292,7 +335,13 @@ pub(crate) fn commit(
             Ok(())
         }
         Err(e) => {
-            let _ = dstp.rename(&backup, to);
+            if let Err(rollback) = dstp.rename(&backup, to) {
+                return Err(std::io::Error::other(RollbackFailed {
+                    backup,
+                    publish: e,
+                    rollback,
+                }));
+            }
             Err(e)
         }
     }
