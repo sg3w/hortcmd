@@ -32,3 +32,9 @@ for the lifetime of the process.
   unregistered; assert the map doesn't grow unboundedly across many such
   races (e.g. assert eventual cleanup, or a capped map size).
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Cancellation now separates registered tasks from a bounded queue of the latest 1,024 pre-start or late cancellation requests. Active flags are never evicted. Pressure coverage simulates 10,240 completed-task races and verifies bounded pending growth, active-task cancellation, recent pre-arming, deduplication, and cleanup.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.
