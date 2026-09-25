@@ -210,6 +210,18 @@ impl Store {
     /// otherwise it re-locks after the next credential access.
     /// `create` allows starting a fresh database at the configured path.
     pub fn unlock(&self, password: &str, remember: bool, create: bool) -> AppResult<CredStatus> {
+        self.unlock_with_keychain(password, remember, create, |password| {
+            self.keychain.set(MASTER_ID, password)
+        })
+    }
+
+    fn unlock_with_keychain(
+        &self,
+        password: &str,
+        remember: bool,
+        create: bool,
+        save_master: impl FnOnce(&str) -> AppResult<()>,
+    ) -> AppResult<CredStatus> {
         let cfg = self.config();
         if !cfg.is_keepass() {
             return Err(AppError::from("Der KeePass-Speicher ist nicht aktiv"));
@@ -219,7 +231,10 @@ impl Store {
         let remember = remember || cfg.master_in_keychain;
         self.keepass.unlock(&cfg, password, remember, create)?;
         if cfg.master_in_keychain {
-            self.keychain.set(MASTER_ID, password)?;
+            if let Err(error) = save_master(password) {
+                self.keepass.lock();
+                return Err(error);
+            }
         }
         Ok(self.status())
     }
@@ -750,6 +765,35 @@ pub(crate) mod tests {
             ..CredConfig::default()
         };
         (path, cfg)
+    }
+
+    #[test]
+    fn failed_master_keychain_write_relocks_the_vault() {
+        let (path, mut cfg) = kdbx_config("keychain-failure");
+        cfg.master_in_keychain = true;
+        let store = Store {
+            config: Mutex::new(cfg),
+            keychain: KeychainStore::new(),
+            keepass: KeepassStore::default(),
+        };
+        let result = store.unlock_with_keychain("master", false, true, |_| {
+            assert!(store.keepass.is_unlocked());
+            Err(AppError::new(code::CRED_STORE))
+        });
+        assert!(result.err().unwrap().is(code::CRED_STORE));
+        assert!(!store.status().unlocked);
+        assert!(store.status().needs_unlock);
+        assert!(store.keepass.get("secret").unwrap_err().is(LOCKED));
+        let status = store
+            .unlock_with_keychain("master", false, false, |password| {
+                assert_eq!(password, "master");
+                Ok(())
+            })
+            .unwrap();
+        assert!(status.unlocked);
+        assert!(!status.needs_unlock);
+        store.lock();
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 
     #[test]

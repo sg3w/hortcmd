@@ -33,3 +33,9 @@ state have diverged.
 - Test: simulate a keychain write failure during KeePass unlock; assert
   `store().status().unlocked` matches the reported `Err`/`Ok` result.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+KeePass unlock re-locks the session before returning a failed master-password keychain write. A deterministic injected keychain failure verifies the returned error, locked status, refused credential access, and successful subsequent unlock without calling the real OS keychain.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.
