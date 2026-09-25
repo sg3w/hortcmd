@@ -850,14 +850,34 @@ pub fn call_session(
             );
             // The typed code travels with the message: a client can tell
             // "not found" from "not connected" without parsing prose.
-            typed_tool_error(&e.code, e.to_string())
+            app_tool_error(&e)
         }
     }
+}
+
+/// Provider diagnostics stay in the local audit log. Even redacted detail can
+/// contain internal paths and protocol replies, so it is never client text.
+fn app_tool_error(error: &crate::errors::AppError) -> Value {
+    super::protocol::typed_tool_error(&error.code, error.code.to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tool_errors_never_export_provider_diagnostics() {
+        let error = crate::errors::AppError::new(crate::errors::code::FS_IO)
+            .detail(r#"[{"provider":"internal-server","path":"/private/diagnostic"}]"#);
+        let response = app_tool_error(&error);
+        assert_eq!(response["isError"], true);
+        assert_eq!(response["structuredContent"]["error"]["code"], "fs.io");
+        assert_eq!(response["content"][0]["text"], "fs.io");
+        let serialized = response.to_string();
+        assert!(!serialized.contains("internal-server"));
+        assert!(!serialized.contains("/private/diagnostic"));
+        assert!(error.to_string().contains("internal-server"));
+    }
 
     #[test]
     fn revoked_permission_and_cancelled_requests_cannot_create_files() {

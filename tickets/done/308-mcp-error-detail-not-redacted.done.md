@@ -35,3 +35,10 @@ error text.
   provider/path string in `detail` does not leak that string in the MCP
   response — only `code` + safe `params` appear.
 - `npm run check`.
+
+## Implementation
+
+The tool error boundary emits only the stable code. Diagnostic detail remains in
+the local audit record; no arbitrary provider text or diagnostic path is exported
+by this error arm. This does not alter successful, authorized tool payloads.
+A regression test checks both the client response and retained diagnostic text.
