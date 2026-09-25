@@ -31,3 +31,14 @@ even though the command reports nothing succeeded.
   flatten fails (permission-denied subdirectory); assert no empty directory
   skeletons remain at the destination for the other jobs.
 - `npm run check`.
+
+## Implementation
+
+All source trees are now collected before any destination directories are created.
+A late source-listing failure therefore leaves no direct-mode skeletons. Workers
+start only after every destination is prepared. If destination preparation itself
+fails, private staging is cleaned and each newly prepared direct directory is
+reported with a localized partial-directory error; direct folders are not removed
+recursively because concurrent processes could have populated them. Tests cover
+late permission denial, preserved existing content, safe-mode cleanup and explicit
+direct-mode remnants after a destination creation failure.

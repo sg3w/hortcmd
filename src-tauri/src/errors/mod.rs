@@ -238,6 +238,7 @@ pub mod code {
     pub const TRANSFER_JOURNAL_UNAVAILABLE: &str = "transfer.journalUnavailable";
     pub const TRANSFER_CHECKSUM: &str = "transfer.checksum";
     pub const TRANSFER_NO_STAGING: &str = "transfer.noStaging";
+    pub const TRANSFER_PARTIAL_DIRECTORIES: &str = "transfer.partialDirectories";
     pub const TRANSFER_COMMIT: &str = "transfer.commit";
     pub const TRANSFER_SOURCE_GONE: &str = "transfer.sourceGone";
     pub const TRANSFER_INTO_ITSELF: &str = "transfer.intoItself";
@@ -321,6 +322,7 @@ pub mod code {
         TRANSFER_CHECKSUM,
         TRANSFER_NO_STAGING,
         TRANSFER_COMMIT,
+        TRANSFER_PARTIAL_DIRECTORIES,
         TRANSFER_SOURCE_GONE,
         TRANSFER_INTO_ITSELF,
         ARCHIVE_PASSWORD_REQUIRED,

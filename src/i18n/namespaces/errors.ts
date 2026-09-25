@@ -41,6 +41,7 @@ export const errors = ns(
     "error.transfer.noStaging":
       "Ausfallsichere Übertragung wird an diesem Ort nicht unterstützt — in den Einstellungen unter „Dateioperationen“ abschalten",
     "error.transfer.commit": "Ziel konnte nicht ersetzt werden",
+    "error.transfer.partialDirectories": "Kopieren vor der Dateiübertragung abgebrochen. Dieser vorbereitete Zielordner bleibt bestehen; prüfe seinen Inhalt.",
     "error.transfer.sourceGone": "Quelle liegt in einem anderen Speicher",
     "error.transfer.intoItself": "Quelle und Ziel sind identisch",
 
@@ -145,6 +146,7 @@ export const errors = ns(
     "error.transfer.noStaging":
       "Failure-safe transfers are not supported at this location — turn them off under “File operations” in the settings",
     "error.transfer.commit": "The destination could not be replaced",
+    "error.transfer.partialDirectories": "Copy stopped before transferring files. This prepared destination folder remains; review its contents.",
     "error.transfer.sourceGone": "The source is on a different store",
     "error.transfer.intoItself": "Source and destination are the same",
 

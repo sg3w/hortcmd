@@ -25,41 +25,94 @@ use std::time::Instant;
 use tauri::AppHandle;
 
 /// A single file copy task (with source index for the ok counting).
+#[derive(Debug)]
 pub(crate) struct CopyTask {
     pub(crate) idx: usize,
     pub(crate) src: StreamPath,
     pub(crate) dst: StreamPath,
 }
 
-/// Flattens a source tree into individual file tasks, creating the
-/// target folders along the way. `idx` refers to the top-level source.
+/// Collect a tree without changing the destination. All jobs must finish this
+/// phase before any directory is created or a worker starts writing files.
 pub(crate) fn flatten_tree(
     srcp: &dyn Provider,
-    dstp: &dyn Provider,
+    directories: &mut Vec<StreamPath>,
     src: &StreamPath,
     dst: &StreamPath,
     idx: usize,
     tasks: &mut Vec<CopyTask>,
 ) -> std::io::Result<()> {
     if srcp.stat(src)?.is_dir {
-        dstp.create_dir_all(dst)?;
-        {
-            for child in srcp.read_dir(src)? {
-                let name = child.file_name().unwrap_or_default();
-                flatten_tree(srcp, dstp, &child, &dst.join(name)?, idx, tasks)?;
-            }
+        directories.push(dst.to_owned());
+        for child in srcp.read_dir(src)? {
+            let name = child.file_name().unwrap_or_default();
+            flatten_tree(srcp, directories, &child, &dst.join(name)?, idx, tasks)?;
         }
     } else {
         if let Some(parent) = dst.parent() {
-            dstp.create_dir_all(&parent)?;
+            if directories.last() != Some(&parent) {
+                directories.push(parent);
+            }
         }
         tasks.push(CopyTask {
             idx,
-            src: src.to_path_buf(),
-            dst: dst.to_path_buf(),
+            src: src.to_owned(),
+            dst: dst.to_owned(),
         });
     }
     Ok(())
+}
+
+pub(crate) fn prepare_jobs(
+    srcp: &dyn Provider,
+    dstp: &dyn Provider,
+    jobs: &[(StreamPath, Plan)],
+) -> Result<Vec<CopyTask>, Vec<ItemError>> {
+    let mut tasks = Vec::new();
+    let mut directories = Vec::new();
+    let mut created = Vec::new();
+    let result = (|| -> Result<(), Vec<ItemError>> {
+        // A failure reading any source leaves every destination untouched.
+        for (i, (src, plan)) in jobs.iter().enumerate() {
+            let mut job_dirs = Vec::new();
+            flatten_tree(srcp, &mut job_dirs, src, &plan.write_to, i, &mut tasks)
+                .map_err(|error| vec![ItemError::new(src.display().to_string(), error.into())])?;
+            directories.push(job_dirs);
+        }
+        for (i, ((src, plan), dirs)) in jobs.iter().zip(directories).enumerate() {
+            plan.writing()
+                .map_err(|error| vec![ItemError::new(src.display().to_string(), error.into())])?;
+            for dir in dirs {
+                let existed = dstp.exists(&dir);
+                let result = dstp.create_dir_all(&dir);
+                if !existed && dstp.exists(&dir) {
+                    created.push((i, dir.clone()));
+                }
+                result.map_err(|error| {
+                    vec![ItemError::new(dir.display().to_string(), error.into())]
+                })?;
+            }
+        }
+        Ok(())
+    })();
+    if let Err(mut errors) = result {
+        for (_, plan) in jobs {
+            discard_staging(dstp, plan, &mut errors);
+        }
+        // Direct output has no exclusive ownership. Never recursively delete a
+        // directory another process could have populated; report exact remnants.
+        for (i, dir) in created {
+            if !jobs[i].1.is_staged() && dstp.exists(&dir) {
+                errors.push(ItemError::new(
+                    dir.display().to_string(),
+                    crate::errors::AppError::new(crate::errors::code::TRANSFER_PARTIAL_DIRECTORIES)
+                        .op("prepare-directories"),
+                ));
+            }
+        }
+        return Err(errors);
+    }
+    Ok(tasks)
 }
 
 /// Copies a file block by block with shared bookkeeping (parallel path).
@@ -151,26 +204,10 @@ pub(crate) fn run_parallel_copy(
     files_total: u32,
     bytes_total: u64,
 ) -> (u32, Vec<ItemError>) {
-    // Flatten all source trees into file tasks (target folders are
-    // created). In safe mode every job writes into its own staging
-    // entry, so one worker's failure can never publish a half-copied
-    // tree or disturb a pre-existing destination.
-    let mut tasks = Vec::new();
-    for (i, (src, plan)) in jobs.iter().enumerate() {
-        if let Err(error) = plan.writing() {
-            return (
-                0,
-                vec![ItemError::new(src.display().to_string(), error.into())],
-            );
-        }
-        if let Err(error) = flatten_tree(&*srcp, &*dstp, src, &plan.write_to, i, &mut tasks) {
-            let mut errors = vec![ItemError::new(src.display().to_string(), error.into())];
-            for (_, plan) in &jobs {
-                discard_staging(&*dstp, plan, &mut errors);
-            }
-            return (0, errors);
-        }
-    }
+    let tasks = match prepare_jobs(&*srcp, &*dstp, &jobs) {
+        Ok(tasks) => tasks,
+        Err(errors) => return (0, errors),
+    };
 
     let sp = Arc::new(SharedProg {
         srcp,

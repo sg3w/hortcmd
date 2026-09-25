@@ -26,6 +26,7 @@ export const ERROR_CODES = [
   "transfer.journalUnavailable",
   "transfer.checksum",
   "transfer.noStaging",
+  "transfer.partialDirectories",
   "transfer.commit",
   "transfer.sourceGone",
   "transfer.intoItself",

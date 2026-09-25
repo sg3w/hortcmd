@@ -50,6 +50,7 @@ struct Fake {
     fail_remove: Mutex<HashSet<crate::vfs::StreamPath>>,
     replaces: bool,
     fail_backup_rename: AtomicBool,
+    fail_read_dir: Mutex<HashSet<crate::vfs::StreamPath>>,
 }
 
 impl Fake {
@@ -61,6 +62,7 @@ impl Fake {
             fail_remove: Mutex::new(HashSet::new()),
             replaces,
             fail_backup_rename: AtomicBool::new(false),
+            fail_read_dir: Mutex::new(HashSet::new()),
         })
     }
     fn path(&self, raw: &str) -> crate::vfs::StreamPath {
@@ -179,6 +181,9 @@ impl Provider for Fake {
         self.fs.lock().unwrap().dirs.contains(path)
     }
     fn read_dir(&self, path: &crate::vfs::StreamPath) -> io::Result<Vec<crate::vfs::StreamPath>> {
+        if self.fail_read_dir.lock().unwrap().contains(path) {
+            return Err(io::Error::from(ErrorKind::PermissionDenied));
+        }
         let fs = self.fs.lock().unwrap();
         Ok(fs
             .files
@@ -1053,9 +1058,10 @@ fn flattening_assigns_every_file_to_its_top_level_source() {
     }
 
     let mut tasks = Vec::new();
+    let mut directories = Vec::new();
     flatten_tree(
         &*fake,
-        &*fake,
+        &mut directories,
         &crate::vfs::StreamPath::from(Path::new("/src")),
         &crate::vfs::StreamPath::from(Path::new("/dst")),
         7,
@@ -1066,8 +1072,11 @@ fn flattening_assigns_every_file_to_its_top_level_source() {
     // The index identifies which top-level source a file came from,
     // which is what lets one failing job be discarded on its own.
     assert!(tasks.iter().all(|t| t.idx == 7));
-    // The target folders exist before any worker writes into them.
-    assert!(fake.is_dir(&crate::vfs::StreamPath::from(Path::new("/dst/sub"))));
+    assert!(directories.contains(&fake.path("/dst/sub")));
+    assert!(
+        !fake.exists(&fake.path("/dst")),
+        "collection must not create directories"
+    );
 }
 
 #[test]
@@ -1199,9 +1208,8 @@ fn resolve_buf_clamps() {
 }
 
 #[test]
-fn flatten_tree_collects_files_and_makes_dirs() {
-    // Source tree with a subfolder; flatten must create the target folders
-    // and yield one task per file (not for directories).
+fn flatten_tree_collects_files_and_plans_dirs() {
+    // Collection records target directories without creating them.
     let root = tmp_dir();
     let src = root.join("src");
     fs::create_dir_all(src.join("sub")).unwrap();
@@ -1210,9 +1218,10 @@ fn flatten_tree_collects_files_and_makes_dirs() {
     let dst = root.join("dst");
 
     let mut tasks: Vec<CopyTask> = Vec::new();
+    let mut directories = Vec::new();
     flatten_tree(
         &LocalProvider,
-        &LocalProvider,
+        &mut directories,
         &crate::vfs::StreamPath::from(&src),
         &crate::vfs::StreamPath::from(&dst),
         0,
@@ -1221,7 +1230,8 @@ fn flatten_tree_collects_files_and_makes_dirs() {
     .unwrap();
 
     assert_eq!(tasks.len(), 2, "zwei Dateien erwartet");
-    assert!(dst.join("sub").is_dir(), "Zielordner angelegt");
+    assert!(directories.contains(&crate::vfs::StreamPath::from(&dst.join("sub"))));
+    assert!(!dst.exists());
     let names: Vec<String> = tasks
         .iter()
         .map(|t| t.dst.file_name().unwrap().to_string_lossy().into_owned())
@@ -1229,6 +1239,15 @@ fn flatten_tree_collects_files_and_makes_dirs() {
     assert!(names.contains(&"a.txt".to_string()));
     assert!(names.contains(&"b.txt".to_string()));
     assert!(tasks.iter().all(|t| t.idx == 0));
+    let jobs = vec![((&src).into(), Plan::direct((&dst).into()))];
+    let prepared = super::parallel::prepare_jobs(&LocalProvider, &LocalProvider, &jobs).unwrap();
+    assert_eq!(prepared.len(), 2);
+    assert!(dst.join("sub").is_dir());
+    assert!(
+        !dst.join("a.txt").exists(),
+        "preparation writes no file content"
+    );
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -1259,20 +1278,11 @@ fn failed_parallel_directory_preparation_does_not_schedule_file_writes() {
     fs::write(source.join("a.txt"), b"source").unwrap();
     let blocked = root.join("blocked");
     fs::write(&blocked, b"existing destination").unwrap();
-    let mut tasks = Vec::new();
-    let result = flatten_tree(
-        &LocalProvider,
-        &LocalProvider,
-        &crate::vfs::StreamPath::from(&source),
-        &crate::vfs::StreamPath::from(&blocked.join("sub")),
-        0,
-        &mut tasks,
-    );
-    assert!(result.is_err());
-    assert!(
-        tasks.is_empty(),
-        "unusable destination must not reach workers"
-    );
+    let jobs = vec![(
+        crate::vfs::StreamPath::from(&source),
+        Plan::direct((&blocked.join("sub")).into()),
+    )];
+    assert!(super::parallel::prepare_jobs(&LocalProvider, &LocalProvider, &jobs).is_err());
     assert_eq!(fs::read(&blocked).unwrap(), b"existing destination");
     assert_eq!(fs::read(source.join("a.txt")).unwrap(), b"source");
     fs::remove_dir_all(root).unwrap();
@@ -1718,4 +1728,73 @@ fn failed_move_rollback_names_the_backup_and_prevents_copy_fallback() {
         }
         assert_eq!(fake.get("/src/file").as_deref(), Some("new"));
     }
+}
+
+#[test]
+fn a_late_source_read_failure_creates_no_parallel_directory_skeletons() {
+    let fake = Fake::new(false);
+    for dir in [
+        "/src/good",
+        "/src/good/empty",
+        "/src/bad",
+        "/src/bad/denied",
+        "/dst/existing",
+    ] {
+        fake.create_dir_all(&fake.path(dir)).unwrap();
+    }
+    fake.put("/dst/existing/keep", "keep");
+    fake.fail_read_dir
+        .lock()
+        .unwrap()
+        .insert(fake.path("/src/bad/denied"));
+    for safe in [false, true] {
+        let jobs = ["good", "bad"]
+            .into_iter()
+            .map(|name| {
+                (
+                    fake.path(&format!("/src/{name}")),
+                    plan_for(&*fake, fake.path(&format!("/dst/{name}")), false, safe).unwrap(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let errors = super::parallel::prepare_jobs(&*fake, &*fake, &jobs).unwrap_err();
+        assert_eq!(errors.len(), 1);
+        assert!(!fake.exists(&fake.path("/dst/good")));
+        assert!(!fake.exists(&fake.path("/dst/bad")));
+        assert_eq!(fake.get("/dst/existing/keep").as_deref(), Some("keep"));
+        assert!(stale_working_entries(&*fake, &fake.path("/dst")).is_empty());
+    }
+}
+
+#[test]
+fn directory_creation_failure_reports_direct_remnants_but_cleans_staging() {
+    let root = fresh_dir();
+    let source = root.join("source");
+    fs::create_dir_all(source.join("empty")).unwrap();
+    let blocked = root.join("blocked");
+    fs::write(&blocked, b"keep").unwrap();
+    for safe in [false, true] {
+        let target = root.join(if safe { "safe" } else { "direct" });
+        let jobs = vec![
+            (
+                (&source).into(),
+                plan_for(&LocalProvider, (&target).into(), false, safe).unwrap(),
+            ),
+            (
+                (&source).into(),
+                Plan::direct((&blocked.join("child")).into()),
+            ),
+        ];
+        let errors =
+            super::parallel::prepare_jobs(&LocalProvider, &LocalProvider, &jobs).unwrap_err();
+        assert_eq!(target.exists(), !safe);
+        assert_eq!(
+            errors.iter().any(|e| e
+                .error
+                .is(crate::errors::code::TRANSFER_PARTIAL_DIRECTORIES)),
+            !safe
+        );
+        assert_eq!(fs::read(&blocked).unwrap(), b"keep");
+    }
+    fs::remove_dir_all(root).unwrap();
 }

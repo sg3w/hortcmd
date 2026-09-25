@@ -476,13 +476,14 @@ fn parallel_planning_errors_propagate_before_any_job_can_be_committed() {
     fs::create_dir(temp.0.join("source")).unwrap();
     fs::write(temp.0.join("source/a"), b"new").unwrap();
     fs::write(temp.0.join("blocked"), b"old-destination").unwrap();
-    let result = crate::commands::fs::transfer::parallel::flatten_tree(
+    let jobs = vec![(
+        crate::vfs::StreamPath::from(&temp.0.join("source")),
+        crate::commands::fs::transfer::plan::Plan::direct((&temp.0.join("blocked/sub")).into()),
+    )];
+    let result = crate::commands::fs::transfer::parallel::prepare_jobs(
         &LocalProvider,
         &LocalProvider,
-        &crate::vfs::StreamPath::from(&temp.0.join("source")),
-        &crate::vfs::StreamPath::from(&temp.0.join("blocked/sub")),
-        0,
-        &mut Vec::new(),
+        &jobs,
     );
     assert!(result.is_err());
     assert_eq!(
