@@ -29,3 +29,9 @@ folder no longer exists" message.
   surfaced error uses the specific code, not the generic internal-error
   fallback.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Folder-size validation now preserves filesystem metadata errors and reports files as fs.notADirectory. Missing folders use fs.notFound; neither common condition suggests reporting an internal error. A regression deletes a folder and then replaces it with a file to verify both outcomes.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

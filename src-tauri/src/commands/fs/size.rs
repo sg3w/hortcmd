@@ -11,7 +11,7 @@
 // ============================================================
 
 use super::cancel;
-use crate::errors::{AppError, AppResult};
+use crate::errors::{code, AppError, AppResult};
 use crate::vfs::caps::{self, Capability};
 use serde::Serialize;
 use std::fs;
@@ -161,11 +161,21 @@ pub async fn dir_size(
     let root = PathBuf::from(&path);
     // Even the initial stat can block on an OS-mounted network volume.
     tauri::async_runtime::spawn_blocking(move || {
-        if root.is_dir() {
-            Ok(walk_size(root, &flag, &on_progress))
-        } else {
-            Err(AppError::from(format!("{}: kein Verzeichnis", path)))
+        let metadata = fs::metadata(&root).map_err(|error| {
+            let missing = error.kind() == std::io::ErrorKind::NotFound;
+            let error = AppError::from(error).op("dir_size").with("path", &path);
+            if missing {
+                error.maybe_action(None)
+            } else {
+                error
+            }
+        })?;
+        if !metadata.is_dir() {
+            return Err(AppError::new(code::FS_NOT_A_DIRECTORY)
+                .op("dir_size")
+                .with("path", &path));
         }
+        Ok(walk_size(root, &flag, &on_progress))
     })
     .await
     .map_err(AppError::from)
@@ -271,6 +281,28 @@ mod tests {
             assert_eq!(res.stats.files, 1);
         }
         assert_eq!(res.stats.dirs, 1);
+    }
+
+    #[test]
+    fn deleted_and_replaced_folders_have_specific_errors() {
+        let root = tmp("replaced");
+        fs::remove_dir(&root).unwrap();
+        for expected in [code::FS_NOT_FOUND, code::FS_NOT_A_DIRECTORY] {
+            if expected == code::FS_NOT_A_DIRECTORY {
+                fs::write(&root, b"replaced by a file").unwrap();
+            }
+            let error = tauri::async_runtime::block_on(dir_size(
+                root.to_string_lossy().into_owned(),
+                "size-replaced-folder".into(),
+                Channel::new(|_| Ok(())),
+            ))
+            .err()
+            .unwrap();
+            assert!(error.is(expected));
+            assert_eq!(error.op.as_deref(), Some("dir_size"));
+            assert!(error.action.is_none());
+        }
+        fs::remove_file(root).unwrap();
     }
 
     #[test]
