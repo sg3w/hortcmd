@@ -29,3 +29,9 @@ structurally-identical sibling command applies is simply absent here.
   capability set lacks the relevant capability, the same way `file.rs`'s
   commands do.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Selection saves require Create and loads require Preview before provider resolution or file I/O. Tests verify the appropriate capability refusals, and the existing local selection round-trip and validation tests pass.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

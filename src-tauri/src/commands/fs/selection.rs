@@ -15,7 +15,10 @@
 // ============================================================
 
 use crate::errors::{code, AppError, AppResult, ErrorAction};
-use crate::vfs;
+use crate::vfs::{
+    self,
+    caps::{self, Capability},
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::io::Read;
@@ -135,6 +138,7 @@ pub fn save_selection(
     entries: Vec<SelEntry>,
     overwrite: bool,
 ) -> AppResult<bool> {
+    caps::require(&path, Capability::Create)?;
     let file = normalize(SelectionFile {
         version: SELECTION_VERSION,
         location,
@@ -155,6 +159,7 @@ pub fn save_selection(
 /// endless stream cannot be pulled into memory.
 #[tauri::command]
 pub fn load_selection(path: String) -> AppResult<SelectionFile> {
+    caps::require(&path, Capability::Preview)?;
     let (provider, resolved) = vfs::resolve(&path)?;
     let p = &resolved;
     if let Ok(st) = provider.stat(p) {
@@ -217,6 +222,24 @@ mod tests {
             version: SELECTION_VERSION,
             location: "/tmp/x".into(),
             entries,
+        }
+    }
+
+    #[test]
+    fn selection_io_requires_the_corresponding_location_capability() {
+        let path = "sftp://selection-capability-fixture.invalid/selection.json".to_string();
+        for (error, capability) in [
+            (
+                save_selection(path.clone(), "/".into(), vec![], true).unwrap_err(),
+                "create",
+            ),
+            (load_selection(path).unwrap_err(), "preview"),
+        ] {
+            assert!(error.is(code::CAPABILITY_OFFLINE));
+            assert_eq!(
+                error.params().get("capability").map(String::as_str),
+                Some(capability)
+            );
         }
     }
 
