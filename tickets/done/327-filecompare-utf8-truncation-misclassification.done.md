@@ -27,3 +27,9 @@ they'd expect, purely because of where the truncation cut landed.
 - Test: a >4MiB UTF-8 text file constructed so a multi-byte character straddles
   the `MAX_TEXT_BYTES` boundary; assert it's classified as text, not binary.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Text comparison omits only an incomplete UTF-8 suffix from a capped read. It preserves binary classification for actual invalid UTF-8, incomplete characters at real EOF, and NUL bytes. Regressions cover every cap-crossing position of two-, three- and four-byte UTF-8 characters, full sizes, truncation, and byte-identical results.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

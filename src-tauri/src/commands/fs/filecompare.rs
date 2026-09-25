@@ -113,9 +113,19 @@ fn read_capped(path: &Path, cap: usize) -> std::io::Result<(Vec<u8>, bool)> {
     Ok((buf, more))
 }
 
-/// Heuristic: NUL byte or invalid UTF-8 ⇒ binary file.
-fn looks_binary(bytes: &[u8]) -> bool {
-    bytes.contains(&0) || std::str::from_utf8(bytes).is_err()
+/// NUL or malformed UTF-8 is binary. Only an incomplete final character in
+/// a known-truncated read may be omitted from the text preview.
+fn text_prefix(bytes: &[u8], truncated: bool) -> Option<&str> {
+    if bytes.contains(&0) {
+        return None;
+    }
+    match std::str::from_utf8(bytes) {
+        Ok(text) => Some(text),
+        Err(error) if truncated && error.error_len().is_none() => {
+            std::str::from_utf8(&bytes[..error.valid_up_to()]).ok()
+        }
+        Err(_) => None,
+    }
 }
 
 /// Builds the side-by-side lines from a line diff.
@@ -239,37 +249,35 @@ fn compare_impl(left: String, right: String) -> AppResult<FileDiff> {
 
     let (lbytes, lmore) = read_capped(lp, MAX_TEXT_BYTES).map_err(AppError::from)?;
     let (rbytes, rmore) = read_capped(rp, MAX_TEXT_BYTES).map_err(AppError::from)?;
-    let binary = looks_binary(&lbytes) || looks_binary(&rbytes);
-
-    if binary {
-        // Limit to a smaller window for the hex view.
-        let lhex = &lbytes[..lbytes.len().min(MAX_HEX_BYTES)];
-        let rhex = &rbytes[..rbytes.len().min(MAX_HEX_BYTES)];
-        let truncated =
-            lmore || rmore || lbytes.len() > MAX_HEX_BYTES || rbytes.len() > MAX_HEX_BYTES;
-        Ok(FileDiff {
-            mode: "binary".into(),
-            identical,
-            truncated,
-            left_size,
-            right_size,
-            lines: Vec::new(),
-            hex: build_hex_diff(lhex, rhex),
-        })
-    } else {
-        // Safe, since looks_binary already checked UTF-8.
-        let ltext = String::from_utf8_lossy(&lbytes);
-        let rtext = String::from_utf8_lossy(&rbytes);
-        let (lines, line_trunc) = build_text_diff(&ltext, &rtext);
-        Ok(FileDiff {
-            mode: "text".into(),
-            identical,
-            truncated: lmore || rmore || line_trunc,
-            left_size,
-            right_size,
-            lines,
-            hex: Vec::new(),
-        })
+    match (text_prefix(&lbytes, lmore), text_prefix(&rbytes, rmore)) {
+        (Some(ltext), Some(rtext)) => {
+            let (lines, line_trunc) = build_text_diff(ltext, rtext);
+            Ok(FileDiff {
+                mode: "text".into(),
+                identical,
+                truncated: lmore || rmore || line_trunc,
+                left_size,
+                right_size,
+                lines,
+                hex: Vec::new(),
+            })
+        }
+        _ => {
+            // Binary previews retain the original bytes, including any suffix.
+            let lhex = &lbytes[..lbytes.len().min(MAX_HEX_BYTES)];
+            let rhex = &rbytes[..rbytes.len().min(MAX_HEX_BYTES)];
+            let truncated =
+                lmore || rmore || lbytes.len() > MAX_HEX_BYTES || rbytes.len() > MAX_HEX_BYTES;
+            Ok(FileDiff {
+                mode: "binary".into(),
+                identical,
+                truncated,
+                left_size,
+                right_size,
+                lines: Vec::new(),
+                hex: build_hex_diff(lhex, rhex),
+            })
+        }
     }
 }
 
@@ -305,6 +313,35 @@ mod tests {
         let p: PathBuf = dir.join(format!("{}-{}", n, name));
         fs::write(&p, bytes).unwrap();
         p.to_string_lossy().into_owned()
+    }
+
+    #[test]
+    fn utf8_characters_straddling_the_read_cap_remain_text() {
+        for character in ["é", "界", "😀"] {
+            for prefix_bytes in 1..character.len() {
+                let mut bytes = vec![b'x'; super::MAX_TEXT_BYTES - prefix_bytes];
+                bytes.extend_from_slice(character.as_bytes());
+                bytes.extend_from_slice(b"tail");
+                let a = write("unicode-left", &bytes);
+                let b = write("unicode-right", &bytes);
+                let diff = compare_impl(a.clone(), b.clone()).unwrap();
+                assert_eq!(diff.mode, "text");
+                assert!(diff.truncated && diff.identical);
+                assert_eq!(diff.left_size, bytes.len() as u64);
+                assert!(diff.hex.is_empty());
+                assert!(!diff.lines[0].left.as_ref().unwrap().contains('\u{fffd}'));
+                fs::remove_file(a).unwrap();
+                fs::remove_file(b).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn truncation_does_not_hide_malformed_utf8_or_nul_bytes() {
+        assert_eq!(super::text_prefix(b"valid\xe2", true), Some("valid"));
+        assert!(super::text_prefix(b"valid\xe2", false).is_none());
+        assert!(super::text_prefix(b"bad\xffsuffix", true).is_none());
+        assert!(super::text_prefix(b"nul\0\xf0", true).is_none());
     }
 
     #[test]
