@@ -17,7 +17,7 @@
     "check:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
     "check:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets --all-features -- -D warnings",
     "check:rust": "cargo test --manifest-path src-tauri/Cargo.toml --locked",
-    "check": "npm run check:fmt && npm run check:clippy && npm run check:rust && npm run check:bindings && npm run check:errorcodes && npm run check:boundaries && npm run check:docs && npm run check:ui-text && npm run typecheck && npm test && npm run build && npm run check:bundle",
+    "check": "npm run check:dependencies && npm run check:fmt && npm run check:clippy && npm run check:rust && npm run check:bindings && npm run check:errorcodes && npm run check:boundaries && npm run check:docs && npm run check:ui-text && npm run typecheck && npm test && npm run build && npm run check:bundle",
     "tauri": "tauri",
     "check:bundle": "node scripts/bundle-report.mjs",
     "bundle:report": "node scripts/bundle-report.mjs --build",
@@ -25,7 +25,13 @@
     "gen:errorcodes": "node scripts/gen-error-codes.mjs",
     "check:errorcodes": "node scripts/gen-error-codes.mjs --check",
     "check:docs": "node scripts/check-docs.mjs",
-    "check:ui-text": "node --test scripts/check-ui-text.test.mjs && node scripts/check-ui-text.mjs"
+    "check:ui-text": "node --test scripts/check-ui-text.test.mjs && node scripts/check-ui-text.mjs",
+    "check:dependencies": "python3 -m unittest discover -s scripts/supply_chain -p 'test_*.py' && python3 scripts/supply_chain/main.py",
+    "supply:bundle": "python3 scripts/supply_chain/main.py --output artifacts/supply-chain",
+    "supply:verify": "python3 scripts/supply_chain/main.py --verify artifacts/supply-chain",
+    "audit:dependencies": "python3 scripts/supply_chain/audit.py",
+    "release:bundle": "npm run check && npm run audit:dependencies && npm run supply:bundle && tauri build --config src-tauri/tauri.release.conf.json && npm run supply:verify",
+    "release:handoff": "python3 scripts/supply_chain/package.py artifacts/hortcmd-release.zip"
   },
   "dependencies": {
     "@radix-ui/react-context-menu": "^2.3.3",

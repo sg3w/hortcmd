@@ -1,0 +1,6 @@
+# Stable source/provenance hashes across Windows, macOS and Linux checkouts.
+*.toml text eol=lf
+*.lock text eol=lf
+package*.json text eol=lf
+policy/** text eol=lf
+*.svg text eol=lf

@@ -81,7 +81,13 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.10"
+      - run: npm ci --ignore-scripts --no-audit
+      - run: cargo fetch --manifest-path src-tauri/Cargo.toml --locked
+      - name: Dependency licenses, provenance and review expiry
+        run: npm run check:dependencies
 
       # Each step separately, so the failing check is visible in the
       # job's step list rather than buried in one long log.
@@ -119,7 +125,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci --engine-strict
+      - run: npm ci --engine-strict --ignore-scripts --no-audit
       - run: npm run typecheck
       - run: npm test
       - run: npm run build

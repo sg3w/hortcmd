@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Dateicommander im Norton-Commander-Stil"
 authors = ["you"]
 edition = "2021"
+license = "MIT"
 # Rust 1.85.1 covers both smb 0.11.1 and the pinned keepass release.
 # .cargo/config.toml prefers compatible dependency versions (TICKET-068).
 rust-version = "1.85.1"

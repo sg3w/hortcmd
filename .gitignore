@@ -21,3 +21,8 @@ Thumbs.db
 # Created by `npm run test:harness` and deleted with the run; the
 # `-logs` siblings are redacted failure artifacts, also disposable.
 harness/.run/
+
+# Reproducible local dependency/release evidence.
+artifacts/supply-chain/
+__pycache__/
+artifacts/hortcmd-release.zip

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "resources": {
+      "../artifacts/supply-chain/sbom.cdx.json": "supply-chain/sbom.cdx.json",
+      "../artifacts/supply-chain/THIRD-PARTY-NOTICES.txt": "supply-chain/THIRD-PARTY-NOTICES.txt",
+      "../artifacts/supply-chain/assets.json": "supply-chain/assets.json",
+      "../artifacts/supply-chain/duplicates.json": "supply-chain/duplicates.json",
+      "../artifacts/supply-chain/manifest.json": "supply-chain/manifest.json"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "skip"
+      }
+    }
+  }
+}

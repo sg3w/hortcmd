@@ -547,3 +547,6 @@ Search offers an explicitly approved [scoped search index](docs/search-index.md)
 
 Local diagnostics and explicit support exports are available in Settings →
 Diagnostics. See [privacy, retention and correlation](docs/diagnostics.md).
+
+[Dependency governance](docs/dependency-governance.md) documents offline license
+checks, explicit online advisory scans, expiring reviews and release SBOM/notices.

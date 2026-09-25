@@ -78,3 +78,12 @@ evidence.
 - Direct dependency additions have a review checklist.
 - Scheduled update and advisory response processes have clear owners.
 - Rename this file to `110-dependency-and-license-governance.done.md`.
+
+## Implementation verification
+
+The offline policy, fixture tests, SBOM/notices generation and verification, and
+full `npm run check` pass. The separate live advisory gate correctly blocks on
+18 existing Rust findings (npm: none); no blanket exceptions were added. See
+[dependency governance](../../docs/dependency-governance.md) for remediation and
+release restrictions. This completion records the governance implementation, not
+a vulnerability-free certification of the existing dependency graph.
