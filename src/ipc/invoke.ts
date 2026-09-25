@@ -10,6 +10,8 @@
 // load it at all.
 // ============================================================
 
+import { ipcError } from "@/lib/appError";
+
 export const hasTauri =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -30,6 +32,14 @@ export async function invoke<T>(
   cmd: string,
   args?: Record<string, unknown>,
 ): Promise<T> {
+  // Native-only domain calls share this refusal before loading Tauri. Domain
+  // functions with explicit demo fallbacks return before reaching this point.
+  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+    throw {
+      ...ipcError(null), code: "capability.unsupported", params: { scheme: "browser" },
+      op: cmd, retryable: false, action: null,
+    };
+  }
   const fn = await getInvoke();
   if (!/^(copy_entries|move_entries|delete_entries|rename_entry|rename_batch|make_dir|net_connect|net_disconnect|net_cancel_connect|cancel_transfer|pause_transfer|pack_archive|extract_archive|plugin_open|plugin_close)$/.test(cmd)) return fn<T>(cmd, args);
   let correlation: string;

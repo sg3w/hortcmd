@@ -5,7 +5,6 @@ import type { IndexPage } from "../bindings/IndexPage";
 import { hasTauri, invoke } from "../invoke";
 export const indexList = (): Promise<IndexInfo[]> => hasTauri ? invoke("index_list", {}) : Promise.resolve([]);
 export function indexCreate(root: string, policy: IndexPolicy, password: string | null): Promise<IndexInfo> {
-  if (!hasTauri) return Promise.reject(new Error("Native runtime required"));
   return invoke("index_create", { root, policy, password });
 }
 export const indexUnlock = (id: string, password: string): Promise<IndexInfo> => invoke("index_unlock", { id, password });

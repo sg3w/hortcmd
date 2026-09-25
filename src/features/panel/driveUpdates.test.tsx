@@ -11,12 +11,9 @@ import { FileBrowserDialog } from "@/components/ui/FileBrowserDialog";
 import { openFileBrowser } from "@/store/fileBrowserStore";
 import { translate } from "@/store/settingsStore";
 vi.mock("@/ipc/invoke", async importOriginal => ({ ...await importOriginal<typeof import("@/ipc/invoke")>(), hasTauri:true }));
-let native: ReturnType<typeof useTauri>;
-beforeAll(() => { native = useTauri({commands:{}}); HTMLElement.prototype.scrollIntoView = vi.fn(); });
+beforeAll(() => { HTMLElement.prototype.scrollIntoView = vi.fn(); });
 function runtime(options: Parameters<typeof useTauri>[0]) {
-  for (const [cmd, impl] of Object.entries(options?.commands ?? {})) native.setCommand(cmd, impl);
-  native.calls.length = 0;
-  return native;
+  return useTauri(options);
 }
 const root = {name:"Root", mount:"/", total:100, free:50};
 const card = {name:"Card", mount:"/Volumes/card", total:100, free:80};

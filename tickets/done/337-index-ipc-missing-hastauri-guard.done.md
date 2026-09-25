@@ -40,3 +40,9 @@ while fixing this one.
   environment; assert each rejects with a structured `AppError`, not a raw
   `TypeError`.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+The shared IPC transport refuses missing native runtimes with a structured capability.unsupported AppError before importing Tauri. This covers all native-only index, connection, credential, shell, recovery, and undo calls while retaining explicit demo fallbacks. Sixteen refusal cases plus native forwarding and demo-list tests pass. The drive-update fixture now selects native mode separately for each test.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.
