@@ -172,8 +172,8 @@ pub async fn index_query(id: String, query: IndexQuery, token: String) -> AppRes
             }
             scope.dirty.store(false, Ordering::Relaxed);
             let mut scratch = scope.snapshot.clone();
-            scratch.rows.clear();
-            scratch.queue = VecDeque::from([String::new()]);
+            scratch.clear_rows();
+            scratch.reset_queue(VecDeque::from([String::new()]));
             scratch.cycle += 1;
             scratch.revision += 1;
             scratch.limited = false;

@@ -28,3 +28,9 @@ bound, on a path that's already time-boxed to 200ms.
   the tracked weight matches a from-scratch `bytes()` computation after a
   sequence of inserts/removals.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Snapshots now maintain a derived byte weight through row insertion/replacement, clearing, reconciliation and folder queue changes. Crawler insertion no longer rescans every row for each folder. The weight is omitted from storage and recalculated after deserialization. Regressions compare it with a full recount, including cancellation/resume.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

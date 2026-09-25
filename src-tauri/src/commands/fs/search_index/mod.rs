@@ -239,7 +239,7 @@ impl Scope {
     fn restart(&mut self) {
         self.snapshot.cycle += 1;
         self.snapshot.revision += 1;
-        self.snapshot.queue = VecDeque::from([String::new()]);
+        self.snapshot.reset_queue(VecDeque::from([String::new()]));
         self.snapshot.limited = false;
         self.snapshot.unreadable = 0;
         self.dirty.store(false, Ordering::Relaxed);
@@ -293,6 +293,7 @@ pub async fn index_create(
             location,
             policy,
             generation,
+            weight: Default::default(),
             rows: BTreeMap::new(),
             queue: VecDeque::from([String::new()]),
             cycle: 1,
@@ -455,7 +456,7 @@ pub async fn index_control(id: String, action: String) -> AppResult<()> {
                 let mut scope = scope.lock().unwrap_or_else(|e| e.into_inner());
                 scope.snapshot.paused = true;
                 scope.secret = None;
-                scope.snapshot.rows.clear();
+                scope.snapshot.clear_rows();
             }
             return storage::remove(&id);
         }
@@ -465,7 +466,7 @@ pub async fn index_control(id: String, action: String) -> AppResult<()> {
             "pause" => scope.snapshot.paused = true,
             "resume" => scope.snapshot.paused = false,
             "rebuild" => {
-                scope.snapshot.rows.clear();
+                scope.snapshot.clear_rows();
                 scope.restart();
                 scope.snapshot.paused = false;
             }
@@ -494,7 +495,7 @@ fn delete_profile_in(profile: &str, dir: &Path) -> AppResult<()> {
     for scope in removed {
         let mut scope = scope.lock().unwrap_or_else(|e| e.into_inner());
         scope.snapshot.paused = true;
-        scope.snapshot.rows.clear();
+        scope.snapshot.clear_rows();
         scope.secret = None;
     }
     if dir.exists() {

@@ -31,6 +31,9 @@ pub struct Snapshot {
     pub location: RecoveryLocation,
     pub policy: IndexPolicy,
     pub generation: String,
+    /// Derived in memory; never trust a weight supplied by persisted input.
+    #[serde(skip)]
+    pub weight: std::cell::Cell<Option<usize>>,
     pub rows: BTreeMap<String, Row>,
     pub queue: VecDeque<String>,
     pub cycle: u64,
@@ -39,6 +42,74 @@ pub struct Snapshot {
     pub paused: bool,
     pub limited: bool,
     pub unreadable: u32,
+}
+impl Snapshot {
+    fn row_weight(path: &str, row: &Row) -> usize {
+        path.len()
+            + row.name.len()
+            + row.identity.len()
+            + row.content.as_ref().map_or(0, String::len)
+            + 256
+    }
+    pub fn recomputed_bytes(&self) -> usize {
+        self.rows
+            .iter()
+            .map(|(path, row)| Self::row_weight(path, row))
+            .sum::<usize>()
+            + self.queue.iter().map(|path| path.len() + 64).sum::<usize>()
+    }
+    pub fn bytes(&self) -> usize {
+        if let Some(weight) = self.weight.get() {
+            return weight;
+        }
+        let weight = self.recomputed_bytes();
+        self.weight.set(Some(weight));
+        weight
+    }
+    pub fn insert_row(&mut self, path: String, row: Row) {
+        let before = self
+            .rows
+            .get(&path)
+            .map_or(0, |old| Self::row_weight(&path, old));
+        let weight = self.bytes() - before + Self::row_weight(&path, &row);
+        self.rows.insert(path, row);
+        self.weight.set(Some(weight));
+    }
+    pub fn clear_rows(&mut self) {
+        self.rows.clear();
+        self.weight
+            .set(Some(self.queue.iter().map(|path| path.len() + 64).sum()));
+    }
+    pub fn retain_current_rows(&mut self) {
+        let mut weight = self.bytes();
+        self.rows.retain(|path, row| {
+            if row.seen == self.cycle {
+                true
+            } else {
+                weight -= Self::row_weight(path, row);
+                false
+            }
+        });
+        self.weight.set(Some(weight));
+    }
+    pub fn push_folder(&mut self, path: String) {
+        let weight = self.bytes() + path.len() + 64;
+        self.queue.push_back(path);
+        self.weight.set(Some(weight));
+    }
+    pub fn pop_folder(&mut self) {
+        let mut weight = self.bytes();
+        if let Some(path) = self.queue.pop_front() {
+            weight -= path.len() + 64;
+        }
+        self.weight.set(Some(weight));
+    }
+    pub fn reset_queue(&mut self, queue: VecDeque<String>) {
+        let weight = self.bytes() - self.queue.iter().map(|path| path.len() + 64).sum::<usize>()
+            + queue.iter().map(|path| path.len() + 64).sum::<usize>();
+        self.queue = queue;
+        self.weight.set(Some(weight));
+    }
 }
 #[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]

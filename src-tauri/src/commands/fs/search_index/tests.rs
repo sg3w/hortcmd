@@ -24,6 +24,7 @@ pub(super) fn fixture() -> (Temp, Snapshot) {
             offline: false,
             max_content_bytes: 1024,
         },
+        weight: Default::default(),
         rows: BTreeMap::new(),
         queue: VecDeque::from([String::new()]),
         cycle: 1,
@@ -102,8 +103,8 @@ fn only_approved_metadata_and_optional_bounded_text_are_collected() {
     assert!(snapshot.rows.values().all(|row| row.content.is_none()));
     snapshot.policy.content = true;
     snapshot.cycle += 1;
-    snapshot.queue.push_back(String::new());
-    snapshot.rows.clear();
+    snapshot.push_folder(String::new());
+    snapshot.clear_rows();
     finish(&mut snapshot);
     assert_eq!(
         snapshot.rows["allowed.txt"].content.as_deref(),
@@ -137,7 +138,7 @@ fn checkpoints_resume_and_reconciliation_removes_renames_and_missed_changes() {
     std::fs::remove_file(dir.0.join("2/a.txt")).unwrap();
     std::fs::write(dir.0.join("3/a.txt"), "changed content").unwrap();
     std::fs::write(dir.0.join("created.txt"), "new").unwrap();
-    restored.queue.push_back(String::new());
+    restored.push_folder(String::new());
     restored.cycle += 1;
     finish(&mut restored);
     assert!(!restored.rows.contains_key("0/a.txt"));
@@ -149,7 +150,7 @@ fn checkpoints_resume_and_reconciliation_removes_renames_and_missed_changes() {
 #[test]
 fn encryption_authenticates_scope_and_rejects_corruption_and_wrong_passwords() {
     let (_dir, mut snapshot) = fixture();
-    snapshot.rows.insert(
+    snapshot.insert_row(
         "private-canary.txt".into(),
         Row {
             name: "private-canary.txt".into(),
@@ -195,8 +196,8 @@ fn indexed_and_live_queries_agree_on_unicode_filters_content_and_pagination() {
     }
     finish(&mut indexed);
     let mut live = indexed.clone();
-    live.rows.clear();
-    live.queue.push_back(String::new());
+    live.clear_rows();
+    live.push_folder(String::new());
     finish(&mut live);
     let mut cases = vec![query()];
     let mut q = query();
@@ -349,13 +350,13 @@ fn a_replaced_root_and_intermediate_symlink_never_expand_approval() {
     let (outside, _) = fixture();
     std::fs::create_dir(dir.0.join("nested")).unwrap();
     std::fs::write(outside.0.join("secret"), "outside").unwrap();
-    snapshot.queue = VecDeque::from(["nested".into()]);
+    snapshot.reset_queue(VecDeque::from(["nested".into()]));
     std::fs::remove_dir(dir.0.join("nested")).unwrap();
     symlink(&outside.0, dir.0.join("nested")).unwrap();
     assert!(crawler::step(&mut snapshot, &AtomicBool::new(false)).is_err());
     assert!(snapshot.rows.is_empty());
     snapshot.generation = "another object".into();
-    snapshot.queue = VecDeque::from([String::new()]);
+    snapshot.reset_queue(VecDeque::from([String::new()]));
     assert!(crawler::step(&mut snapshot, &AtomicBool::new(false)).is_err());
     assert!(snapshot.rows.is_empty());
 }
@@ -466,7 +467,7 @@ async fn api_requires_scope_consent_revalidates_roots_and_clears_offline_profile
         path: "/approved".into(),
     };
     snapshot.policy.offline = true;
-    snapshot.rows.insert(
+    snapshot.insert_row(
         "old.txt".into(),
         Row {
             name: "old.txt".into(),
@@ -503,10 +504,10 @@ async fn api_requires_scope_consent_revalidates_roots_and_clears_offline_profile
 #[test]
 fn unrelated_listing_cache_changes_preserve_index_freshness_and_pagination() {
     let (_root, mut snapshot) = fixture();
-    snapshot.queue.clear();
+    snapshot.reset_queue(VecDeque::new());
     snapshot.completed = now();
     for name in ["a.txt", "b.txt"] {
-        snapshot.rows.insert(
+        snapshot.insert_row(
             name.into(),
             Row {
                 name: name.into(),
@@ -570,4 +571,39 @@ fn indexed_globs_support_the_same_alternatives_as_live_search() {
     assert!(glob("[draft].txt", true).unwrap().is_match("[draft].txt"));
     assert!(!glob("*.TXT", true).unwrap().is_match("readme.txt"));
     assert!(glob(&"a".repeat(1025), false).is_err());
+}
+
+#[test]
+fn incremental_weight_matches_recount_and_is_not_persisted() {
+    let (_dir, mut snapshot) = fixture();
+    let row = Row {
+        name: "a".into(),
+        directory: false,
+        size: 1,
+        modified: 0,
+        identity: "id".into(),
+        content: Some("content".into()),
+        seen: 1,
+    };
+    snapshot.insert_row("a".into(), row.clone());
+    snapshot.push_folder("nested".into());
+    assert_eq!(snapshot.bytes(), snapshot.recomputed_bytes());
+    let mut replaced = row.clone();
+    replaced.content = None;
+    snapshot.insert_row("a".into(), replaced);
+    snapshot.pop_folder();
+    assert_eq!(snapshot.bytes(), snapshot.recomputed_bytes());
+    snapshot.cycle = 2;
+    snapshot.retain_current_rows();
+    assert_eq!(snapshot.bytes(), snapshot.recomputed_bytes());
+    snapshot.insert_row("b".into(), row);
+    snapshot.reset_queue(VecDeque::from(["other".into()]));
+    assert_eq!(snapshot.bytes(), snapshot.recomputed_bytes());
+    let encoded = serde_json::to_value(&snapshot).unwrap();
+    assert!(encoded.get("weight").is_none());
+    let restored: Snapshot = serde_json::from_value(encoded).unwrap();
+    assert_eq!(restored.weight.get(), None);
+    assert_eq!(restored.bytes(), snapshot.bytes());
+    snapshot.clear_rows();
+    assert_eq!(snapshot.bytes(), snapshot.recomputed_bytes());
 }

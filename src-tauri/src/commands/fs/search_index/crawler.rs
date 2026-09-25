@@ -53,19 +53,9 @@ pub fn excluded(path: &str, policy: &super::types::IndexPolicy) -> bool {
     })
 }
 pub fn bytes(snapshot: &Snapshot) -> usize {
-    snapshot
-        .rows
-        .iter()
-        .map(|(path, row)| {
-            path.len()
-                + row.name.len()
-                + row.identity.len()
-                + row.content.as_ref().map_or(0, String::len)
-                + 256
-        })
-        .sum::<usize>()
-        + snapshot.queue.iter().map(|p| p.len() + 64).sum::<usize>()
+    snapshot.bytes()
 }
+
 fn content(mut file: impl Read, maximum: u32, cancel: &AtomicBool) -> AppResult<Option<String>> {
     let mut bytes = Vec::new();
     let mut buffer = [0; 8192];
@@ -353,10 +343,10 @@ pub fn step(snapshot: &mut Snapshot, cancel: &AtomicBool) -> AppResult<()> {
         if !insert_rows(snapshot, rows, cancel) {
             return Ok(());
         }
-        snapshot.queue.pop_front();
+        snapshot.pop_folder();
     }
     if snapshot.queue.is_empty() && !snapshot.limited {
-        snapshot.rows.retain(|_, row| row.seen == snapshot.cycle);
+        snapshot.retain_current_rows();
         snapshot.completed = super::now();
     }
     Ok(())
@@ -370,7 +360,6 @@ fn insert_rows(
     cancel: &AtomicBool,
 ) -> bool {
     let mut queued: HashSet<String> = snapshot.queue.iter().cloned().collect();
-    let mut weight = bytes(snapshot);
     for item in rows {
         if cancel.load(Ordering::Relaxed) {
             return false;
@@ -378,29 +367,16 @@ fn insert_rows(
         if snapshot.rows.len() >= MAX_ROWS
             || snapshot.queue.len() >= 5000
             || item.path.split('/').count() > 64
-            || weight >= MAX_BYTES / 2
+            || snapshot.bytes() >= MAX_BYTES / 2
         {
             snapshot.limited = true;
             snapshot.paused = true;
             return false;
         }
         if item.row.directory && queued.insert(item.path.clone()) {
-            weight += item.path.len() + 64;
-            snapshot.queue.push_back(item.path.clone());
+            snapshot.push_folder(item.path.clone());
         }
-        if let Some(old) = snapshot.rows.get(&item.path) {
-            weight -= item.path.len()
-                + old.name.len()
-                + old.identity.len()
-                + old.content.as_ref().map_or(0, String::len)
-                + 256;
-        }
-        weight += item.path.len()
-            + item.row.name.len()
-            + item.row.identity.len()
-            + item.row.content.as_ref().map_or(0, String::len)
-            + 256;
-        snapshot.rows.insert(item.path, item.row);
+        snapshot.insert_row(item.path, item.row);
     }
     true
 }
@@ -412,9 +388,9 @@ mod tests {
     #[test]
     fn wide_insertion_cancels_mid_batch_and_resumes_without_duplicate_queue_entries() {
         let (_dir, mut snapshot) = super::super::tests::fixture();
-        snapshot
-            .queue
-            .extend((0..3000).map(|i| format!("pending-{i}")));
+        for i in 0..3000 {
+            snapshot.push_folder(format!("pending-{i}"));
+        }
         let cancel = AtomicBool::new(false);
         let items = || {
             (0..50_000).map(|i| Item {
@@ -439,6 +415,7 @@ mod tests {
         });
         assert!(!insert_rows(&mut snapshot, rows, &cancel));
         assert_eq!(consumed, 1001);
+        assert_eq!(snapshot.bytes(), snapshot.recomputed_bytes());
         assert_eq!(snapshot.rows.len(), 1000);
         assert_eq!(snapshot.queue.len(), 4001);
         assert_eq!(snapshot.queue.front().unwrap(), "");
@@ -446,6 +423,7 @@ mod tests {
         assert_eq!(snapshot.completed, 0);
         cancel.store(false, Ordering::Relaxed);
         assert!(insert_rows(&mut snapshot, items().take(1100), &cancel));
+        assert_eq!(snapshot.bytes(), snapshot.recomputed_bytes());
         assert_eq!(snapshot.rows.len(), 1100);
         assert_eq!(snapshot.queue.len(), 4101);
     }
