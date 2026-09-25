@@ -1,5 +1,6 @@
 import { beforeEach, expect, it } from "vitest";
 import { useDemo, useTauri } from "@/test/tauri";
+import { hasTauri } from "./invoke";
 import { isAppError } from "@/lib/appError";
 import * as index from "./domains/index";
 import * as net from "./domains/net";
@@ -62,4 +63,16 @@ it("forwards native calls and arguments when the runtime exists", async () => {
   const runtime = useTauri({ commands: { index_step: () => ({ id: "native-result" }) } });
   expect(await index.indexStep("scope", "cancel-token")).toEqual({ id: "native-result" });
   expect(runtime.calls).toEqual([{ cmd: "index_step", args: { id: "scope", token: "cancel-token" } }]);
+});
+
+it("switches statically imported guarded clients between native and demo modes", async () => {
+  expect(hasTauri()).toBe(false);
+  expect(await index.indexList()).toEqual([]);
+  const runtime = useTauri({ commands: { index_list: () => [{ id: "native" }] } });
+  expect(hasTauri()).toBe(true);
+  expect(await index.indexList()).toEqual([{ id: "native" }]);
+  expect(runtime.calls).toEqual([{ cmd: "index_list", args: {} }]);
+  useDemo();
+  expect(hasTauri()).toBe(false);
+  expect(await index.indexList()).toEqual([]);
 });

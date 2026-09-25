@@ -7,7 +7,7 @@ import { useSettings } from "@/store/settingsStore";
 import type { RecoveryEntry } from "@/ipc/bindings/RecoveryEntry";
 import { RecoveryDialog } from "./RecoveryDialog";
 
-vi.mock("@/ipc/invoke", async original => ({ ...await original<typeof import("@/ipc/invoke")>(), hasTauri: true }));
+vi.mock("@/ipc/invoke", async original => ({ ...await original<typeof import("@/ipc/invoke")>(), hasTauri: () => true }));
 const entry: RecoveryEntry = { id: "interrupted", kind: "move", state: "cleanupRequired", order: 1,
   sources: [{ kind: "local", path: "/source/a.txt" }], destination: { kind: "local", path: "/destination" }, committed: 0, total: 1, reason: null };
 

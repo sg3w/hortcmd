@@ -7,7 +7,7 @@ import type { Profile } from "@/ipc/bindings/Profile";
 import type { CertificatePreview } from "@/ipc/bindings/CertificatePreview";
 import { CertificateTrustForm } from "./CertificateTrustForm";
 
-vi.mock("@/ipc/invoke", async original => ({ ...await original<typeof import("@/ipc/invoke")>(), hasTauri: true }));
+vi.mock("@/ipc/invoke", async original => ({ ...await original<typeof import("@/ipc/invoke")>(), hasTauri: () => true }));
 const profile: Profile = { id: "p", name: "Example", host: "example.test", port: 443, protocol: "webdav", user: "test", auth: "password", key_path: null, start_path: "/", security: { plaintextAcknowledged: false, certificate: null } };
 const preview: CertificatePreview = { trust: { path: "/certificate.pem", fingerprint: "abcd1234", profileId: "p", endpoint: "endpoint", isCa: false }, subject: "CN=example.test", issuer: "CN=Private CA", validFrom: "2026-01-01", validUntil: "2027-01-01", hostnames: ["example.test"], algorithm: "ECDSA-SHA256" };
 

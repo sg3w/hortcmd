@@ -7,7 +7,7 @@
 // be testable, so a test says which one it wants rather than getting
 // whichever the environment happens to provide.
 //
-//   * `useDemo()` — no runtime. `hasTauri` is false, the demo fallbacks
+//   * `useDemo()` — no runtime. `hasTauri()` is false, the demo fallbacks
 //     run, and no command may be invoked. This is the default.
 //   * `useTauri({ commands })` — a runtime whose commands answer from
 //     the supplied table. Calls are recorded, an unhandled command

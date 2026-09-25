@@ -9,7 +9,7 @@ import { useCompareDialog } from "@/store/compareStore";
 import { usePanes } from "@/store/panesStore";
 import { translate as t, useSettings } from "@/store/settingsStore";
 import { CompareDialog } from "./CompareDialog";
-vi.mock("@/ipc/invoke", async original=>({...await original<typeof import("@/ipc/invoke")>(),hasTauri:true}));
+vi.mock("@/ipc/invoke", async original=>({...await original<typeof import("@/ipc/invoke")>(),hasTauri: () => true}));
 vi.mock("@tanstack/react-virtual",()=>({useVirtualizer:({count,getItemKey}:{count:number;getItemKey:(i:number)=>string})=>({getVirtualItems:()=>Array.from({length:count},(_,index)=>({index,key:getItemKey(index),start:index*28})),getTotalSize:()=>count*28,scrollToIndex:vi.fn()})}));
 const pair=(rel:string,status="different",left=true,right=true):DiffEntry=>({rel,name:rel.split("/").pop()!,status,left,right,left_size:123,right_size:456,left_modified:1700000000,right_modified:1700001000});
 const rows=[pair("src/Grüße app.ts","newer_left"),pair("left.txt","left_only",true,false),pair("right.txt","right_only",false,true),pair("equal.txt","same")];

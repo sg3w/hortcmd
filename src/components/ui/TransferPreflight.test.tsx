@@ -7,7 +7,7 @@ import { useOps } from "@/store/opsStore";
 import { useSettings } from "@/store/settingsStore";
 import { OperationDialogs } from "./OperationDialogs";
 import type { PreflightRequest } from "@/ipc/domains/preflight";
-vi.mock("@/ipc/invoke", async original => ({ ...await original<typeof import("@/ipc/invoke")>(), hasTauri: true }));
+vi.mock("@/ipc/invoke", async original => ({ ...await original<typeof import("@/ipc/invoke")>(), hasTauri: () => true }));
 const request: PreflightRequest = { kind: "copy", sources: ["/src/a"], destination: "/dst", settings: { safe: true, verify: false, limit: 0, bufKb: 256, threads: 2 } };
 it.each(["de", "en"] as const)("blocks known capacity failures before dispatch in %s", async language => {
   const plan = preflightFixture(request); plan.issues = [{ severity: "blocking", code: "noSpace", item: null }];

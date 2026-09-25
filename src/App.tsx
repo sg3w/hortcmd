@@ -216,7 +216,7 @@ export default function App() {
   // Intercept window closing during running transfers (TICKET-004): instead
   // of aborting silently, a modal forces a decision.
   useEffect(() => {
-    if (!hasTauri) return;
+    if (!hasTauri()) return;
     let unlisten = () => {};
     (async () => {
       const { getCurrentWindow } = await import("@tauri-apps/api/window");

@@ -11,7 +11,7 @@
 //     Zustand stores are all process-wide. A test that leaves one dirty
 //     makes the next one's result depend on file order, which is exactly
 //     the flakiness a suite is supposed to catch, not produce.
-//   * **No Tauri by default.** `hasTauri` is false in jsdom, so the
+//   * **No Tauri by default.** `hasTauri()` is false in jsdom, so the
 //     client's demo fallbacks run unless a test asks for Tauri
 //     explicitly (see `src/test/tauri.ts`).
 // ============================================================

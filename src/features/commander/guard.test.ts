@@ -33,7 +33,7 @@ vi.mock("@/ipc/client", () => {
     return Promise.resolve(undefined as never);
   };
   return {
-    hasTauri: false,
+    hasTauri: () => false,
     locationCapabilities: (address: string): Promise<LocationCapabilities> => {
       const key = keyOf(address);
       const caps = answers[key];

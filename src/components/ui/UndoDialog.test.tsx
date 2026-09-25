@@ -1,13 +1,12 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
-import { useTauri } from "@/test/tauri";
+import { useDemo, useTauri } from "@/test/tauri";
 import { useUndo } from "@/store/undoStore";
 import { useSettings } from "@/store/settingsStore";
 import { usePanes } from "@/store/panesStore";
 import { useKeyboard } from "@/features/commander/useKeyboard";
 import { UndoDialog } from "./UndoDialog";
-vi.mock("@/ipc/invoke", async original => ({ ...await original<typeof import("@/ipc/invoke")>(), hasTauri: true }));
 it.each(["de", "en"] as const)("reviews exact paths and disables changed entries before undo in %s", async language => {
   const entry = { id: "a", group: null, kind: "rename", path: "/new", target: "/old", status: "ready", retained: null };
   const runtime = useTauri({ commands: { undo_preview: () => [entry, { ...entry, id: "b", path: "/changed", status: "changed" }], undo_execute: () => [{ ...entry, status: "restored" }] } });
@@ -30,4 +29,16 @@ it("leaves text editing undo and its modifier variants in the focused field", as
   expect(useUndo.getState().open).toBe(false);
   input.blur(); await user.keyboard("{Control>}{Alt>}z{/Alt}{/Control}");
   expect(useUndo.getState().open).toBe(true);
+});
+
+it("uses native IPC from a statically imported component after switching modes", async () => {
+  useDemo();
+  const runtime = useTauri({ commands: { undo_preview: () => [{
+    id: "native-static", group: null, kind: "rename", path: "/native-new",
+    target: "/native-old", status: "ready", retained: null,
+  }] } });
+  useUndo.setState({ open: true });
+  render(<UndoDialog />);
+  await screen.findByText("/native-new → /native-old");
+  expect(runtime.calls).toContainEqual({ cmd: "undo_preview", args: {} });
 });

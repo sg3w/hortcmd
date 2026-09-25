@@ -57,7 +57,7 @@ export function runAction(id: ActionId, side: Side): void {
       // Via getCurrentWindow().close(), the close runs through
       // the same onCloseRequested handler as the native window button
       // (App.tsx, TICKET-004), including the prompt for running transfers.
-      if (hasTauri) {
+      if (hasTauri()) {
         void import("@tauri-apps/api/window").then(({ getCurrentWindow }) =>
           getCurrentWindow().close(),
         );

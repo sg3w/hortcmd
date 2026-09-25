@@ -15,13 +15,13 @@ export function McpForm() {
   const [busy, setBusy] = useState(false);
   const failed = () => setError(t("mcp.error"));
   useEffect(() => {
-    if (!hasTauri) return;
+    if (!hasTauri()) return;
     let disposed = false;
     void mcpStatus().then(s => { if (!disposed) { setConfig(s.config); setEndpoint(s.endpoint ?? ""); } }).catch(failed);
     void mcpAudit().then(a => { if (!disposed) setAudit(a); }).catch(failed);
     return () => { disposed = true; };
   }, []);
-  if (!hasTauri) return <p>{t("mcp.native")}</p>;
+  if (!hasTauri()) return <p>{t("mcp.native")}</p>;
   if (!config) return <p role="status">{error || t("mcp.loading")}</p>;
   const patch = (change: Partial<McpConfig>) => setConfig({ ...config, ...change });
   const save = async () => {

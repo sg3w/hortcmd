@@ -63,7 +63,7 @@ export function RowIcon({ row, size = 14, directory }: { row: Row; size?: number
   const request = iconRequest(row, directory === undefined ? context : directory, size,
     window.devicePixelRatio || 1, env.split(":")[0]);
   const key = request.id;
-  const enabled = mode === "system" && hasTauri && !row.parent;
+  const enabled = mode === "system" && hasTauri() && !row.parent;
   useEffect(() => {
     if (!enabled || !element.current || typeof IntersectionObserver === "undefined") return;
     const observer = new IntersectionObserver(entries => setVisible(entries[0].isIntersecting), { rootMargin: "80px" });

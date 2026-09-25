@@ -115,7 +115,7 @@ function read(): WindowBox | null {
  * moves/resizes (debounced). Without Tauri a no-op.
  */
 export async function initWindowState(): Promise<void> {
-  if (!hasTauri) return;
+  if (!hasTauri()) return;
   try {
     const { getCurrentWindow, availableMonitors, LogicalPosition, LogicalSize } =
       await import("@tauri-apps/api/window");

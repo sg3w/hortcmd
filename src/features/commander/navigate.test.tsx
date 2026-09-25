@@ -11,7 +11,7 @@ import { FileContextMenu } from "@/components/ui/FileContextMenu";
 import { CommandBar } from "./CommandBar";
 import { openOpposite } from "./navigate";
 
-vi.mock("@/ipc/invoke", async original => ({...await original<typeof import("@/ipc/invoke")>(),hasTauri:true}));
+vi.mock("@/ipc/invoke", async original => ({...await original<typeof import("@/ipc/invoke")>(),hasTauri: () => true}));
 function fixture(side: Side, path: string, archive: string | null = null) {
   const runtime=useTauri({commands:{
     list_dir:({path})=>({path,entries:[]}),

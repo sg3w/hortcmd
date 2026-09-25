@@ -4,7 +4,7 @@ import { useTauri } from "@/test/tauri";
 import { acquireDrives, onMount, useDriveState } from "./driveStore";
 import { ensureTauriEvents } from "@/ipc/client";
 import type { Drive } from "@/ipc/bindings";
-vi.mock("@/ipc/invoke", async importOriginal => ({ ...await importOriginal<typeof import("@/ipc/invoke")>(), hasTauri: true }));
+vi.mock("@/ipc/invoke", async importOriginal => ({ ...await importOriginal<typeof import("@/ipc/invoke")>(), hasTauri: () => true }));
 const root: Drive = {name:"disk",mount:"/",free:50,total:100};
 const card: Drive = {name:"card",mount:"/Volumes/card",free:20,total:30};
 let stops: Array<() => void> = [];

@@ -28,7 +28,7 @@ vi.mock("./fileOps", () => ({
   runQuickLook: () => false,
 }));
 vi.mock("@/ipc/client", () => ({
-  hasTauri: false,
+  hasTauri: () => false,
   listDir: () => Promise.resolve({ path: "/", entries: [] }),
   listArchive: () => Promise.reject(new Error("none")),
   homeDir: () => Promise.resolve("/home"),

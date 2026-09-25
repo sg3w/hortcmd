@@ -12,9 +12,9 @@ export function DiagnosticsForm() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const refresh = () => diagnosticsStatus().then(setStatus);
-  useEffect(() => { if (hasTauri) { let disposed = false; void diagnosticsStatus().then(s => { if (!disposed) setStatus(s); }).catch(() => { if (!disposed) setMessage(t("diagnostics.error")); }); return () => { disposed = true; }; } }, []);
+  useEffect(() => { if (hasTauri()) { let disposed = false; void diagnosticsStatus().then(s => { if (!disposed) setStatus(s); }).catch(() => { if (!disposed) setMessage(t("diagnostics.error")); }); return () => { disposed = true; }; } }, []);
   const run = async (action: () => Promise<unknown>) => { setBusy(true); setMessage(""); try { await action(); await refresh(); setMessage(t("diagnostics.done")); } catch { setMessage(t("diagnostics.error")); } finally { setBusy(false); } };
-  if (!hasTauri) return <p>{t("diagnostics.desktop")}</p>;
+  if (!hasTauri()) return <p>{t("diagnostics.desktop")}</p>;
   return <div className="space-y-3 text-sm">
     <p>{t("diagnostics.privacy")}</p>
     {message && <p role="status">{message}</p>}

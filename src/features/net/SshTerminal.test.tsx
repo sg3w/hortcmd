@@ -8,7 +8,7 @@ import { useTerminals } from "./terminalStore";
 import { SshTerminalWindow } from "./SshTerminal";
 
 vi.mock("@/ipc/invoke", async importOriginal => ({
-  ...await importOriginal<typeof import("@/ipc/invoke")>(), hasTauri: true,
+  ...await importOriginal<typeof import("@/ipc/invoke")>(), hasTauri: () => true,
 }));
 const terminals = vi.hoisted(() => [] as { options: Record<string, unknown>; textarea: HTMLTextAreaElement }[]);
 vi.mock("@xterm/xterm", () => ({ Terminal: class {

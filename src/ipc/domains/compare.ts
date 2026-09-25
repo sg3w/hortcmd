@@ -30,7 +30,7 @@ export async function compareDirs(
   recursive: boolean,
   onBatch: (entries: DiffEntry[]) => void,
 ): Promise<boolean> {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     const rows = demo.demoCompare(recursive);
     const top = rows.filter((r) => !r.rel.includes("/"));
     const nested = rows.filter((r) => r.rel.includes("/"));
@@ -61,7 +61,7 @@ export async function compareLevels(
   left: LevelEntry[],
   right: LevelEntry[],
 ): Promise<LevelDiff[]> {
-  if (!hasTauri) return demo.demoCompareLevels(left, right);
+  if (!hasTauri()) return demo.demoCompareLevels(left, right);
   return invoke<LevelDiff[]>("compare_levels", { left, right });
 }
 
@@ -75,7 +75,7 @@ export async function saveSelection(
   entries: SelEntry[],
   overwrite: boolean,
 ): Promise<boolean> {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     console.log("[demo] save_selection", path, `${entries.length} Eintrag/Einträge`);
     return true;
   }
@@ -84,7 +84,7 @@ export async function saveSelection(
 
 /** Reads and validates a selection file (format checks live in Rust). */
 export async function loadSelection(path: string): Promise<SelectionFile> {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     return { version: 1, location: "/demo", entries: [{ name: "readme.md", is_dir: false }] };
   }
   return invoke<SelectionFile>("load_selection", { path });
@@ -94,7 +94,7 @@ export async function loadSelection(path: string): Promise<SelectionFile> {
 export async function syncCopy(
   items: [string, string][],
 ): Promise<OpResult> {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     console.log("[demo] sync_copy", `${items.length} Datei(en)`);
     return { ok: items.length, errors: [] };
   }
@@ -106,6 +106,6 @@ export async function compareFiles(
   left: string,
   right: string,
 ): Promise<FileDiff> {
-  if (!hasTauri) return demo.demoFileDiff(left, right);
+  if (!hasTauri()) return demo.demoFileDiff(left, right);
   return invoke<FileDiff>("compare_files", { left, right });
 }

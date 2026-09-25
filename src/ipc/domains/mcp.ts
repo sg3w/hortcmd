@@ -17,13 +17,13 @@ let eventModule: Promise<typeof import("@tauri-apps/api/event")> | undefined;
 const events = () => eventModule ??= import("@tauri-apps/api/event");
 
 export async function onMcpConfirm(callback: (request: McpConfirmRequest) => void) {
-  if (!hasTauri) return () => {};
+  if (!hasTauri()) return () => {};
   const { listen } = await events();
   return listen<McpConfirmRequest>("mcp-confirm", (e) => callback(e.payload));
 }
 
 export async function onMcpConfirmClosed(callback: (id: string) => void) {
-  if (!hasTauri) return () => {};
+  if (!hasTauri()) return () => {};
   const { listen } = await events();
   return listen<string>("mcp-confirm-closed", (e) => callback(e.payload));
 }

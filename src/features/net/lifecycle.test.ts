@@ -22,7 +22,7 @@ let connectOutcome: () => Promise<ConnectOutcome> = () =>
   Promise.reject(new Error("not configured"));
 
 vi.mock("@/ipc/client", () => ({
-  hasTauri: false,
+  hasTauri: () => false,
   netConnect: (id: string) => {
     calls.push(`connect:${id}`);
     return connectOutcome();

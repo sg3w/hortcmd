@@ -12,7 +12,7 @@ import { DirTree } from "./DirTree";
 // The transport normally snapshots native availability during module loading.
 vi.mock("@/ipc/invoke", async importOriginal => ({
   ...await importOriginal<typeof import("@/ipc/invoke")>(),
-  hasTauri: true,
+  hasTauri: () => true,
 }));
 
 // jsdom has no layout. Render every virtual item so keyboard and ARIA tests

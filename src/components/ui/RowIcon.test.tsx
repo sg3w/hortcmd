@@ -5,7 +5,7 @@ import { row } from "@/test/fixtures";
 import { useTauri } from "@/test/tauri";
 import { useSettings } from "@/store/settingsStore";
 import type { FileIconRequest } from "@/ipc/bindings/FileIconRequest";
-vi.mock("@/ipc/invoke", async original => ({ ...await original<typeof import("@/ipc/invoke")>(), hasTauri: true }));
+vi.mock("@/ipc/invoke", async original => ({ ...await original<typeof import("@/ipc/invoke")>(), hasTauri: () => true }));
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 it("uses path/mtime/theme/scale identities, but type-only requests for remote/archive/links", () => {
   const r = row("a.txt");

@@ -18,7 +18,7 @@ import { hasTauri, invoke } from "../invoke";
 import * as demo from "../demo";
 
 export async function netListProfiles(): Promise<Profile[]> {
-  if (!hasTauri) return [];
+  if (!hasTauri()) return [];
   return invoke<Profile[]>("net_list_profiles");
 }
 
@@ -26,12 +26,12 @@ export async function netSaveProfile(
   profile: Profile,
   secret: string | null,
 ): Promise<void> {
-  if (!hasTauri) return;
+  if (!hasTauri()) return;
   return invoke<void>("net_save_profile", { profile, secret });
 }
 
 export async function netDeleteProfile(id: string): Promise<void> {
-  if (!hasTauri) return;
+  if (!hasTauri()) return;
   return invoke<void>("net_delete_profile", { id });
 }
 
@@ -49,34 +49,34 @@ export async function netTrustHostKey(
 
 /** Drops the host keys hortcmd stores for a profile's endpoint. */
 export async function netForgetHostKey(id: string): Promise<ForgetResult> {
-  if (!hasTauri) return { removed: 0, remaining: [] };
+  if (!hasTauri()) return { removed: 0, remaining: [] };
   return invoke<ForgetResult>("net_forget_host_key", { id });
 }
 
 /** Stops a running connection attempt (TICKET-032). Idempotent: an
  *  already finished or unknown attempt is a no-op, never an error. */
 export async function netCancelConnect(attempt: string): Promise<void> {
-  if (!hasTauri) return;
+  if (!hasTauri()) return;
   return invoke<void>("net_cancel_connect", { attempt });
 }
 
 export async function netDisconnect(id: string): Promise<void> {
-  if (!hasTauri) return;
+  if (!hasTauri()) return;
   return invoke<void>("net_disconnect", { id });
 }
 
 export async function netListConnections(): Promise<ConnectionStatus[]> {
-  if (!hasTauri) return [];
+  if (!hasTauri()) return [];
   return invoke<ConnectionStatus[]>("net_list_connections");
 }
 
 export async function netCredStatus(): Promise<CredStatus> {
-  if (!hasTauri) return demo.DEMO_CRED;
+  if (!hasTauri()) return demo.DEMO_CRED;
   return invoke<CredStatus>("net_cred_status");
 }
 
 export async function netCredSetBackend(config: CredConfig): Promise<CredStatus> {
-  if (!hasTauri) return demo.DEMO_CRED;
+  if (!hasTauri()) return demo.DEMO_CRED;
   return invoke<CredStatus>("net_cred_set_backend", { config });
 }
 
@@ -91,7 +91,7 @@ export async function netCredUnlock(
 }
 
 export async function netCredLock(): Promise<CredStatus> {
-  if (!hasTauri) return demo.DEMO_CRED;
+  if (!hasTauri()) return demo.DEMO_CRED;
   return invoke<CredStatus>("net_cred_lock");
 }
 
@@ -107,7 +107,7 @@ export async function sshOpenShell(
 
 /** Sends keyboard input to a shell session. */
 export async function sshSend(id: string, data: string): Promise<void> {
-  if (!hasTauri) return;
+  if (!hasTauri()) return;
   return invoke<void>("ssh_send", { id, data });
 }
 
@@ -117,30 +117,30 @@ export async function sshResize(
   cols: number,
   rows: number,
 ): Promise<void> {
-  if (!hasTauri) return;
+  if (!hasTauri()) return;
   return invoke<void>("ssh_resize", { id, cols, rows });
 }
 
 /** Closes a shell session (unknown ids are ignored by the backend). */
 export async function sshClose(id: string): Promise<void> {
-  if (!hasTauri) return;
+  if (!hasTauri()) return;
   return invoke<void>("ssh_close", { id });
 }
 
 /** Rebuilds the reduced native macOS menu in `lang` (TICKET-040).
  *  Only the frontend knows the persisted language setting. */
 export function setMenuLanguage(lang: string): void {
-  if (!hasTauri) return;
+  if (!hasTauri()) return;
   void invoke<void>("set_menu_language", { lang });
 }
 
 export async function netTransportPolicy(): Promise<import("../bindings/TransportPolicy").TransportPolicy> {
-  if (!hasTauri) return { allowPlaintext: false };
+  if (!hasTauri()) return { allowPlaintext: false };
   return invoke("net_transport_policy");
 }
 
 export async function netSetTransportPolicy(policy: import("../bindings/TransportPolicy").TransportPolicy): Promise<void> {
-  if (!hasTauri) return;
+  if (!hasTauri()) return;
   return invoke("net_set_transport_policy", { policy });
 }
 

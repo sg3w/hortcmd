@@ -10,10 +10,6 @@ import { useKeyboard } from "./useKeyboard";
 import { runCommand } from "./commands";
 
 const platform = vi.hoisted(() => ({ mac: false }));
-vi.mock("@/ipc/invoke", async importOriginal => ({
-  ...await importOriginal<typeof import("@/ipc/invoke")>(),
-  get hasTauri() { return "__TAURI_INTERNALS__" in window; },
-}));
 vi.mock("@/lib/platform", () => ({
   get isMacOS() { return platform.mac; },
   get isWindows() { return !platform.mac; },

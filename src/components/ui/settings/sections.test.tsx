@@ -12,7 +12,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("@/ipc/client", () => ({
-  hasTauri: false,
+  hasTauri: () => false,
   listDir: () => Promise.resolve({ path: "/", entries: [] }),
   listArchive: () => Promise.reject(new Error("none")),
   homeDir: () => Promise.resolve("/home"),

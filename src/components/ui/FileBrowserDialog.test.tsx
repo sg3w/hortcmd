@@ -9,7 +9,7 @@ import { openFileBrowser, useFileBrowser } from "@/store/fileBrowserStore";
 import { FileBrowserDialog } from "./FileBrowserDialog";
 
 vi.mock("@/ipc/invoke", async importOriginal => ({
-  ...await importOriginal<typeof import("@/ipc/invoke")>(), hasTauri: true,
+  ...await importOriginal<typeof import("@/ipc/invoke")>(), hasTauri: () => true,
 }));
 
 for (const mode of ["file", "folder"] as const) {

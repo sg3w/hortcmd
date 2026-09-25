@@ -8,7 +8,7 @@ import type { AppError } from "@/ipc/bindings";
 const error = (code: string): AppError => ({ version: 1, code, id: "archive-test", params: {},
   op: "list_archive", provider: null, retryable: true, action: null, detail: null });
 vi.mock("@/ipc/invoke", async original => ({
-  ...await original<typeof import("@/ipc/invoke")>(), hasTauri: true,
+  ...await original<typeof import("@/ipc/invoke")>(), hasTauri: () => true,
 }));
 
 it.each(["archive.passwordRequired", "archive.passwordWrong"])("prompts and retries for structured %s", async code => {

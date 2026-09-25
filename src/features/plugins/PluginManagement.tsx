@@ -27,7 +27,7 @@ export function PluginManagement() {
     try {await action();} catch(cause) {setError(String(cause));}
     finally {await refresh();setBusy(false);}
   };
-  if(!hasTauri) return <p>{t("plugins.desktop")}</p>;
+  if(!hasTauri()) return <p>{t("plugins.desktop")}</p>;
   return <div className="space-y-4 text-sm">
     <p>{t("plugins.installHint")}</p>
     <label className="flex flex-col gap-1">{t("plugins.source")}

@@ -23,7 +23,7 @@ export function AboutDialog() {
 
   // Inside Tauri the bundle is the authority on the version.
   useEffect(() => {
-    if (!open || !hasTauri) return;
+    if (!open || !hasTauri()) return;
     let alive = true;
     void import("@tauri-apps/api/app")
       .then((m) => m.getVersion())

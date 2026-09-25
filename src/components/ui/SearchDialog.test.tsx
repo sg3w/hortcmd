@@ -13,7 +13,7 @@ import { useKeyboard } from "@/features/commander/useKeyboard";
 import { SearchDialog } from "./SearchDialog";
 
 vi.mock("@/ipc/invoke", async importOriginal => ({
-  ...await importOriginal<typeof import("@/ipc/invoke")>(), hasTauri: true,
+  ...await importOriginal<typeof import("@/ipc/invoke")>(), hasTauri: () => true,
 }));
 // Only virtual measurements are unavailable in jsdom.
 vi.mock("@tanstack/react-virtual", () => ({ useVirtualizer: ({ count }: { count: number }) => ({

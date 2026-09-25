@@ -49,7 +49,7 @@ export const netStateSubs = new Set<(states: ConnectionStatus[]) => void>();
 let tauriReady: Promise<void> | null = null;
 
 export function ensureTauriEvents(): Promise<void> {
-  if (!hasTauri) return Promise.resolve();
+  if (!hasTauri()) return Promise.resolve();
   if (!tauriReady) tauriReady = wireEvents().catch(error => { tauriReady = null; throw error; });
   return tauriReady;
 }

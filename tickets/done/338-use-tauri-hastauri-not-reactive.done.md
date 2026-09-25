@@ -43,3 +43,9 @@ that would not catch a real regression in the native code path.
   statically-imported component with no `vi.mock`/`resetModules` workaround;
   assert the mocked command is actually invoked.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Runtime detection is now evaluated per call through hasTauri(), and all callers and test stubs use that function. Static-import regressions switch a guarded client between demo and native modes and render UndoDialog against useTauri without runtime mocks or module resets. Obsolete runtime overrides were removed from UndoDialog and zoom tests.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

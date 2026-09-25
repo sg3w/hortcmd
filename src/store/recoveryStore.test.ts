@@ -4,7 +4,7 @@ import { useRecovery } from "./recoveryStore";
 import { useTransfers } from "./transfersStore";
 import type { RecoveryEntry } from "@/ipc/bindings/RecoveryEntry";
 
-vi.mock("@/ipc/invoke", async original => ({ ...await original<typeof import("@/ipc/invoke")>(), hasTauri: true }));
+vi.mock("@/ipc/invoke", async original => ({ ...await original<typeof import("@/ipc/invoke")>(), hasTauri: () => true }));
 const entry: RecoveryEntry = { id: "job", kind: "copy", state: "completed", order: 1,
   sources: [], destination: { kind: "local", path: "/destination" }, committed: 1, total: 1, reason: null };
 

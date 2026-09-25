@@ -24,7 +24,7 @@ export async function search(
   token: string,
   onBatch: (hits: SearchHit[]) => void,
 ): Promise<SearchSummary> {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     const rows = demo.demoSearch(options);
     onBatch(rows);
     return {
@@ -43,6 +43,6 @@ export async function search(
 
 /** Stops a running `search`; unknown tokens are ignored. */
 export async function cancelSearch(token: string): Promise<void> {
-  if (!hasTauri) return;
+  if (!hasTauri()) return;
   return invoke<void>("cancel_search", { token });
 }

@@ -11,7 +11,7 @@ let pending = Promise.resolve();
 /** Keep confirmed page zoom separate from font/icon preferences. Queue key
  * repeats so a slow native call cannot overwrite a newer zoom level. */
 export function changePageZoom(action: ZoomAction): Promise<void> {
-  if (!hasTauri) return Promise.resolve();
+  if (!hasTauri()) return Promise.resolve();
   pending = pending.then(async () => {
     const next = action === "reset" ? 100
       : Math.max(50, Math.min(300, percent + (action === "in" ? 25 : -25)));
@@ -27,7 +27,7 @@ export function changePageZoom(action: ZoomAction): Promise<void> {
 
 export function useNativeZoom(): void {
   useEffect(() => {
-    if (!hasTauri) return;
+    if (!hasTauri()) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.isComposing || event.altKey || event.code.startsWith("Numpad")) return;
       if (isMacOS ? !event.metaKey || event.ctrlKey : !event.ctrlKey || event.metaKey) return;

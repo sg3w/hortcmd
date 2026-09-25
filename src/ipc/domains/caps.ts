@@ -25,6 +25,6 @@ import * as demo from "../demo";
 export async function locationCapabilities(
   address: string,
 ): Promise<LocationCapabilities> {
-  if (!hasTauri) return demo.demoCapabilities();
+  if (!hasTauri()) return demo.demoCapabilities();
   return invoke<LocationCapabilities>("location_capabilities", { address });
 }

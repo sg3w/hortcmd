@@ -6,7 +6,7 @@ import { translate, useSettings } from "../settingsStore";
 import type { AppError } from "@/ipc/bindings";
 
 vi.mock("@/ipc/invoke", async original => ({
-  ...await original<typeof import("@/ipc/invoke")>(), hasTauri: true,
+  ...await original<typeof import("@/ipc/invoke")>(), hasTauri: () => true,
 }));
 async function fail(error: unknown) {
   useSettings.setState({ gitEnabled: false });

@@ -168,7 +168,7 @@ function beginApprovedTransfer(op: "copy" | "move", sources: string[], dest: str
   const id = newId();
   useTransfers.getState().start(op, id);
 
-  if (hasTauri) {
+  if (hasTauri()) {
     persistedIntents.set(id, queueRecovery(id, op, sources, dest, { limit, verify, bufKb, threads, safe, checkSpace }, plan?.digest).then(() => true, error => {
       useTransfers.getState().finish({ id, op, ok: 0, errors: [{ item: "", error: ipcError(error) }], cancelled: false, mode: safe ? "safe" : "direct" });
       startNextQueued();
@@ -223,7 +223,7 @@ export function dequeueTransfer(id: string): void {
     useTransfers.getState().remove(id);return;
   }
   queuedParams.delete(id);
-  if (hasTauri) {
+  if (hasTauri()) {
     const persisted = persistedIntents.get(id) ?? Promise.resolve(true);
     void persisted.then(ok => ok ? discardRecovery(id) : undefined).catch(error => reportErrors([{ item: "", error: ipcError(error) }]));
   }

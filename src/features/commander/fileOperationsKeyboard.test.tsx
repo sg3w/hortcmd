@@ -15,7 +15,7 @@ import { useKeyboard } from "./useKeyboard";
 
 // Keep the real domain clients and command arguments; only select the runtime.
 vi.mock("@/ipc/invoke", async importOriginal => ({
-  ...await importOriginal<typeof import("@/ipc/invoke")>(), hasTauri: true,
+  ...await importOriginal<typeof import("@/ipc/invoke")>(), hasTauri: () => true,
 }));
 
 function Host() {

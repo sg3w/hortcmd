@@ -6,7 +6,7 @@ import { useNet } from "@/features/net/netStore";
 /** UI ownership and visibility only; policy, paths and scheduling live in Rust. */
 export function useRefresh() {
   useEffect(() => {
-    if (!hasTauri) return;
+    if (!hasTauri()) return;
     let disposed = false;
     let running = false;
     let again = false;

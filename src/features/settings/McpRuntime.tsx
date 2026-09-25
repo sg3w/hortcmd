@@ -15,7 +15,7 @@ export function McpRuntime() {
   const [answering, setAnswering] = useState(false);
   const request = requests[0];
   useEffect(() => {
-    if (!hasTauri) return;
+    if (!hasTauri()) return;
     let disposed = false;
     const listening = Promise.all([
       onMcpConfirm(r => { if (!disposed) setRequests(q => [...q, r]); }),

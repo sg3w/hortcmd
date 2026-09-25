@@ -6,7 +6,7 @@ import { startPluginActions } from "./actions";
 import { publishContext } from "./context";
 export default function PluginRuntime() {
   useEffect(() => {
-    if (!hasTauri) return;
+    if (!hasTauri()) return;
     const stopActions=startPluginActions();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const publish = () => { void publishContext().catch(() => {}); };

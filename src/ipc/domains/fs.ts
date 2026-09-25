@@ -18,22 +18,22 @@ import * as demo from "../demo";
 import { gitReadySubs } from "../events";
 
 export async function listDir(path: string, fresh = false): Promise<DirListing> {
-  if (!hasTauri) return demo.demoListDir(path);
+  if (!hasTauri()) return demo.demoListDir(path);
   return invoke<DirListing>("list_dir", { path, ...(fresh ? { fresh } : {}) });
 }
 
 export async function listDrives(): Promise<Drive[]> {
-  if (!hasTauri) return demo.demoDrives();
+  if (!hasTauri()) return demo.demoDrives();
   return invoke<Drive[]>("list_drives");
 }
 
 export async function homeDir(): Promise<string> {
-  if (!hasTauri) return "/Users/demo";
+  if (!hasTauri()) return "/Users/demo";
   return invoke<string>("home_dir");
 }
 
 export async function makeDir(path: string): Promise<string> {
-  if (!hasTauri) return path;
+  if (!hasTauri()) return path;
   return invoke<string>("make_dir", { path });
 }
 
@@ -47,7 +47,7 @@ export async function writeTextFile(
   contents: string,
   overwrite: boolean,
 ): Promise<boolean> {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     console.log("[demo] write_text_file", path, `${contents.length} B`, { overwrite });
     return true;
   }
@@ -56,7 +56,7 @@ export async function writeTextFile(
 
 /** Renames an entry (full source and target path). */
 export async function renameEntry(from: string, to: string): Promise<void> {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     console.log("[demo] rename_entry", from, to);
     return;
   }
@@ -72,7 +72,7 @@ export async function renameBatch(
   dir: string,
   renames: [string, string][],
 ): Promise<OpResult> {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     console.log("[demo] rename_batch", dir, `${renames.length} Einträge`);
     return { ok: renames.length, errors: [] };
   }
@@ -80,13 +80,13 @@ export async function renameBatch(
 }
 
 export async function deleteEntries(paths: string[]): Promise<OpResult> {
-  if (!hasTauri) return { ok: paths.length, errors: [] };
+  if (!hasTauri()) return { ok: paths.length, errors: [] };
   return invoke<OpResult>("delete_entries", { paths });
 }
 
 /** Moves entries to the system trash (restorable). */
 export async function trashEntries(paths: string[]): Promise<OpResult> {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     console.log("[demo] trash_entries", paths);
     return { ok: paths.length, errors: [] };
   }
@@ -98,7 +98,7 @@ export async function readPreview(
   path: string,
   maxBytes: number,
 ): Promise<Preview> {
-  if (!hasTauri) return demo.demoPreview(path);
+  if (!hasTauri()) return demo.demoPreview(path);
   return invoke<Preview>("read_preview", { path, maxBytes });
 }
 
@@ -108,7 +108,7 @@ export async function readPreview(
  * instead of failing silently (TICKET-018).
  */
 export async function openPath(path: string): Promise<void> {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     console.log("[demo] open_path", path);
     return;
   }
@@ -119,7 +119,7 @@ export async function openPath(path: string): Promise<void> {
  *  (TICKET-030). The backend validates the scheme again and refuses
  *  anything else, so this is never a general launcher. */
 export async function openExternal(url: string): Promise<void> {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     console.log("[demo] open_external", url);
     return;
   }
@@ -128,7 +128,7 @@ export async function openExternal(url: string): Promise<void> {
 
 /** Native macOS Quick Look preview (Space). */
 export function quickLook(path: string): void {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     console.log("[demo] quick_look", path);
     return;
   }
@@ -142,7 +142,7 @@ export function quickLook(path: string): void {
  * has been handed to the system; it outlives hortcmd's own dialog.
  */
 export async function openSystemProperties(path: string): Promise<void> {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     console.log("[demo] open_system_properties", path);
     return;
   }
@@ -151,7 +151,7 @@ export async function openSystemProperties(path: string): Promise<void> {
 
 /** Opens a file with a specific program (empty = system default). */
 export function openWith(path: string, program: string): void {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     console.log("[demo] open_with", path, program);
     return;
   }
@@ -162,7 +162,7 @@ export function openWith(path: string, program: string): void {
  *  in the background (blocks neither folder opening nor other IPC calls) and
  *  delivers the result via `onGitStatusReady` (event `git-support-ready`). */
 export function requestGitStatus(path: string): void {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     // Demo: deliver the result asynchronously as well, like the original.
     queueMicrotask(() =>
       gitReadySubs.forEach((f) => f(path, demo.demoGitStatus(path))),
@@ -175,7 +175,7 @@ export function requestGitStatus(path: string): void {
 /** Opens a terminal in the folder (empty `program` = system default). */
 export function openTerminal(path: string, program?: string): void {
   const prog = program?.trim() ? program.trim() : null;
-  if (!hasTauri) {
+  if (!hasTauri()) {
     console.log("[demo] open_terminal", path, prog);
     return;
   }
@@ -188,7 +188,7 @@ export async function listArchive(
   inner: string,
   password?: string,
 ): Promise<DirListing> {
-  if (!hasTauri) return demo.demoArchive(archive, inner);
+  if (!hasTauri()) return demo.demoArchive(archive, inner);
   return invoke<DirListing>("list_archive", {
     archive,
     inner,

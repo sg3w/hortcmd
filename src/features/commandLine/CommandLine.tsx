@@ -38,7 +38,7 @@ export default function CommandLine({ path }: { path: string }) {
   }, [id, output?.done]);
 
   async function start() {
-    if (busy.current || !local || !hasTauri || !command.trim()) return;
+    if (busy.current || !local || !hasTauri() || !command.trim()) return;
     busy.current = true;
     setStarting(true);
     setId(null);
@@ -57,8 +57,8 @@ export default function CommandLine({ path }: { path: string }) {
 
   return <div className="min-w-0 flex-1 text-[12px]">
     <div className="flex items-center gap-2">
-      <input ref={input} aria-label={t("command.input")} title={t(local && hasTauri ? "command.hint" : "command.localOnly")}
-        disabled={!local || !hasTauri || running} value={command} onChange={e => setCommand(e.target.value)}
+      <input ref={input} aria-label={t("command.input")} title={t(local && hasTauri() ? "command.hint" : "command.localOnly")}
+        disabled={!local || !hasTauri() || running} value={command} onChange={e => setCommand(e.target.value)}
         onKeyDown={e => {
           if (e.repeat || e.nativeEvent.isComposing || e.defaultPrevented || isDialogKey(e.nativeEvent) || document.querySelector('[role="dialog"], [role="menu"], [role="alertdialog"]')) return;
           if (e.key === "Enter" && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); void start(); }

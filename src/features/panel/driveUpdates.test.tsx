@@ -10,7 +10,7 @@ import { DriveSelect } from "./DriveSelect";
 import { FileBrowserDialog } from "@/components/ui/FileBrowserDialog";
 import { openFileBrowser } from "@/store/fileBrowserStore";
 import { translate } from "@/store/settingsStore";
-vi.mock("@/ipc/invoke", async importOriginal => ({ ...await importOriginal<typeof import("@/ipc/invoke")>(), hasTauri:true }));
+vi.mock("@/ipc/invoke", async importOriginal => ({ ...await importOriginal<typeof import("@/ipc/invoke")>(), hasTauri: () => true }));
 beforeAll(() => { HTMLElement.prototype.scrollIntoView = vi.fn(); });
 function runtime(options: Parameters<typeof useTauri>[0]) {
   return useTauri(options);

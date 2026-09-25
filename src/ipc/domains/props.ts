@@ -26,7 +26,7 @@ export async function dirSize(
   token: string,
   onProgress: (stats: DirSizeStats) => void,
 ): Promise<DirSize> {
-  if (!hasTauri) return demo.demoDirSize(onProgress);
+  if (!hasTauri()) return demo.demoDirSize(onProgress);
   const { Channel } = await import("@tauri-apps/api/core");
   const channel = new Channel<DirSizeStats>();
   channel.onmessage = onProgress;
@@ -35,25 +35,25 @@ export async function dirSize(
 
 /** Stops a running `dirSize`; unknown tokens are ignored. */
 export async function cancelDirSize(token: string): Promise<void> {
-  if (!hasTauri) return;
+  if (!hasTauri()) return;
   return invoke<void>("cancel_dir_size", { token });
 }
 
 /** Capacity/usage of the volume `path` lies on; null if none matches. */
 export async function volumeInfo(path: string): Promise<VolumeInfo | null> {
-  if (!hasTauri) return demo.demoVolume();
+  if (!hasTauri()) return demo.demoVolume();
   return invoke<VolumeInfo | null>("volume_info", { path });
 }
 
 /** Reads permissions, owner, extended attributes, and ACL of an entry. */
 export async function fileProps(path: string): Promise<FileProps> {
-  if (!hasTauri) return demo.demoProps(path);
+  if (!hasTauri()) return demo.demoProps(path);
   return invoke<FileProps>("file_props", { path });
 }
 
 /** Sets the access rights (chmod); `mode` are the permission bits (0..0o7777). */
 export async function setPermissions(path: string, mode: number): Promise<void> {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     console.log("[demo] set_permissions", path, mode.toString(8));
     return;
   }
@@ -66,7 +66,7 @@ export async function setOwner(
   owner: string | null,
   group: string | null,
 ): Promise<void> {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     console.log("[demo] set_owner", path, owner, group);
     return;
   }
@@ -75,7 +75,7 @@ export async function setOwner(
 
 /** Computes MD5, SHA-1, and SHA-256 of a file. */
 export async function fileChecksums(path: string): Promise<Checksums> {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     return {
       md5: "d41d8cd98f00b204e9800998ecf8427e",
       sha1: "da39a3ee5e6b4b0d3255bfef95601890afd80709",
@@ -88,13 +88,13 @@ export async function fileChecksums(path: string): Promise<Checksums> {
 
 /** Reads the Finder tags of an entry (macOS; otherwise empty). */
 export async function getTags(path: string): Promise<Tag[]> {
-  if (!hasTauri) return demo.demoGetTags();
+  if (!hasTauri()) return demo.demoGetTags();
   return invoke<Tag[]>("get_tags", { path });
 }
 
 /** Writes the Finder tags (an empty list removes them). */
 export async function setTags(path: string, tags: Tag[]): Promise<void> {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     demo.demoSetTags(tags);
     console.log("[demo] set_tags", path, tags);
     return;

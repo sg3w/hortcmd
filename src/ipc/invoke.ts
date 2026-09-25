@@ -12,8 +12,10 @@
 
 import { ipcError } from "@/lib/appError";
 
-export const hasTauri =
-  typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+/** Runtime mode is read at use time, including after test harness switches. */
+export function hasTauri(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
 
 type InvokeFn = <T>(cmd: string, args?: Record<string, unknown>, options?: { headers: Record<string, string> }) => Promise<T>;
 
@@ -34,7 +36,7 @@ export async function invoke<T>(
 ): Promise<T> {
   // Native-only domain calls share this refusal before loading Tauri. Domain
   // functions with explicit demo fallbacks return before reaching this point.
-  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+  if (!hasTauri()) {
     throw {
       ...ipcError(null), code: "capability.unsupported", params: { scheme: "browser" },
       op: cmd, retryable: false, action: null,

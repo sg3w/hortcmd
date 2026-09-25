@@ -7,7 +7,7 @@ import type { IndexInfo } from "@/ipc/bindings/IndexInfo";
 import { useIndexSearchSession } from "@/store/indexSearchSession";
 import { SearchIndexPanel } from "./SearchIndexPanel";
 vi.mock("@/ipc/invoke", async importOriginal => ({
-  ...await importOriginal<typeof import("@/ipc/invoke")>(), hasTauri: true,
+  ...await importOriginal<typeof import("@/ipc/invoke")>(), hasTauri: () => true,
 }));
 const info: IndexInfo = { id: "0-abcd", root: "/approved", state: "paused", entries: 2, bytes: 500, pending: 0, unreadable: 0, persistent: false,
   policy: { content: false, hidden: false, offline: false, allowBattery: false, ignore: [], maxContentBytes: 1048576 } };

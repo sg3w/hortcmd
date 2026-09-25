@@ -26,7 +26,7 @@ interface StartCall {
 const started: StartCall[] = [];
 
 vi.mock("@/ipc/client", () => ({
-  hasTauri: false,
+  hasTauri: () => false,
   startTransfer: (
     op: string,
     id: string,

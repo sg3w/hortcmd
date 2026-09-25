@@ -10,7 +10,7 @@ import { useNet } from "./netStore";
 import { ConnectionsDialog } from "./ConnectionsDialog";
 
 vi.mock("@/ipc/invoke", async importOriginal => ({
-  ...await importOriginal<typeof import("@/ipc/invoke")>(), hasTauri: true,
+  ...await importOriginal<typeof import("@/ipc/invoke")>(), hasTauri: () => true,
 }));
 
 function setup(language: "de" | "en", overrides: Partial<Profile> = {}) {

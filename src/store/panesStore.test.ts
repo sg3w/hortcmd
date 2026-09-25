@@ -19,7 +19,7 @@ let folders: Record<string, string[]> = {};
 let missing = new Set<string>();
 
 vi.mock("@/ipc/client", () => ({
-  hasTauri: false,
+  hasTauri: () => false,
   listDir: (path: string): Promise<DirListing> => {
     if (missing.has(path)) return Promise.reject(new Error("weg"));
     const names = folders[path];

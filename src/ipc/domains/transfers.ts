@@ -29,7 +29,7 @@ export function startTransfer(
   safe = false,
   checkSpace?: boolean,
 ): void {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     demo.demoTransfer(op, id, sources, destDir, true);
     return;
   }
@@ -49,7 +49,7 @@ export function startTransfer(
 
 /** Pauses or resumes a running transfer. */
 export function pauseTransfer(id: string, paused: boolean): void {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     demo.demoPause(id, paused);
     return;
   }
@@ -65,7 +65,7 @@ export function startExtract(
   destDir: string,
   password?: string,
 ): void {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     demo.demoTransfer("extract", id, names.length ? names : ["(alles)"], destDir, false);
     return;
   }
@@ -81,7 +81,7 @@ export function startExtract(
 
 /** Packs sources into a new ZIP archive (fire-and-forget). */
 export function startPack(id: string, sources: string[], destZip: string): void {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     demo.demoTransfer("pack", id, sources, destZip, false);
     return;
   }
@@ -90,8 +90,8 @@ export function startPack(id: string, sources: string[], destZip: string): void 
 
 /** Cancels a running transfer. */
 export function cancelTransfer(id: string): void {
-  if(hasTauri && id.startsWith("plugin-")) { void invoke("plugin_transfer_cancel",{id}); return; }
-  if (!hasTauri) {
+  if(hasTauri() && id.startsWith("plugin-")) { void invoke("plugin_transfer_cancel",{id}); return; }
+  if (!hasTauri()) {
     demo.demoCancelled.add(id);
     return;
   }
@@ -104,7 +104,7 @@ export function resolveCollision(
   action: "overwrite" | "rename" | "skip",
   applyAll: boolean,
 ): void {
-  if (!hasTauri) {
+  if (!hasTauri()) {
     const resume = demo.demoCollisionResume.get(reqId);
     demo.demoCollisionResume.delete(reqId);
     resume?.();

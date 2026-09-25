@@ -9,7 +9,7 @@ import { file } from "@/test/fixtures";
 import { recordNavigation } from "./history";
 
 vi.mock("@/ipc/invoke", async original => ({
-  ...await original<typeof import("@/ipc/invoke")>(), hasTauri: true,
+  ...await original<typeof import("@/ipc/invoke")>(), hasTauri: () => true,
 }));
 const tab = () => panelOf(usePanes.getState(), "left");
 const folder = (path: string) => ({ path, archive: null });

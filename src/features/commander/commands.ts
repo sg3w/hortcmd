@@ -748,19 +748,19 @@ export const COMMANDS = {
     label: "zoom.in",
     shortcut: { mods: ["Mod"], key: "+" },
     run: () => void changePageZoom("in"),
-    state: () => ({ hidden: !hasTauri }),
+    state: () => ({ hidden: !hasTauri() }),
   },
   "view.zoomOut": {
     label: "zoom.out",
     shortcut: { mods: ["Mod"], key: "-" },
     run: () => void changePageZoom("out"),
-    state: () => ({ hidden: !hasTauri }),
+    state: () => ({ hidden: !hasTauri() }),
   },
   "view.zoomReset": {
     label: "zoom.reset",
     shortcut: { mods: ["Mod"], key: "0" },
     run: () => void changePageZoom("reset"),
-    state: () => ({ hidden: !hasTauri }),
+    state: () => ({ hidden: !hasTauri() }),
   },
   "view.list": {
     label: "view.list",

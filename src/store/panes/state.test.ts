@@ -23,7 +23,7 @@ import {
   sortEntries,
 } from "./state";
 
-vi.mock("@/ipc/client", () => ({ hasTauri: false }));
+vi.mock("@/ipc/client", () => ({ hasTauri: () => false }));
 
 const { useSettings } = await import("../settingsStore");
 

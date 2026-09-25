@@ -5,7 +5,7 @@ import { useTauri } from "@/test/tauri";
 import { useSettings } from "@/store/settingsStore";
 import { TransportSecurityForm } from "./TransportSecurityForm";
 
-vi.mock("@/ipc/invoke", async original => ({ ...await original<typeof import("@/ipc/invoke")>(), hasTauri: true }));
+vi.mock("@/ipc/invoke", async original => ({ ...await original<typeof import("@/ipc/invoke")>(), hasTauri: () => true }));
 it("requires an explicit global enablement and a separate profile acknowledgment", async () => {
   const runtime = useTauri({ commands: { net_transport_policy: () => ({ allowPlaintext: false }), net_set_transport_policy: () => {} } });
   useSettings.setState({ language: "en" });
