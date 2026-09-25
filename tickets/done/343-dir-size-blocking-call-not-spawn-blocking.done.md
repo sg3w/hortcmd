@@ -28,3 +28,9 @@ not just the size dialog.
 - Manual/mocked test: a stale/hung mount point passed to `dir_size`; assert
   other concurrent async commands are not stalled while it's pending.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Moved the initial directory stat into the same spawn_blocking closure as the recursive walk, keeping filesystem waits off the async executor. Existing folder-size and cancellation tests pass; no stale network mount was needed for validation.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

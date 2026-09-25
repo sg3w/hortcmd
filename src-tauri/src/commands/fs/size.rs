@@ -150,13 +150,17 @@ pub async fn dir_size(
     let root = PathBuf::from(&path);
     // Register first, so every path out of here also unregisters again.
     let flag = cancel::register(KIND, &token);
-    let result = if root.is_dir() {
-        tauri::async_runtime::spawn_blocking(move || walk_size(root, &flag, &on_progress))
-            .await
-            .map_err(AppError::from)
-    } else {
-        Err(AppError::from(format!("{}: kein Verzeichnis", path)))
-    };
+    // Even the initial stat can block on an OS-mounted network volume.
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        if root.is_dir() {
+            Ok(walk_size(root, &flag, &on_progress))
+        } else {
+            Err(AppError::from(format!("{}: kein Verzeichnis", path)))
+        }
+    })
+    .await
+    .map_err(AppError::from)
+    .and_then(|result| result);
     cancel::unregister(KIND, &token);
     result
 }

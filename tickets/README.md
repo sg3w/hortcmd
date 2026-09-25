@@ -2,7 +2,7 @@
 
 All tickets below 100 and tickets 100–110 have been completed.
 Tickets 125–126, 128, 131, 134, 137 and the discovered issues 300–301 and 303–316 are also complete. There are
-**61 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
+**60 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
 issues 317–377 (excluding completed tickets listed below). Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
@@ -109,7 +109,7 @@ Correctness (backend):
 [333](done/333-monitor-unsupported-state-latched.done.md), [334](done/334-keepass-unlock-state-divergence.done.md),
 [335](done/335-cancel-token-map-orphan-leak.done.md), [339](339-smb-ensure-share-race-condition.md),
 [340](done/340-webdav-list-dot-dotdot-not-filtered.done.md), [341](341-smb-shares-error-generic-code.md),
-[342](done/342-mcp-mutex-lock-expect-poison-panic.done.md), [343](343-dir-size-blocking-call-not-spawn-blocking.md),
+[342](done/342-mcp-mutex-lock-expect-poison-panic.done.md), [343](done/343-dir-size-blocking-call-not-spawn-blocking.done.md),
 [344](344-finder-tags-dead-fallback-code.md), [345](345-git-status-canonicalize-fallback-scope-widening.md),
 [346](346-dir-size-cancel-token-leak.md), [347](347-dir-size-generic-not-a-directory-error.md),
 [349](349-pack-sources-count-not-bounded-early.md), [350](350-archive-unknown-format-generic-error.md),
@@ -206,3 +206,5 @@ policy-valid disposition. No advisory exceptions were added by this backlog upda
 - [340](done/340-webdav-list-dot-dotdot-not-filtered.done.md): completed and verified.
 
 - [342](done/342-mcp-mutex-lock-expect-poison-panic.done.md): completed and verified.
+
+- [343](done/343-dir-size-blocking-call-not-spawn-blocking.done.md): completed and verified.
