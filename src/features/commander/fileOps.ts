@@ -621,12 +621,13 @@ export function runMkdir(side: Side): void {
       if (!trimmed) return;
       const base = panelOf(usePanes.getState(), side).path;
       void withBusy(async () => {
-        await makeDir(joinPath(base, trimmed));
-        // Reveal by name, not by diff: the folder stays under the cursor even
-        // if the watcher refreshed the listing in between (TICKET-014).
-        await usePanes
-          .getState()
-          .refresh(side, { reveal: true, names: [trimmed] });
+        try {
+          await makeDir(joinPath(base, trimmed));
+          // Reveal by name, even if the watcher already refreshed the listing.
+          await usePanes.getState().refresh(side, { reveal: true, names: [trimmed] });
+        } catch (error) {
+          reportMessage(describeErrorFull(error));
+        }
       });
     },
   });

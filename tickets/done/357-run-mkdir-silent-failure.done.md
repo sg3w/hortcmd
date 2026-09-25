@@ -27,3 +27,9 @@ that the mkdir failed — they may believe it succeeded or just be confused.
 - Test: F7 mkdir with a name colliding with an existing entry (mocked IPC
   rejection); assert an error message is shown to the user.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+F7 mkdir now catches and formats creation failures rather than leaving rejected promises unhandled. A mocked collision regression verifies the reported message, trimmed destination path and restored busy state.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.
