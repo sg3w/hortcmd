@@ -30,3 +30,9 @@ unbounded leak proportional to how often this race occurs. Related to ticket
 - Test: call `cancel_dir_size(token)` for a request that then fails
   capability validation; assert the token is cleaned up rather than leaked.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+Folder-size requests now register cancellation before validation and use a drop guard to clean up on every exit. Regressions cover an offline capability refusal after a pre-armed cancel and a successful early-cancelled command, including clean token reuse.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

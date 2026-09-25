@@ -55,6 +55,15 @@ const PROGRESS_INTERVAL: Duration = Duration::from_millis(120);
 /// Cancel token namespace, so search and folder size cannot collide.
 const KIND: &str = "dir_size";
 
+/// Remove both active flags and pre-armed cancels on every exit path.
+struct CancelCleanup<'a>(&'a str);
+
+impl Drop for CancelCleanup<'_> {
+    fn drop(&mut self) {
+        cancel::unregister(KIND, self.0);
+    }
+}
+
 /// Sets the cancel flag of a calculation. Also works before the task has
 /// registered: the flag is stored, and the run then starts cancelled.
 #[tauri::command]
@@ -145,13 +154,13 @@ pub async fn dir_size(
     token: String,
     on_progress: Channel<DirSizeStats>,
 ) -> AppResult<DirSize> {
+    let flag = cancel::register(KIND, &token);
+    let _cleanup = CancelCleanup(&token);
     // Same local traversal as the search (TICKET-031).
     caps::require(&path, Capability::RecursiveSize)?;
     let root = PathBuf::from(&path);
-    // Register first, so every path out of here also unregisters again.
-    let flag = cancel::register(KIND, &token);
     // Even the initial stat can block on an OS-mounted network volume.
-    let result = tauri::async_runtime::spawn_blocking(move || {
+    tauri::async_runtime::spawn_blocking(move || {
         if root.is_dir() {
             Ok(walk_size(root, &flag, &on_progress))
         } else {
@@ -160,9 +169,7 @@ pub async fn dir_size(
     })
     .await
     .map_err(AppError::from)
-    .and_then(|result| result);
-    cancel::unregister(KIND, &token);
-    result
+    .and_then(|result| result)
 }
 
 #[cfg(test)]
@@ -264,6 +271,41 @@ mod tests {
             assert_eq!(res.stats.files, 1);
         }
         assert_eq!(res.stats.dirs, 1);
+    }
+
+    #[test]
+    fn capability_failure_cleans_up_a_prearmed_cancel() {
+        let token = "size-capability-failure";
+        cancel_dir_size(token.into());
+        let result = tauri::async_runtime::block_on(dir_size(
+            "sftp://size-ticket-346.invalid/path".into(),
+            token.into(),
+            Channel::new(|_| Ok(())),
+        ));
+        assert!(result
+            .err()
+            .unwrap()
+            .is(crate::errors::code::CAPABILITY_OFFLINE));
+        let flag = cancel::register(KIND, token);
+        assert!(!flag.load(Ordering::Relaxed));
+        cancel::unregister(KIND, token);
+    }
+
+    #[test]
+    fn successful_command_consumes_and_cleans_up_a_prearmed_cancel() {
+        let root = tmp("prearmed");
+        let token = "size-prearmed-success";
+        cancel_dir_size(token.into());
+        let result = tauri::async_runtime::block_on(dir_size(
+            root.to_string_lossy().into_owned(),
+            token.into(),
+            Channel::new(|_| Ok(())),
+        ))
+        .unwrap();
+        assert!(result.cancelled);
+        assert!(!cancel::register(KIND, token).load(Ordering::Relaxed));
+        cancel::unregister(KIND, token);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
