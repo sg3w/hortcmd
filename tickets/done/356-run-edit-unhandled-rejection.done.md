@@ -28,3 +28,9 @@ happens, with only a console "Uncaught (in promise)" they never see.
 - Test: press F4 on a file whose open fails (mocked IPC rejection); assert
   the same error dialog `openEntry` would show appears.
 - `npm run check`.
+
+## Resolution (2026-09-25)
+
+F4 and Enter now share an OS-launch helper that catches rejected open_path calls and presents the same localized error dialog. Regression tests exercise both entry points with a structured IPC refusal.
+
+Validation: `RUST_TEST_THREADS=1 npm run check` passed on macOS.

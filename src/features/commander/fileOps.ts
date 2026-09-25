@@ -1,3 +1,4 @@
+import { openFile } from "./openFile";
 import type { OperationPlan } from "@/ipc/bindings/OperationPlan";
 import type { RecoverySettings } from "@/ipc/bindings/RecoverySettings";
 // ============================================================
@@ -17,7 +18,6 @@ import {
   discardRecovery,
   deleteEntries,
   makeDir,
-  openPath,
   openWith,
   quickLook,
   renameEntry,
@@ -428,7 +428,7 @@ export function runEdit(side: Side): void {
   const cur = p.entries[p.cursor];
   if (!cur || cur.parent || cur.is_dir) return;
   if (!guard(side, p.path, "systemOpen")) return;
-  openPath(joinPath(p.path, cur.name));
+  openFile(joinPath(p.path, cur.name));
 }
 
 /**

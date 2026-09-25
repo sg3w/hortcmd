@@ -1,16 +1,13 @@
+import { openFile } from "./openFile";
 // ============================================================
 // Opening an entry: navigate folders, enter/leave
 // archives, open files with the default program.
 // ============================================================
 
 import { panelOf, usePanes, type Side } from "@/store/panesStore";
-import { describeErrorFull } from "@/store/errorText";
-import { openPath } from "@/ipc/client";
 import { guard } from "./guard";
 import { joinPath, parentPath } from "@/lib/path";
 import { isArchive } from "@/lib/archive";
-import { useOps } from "@/store/opsStore";
-import { translate } from "@/store/settingsStore";
 
 /** Opens the entry at `index` in the active tab of `side`. */
 export function openEntry(side: Side, index: number): void {
@@ -48,14 +45,7 @@ export function openEntry(side: Side, index: number): void {
     // Handing a path to the OS is a capability of the location
     // (TICKET-031), so a remote entry says so instead of being launched.
     if (!guard(side, p.path, "systemOpen")) return;
-    void openPath(joinPath(p.path, entry.name)).catch((e) => {
-      useOps.getState().requestConfirm({
-        title: translate("open.error"),
-        message: describeErrorFull(e),
-        danger: true,
-        onConfirm: () => {},
-      });
-    });
+    openFile(joinPath(p.path, entry.name));
   }
 }
 
