@@ -55,6 +55,26 @@ it.each(["de", "en"] as const)("describes confirmation messages and exposes inde
   expect(screen.getByRole("status")).toHaveTextContent(translate("op.progress"));
 });
 
+it("traps focus while a synchronous operation is running", async () => {
+  // Ticket 348: the progress overlay used to be a plain covering div, so a
+  // background control stayed in the Tab order and could be activated with
+  // Enter behind it.
+  const user = userEvent.setup();
+  const behind = vi.fn();
+  render(<><button onClick={behind}>Behind</button><OperationDialogs /></>);
+  const background = screen.getByRole("button", { name: "Behind" });
+  background.focus();
+  act(() => useOps.getState().setBusy(true));
+  await waitFor(() => expect(screen.getByRole("dialog")).toBeVisible());
+  // Radix marks the rest of the tree hidden at the body-child level.
+  expect(background.closest('[aria-hidden="true"]')).not.toBeNull();
+  await user.tab();
+  expect(document.activeElement).not.toBe(background);
+  await user.keyboard("{Enter}");
+  expect(behind).not.toHaveBeenCalled();
+  act(() => useOps.getState().setBusy(false));
+});
+
 it("returns focus to the invoking control after a prompt and follow-up confirmation", async () => {
   const user = userEvent.setup();
   render(<><button onClick={() => useOps.getState().requestPrompt({
