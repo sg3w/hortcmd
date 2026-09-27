@@ -30,3 +30,25 @@ dead code that could silently diverge from the doc during a future refactor.
 
 - `cargo check`/`npm run check` after the cleanup; confirm the module doc
   comment matches actual behavior.
+
+## Resolution (2026-09-27)
+
+The module doc no longer claims a non-macOS behaviour that cannot happen. It
+now states the actual rule: `Capability::FinderTags` is in `local_caps()` on
+macOS alone and in no remote capability set, so `caps::require` refuses every
+address on the other platforms before any tag code runs, and the
+`#[cfg(not(macos))]` arms exist only because the compiler needs a value there.
+
+Those arms no longer invent an answer. `get_tags` returned `Ok(vec![])` — the
+exact divergence the ticket describes — and `set_tags` returned a prose
+`String` error; both now call one shared `unreachable_without_macos`, which
+re-runs `caps::require` and hands back the very refusal the gate above already
+produced (falling back to `capability.unsupported` if that ever succeeded).
+There is one answer for this platform instead of three, so a future refactor
+cannot let them drift apart.
+
+The arms are not compiled on macOS, so they were type-checked by temporarily
+flipping the two `cfg`s to `all()`/`any()` and running `cargo check`; the
+change was reverted before the commit.
+
+Validation: `npm run check` passed on macOS.
