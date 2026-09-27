@@ -2,8 +2,8 @@
 
 All tickets below 100 and tickets 100–110 have been completed.
 Tickets 125–126, 128, 131, 134, 137 and the discovered issues 300–301 and 303–316 are also complete. There are
-**29 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
-issues 317–377 (excluding completed tickets listed below). Dependencies use the current paths.
+**31 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
+issues 317–379 (excluding completed tickets listed below). Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
 filenames ending in `.done.md`. This also applies to previously completed support
@@ -250,3 +250,19 @@ policy-valid disposition. No advisory exceptions were added by this backlog upda
 - [367](done/367-net-store-duplicated-authority-logic.done.md): completed and verified.
 
 - [368](done/368-drive-select-redundant-refresh.done.md): completed and verified.
+
+## Discovered while verifying the advisory batch (2026-09-27)
+
+Running `npm run test:harness` for ticket 370 showed the protocol harness is
+already red on `main` — 15 of 22 tests fail there — for two reasons that have
+nothing to do with the advisory work:
+
+- [378](378-webdav-collection-trailing-slash-redirect.md): WebDAV collection
+  requests are not retried with a trailing slash, so every `mod_dav` server
+  that answers `301` breaks listing, stat, mkdir, delete, staging and transfers.
+  A product bug, not a harness bug.
+
+- [379](379-harness-traversal-and-ca-test-defects.md): the traversal test
+  unwraps a path the versioned locations now reject up front, and the
+  certificate test lists an empty path because a `"/"` root trims to nothing —
+  so neither test asserts what it claims.
