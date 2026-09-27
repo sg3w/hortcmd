@@ -34,7 +34,6 @@ export function OperationDialogs() {
 // ---------- Name collision ----------
 
 function CollisionDialog() {
-  const returnFocus = useDialogFocusReturn();
   const head = useOps((s) => s.collisions[0] ?? null);
   const shiftCollision = useOps((s) => s.shiftCollision);
   const t = useT();
@@ -54,14 +53,13 @@ function CollisionDialog() {
   const name = head ? basename(head.path) : "";
 
   return (
-    <Dialog.Root open={!!head} onOpenChange={() => {}}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[62] bg-black/50" />
-        <Dialog.Content
-          onCloseAutoFocus={returnFocus}
-          onKeyDownCapture={markDialogKey}
-          className="fixed left-1/2 top-1/2 z-[63] w-[440px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-panel shadow-2xl"
-        >
+    <SimpleDialog
+      open={!!head}
+      onOpenChange={() => {}}
+      overlayZ="z-[62]"
+      contentZ="z-[63]"
+      className="w-[440px]"
+    >
           <Dialog.Title className="flex items-center gap-2 border-b border-edge px-4 py-2.5 text-text">
             <FileWarning size={16} className="text-amber-400" />
             {t("op.collision.title")}
@@ -98,9 +96,7 @@ function CollisionDialog() {
               {t("op.collision.overwrite")}
             </button>
           </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    </SimpleDialog>
   );
 }
 
@@ -110,31 +106,88 @@ function basename(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
+/**
+ * The chrome the blocking dialogs in this file share: a modal
+ * `Dialog.Root`, its overlay, and a centered `Dialog.Content` that returns
+ * focus to wherever it came from. The fixed-size sibling of `AppDialog`
+ * (no resizing, no stored size). Everything here used to be copied per
+ * dialog, which is how `ProgressOverlay` ended up without a focus trap at
+ * all — a chrome fix now lands in one place (ticket 348).
+ */
+function SimpleDialog({
+  open,
+  onOpenChange,
+  overlayZ,
+  contentZ,
+  className,
+  noDescription,
+  onOpenAutoFocus,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  overlayZ: string;
+  contentZ: string;
+  /** Width and any per-dialog overflow behaviour. */
+  className: string;
+  /** Opts out of Radix's description wiring for a dialog without one. */
+  noDescription?: boolean;
+  /** Overrides where focus lands on open (Radix picks the first tabbable). */
+  onOpenAutoFocus?: (event: Event) => void;
+  children: React.ReactNode;
+}) {
+  const returnFocus = useDialogFocusReturn();
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className={cn("fixed inset-0 bg-black/50", overlayZ)} />
+        <Dialog.Content
+          onCloseAutoFocus={returnFocus}
+          onOpenAutoFocus={onOpenAutoFocus}
+          {...(noDescription ? { "aria-describedby": undefined } : {})}
+          onKeyDownCapture={markDialogKey}
+          className={cn(
+            "fixed left-1/2 top-1/2 max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-panel shadow-2xl",
+            contentZ,
+            className,
+          )}
+        >
+          {children}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
 // ---------- Confirmation ----------
 
 function ConfirmDialog() {
-  const returnFocus = useDialogFocusReturn();
   const confirm = useOps((s) => s.confirm);
   const settingsOpen = useUi(s => s.settingsOpen);
   const undoClass = useUndoClassification(confirm?.undo);
   const preflight = useTransferPreflight(confirm?.preflight);
   const closeDialogs = useOps((s) => s.closeDialogs);
   const t = useT();
+  const confirmButton = useRef<HTMLButtonElement>(null);
 
   const Icon = confirm?.icon ?? (confirm?.danger ? AlertTriangle : null);
 
   return (
-    <Dialog.Root
+    <SimpleDialog
       open={!!confirm && !settingsOpen}
       onOpenChange={(o) => !o && closeDialogs()}
+      overlayZ="z-[60]"
+      contentZ="z-[61]"
+      className="max-h-[90vh] w-[420px] overflow-y-auto"
+      // The confirm button owns the initial focus. Saying so beats relying
+      // on React's `autoFocus` winning the race against Radix's "focus the
+      // first tabbable", which another dialog closing in the same commit
+      // can tip the other way (ticket 348).
+      onOpenAutoFocus={(event) => {
+        event.preventDefault();
+        confirmButton.current?.focus();
+      }}
     >
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[60] bg-black/50" />
-        <Dialog.Content
-          onCloseAutoFocus={returnFocus}
-          onKeyDownCapture={markDialogKey}
-          className="fixed left-1/2 top-1/2 z-[61] max-h-[90vh] w-[420px] max-w-[92vw] overflow-y-auto -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-panel shadow-2xl"
-        >
           <Dialog.Title className="flex items-center gap-2 border-b border-edge px-4 py-2.5 text-text">
             {Icon && (
               <Icon
@@ -157,7 +210,7 @@ function ConfirmDialog() {
               {t("op.cancel")}
             </button>
             <button
-              autoFocus
+              ref={confirmButton}
               disabled={undoClass === null || preflight.blocked}
               onClick={() => {
                 useOps.getState().confirmDialog(preflight.plan ?? undefined);
@@ -172,16 +225,13 @@ function ConfirmDialog() {
               {confirm?.confirmLabel ?? t("op.confirm")}
             </button>
           </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    </SimpleDialog>
   );
 }
 
 // ---------- Input (new folder) ----------
 
 function PromptDialog() {
-  const returnFocus = useDialogFocusReturn();
   const inputId = useId();
   const prompt = useOps((s) => s.prompt);
   const closeDialogs = useOps((s) => s.closeDialogs);
@@ -228,15 +278,14 @@ function PromptDialog() {
   const Icon = prompt?.icon ?? FolderPlus;
 
   return (
-    <Dialog.Root open={!!prompt} onOpenChange={(o) => !o && closeDialogs()}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[60] bg-black/50" />
-        <Dialog.Content
-          onCloseAutoFocus={returnFocus}
-          aria-describedby={undefined}
-          onKeyDownCapture={markDialogKey}
-          className="fixed left-1/2 top-1/2 z-[61] w-[420px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-panel shadow-2xl"
-        >
+    <SimpleDialog
+      open={!!prompt}
+      onOpenChange={(o) => !o && closeDialogs()}
+      overlayZ="z-[60]"
+      contentZ="z-[61]"
+      className="w-[420px]"
+      noDescription
+    >
           <Dialog.Title className="flex items-center gap-2 border-b border-edge px-4 py-2.5 text-text">
             <Icon size={16} className="text-accent" />
             {prompt?.title}
@@ -301,9 +350,7 @@ function PromptDialog() {
               {prompt?.confirmLabel ?? t("op.create")}
             </button>
           </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    </SimpleDialog>
   );
 }
 
@@ -314,24 +361,35 @@ function PromptDialog() {
 function ProgressOverlay() {
   const busy = useOps((s) => s.busy);
   const t = useT();
-  if (!busy) return null;
-
+  // Hand-rolled before: an ordinary `fixed inset-0` div that covered the
+  // workspace visually while leaving every background control in the Tab
+  // order (ticket 348). It is a blocking dialog like its siblings, so it
+  // gets their chrome — Radix's modal mode is what traps focus. Nothing
+  // here is dismissible: the operation is synchronous and has no cancel.
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40">
-      <div className="w-[280px] max-w-[92vw] rounded-lg border border-edge bg-panel p-4 shadow-2xl">
+    <SimpleDialog
+      open={busy}
+      onOpenChange={() => {}}
+      overlayZ="z-[70]"
+      contentZ="z-[71]"
+      className="w-[280px] p-4"
+      noDescription
+    >
+      {/* `asChild` keeps the live region the screen reader already had
+          while giving Radix the title it needs to label the dialog. */}
+      <Dialog.Title asChild>
         <div role="status" className="mb-3 text-[13px] text-text">{t("op.progress")}</div>
-        <div role="progressbar" aria-label={t("op.progress")} className="h-1.5 overflow-hidden rounded bg-panel-inactive">
-          <div className="h-full w-1/3 animate-pulse rounded bg-accent" />
-        </div>
+      </Dialog.Title>
+      <div role="progressbar" aria-label={t("op.progress")} className="h-1.5 overflow-hidden rounded bg-panel-inactive">
+        <div className="h-full w-1/3 animate-pulse rounded bg-accent" />
       </div>
-    </div>
+    </SimpleDialog>
   );
 }
 
 // ---------- Closing the window while transfers are running (TICKET-004) ----------
 
 function ForceCloseDialog() {
-  const returnFocus = useDialogFocusReturn();
   const open = useOps((s) => s.forceClose);
   const setForceClose = useOps((s) => s.setForceClose);
   const t = useT();
@@ -354,14 +412,13 @@ function ForceCloseDialog() {
   };
 
   return (
-    <Dialog.Root open={open} onOpenChange={(o) => !o && setForceClose(false)}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[80] bg-black/50" />
-        <Dialog.Content
-          onCloseAutoFocus={returnFocus}
-          onKeyDownCapture={markDialogKey}
-          className="fixed left-1/2 top-1/2 z-[81] w-[420px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-panel shadow-2xl"
-        >
+    <SimpleDialog
+      open={open}
+      onOpenChange={(o) => !o && setForceClose(false)}
+      overlayZ="z-[80]"
+      contentZ="z-[81]"
+      className="w-[420px]"
+    >
           <Dialog.Title className="flex items-center gap-2 border-b border-edge px-4 py-2.5 text-text">
             <AlertTriangle size={16} className="text-amber-400" />
             {t("op.forceClose.title")}
@@ -390,8 +447,6 @@ function ForceCloseDialog() {
               {t("op.forceClose.closeAnyway")}
             </button>
           </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    </SimpleDialog>
   );
 }
