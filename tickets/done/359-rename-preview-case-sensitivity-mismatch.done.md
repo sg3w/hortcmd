@@ -31,3 +31,29 @@ is safe, and it then fails after the fact with no forewarning.
 - Test: batch-rename a file to a name that case-insensitively collides with
   an existing unrelated file; assert the preview flags the collision.
 - `npm run check`.
+
+## Resolution (2026-09-27)
+
+`buildPreview` no longer compares target names by exact string. It folds every
+name through one `key()` helper before building the duplicate counter, the
+source-name set and the folder-name set, so a target that collides with an
+existing name only by case is flagged `exists` in the preview instead of
+failing later with `fs.exists`, and two targets differing only by case are
+flagged `duplicate`.
+
+Folding is case-insensitive by default, which is what the default targets
+(macOS, Windows) do. A fourth parameter `caseSensitive` lets a caller that
+knows better opt into exact matching; the preview has no
+`ProviderLimits.caseSensitive` to read today (it only reaches the frontend
+inside a transfer's `OperationPlan`), so `RenameDialog` keeps the default.
+Unknown therefore warns about a collision that might not happen rather than
+hiding one that will — the safe direction, since the backend's
+`provider.exists` check remains the authority at execution time.
+
+Case-only renames of entries inside the batch keep working: the folded source
+set still absorbs them, and `unchanged` is still decided by exact comparison so
+"Readme.txt" → "readme.txt" reads as a real rename. Four tests cover the
+collision the ticket describes, its case-sensitive counterpart, a case-only
+duplicate pair, and the case-only rename that must stay `ok`.
+
+Validation: `npm run check` passed on macOS.
