@@ -80,7 +80,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -94,7 +94,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -108,7 +108,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -138,7 +138,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -160,7 +160,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -174,7 +174,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -188,7 +188,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -202,7 +202,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -216,7 +216,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -230,7 +230,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -244,7 +244,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -258,7 +258,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -272,7 +272,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -286,7 +286,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -300,7 +300,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -314,7 +314,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -328,7 +328,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -342,7 +342,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -356,7 +356,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -370,7 +370,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -384,7 +384,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -398,7 +398,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -412,7 +412,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -426,7 +426,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -448,7 +448,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -462,7 +462,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -476,7 +476,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -490,7 +490,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -504,7 +504,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -518,23 +518,23 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
     },
     {
       "kind": "direct",
-      "key": "cargo:russh@0.53.0",
+      "key": "cargo:russh@0.63.3",
       "owner": "hortcmd maintainers",
-      "reason": "Existing locked direct dependency baseline. Feature/platform metadata is captured in the SBOM; current advisory scans and CI/MSRV checks govern this exact version. New versions/additions require the dependency review checklist.",
+      "reason": "Upgraded for ticket 372 to clear RUSTSEC-2026-0154 and, through russh-cryptovec 0.62.0, RUSTSEC-2026-0153.",
       "expires": "2026-12-24",
       "checklist": {
-        "changelog": "Baseline version retained; no API upgrade",
-        "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
-        "platforms": "Windows/macOS/Linux CI",
-        "features": "Cargo manifest and generated SBOM feature graph"
+        "changelog": "0.53 -> 0.63.3: agent frames are capped at 256 KiB and CryptoVec growth is checked (upstream a2d48a71); check_server_key now receives PublicKeyOrCertificate and agent identities are AgentIdentity, both adapted in net/ssh.rs; the internal ssh-key fork is replaced by ssh-key 0.7.0-rc.11.",
+        "security": "Both owned advisories are patched at >=0.60.3; the resolved 0.63.3/0.62.0 pair is past that. rsa remains in the graph once, tracked by ticket 373.",
+        "msrv": "russh 0.63.3 declares 1.89; the project floor is raised to 1.93 in this ticket.",
+        "platforms": "Windows/macOS/Linux CI; SFTP and the SSH terminal exercised by the Docker harness.",
+        "features": "Default features only, as before; no optional crypto feature was enabled."
       }
     },
     {
@@ -546,7 +546,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -560,7 +560,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -582,7 +582,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -596,7 +596,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -618,7 +618,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -632,7 +632,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -646,7 +646,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -660,31 +660,31 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
     },
     {
       "kind": "source",
-      "key": "cargo:smb@0.11.1",
+      "key": "cargo:smb@0.12.1",
       "owner": "hortcmd maintainers",
-      "reason": "Existing in-tree reviewed patch; see vendor package Cargo.toml and patch/history. Exact tree fingerprint prevents unreviewed changes; upstream replacement remains tracked in tickets.",
+      "reason": "In-tree reviewed patch of the published smb 0.12.1: the ticket-096 authenticated SMB2 ECHO helper, the ticket-271 feature gate, and the sspi 0.22.0 pin needed to unify the crypto graph with russh (ticket 372). See vendor/smb/HORTCMD-PATCH.md and docs/smb-backport.md. The exact tree fingerprint prevents unreviewed changes.",
       "expires": "2026-12-24",
-      "fingerprint": "0d7ff7a101301605c8d5b266d59a16553b4c11992512cdce92e39773dd398776"
+      "fingerprint": "a067977a8438f329fb138886269b1fb5b9dd400022bbd638e11a1ec36f5a2b78"
     },
     {
       "kind": "direct",
-      "key": "cargo:smb@0.11.1",
+      "key": "cargo:smb@0.12.1",
       "owner": "hortcmd maintainers",
-      "reason": "Existing locked direct dependency baseline. Feature/platform metadata is captured in the SBOM; current advisory scans and CI/MSRV checks govern this exact version. New versions/additions require the dependency review checklist.",
+      "reason": "Upgraded for ticket 372: smb 0.11.1 pins sspi 0.18.x, whose exact RustCrypto pre-release pins cannot coexist with any patched russh.",
       "expires": "2026-12-24",
       "checklist": {
-        "changelog": "Baseline version retained; no API upgrade",
-        "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
-        "platforms": "Windows/macOS/Linux CI",
-        "features": "Cargo manifest and generated SBOM feature graph"
+        "changelog": "0.11.1 -> 0.12.1: the async read-reply fix backported in ticket 071 is upstream, so only the ticket-096 ECHO helper and the ticket-271 feature gate remain local; sspi moves to 0.22.0 and the crypto dependencies move from RustCrypto pre-releases to their stable releases.",
+        "security": "No advisory applies to 0.12.1; signing and encryption features are unchanged.",
+        "msrv": "smb 0.12.1 declares 1.89 and sspi 0.22.0 declares 1.93; the project floor is 1.93.",
+        "platforms": "Windows/macOS/Linux CI; SMB exercised against Samba in the Docker harness.",
+        "features": "default-features = false with multi_threaded, sign and encrypt, as before."
       }
     },
     {
@@ -696,7 +696,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -710,7 +710,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -732,7 +732,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -746,7 +746,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -760,7 +760,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -774,7 +774,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -788,7 +788,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -802,7 +802,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -816,7 +816,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -838,7 +838,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -852,7 +852,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -866,7 +866,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -880,7 +880,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -894,7 +894,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -908,7 +908,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -922,7 +922,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -944,7 +944,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -958,7 +958,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -972,7 +972,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -986,7 +986,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1000,7 +1000,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1014,7 +1014,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1028,7 +1028,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1042,7 +1042,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1056,7 +1056,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1070,7 +1070,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1084,7 +1084,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1098,7 +1098,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1112,7 +1112,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1126,7 +1126,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1140,7 +1140,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1154,7 +1154,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1168,7 +1168,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1182,7 +1182,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1196,7 +1196,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1210,7 +1210,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1240,7 +1240,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1254,7 +1254,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1268,7 +1268,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1298,7 +1298,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1312,7 +1312,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1326,7 +1326,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1340,7 +1340,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1354,7 +1354,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1368,7 +1368,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1382,7 +1382,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1396,7 +1396,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1410,7 +1410,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1424,7 +1424,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1438,7 +1438,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1452,7 +1452,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1466,7 +1466,7 @@
       "checklist": {
         "changelog": "Baseline version retained; no API upgrade",
         "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.85.1 CI; npm Node engines in package.json",
+        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
         "platforms": "Windows/macOS/Linux CI",
         "features": "Cargo manifest and generated SBOM feature graph"
       }
@@ -1477,7 +1477,7 @@
       "owner": "hortcmd maintainers",
       "reason": "Locked compatibility lines retained for aes-gcm, keepass, picky-krb, pkcs5, russh, sevenz-rust, smb, ssh-cipher, zip. Forcing a unification can break protocol/crypto APIs; each version stays advisory-scanned. Remove when upstream version requirements converge.",
       "expires": "2026-12-24",
-      "fingerprint": "0.8.4,0.9.0-rc.1"
+      "fingerprint": "0.8.4,0.9.3"
     },
     {
       "kind": "duplicate",
@@ -1501,7 +1501,7 @@
       "owner": "hortcmd maintainers",
       "reason": "Locked compatibility lines retained for aes, aes-gcm, blowfish, cbc, ccm, chacha20, cmac, ctr, des, keepass, picky-krb, salsa20, ssh-cipher, twofish. Forcing a unification can break protocol/crypto APIs; each version stays advisory-scanned. Remove when upstream version requirements converge.",
       "expires": "2026-12-24",
-      "fingerprint": "0.4.4,0.5.0-rc.1"
+      "fingerprint": "0.4.4,0.5.2"
     },
     {
       "kind": "duplicate",
@@ -1517,7 +1517,7 @@
       "owner": "hortcmd maintainers",
       "reason": "Locked compatibility lines retained for aead, cipher, digest, picky, picky-krb, smb, sspi, universal-hash. Forcing a unification can break protocol/crypto APIs; each version stays advisory-scanned. Remove when upstream version requirements converge.",
       "expires": "2026-12-24",
-      "fingerprint": "0.1.7,0.2.0-rc.4"
+      "fingerprint": "0.1.7,0.2.2"
     },
     {
       "kind": "duplicate",
@@ -1533,7 +1533,7 @@
       "owner": "hortcmd maintainers",
       "reason": "Locked compatibility lines retained for blake2, cmac, curve25519-dalek, digest_auth, ecdsa, elliptic-curve, hmac, kbkdf, md-5, md4, pbkdf2, picky, picky-krb, rsa, russh, sha1, sha2, sha3, signature, sspi. Forcing a unification can break protocol/crypto APIs; each version stays advisory-scanned. Remove when upstream version requirements converge.",
       "expires": "2026-12-24",
-      "fingerprint": "0.10.7,0.11.0-rc.3"
+      "fingerprint": "0.10.7,0.11.3"
     },
     {
       "kind": "duplicate",
@@ -1565,7 +1565,7 @@
       "owner": "hortcmd maintainers",
       "reason": "Locked compatibility lines retained for hkdf, internal-russh-forked-ssh-key, keepass, pbkdf2, picky-krb, rfc6979, russh, smb, sspi, zip. Forcing a unification can break protocol/crypto APIs; each version stays advisory-scanned. Remove when upstream version requirements converge.",
       "expires": "2026-12-24",
-      "fingerprint": "0.12.1,0.13.0-rc.2"
+      "fingerprint": "0.12.1,0.13.0"
     },
     {
       "kind": "duplicate",
@@ -1589,7 +1589,7 @@
       "owner": "hortcmd maintainers",
       "reason": "Locked compatibility lines retained for digest_auth, num-bigint, num-bigint-dig, pageant, picky, picky-krb, quinn-proto, russh, sevenz-rust, smb, smb-dtyp, sspi. Forcing a unification can break protocol/crypto APIs; each version stays advisory-scanned. Remove when upstream version requirements converge.",
       "expires": "2026-12-24",
-      "fingerprint": "0.10.2,0.8.7,0.9.5"
+      "fingerprint": "0.10.2,0.8.7"
     },
     {
       "kind": "duplicate",
@@ -1605,7 +1605,7 @@
       "owner": "hortcmd maintainers",
       "reason": "Locked compatibility lines retained for chacha20, crypto-bigint, crypto-common, crypto-primes, ed25519-dalek, elliptic-curve, ff, getrandom, group, internal-russh-forked-ssh-key, p521, password-hash, picky, pkcs8, primefield, rand, rand_chacha, rand_pcg, rsa, russh, signature, x25519-dalek. Forcing a unification can break protocol/crypto APIs; each version stays advisory-scanned. Remove when upstream version requirements converge.",
       "expires": "2026-12-24",
-      "fingerprint": "0.10.1,0.6.4,0.9.5"
+      "fingerprint": "0.10.1,0.6.4"
     },
     {
       "kind": "duplicate",
@@ -1629,7 +1629,7 @@
       "owner": "hortcmd maintainers",
       "reason": "Locked compatibility lines retained for hortcmd, internal-russh-forked-ssh-key, pbkdf2, picky, picky-krb, rsa, russh, sspi, zip. Forcing a unification can break protocol/crypto APIs; each version stays advisory-scanned. Remove when upstream version requirements converge.",
       "expires": "2026-12-24",
-      "fingerprint": "0.10.6,0.11.0-rc.2"
+      "fingerprint": "0.10.6,0.11.0"
     },
     {
       "kind": "duplicate",
@@ -1637,7 +1637,7 @@
       "owner": "hortcmd maintainers",
       "reason": "Locked compatibility lines retained for bcrypt-pbkdf, digest_auth, ed25519-dalek, hortcmd, internal-russh-forked-ssh-key, keepass, p256, p384, p521, picky, pkcs5, rsa, russh, scrypt, sevenz-rust, smb, ssh-encoding, sspi, tauri-codegen, wry. Forcing a unification can break protocol/crypto APIs; each version stays advisory-scanned. Remove when upstream version requirements converge.",
       "expires": "2026-12-24",
-      "fingerprint": "0.10.9,0.11.0-rc.2"
+      "fingerprint": "0.10.9,0.11.0"
     },
     {
       "kind": "duplicate",
@@ -2295,18 +2295,10 @@
     },
     {
       "kind": "install",
-      "key": "cargo:curve25519-dalek@4.1.3",
-      "fingerprint": "97fb8b7c4503de7d6ae7b42ab72a5a59857b4c937ec27a3d4539dba95b5ab2be",
+      "key": "cargo:curve25519-dalek@5.0.0",
+      "fingerprint": "b5eed333089e2e1c1ac8c6c0398e5e2497b4c9926ca6d0365ed1e099afa5bc23",
       "owner": "hortcmd maintainers",
-      "reason": "Existing locked Rust build script: compiles native code, generates bindings or configures platform linking. Run only from the checksum-verified source in the CI build environment. Any source/version change invalidates this review.",
-      "expires": "2026-12-24"
-    },
-    {
-      "kind": "install",
-      "key": "cargo:curve25519-dalek@5.0.0-pre.1",
-      "fingerprint": "6f9200d1d13637f15a6acb71e758f64624048d85b31a5fdbfd8eca1e2687d0b7",
-      "owner": "hortcmd maintainers",
-      "reason": "Existing locked Rust build script: compiles native code, generates bindings or configures platform linking. Run only from the checksum-verified source in the CI build environment. Any source/version change invalidates this review.",
+      "reason": "Rust build script: compiles native code, generates bindings or configures platform linking. Run only from the checksum-verified source in the CI build environment. Any source/version change invalidates this review. Version reviewed for ticket 372 (SSH/SMB stack upgrade).",
       "expires": "2026-12-24"
     },
     {
@@ -2575,10 +2567,10 @@
     },
     {
       "kind": "install",
-      "key": "cargo:nix@0.29.0",
-      "fingerprint": "71e2746dc3a24dd78b3cfcb7be93368c6de9963d30f43a6a73998a9cf4b17b46",
+      "key": "cargo:nix@0.31.3",
+      "fingerprint": "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d",
       "owner": "hortcmd maintainers",
-      "reason": "Existing locked Rust build script: compiles native code, generates bindings or configures platform linking. Run only from the checksum-verified source in the CI build environment. Any source/version change invalidates this review.",
+      "reason": "Rust build script: compiles native code, generates bindings or configures platform linking. Run only from the checksum-verified source in the CI build environment. Any source/version change invalidates this review. Version reviewed for ticket 372 (SSH/SMB stack upgrade).",
       "expires": "2026-12-24"
     },
     {
@@ -3367,8 +3359,8 @@
     },
     {
       "kind": "native",
-      "key": "cargo:nix@0.29.0",
-      "fingerprint": "71e2746dc3a24dd78b3cfcb7be93368c6de9963d30f43a6a73998a9cf4b17b46",
+      "key": "cargo:nix@0.31.3",
+      "fingerprint": "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d",
       "owner": "hortcmd maintainers",
       "expires": "2026-12-24",
       "reason": "C/assembly build helpers and test fixtures are covered by package notices. Bundled libbzip2/liblzma/Zstandard/D-Bus have separate native license records; ring/AWS-LC include native licenses in their declared conjunctions. System API libraries are externally provided."
@@ -3460,6 +3452,14 @@
       "reason": "Ticket 320: pinned crates.io source with a caller-configured socket API for implicit TLS timeouts. See vendor/suppaftp/HORTCMD-PATCH.md. No dependency, feature or license changes; outstanding advisory remains ticket 374.",
       "expires": "2026-12-24",
       "fingerprint": "30eac8f5fb41062ce660c51306a7c262e71610ae01ab762c60143b7d3e9db9f5"
+    },
+    {
+      "kind": "duplicate",
+      "key": "cargo:sha3",
+      "owner": "hortcmd maintainers",
+      "reason": "Locked compatibility lines retained for the SSH stack and the SMB/SSPI authentication path. Forcing a unification can break protocol/crypto APIs; each version stays advisory-scanned. Remove when upstream version requirements converge.",
+      "expires": "2026-12-24",
+      "fingerprint": "0.11.0,0.12.0"
     }
   ],
   "advisoryExceptions": [],

@@ -298,9 +298,10 @@ the maintainer directly rather than filing publicly.
 
 ## Requirements
 
-- **Rust** — stable for day-to-day work. The declared minimum is **1.85.1**
+- **Rust** — stable for day-to-day work. The declared minimum is **1.93**
   (`rust-version` in `src-tauri/Cargo.toml`, verified by its own CI job; the
-  SMB client needs Rust 1.85 and the pinned KeePass library needs 1.85.1).
+  SMB client's SSPI dependency needs 1.93 and the russh 0.63 SSH stack needs
+  1.89 — ticket 372 raised the floor to keep both advisory-free).
   Install from <https://rustup.rs>.
 - **Node.js** 20.19+, 22.13+, or 24+ (CI checks Node 20 and 22).
 - The **Tauri CLI** comes with `npm install`; run it as `npm run tauri`.
@@ -536,7 +537,7 @@ from a store is enough to undo the split, and nothing else would notice.
 
 **CI jobs.** `check` (the full gate, Linux), `rust` (Ubuntu/macOS/Windows, so
 the `cfg`-gated platform code keeps compiling and its portable tests keep
-passing) and `msrv` (Rust 1.85.1 with `--locked`). Workflow permissions are
+passing) and `msrv` (Rust 1.93 with `--locked`). Workflow permissions are
 `contents: read`, and no job receives secrets.
 
 Desktop transfer recovery on macOS is documented in [Transfer recovery](docs/transfer-recovery.md), including recovery choices, journal bounds and deferred platform checks.

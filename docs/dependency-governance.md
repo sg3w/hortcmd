@@ -88,7 +88,7 @@ SSH/SMB/TLS consumers; new versions or source changes invalidate the reviews.
 A direct review must name the exact resolved version and cover:
 
 - upstream changelog/API changes and security history;
-- project MSRV (Rust 1.85.1), Node engines and Windows/macOS/Linux support;
+- project MSRV (Rust 1.93), Node engines and Windows/macOS/Linux support;
 - feature/default-feature changes, optional dependencies, scripts and native code;
 - license, source provenance, notice/source-distribution obligations;
 - tests and all three platform CI builds before merging.

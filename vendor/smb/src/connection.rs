@@ -117,13 +117,13 @@ impl Connection {
 
         log::info!(
             "Connecting to {} (at {actual_connect_address})...",
-            &self.server_name,
+            self.server_name,
         );
         transport
             .connect(&self.server_name, actual_connect_address)
             .await?;
 
-        log::info!("Connected to {}. Negotiating.", &self.server_name);
+        log::info!("Connected to {}. Negotiating.", self.server_name);
         self._negotiate(transport, self.config.smb2_only_negotiate)
             .await?;
 
@@ -325,7 +325,7 @@ impl Connection {
         log::trace!(
             "Negotiated SMB results: dialect={:?}, state={:?}",
             dialect_rev,
-            &negotiation
+            negotiation
         );
 
         let preauth_hash = if dialect_impl.preauth_hash_supported() {
@@ -657,24 +657,24 @@ impl ConnectionMessageHandler {
 
     #[maybe_async]
     async fn process_sequence_incoming(&self, msg: &IncomingMessage) -> crate::Result<()> {
-        if let Some(neg) = self.conn_info.get() {
-            if neg.negotiation.caps.large_mtu() {
-                let granted_credits = msg.message.header.credit_request;
-                let charged_credits = msg.message.header.credit_charge;
-                // Update the pool size - return how many EXTRA credits were granted.
-                // also, handle the case where the server granted less credits than charged.
-                if charged_credits > granted_credits {
-                    self.credit_pool
-                        .fetch_sub(charged_credits - granted_credits, Ordering::SeqCst);
-                } else {
-                    self.credit_pool
-                        .fetch_add(granted_credits - charged_credits, Ordering::SeqCst);
-                }
-
-                // Return the credits to the pool.
-                self.curr_credits.add_permits(granted_credits as usize);
-                return Ok(());
+        if let Some(neg) = self.conn_info.get()
+            && neg.negotiation.caps.large_mtu()
+        {
+            let granted_credits = msg.message.header.credit_request;
+            let charged_credits = msg.message.header.credit_charge;
+            // Update the pool size - return how many EXTRA credits were granted.
+            // also, handle the case where the server granted less credits than charged.
+            if charged_credits > granted_credits {
+                self.credit_pool
+                    .fetch_sub(charged_credits - granted_credits, Ordering::SeqCst);
+            } else {
+                self.credit_pool
+                    .fetch_add(granted_credits - charged_credits, Ordering::SeqCst);
             }
+
+            // Return the credits to the pool.
+            self.curr_credits.add_permits(granted_credits as usize);
+            return Ok(());
         }
 
         // Default case: return a single credit to the pool.
@@ -788,10 +788,10 @@ impl MessageHandler for ConnectionMessageHandler {
         let msg = self.worker.get().unwrap().receive(&options).await?;
 
         // Command matching (if needed).
-        if let Some(cmd) = options.cmd {
-            if msg.message.header.command != cmd {
-                return Err(Error::UnexpectedMessageCommand(msg.message.header.command));
-            }
+        if let Some(cmd) = options.cmd
+            && msg.message.header.command != cmd
+        {
+            return Err(Error::UnexpectedMessageCommand(msg.message.header.command));
         }
 
         // Direction matching.

@@ -30,9 +30,23 @@ impl client::Handler for ClientHandler {
 
     async fn check_server_key(
         &mut self,
-        server_public_key: &russh::keys::PublicKey,
+        server_public_key: &russh::keys::PublicKeyOrCertificate,
     ) -> Result<bool, Self::Error> {
-        let verdict = hostkey::check(&self.id, server_public_key);
+        // A host certificate would have to be checked against a CA, and
+        // hortcmd's trust stores hold host keys. russh 0.53 never offered
+        // this callback a certificate at all, so refusing one keeps the
+        // guarantee the trust stores actually make instead of widening it.
+        let verdict = match server_public_key {
+            russh::keys::PublicKeyOrCertificate::PublicKey { key, .. } => {
+                hostkey::check(&self.id, key)
+            }
+            russh::keys::PublicKeyOrCertificate::Certificate(_) => {
+                Err(AppError::new(code::SECURITY_HOST_KEY_UNKNOWN)
+                    .with("host", &self.id.host)
+                    .provider("sftp")
+                    .detail("the server presented a host certificate, which is not trusted"))
+            }
+        };
         // Only a host we already trust may continue; everything else
         // aborts the handshake *before* any authentication method runs.
         let trusted = matches!(verdict, Ok(Decision::Trusted));
@@ -181,7 +195,12 @@ async fn authenticate_agent(
             .action(ErrorAction::Authenticate)
             .detail("ssh-agent offers no keys"));
     }
-    for key in identities {
+    for identity in identities {
+        // Only plain public keys are offered: a certificate identity needs a
+        // CA-aware method, which this client does not use (see `check_server_key`).
+        let russh::keys::agent::AgentIdentity::PublicKey { key, .. } = identity else {
+            continue;
+        };
         let result = handle
             .authenticate_publickey_with(user, key, None, &mut agent)
             .await
