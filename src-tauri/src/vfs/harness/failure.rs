@@ -83,7 +83,7 @@ fn harness_survives_a_server_dying_mid_copy() {
     // the most direct way.
     let name = "sftp";
     let p = h.connect(name);
-    let root = h.service(name).root.trim_end_matches('/').to_string();
+    let root = h.service(name).prefix().to_string();
     let dir = format!("{}/work/interrupt", root);
     let _ = p.remove_dir_all(
         &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
@@ -175,7 +175,7 @@ fn harness_direct_mode_reports_an_interrupted_copy() {
 
     let name = "webdav";
     let p = h.connect(name);
-    let root = h.service(name).root.trim_end_matches('/').to_string();
+    let root = h.service(name).prefix().to_string();
     let dir = format!("{}/work/interrupt-direct", root);
     let _ = p.remove_dir_all(
         &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
@@ -317,7 +317,10 @@ fn harness_rejects_an_untrusted_certificate() {
     // With the anchor: the three TLS services answer.
     for name in ["ftps", "ftpsi", "webdavs"] {
         let p = h.connect(name);
-        let root = h.service(name).root.trim_end_matches('/');
+        // A root of "/" trims to nothing, and the empty string is not a
+        // listable address — it fails validation before TLS trust is
+        // exercised at all (ticket 379).
+        let root = h.service(name).dir();
         p.list(root)
             .unwrap_or_else(|e| panic!("{} with the harness CA: {}", name, e));
         println!("  {} verified against the harness CA", name);
@@ -605,11 +608,8 @@ fn harness_stalled_ftp_and_webdav_operations_time_out() {
             started.elapsed() < Duration::from_secs(8),
             "{name} listing timeout"
         );
-        let path = crate::vfs::StreamPath::remote(&format!(
-            "{}/tree/readme.txt",
-            service.root.trim_end_matches('/')
-        ))
-        .unwrap();
+        let path = crate::vfs::StreamPath::remote(&format!("{}/tree/readme.txt", service.prefix()))
+            .unwrap();
         let started = Instant::now();
         assert!(
             provider.open_read(&path).is_err(),

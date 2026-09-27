@@ -34,7 +34,7 @@ fn harness_mcp_reads_live_remote_and_refuses_closed_connection() {
             .iter()
             .find(|entry| !entry.dir && entry.size < 1024)
             .expect("seeded small file");
-        let path = format!("{}/{}", root.trim_end_matches('/'), file.path);
+        let path = format!("{}/{}", root, file.path);
         let read = tools::call_session(
             "harness",
             "harness",

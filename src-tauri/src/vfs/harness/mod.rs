@@ -70,6 +70,27 @@ pub(crate) struct Service {
     pub seed: Vec<SeedEntry>,
 }
 
+impl Service {
+    /// The root as a *prefix*, for building `{prefix}/tree/readme.txt`.
+    /// A root of `"/"` trims to nothing, which is exactly right here.
+    pub fn prefix(&self) -> &str {
+        self.root.trim_end_matches('/')
+    }
+
+    /// The root as a *path*, for handing it to a provider. A root of
+    /// `"/"` must stay `"/"`: the empty string is not an address, and
+    /// `vfs-location` rejects it with `validation.badInput` before the
+    /// provider is ever asked (ticket 379).
+    pub fn dir(&self) -> &str {
+        let prefix = self.prefix();
+        if prefix.is_empty() {
+            "/"
+        } else {
+            prefix
+        }
+    }
+}
+
 /// The whole run.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -134,7 +155,7 @@ impl Harness {
     /// The address of the seeded tree on one of the servers.
     pub fn address(&self, name: &str) -> String {
         let profile = self.profile(name);
-        let root = self.service(name).root.trim_end_matches('/');
+        let root = self.service(name).prefix();
         format!(
             "{}://{}{}",
             profile.scheme(),
