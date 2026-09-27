@@ -25,7 +25,7 @@ use smb::{
     Client, ClientConfig, CreateOptions, FileAccessMask, FileAttributes,
     FileIdBothDirectoryInformation, FileRenameInformation, UncPath,
 };
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::sync::{Arc, Mutex};
 
@@ -65,7 +65,7 @@ pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Pro
         client,
         user,
         password,
-        connected: Mutex::new(HashSet::new()),
+        connected: AttachGates::default(),
     };
 
     // Probe: connecting the start path's share (or listing the shares)
@@ -106,7 +106,54 @@ pub struct SmbProvider {
     user: String,
     password: String,
     /// Shares that have already been attached on this connection.
-    connected: Mutex<HashSet<String>>,
+    connected: AttachGates,
+}
+
+/// One attach gate per share, so a share is tree-connected exactly once
+/// even when two operations reach it at the same time (ticket 339).
+///
+/// The map lock is only held while a gate is looked up; the gate itself is
+/// held across the connect. Two operations on the *same* share therefore
+/// serialize — the second finds the share already attached and returns —
+/// while two operations on *different* shares still attach concurrently,
+/// which is what a remote→remote copy on one server needs.
+#[derive(Default)]
+struct AttachGates {
+    gates: Mutex<HashMap<String, Arc<Mutex<bool>>>>,
+}
+
+impl AttachGates {
+    fn gate(&self, share: &str) -> Arc<Mutex<bool>> {
+        self.gates
+            .lock()
+            .unwrap()
+            .entry(share.to_string())
+            .or_default()
+            .clone()
+    }
+
+    /// Runs `connect` unless this share is already attached.
+    fn attach(&self, share: &str, connect: impl FnOnce() -> AppResult<()>) -> AppResult<()> {
+        let gate = self.gate(share);
+        let mut attached = gate.lock().unwrap();
+        if *attached {
+            return Ok(());
+        }
+        connect()?;
+        *attached = true;
+        Ok(())
+    }
+
+    /// Any share known to be attached, for the health probe. Never waits on
+    /// a gate: an in-flight connect is not an answer about an existing one.
+    fn any_attached(&self) -> Option<String> {
+        self.gates
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|(_, gate)| gate.try_lock().is_ok_and(|attached| *attached))
+            .map(|(share, _)| share.clone())
+    }
 }
 
 /// Marker for the hidden IPC$ share in the `connected` set (it is
@@ -151,20 +198,14 @@ fn unix_secs(t: impl Into<std::time::SystemTime>) -> u64 {
 impl SmbProvider {
     /// Attaches a share once per connection.
     fn ensure_share(&self, share: &str) -> AppResult<()> {
-        {
-            let done = self.connected.lock().unwrap();
-            if done.contains(share) {
-                return Ok(());
-            }
-        }
-        let unc = UncPath::new(&self.server)
-            .and_then(|u| u.with_share(share))
-            .map_err(|e| AppError::from(format!("Ungültiger SMB-Pfad: {}", e)))?;
-        self.client
-            .share_connect(&unc, &self.user, self.password.clone())
-            .map_err(|e| AppError::from(format!("Share '{}' nicht erreichbar: {}", share, e)))?;
-        self.connected.lock().unwrap().insert(share.to_string());
-        Ok(())
+        self.connected.attach(share, || {
+            let unc = UncPath::new(&self.server)
+                .and_then(|u| u.with_share(share))
+                .map_err(|e| AppError::from(format!("Ungültiger SMB-Pfad: {}", e)))?;
+            self.client
+                .share_connect(&unc, &self.user, self.password.clone())
+                .map_err(|e| AppError::from(format!("Share '{}' nicht erreichbar: {}", share, e)))
+        })
     }
 
     /// UNC path for a provider path (share must be attached first).
@@ -186,15 +227,11 @@ impl SmbProvider {
     fn shares(&self, budget: &mut ListingBudget) -> AppResult<Vec<DirEntry>> {
         // Enumerating shares talks to the `srvsvc` named pipe, which lives
         // on the hidden IPC$ share — that has to be attached first.
-        {
-            let mut done = self.connected.lock().unwrap();
-            if !done.contains(IPC_SHARE) {
-                self.client
-                    .ipc_connect(&self.server, &self.user, self.password.clone())
-                    .map_err(|e| AppError::from(format!("IPC$ nicht erreichbar: {}", e)))?;
-                done.insert(IPC_SHARE.to_string());
-            }
-        }
+        self.connected.attach(IPC_SHARE, || {
+            self.client
+                .ipc_connect(&self.server, &self.user, self.password.clone())
+                .map_err(|e| AppError::from(format!("IPC$ nicht erreichbar: {}", e)))
+        })?;
         // Not every server accepts the RPC transfer syntax the client
         // proposes (Samba, for instance, rejects the bind) — say what to
         // do instead of surfacing a raw protocol error.
@@ -314,7 +351,7 @@ impl Provider for SmbProvider {
     fn health_check(&self, _timeout: std::time::Duration) -> io::Result<super::Health> {
         // The connection timeout was captured from this profile at connect.
         // Use an already attached share: a health probe must not create a login.
-        let share = self.connected.lock().unwrap().iter().next().cloned();
+        let share = self.connected.any_attached();
         let Some(share) = share else {
             return Ok(super::Health::Unsupported);
         };
@@ -685,8 +722,46 @@ impl Drop for SmbWriter {
 
 #[cfg(test)]
 mod tests {
-    use super::{child_action, split_share, ChildAction};
+    use super::{child_action, split_share, AttachGates, ChildAction};
     use crate::commands::fs::dir::DirEntry;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Barrier};
+
+    #[test]
+    fn concurrent_callers_attach_a_share_exactly_once() {
+        let gates = Arc::new(AttachGates::default());
+        let connects = Arc::new(AtomicUsize::new(0));
+        let start = Arc::new(Barrier::new(8));
+        let mut threads = Vec::new();
+        for _ in 0..8 {
+            let (gates, connects, start) = (gates.clone(), connects.clone(), start.clone());
+            threads.push(std::thread::spawn(move || {
+                start.wait();
+                gates.attach("data", || {
+                    connects.fetch_add(1, Ordering::SeqCst);
+                    // Widen the window the old check-then-act version left open.
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                    Ok(())
+                })
+            }));
+        }
+        for t in threads {
+            t.join().unwrap().expect("no caller sees a spurious error");
+        }
+        assert_eq!(connects.load(Ordering::SeqCst), 1);
+        assert_eq!(gates.any_attached().as_deref(), Some("data"));
+    }
+
+    #[test]
+    fn a_failed_attach_is_retried_and_never_marks_the_share_attached() {
+        let gates = AttachGates::default();
+        assert!(gates
+            .attach("data", || Err("offline".to_string().into()))
+            .is_err());
+        assert_eq!(gates.any_attached(), None);
+        assert!(gates.attach("data", || Ok(())).is_ok());
+        assert_eq!(gates.any_attached().as_deref(), Some("data"));
+    }
 
     fn entry(is_dir: bool, is_symlink: bool) -> DirEntry {
         DirEntry {
