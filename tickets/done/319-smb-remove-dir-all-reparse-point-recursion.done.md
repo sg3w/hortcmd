@@ -38,3 +38,25 @@ guard.
   fixture (or a mocked-provider unit test where a real SMB server isn't
   practical) and assert delete does not recurse into it.
 - `npm run test:harness` (SMB), `npm run check`.
+
+## Resolution (2026-09-27)
+
+`remove_dir_all` no longer asks `stat` whether a child is a directory — `stat`
+resolves the reparse point, which is exactly what makes `a/link -> a` recurse
+forever. It now walks `dir_entries` and classifies each child from its
+link-level attributes via the pure `child_action` helper: a plain directory is
+descended into, a plain file is unlinked, and any entry carrying
+`reparse_point()` is deleted as the link itself through
+`remove_reparse_point`, which opens it with `FILE_OPEN_REPARSE_POINT |
+DELETE_ON_CLOSE` so the server never follows it and the target stays
+untouched. This mirrors how SFTP's `remove_dir_all_async` treats a
+symlink-to-directory. Deleting the connection root (which lists shares, not
+directory entries) now fails with a clear message instead of trying to delete
+shares.
+
+Unit tests over `child_action` assert that a directory reparse point maps to
+`DeleteLink`, never `Descend`, and that plain entries keep their previous
+handling. A real self-referential junction needs an SMB server, so the
+protocol-harness fixture stays for the native SMB verification tickets.
+
+Validation: `npm run check` passed on macOS.
