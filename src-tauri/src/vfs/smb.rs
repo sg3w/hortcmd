@@ -17,7 +17,7 @@
 use super::listing::{self, ListingBudget};
 use super::{Provider, Stat};
 use crate::commands::fs::dir::{DirEntry, DirListing};
-use crate::errors::{AppError, AppResult};
+use crate::errors::{code, AppError, AppResult};
 use crate::net::session::Profile;
 use smb::binrw_util::sized_string::SizedWideString;
 use smb::resource::{FileCreateArgs, Resource};
@@ -233,16 +233,16 @@ impl SmbProvider {
                 .map_err(|e| AppError::from(format!("IPC$ nicht erreichbar: {}", e)))
         })?;
         // Not every server accepts the RPC transfer syntax the client
-        // proposes (Samba, for instance, rejects the bind) — say what to
-        // do instead of surfacing a raw protocol error.
+        // proposes (Samba, for instance, rejects the bind). This needs its
+        // own code, not the generic internal error: the guidance is the
+        // whole point of the message, and `.detail` is never displayed
+        // (ticket 341). The raw protocol error stays in the diagnostics.
         let shares = self.client.list_shares(&self.server).map_err(|e| {
-            format!(
-                "Shares konnten nicht aufgelistet werden ({}). \
-                 Dieser Server unterstützt die Share-Auflistung nicht — \
-                 bitte im Verbindungsprofil einen Startpfad mit Share angeben, \
-                 z. B. /Freigabe.",
-                e
-            )
+            AppError::new(code::NET_SHARE_LISTING_UNSUPPORTED)
+                .provider("smb")
+                .op("list")
+                .action(crate::errors::ErrorAction::Unsupported)
+                .detail(e)
         })?;
         let mut entries = Vec::new();
         for share in &shares {

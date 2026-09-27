@@ -272,6 +272,7 @@ pub mod code {
     pub const NET_NO_PROFILE: &str = "net.noProfile";
     pub const NET_UNSUPPORTED_PROTOCOL: &str = "net.unsupportedProtocol";
     pub const NET_NO_SHELL: &str = "net.noShell";
+    pub const NET_SHARE_LISTING_UNSUPPORTED: &str = "net.shareListingUnsupported";
     /// The TLS handshake itself failed — an untrusted or expired
     /// certificate, or an unreadable extra CA bundle (TICKET-038).
     pub const NET_TLS_PROTOCOL: &str = "net.tlsProtocol";
@@ -352,6 +353,7 @@ pub mod code {
         NET_NO_PROFILE,
         NET_UNSUPPORTED_PROTOCOL,
         NET_NO_SHELL,
+        NET_SHARE_LISTING_UNSUPPORTED,
         NET_TLS_PROTOCOL,
         NET_CERTIFICATE_EXPIRED,
         NET_CERTIFICATE_FUTURE,

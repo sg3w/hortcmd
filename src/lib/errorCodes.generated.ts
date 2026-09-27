@@ -47,6 +47,7 @@ export const ERROR_CODES = [
   "net.noProfile",
   "net.unsupportedProtocol",
   "net.noShell",
+  "net.shareListingUnsupported",
   "net.tlsProtocol",
   "net.certificateExpired",
   "net.certificateFuture",

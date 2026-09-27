@@ -31,3 +31,23 @@ of writing it.
   error is the dedicated code with the actionable guidance visible, not the
   generic internal-error fallback.
 - `npm run test:harness` (SMB), `npm run check`.
+
+## Resolution (2026-09-27)
+
+The share-enumeration failure has its own code, `net.shareListingUnsupported`,
+instead of a prose `String` that `From<String>` turned into
+`internal.unexpected` with the guidance buried in the diagnostics-only
+`.detail`. `shares()` now builds
+`AppError::new(code::NET_SHARE_LISTING_UNSUPPORTED).provider("smb").op("list")
+.action(ErrorAction::Unsupported).detail(e)`, so the raw protocol error stays
+where diagnostics want it and the actionable sentence — set a start path that
+includes a share, e.g. /Freigabe — is the displayed message, translated in both
+languages like every other code.
+
+The dedicated code is in `errors::code::ALL`, so the generated
+`errorCodes.generated.ts` and the translation test cover it; a Samba server
+rejecting the RPC bind now reaches the user with the guidance rather than the
+generic internal-error fallback. Asserting that end to end needs a server that
+rejects share enumeration, which stays with the SMB harness tickets.
+
+Validation: `npm run check` passed on macOS.
