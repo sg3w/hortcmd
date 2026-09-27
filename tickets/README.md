@@ -2,7 +2,7 @@
 
 All tickets below 100 and tickets 100–110 have been completed.
 Tickets 125–126, 128, 131, 134, 137 and the discovered issues 300–301 and 303–316 are also complete. There are
-**25 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
+**24 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
 issues 317–381 (excluding completed tickets listed below). Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
@@ -284,9 +284,11 @@ blocked until they have a disposition:
 - [376](376-replace-unmaintained-proc-macro-error.md): `proc-macro-error@1.0.4`,
   unmaintained, reached through the Linux GTK macro crates. Untouched — it needs a
   Linux build with real GTK/WebKit prerequisites.
-- [380](380-rsa-marvin-successor-version.md): `rsa@0.10.0-rc.18`. Ticket 373
-  removed both of its originally recorded pairs and traced the remaining
-  exposure; this successor pair has no fix and no exception, by design.
+- [380](done/380-rsa-marvin-successor-version.done.md): `rsa@0.10.0-rc.18`.
+  Resolved 2026-09-27: SSH RSA signing was moved to AWS-LC, which leaves no
+  reachable RSA private-key operation in the crate, and that control earns the
+  gate's single bounded exception (expiring 2026-12-27). One finding still
+  blocks release — 376's.
 
 Ticket 372 raised the declared MSRV from 1.85.1 to **1.93** deliberately: the
 fixed releases for the quick-xml, suppaftp, time and urlpattern findings, and the

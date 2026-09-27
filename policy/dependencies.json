@@ -2182,6 +2182,20 @@
       "expires": "2026-12-24"
     },
     {
+      "kind": "direct",
+      "key": "cargo:aws-lc-rs@1.18.1",
+      "owner": "hortcmd maintainers",
+      "reason": "Added by ticket 380 to sign SSH RSA public-key authentication with AWS-LC instead of the non-constant-time `rsa` crate. Already in the locked graph as russh's default backend, so this adds no crate, no version and no native build; the install and native reviews for this exact version already apply.",
+      "expires": "2026-12-24",
+      "checklist": {
+        "changelog": "1.18.1 as already locked via russh 0.63.3; no version change",
+        "security": "AWS-LC is the FIPS-validated BoringSSL derivative and blinds RSA private-key operations; no open RustSec advisory for aws-lc-rs or aws-lc-sys at these versions in the pinned database",
+        "msrv": "Rust 1.93 CI; aws-lc-rs 1.18 requires 1.63",
+        "platforms": "Windows/macOS/Linux CI; the aws-lc-sys build path is unchanged because russh already selects it",
+        "features": "Default features only, identical to russh's selection \u2014 no `fips`, no `unstable`"
+      }
+    },
+    {
       "kind": "install",
       "key": "cargo:aws-lc-rs@1.18.1",
       "fingerprint": "b281d307588d634de920874890732659e2e7672f72b5e10e81badc1a8a83621e",
@@ -3494,7 +3508,15 @@
       "expires": "2026-12-24"
     }
   ],
-  "advisoryExceptions": [],
+  "advisoryExceptions": [
+    {
+      "key": "cargo:rsa@0.10.0-rc.18:RUSTSEC-2023-0071",
+      "owner": "hortcmd maintainers",
+      "reason": "RUSTSEC-2023-0071 (Marvin) has no patched `rsa` release: `patched = []` is intentional upstream, and 0.9.10 and 0.10.0-rc.18 are both affected. The crate cannot leave the graph without losing RSA host keys (russh/ssh-key) and the SMB stack (sspi/picky). Ticket 380 records this disposition; ticket 373 records the reachability analysis.",
+      "control": "Ticket 380 moved the one reachable RSA private-key operation out of this crate: SSH public-key authentication with an RSA key is signed by AWS-LC (net/ssh.rs::RsaSigner), whose RSA is blinded, and ssh-agent signing never entered the crate. What remains inside `rsa` is key-file parsing and verification of a server's RSA host key \u2014 neither involves a private key, so neither can leak one \u2014 plus sspi/picky's PKINIT/PKU2U code, which hortcmd's password-only SMB path does not enter. Enforced by net::ssh::tests::rsa_signatures_verify_and_carry_the_negotiated_algorithm and by vfs::harness::conformance::harness_authenticates_with_client_keys against a real OpenSSH server.",
+      "expires": "2026-12-27"
+    }
+  ],
   "externalComponents": [
     {
       "name": "Windows system APIs / WebView2",

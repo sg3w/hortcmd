@@ -2398,6 +2398,7 @@ name = "hortcmd"
 version = "0.1.0"
 dependencies = [
  "archive-budget",
+ "aws-lc-rs",
  "base64 0.22.1",
  "cap-std",
  "dirs 5.0.1",

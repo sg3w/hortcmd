@@ -24,6 +24,7 @@ services:
     volumes:
       - "${RUN_DIR}/data/sftp:/data"
       - "${RUN_DIR}/secrets/ssh_host_ed25519_key:/run/secrets/ssh_host_ed25519_key:ro"
+      - "${RUN_DIR}/secrets/authorized_keys:/run/secrets/authorized_keys:ro"
     healthcheck:
       test: ["CMD", "sh", "-c", "nc -z 127.0.0.1 22"]
       interval: 1s

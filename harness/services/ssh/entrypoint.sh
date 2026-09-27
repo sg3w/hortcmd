@@ -11,6 +11,11 @@ if ! id "$HARNESS_USER" >/dev/null 2>&1; then
   echo "$HARNESS_USER:$HARNESS_PASSWORD" | chpasswd
 fi
 mkdir -p "/home/$HARNESS_USER/.ssh"
+# StrictModes wants the file owned by the account and unreadable by
+# anyone else, which a read-only bind mount cannot be — so it is copied
+# in, exactly like the host key below.
+install -m 600 -o "$HARNESS_USER" /run/secrets/authorized_keys \
+  "/home/$HARNESS_USER/.ssh/authorized_keys"
 chown -R "$HARNESS_USER" "/home/$HARNESS_USER"
 chmod 700 "/home/$HARNESS_USER/.ssh"
 
