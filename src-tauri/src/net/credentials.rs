@@ -26,7 +26,7 @@
 // ============================================================
 
 use crate::errors::{code, AppError, AppResult, ErrorAction};
-use keepass::db::{fields, Entry as KpEntry, Group, Times};
+use keepass::db::{fields, EntryId, GroupId, GroupMut, Times};
 use keepass::{Database, DatabaseKey};
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
@@ -463,24 +463,29 @@ impl KeepassStore {
 impl CredentialStore for KeepassStore {
     fn get(&self, id: &str) -> AppResult<Option<String>> {
         self.with_session(|s| {
-            Ok(find_entry(&s.db.root, id).and_then(|e| e.get_password().map(str::to_string)))
+            Ok(find_entry(&s.db, id)
+                .and_then(|id| s.db.entry(id))
+                .and_then(|e| e.get_password().map(str::to_string)))
         })
     }
 
     fn set(&self, id: &str, secret: &str) -> AppResult<()> {
         self.with_session(|s| {
-            match find_entry_mut(&mut s.db.root, id) {
-                Some(entry) => {
+            match find_entry(&s.db, id) {
+                // An existing entry is updated where the user filed it.
+                Some(found) => {
+                    let mut entry = s.db.entry_mut(found).ok_or_else(missing_entry)?;
                     entry.set_protected(fields::PASSWORD, secret);
                     entry.times.last_modification = Some(Times::now());
                 }
                 None => {
-                    let mut entry = KpEntry::new();
-                    entry.icon_id = Some(0);
+                    let group = own_group(&mut s.db);
+                    let mut group = s.db.group_mut(group).ok_or_else(missing_entry)?;
+                    let mut entry = group.add_entry();
+                    entry.set_icon_builtin(0);
                     entry.set_unprotected(fields::TITLE, id);
                     entry.set_protected(fields::PASSWORD, secret);
                     entry.set_unprotected(fields::NOTES, "hortcmd: Verbindungs-Zugangsdaten");
-                    group_mut(&mut s.db.root).entries.push(entry);
                 }
             }
             write_atomic(&s.path, &s.db, s.key()?)
@@ -491,9 +496,10 @@ impl CredentialStore for KeepassStore {
         self.with_session(|s| {
             // Removing a missing entry is not an error — and it must not
             // rewrite the file either.
-            if !remove_entry(&mut s.db.root, id) {
+            let Some(found) = find_entry(&s.db, id) else {
                 return Ok(());
-            }
+            };
+            s.db.entry_mut(found).ok_or_else(missing_entry)?.remove();
             write_atomic(&s.path, &s.db, s.key()?)
         })
     }
@@ -510,7 +516,7 @@ fn new_database() -> Database {
     use keepass::db::MemoryProtection;
 
     let now = Times::now();
-    let mut db = Database::new(Default::default());
+    let mut db = Database::new();
     db.meta.generator = Some("hortcmd".to_string());
     db.meta.database_name = Some("hortcmd".to_string());
     db.meta.database_name_changed = Some(now);
@@ -533,14 +539,14 @@ fn new_database() -> Database {
     db.meta.history_max_items = Some(10);
     db.meta.history_max_size = Some(6 * 1024 * 1024);
     db.meta.settings_changed = Some(now);
-    decorate_group(&mut db.root);
+    decorate_group(&mut db.root_mut());
     db
 }
 
 /// Fills the fields KeePassXC expects to be present on a group.
-fn decorate_group(group: &mut Group) {
+fn decorate_group(group: &mut GroupMut<'_>) {
     group.notes = Some(String::new());
-    group.icon_id = Some(48);
+    group.set_icon_builtin(48);
     group.enable_autotype = Some(true);
     group.enable_searching = Some(true);
     group.is_expanded = true;
@@ -629,43 +635,31 @@ fn write_atomic(path: &Path, db: &Database, key: DatabaseKey) -> AppResult<()> {
 }
 
 /// hortcmd's own group, created on first write. Entries the user filed
-/// elsewhere are still found by the lookups below (KeePassXC interop).
-fn group_mut(root: &mut Group) -> &mut Group {
-    if root.group_by_name(KP_GROUP).is_none() {
-        let mut group = Group::new(KP_GROUP);
-        decorate_group(&mut group);
-        root.groups.push(group);
+/// elsewhere are still found by the lookup below (KeePassXC interop).
+fn own_group(db: &mut Database) -> GroupId {
+    if let Some(group) = db.root().group_by_name(KP_GROUP) {
+        return group.id();
     }
-    root.group_by_name_mut(KP_GROUP)
-        .expect("group just inserted")
+    let mut root = db.root_mut();
+    let mut group = root.add_group();
+    group.name = KP_GROUP.to_string();
+    decorate_group(&mut group);
+    group.id()
 }
 
-/// Depth-first lookup by entry title across the whole tree.
-fn find_entry<'a>(group: &'a Group, title: &str) -> Option<&'a KpEntry> {
-    if let Some(entry) = group.entry_by_name(title) {
-        return Some(entry);
-    }
-    group.groups.iter().find_map(|g| find_entry(g, title))
+/// Lookup by entry title across the whole database. Entries live in one
+/// flat map, so a single pass covers every group — including the ones the
+/// user filed credentials in themselves.
+fn find_entry(db: &Database, title: &str) -> Option<EntryId> {
+    db.iter_all_entries()
+        .find(|entry| entry.get_title() == Some(title))
+        .map(|entry| entry.id())
 }
 
-fn find_entry_mut<'a>(group: &'a mut Group, title: &str) -> Option<&'a mut KpEntry> {
-    if group.entry_by_name(title).is_some() {
-        return group.entry_by_name_mut(title);
-    }
-    group
-        .groups
-        .iter_mut()
-        .find_map(|g| find_entry_mut(g, title))
-}
-
-/// Removes the entry wherever it sits; `true` when one was removed.
-fn remove_entry(group: &mut Group, title: &str) -> bool {
-    let before = group.entries.len();
-    group.entries.retain(|e| e.get_title() != Some(title));
-    if group.entries.len() != before {
-        return true;
-    }
-    group.groups.iter_mut().any(|g| remove_entry(g, title))
+/// An id that came out of `find_entry` or `own_group` and no longer
+/// resolves means the database was mutated behind our back.
+fn missing_entry() -> AppError {
+    AppError::new(code::CRED_STORE).action(ErrorAction::Report)
 }
 
 // ---------- Commands ----------
@@ -874,13 +868,15 @@ pub(crate) mod tests {
     fn keepass_finds_entries_outside_our_own_group() {
         let (path, cfg) = kdbx_config("interop");
         // Mimic KeePassXC: an entry sitting in a foreign group.
-        let mut db = Database::new(Default::default());
-        let mut foreign = Group::new("Internet");
-        let mut entry = KpEntry::new();
-        entry.set_unprotected(fields::TITLE, "c1");
-        entry.set_protected(fields::PASSWORD, "from-keepassxc");
-        foreign.entries.push(entry);
-        db.root.groups.push(foreign);
+        let mut db = Database::new();
+        {
+            let mut root = db.root_mut();
+            let mut foreign = root.add_group();
+            foreign.name = "Internet".to_string();
+            let mut entry = foreign.add_entry();
+            entry.set_unprotected(fields::TITLE, "c1");
+            entry.set_protected(fields::PASSWORD, "from-keepassxc");
+        }
         write_atomic(&path, &db, database_key("master", None).unwrap()).unwrap();
 
         let s = KeepassStore::default();
@@ -893,10 +889,10 @@ pub(crate) mod tests {
             database_key("master", None).unwrap(),
         )
         .unwrap();
-        assert!(reopened.root.group_by_name(KP_GROUP).is_none());
+        assert!(reopened.root().group_by_name(KP_GROUP).is_none());
         assert_eq!(
             reopened
-                .root
+                .root()
                 .group_by_name("Internet")
                 .unwrap()
                 .entry_by_name("c1")
@@ -1085,9 +1081,10 @@ pub(crate) mod tests {
         assert!(db.meta.last_top_visible_group.is_some());
         assert!(db.meta.history_max_items.is_some());
         assert!(db.meta.history_max_size.is_some());
-        assert_eq!(db.root.icon_id, Some(48));
-        assert!(db.root.enable_autotype.is_some());
-        assert!(db.root.enable_searching.is_some());
+        let root = db.root();
+        assert_eq!(root.icon(), Some(&keepass::db::Icon::BuiltIn(48)));
+        assert!(root.enable_autotype.is_some());
+        assert!(root.enable_searching.is_some());
     }
 
     #[test]
