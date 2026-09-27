@@ -1353,7 +1353,7 @@ npm run check   # fmt → clippy → cargo test → bindings → error codes →
   across all four protocols (**TICKET-031**).
 - **Platforms**: an Ubuntu/macOS/Windows job keeps the `cfg`-gated code (Quick
   Look, Finder tags, Unix rights, trash, terminals) compiling and its portable
-  tests passing; a separate job holds the declared MSRV **1.85** with
+  tests passing; a separate job holds the declared MSRV **1.93** with
   `--locked`.
 - **Protocol tests stay out of pull requests.** They are `#[ignore]`d, take
   minutes, and start containers — more trust than a fork's pull request should
