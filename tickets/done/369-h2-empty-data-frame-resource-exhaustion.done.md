@@ -23,7 +23,7 @@ The locked h2 0.4.15 is pulled in by hyper 1.10.1 and reqwest 0.13.4. The record
 
 Resolve h2 to a non-affected release (the recorded minimum is 0.4.16), inspecting hyper/reqwest constraints rather than forcing an incompatible replacement. Preserve HTTP connection cancellation and resource limits.
 
-- Follow [dependency governance](../docs/dependency-governance.md): update exact
+- Follow [dependency governance](../../docs/dependency-governance.md): update exact
   source/script/direct/duplicate reviews for changed versions, inspect changelogs,
   security history, licenses, features, MSRV and platform support.
 - Keep changes scoped to this remediation. Preserve a release block for any
