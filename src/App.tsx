@@ -4,6 +4,7 @@
 // ============================================================
 
 import { lazy, Suspense, useEffect, useRef, useState, type MouseEvent } from "react";
+import { RowIconSettingsProvider } from "@/components/ui/RowIcon";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useDrives } from "@/store/driveStore";
 import { useDriveFallback } from "@/features/panel/useDriveFallback";
@@ -246,6 +247,10 @@ export default function App() {
   }
 
   return (
+    // One subscription to the icon-relevant settings for the whole tree:
+    // a `RowIcon` per visible row must not subscribe to the persisted
+    // settings store itself (ticket 354).
+    <RowIconSettingsProvider>
     <div className="flex h-full flex-col">
       {/* Anwendungsmenü (TICKET-040) */}
       <MenuBar />
@@ -321,5 +326,6 @@ export default function App() {
       <ConnectionAnnouncements />
       <LazyDialogs />
     </div>
+    </RowIconSettingsProvider>
   );
 }
