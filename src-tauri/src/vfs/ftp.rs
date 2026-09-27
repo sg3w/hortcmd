@@ -652,3 +652,117 @@ mod timeout_tests {
         peer.join().unwrap();
     }
 }
+
+/// CR/LF in a control-channel argument must not become a second command
+/// (ticket 374, RUSTSEC-2026-0271).
+///
+/// A scripted server is the only way to answer the question that matters:
+/// not "does the call fail" but "what did the server actually receive".
+#[cfg(test)]
+mod injection_tests {
+    use super::*;
+    use std::io::{BufRead, BufReader, Write};
+
+    /// Serves one client with a canned reply per verb, and hands back every
+    /// line it read. Codes are the real ones, so a refusal cannot be confused
+    /// with a server that simply answered unexpectedly.
+    fn scripted_server() -> (String, std::thread::JoinHandle<Vec<String>>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        let handle = std::thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_millis(500)))
+                .unwrap();
+            let mut writer = stream.try_clone().unwrap();
+            let mut reader = BufReader::new(stream);
+            writer.write_all(b"220 scripted\r\n").unwrap();
+            let mut seen = Vec::new();
+            let mut line = String::new();
+            while reader.read_line(&mut line).is_ok_and(|n| n > 0) {
+                let command = line.trim_end_matches(['\r', '\n']).to_string();
+                line.clear();
+                let reply: &[u8] = match command.split(' ').next().unwrap_or_default() {
+                    "USER" => b"331 password\r\n",
+                    "PASS" => b"230 logged in\r\n",
+                    "MKD" => b"257 created\r\n",
+                    "RNFR" => b"350 ready for RNTO\r\n",
+                    "QUIT" => b"221 bye\r\n",
+                    _ => b"250 ok\r\n",
+                };
+                seen.push(command);
+                if writer.write_all(reply).is_err() {
+                    break;
+                }
+            }
+            seen
+        });
+        (address, handle)
+    }
+
+    fn assert_refused(result: Result<(), FtpError>) {
+        match result {
+            Err(FtpError::ConnectionError(e)) => {
+                assert_eq!(e.kind(), std::io::ErrorKind::InvalidInput)
+            }
+            other => panic!("an injected argument was accepted: {:?}", other.err()),
+        }
+    }
+
+    #[test]
+    fn crlf_in_an_argument_never_reaches_the_control_channel() {
+        let (address, server) = scripted_server();
+        let mut ftp = RustlsFtpStream::connect(&address).unwrap();
+        ftp.login("hortcmd", "hunter2").unwrap();
+
+        // One per control-channel argument class, each carrying a second
+        // command. Every one of them is rendered by the same gate, so a new
+        // command type cannot reintroduce the hole.
+        assert_refused(ftp.cwd("/tree\r\nDELE important.txt"));
+        assert_refused(ftp.mkdir("new\r\nQUIT"));
+        assert_refused(ftp.rmdir("old\nQUIT"));
+        assert_refused(ftp.rm("a.txt\rQUIT"));
+        assert_refused(ftp.rename("a\r\nQUIT", "b.txt"));
+        assert_refused(ftp.site("CHMOD 777 a\r\nQUIT").map(|_| ()));
+        assert_refused(ftp.custom_command("NOOP\r\nDELE a.txt", &[]).map(|_| ()));
+        assert_refused(ftp.size("a\r\nQUIT").map(|_| ()));
+        assert_refused(ftp.mdtm("a\r\nQUIT").map(|_| ()));
+
+        // A rename whose *destination* carries the injection: RNFR goes out
+        // because it is legitimate, and RNTO is refused before it is written.
+        assert_refused(ftp.rename("a.txt", "b\r\nPORT 127,0,0,1,0,21"));
+
+        // Ordinary arguments, including spaces and non-ASCII, still go out.
+        ftp.cwd("/a folder/Ümlaut-Grüße").unwrap();
+        ftp.mkdir("neuer Ordner").unwrap();
+        ftp.quit().unwrap();
+
+        let seen = server.join().unwrap();
+        assert_eq!(
+            seen,
+            vec![
+                "USER hortcmd".to_string(),
+                "PASS hunter2".to_string(),
+                "RNFR a.txt".to_string(),
+                "CWD /a folder/Ümlaut-Grüße".to_string(),
+                "MKD neuer Ordner".to_string(),
+                "QUIT".to_string(),
+            ],
+            "the control channel must carry no injected command"
+        );
+    }
+
+    #[test]
+    fn crlf_in_credentials_never_reaches_the_control_channel() {
+        let (address, server) = scripted_server();
+        let mut ftp = RustlsFtpStream::connect(&address).unwrap();
+        // The user name is refused before anything is written, so the password
+        // is never sent either.
+        assert_refused(ftp.login("omar\r\nPASS hunter2", "hunter2"));
+        drop(ftp);
+        assert!(
+            server.join().unwrap().is_empty(),
+            "no command may reach a server whose login was refused"
+        );
+    }
+}

@@ -854,7 +854,7 @@ where
 
     /// Write data to stream with command to perform
     fn perform(&mut self, command: Command) -> FtpResult<()> {
-        let command = command.to_string();
+        let command = crate::command::render(&command)?;
         trace!("CC OUT: {}", command.trim_end_matches("\r\n"));
 
         let stream = self.reader.get_mut();
