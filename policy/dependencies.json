@@ -2791,10 +2791,10 @@
     },
     {
       "kind": "install",
-      "key": "cargo:swift-rs@1.0.7",
-      "fingerprint": "4057c98e2e852d51fdcfca832aac7b571f6b351ad159f9eda5db1655f8d0c4d7",
+      "key": "cargo:swift-rs@1.0.8",
+      "fingerprint": "e45c444e496845d3f2a351146bff59aae4975b2280238df1dfaa0c7d1846f38e",
       "owner": "hortcmd maintainers",
-      "reason": "Existing locked Rust build script: compiles native code, generates bindings or configures platform linking. Run only from the checksum-verified source in the CI build environment. Any source/version change invalidates this review.",
+      "reason": "Rust build script: compiles native code, generates bindings or configures platform linking. Run only from the checksum-verified source in the CI build environment. Any source/version change invalidates this review. Version reviewed for ticket 377 (tauri-utils 2.10 drops the rust-unic crates).",
       "expires": "2026-12-24"
     },
     {
@@ -3460,6 +3460,38 @@
       "reason": "Locked compatibility lines retained for the SSH stack and the SMB/SSPI authentication path. Forcing a unification can break protocol/crypto APIs; each version stays advisory-scanned. Remove when upstream version requirements converge.",
       "expires": "2026-12-24",
       "fingerprint": "0.11.0,0.12.0"
+    },
+    {
+      "kind": "license",
+      "key": "cargo:cssparser@0.37.0",
+      "owner": "hortcmd maintainers",
+      "reason": "MPL: unmodified file-level copyleft components; retain notices and make upstream source available via exact package version. CC-BY: caniuse-lite attribution preserved in notices. Applies equally to build/test dependencies.",
+      "expires": "2026-12-24",
+      "fingerprint": "MPL-2.0"
+    },
+    {
+      "kind": "license",
+      "key": "cargo:cssparser-macros@0.7.1",
+      "owner": "hortcmd maintainers",
+      "reason": "MPL: unmodified file-level copyleft components; retain notices and make upstream source available via exact package version. CC-BY: caniuse-lite attribution preserved in notices. Applies equally to build/test dependencies.",
+      "expires": "2026-12-24",
+      "fingerprint": "MPL-2.0"
+    },
+    {
+      "kind": "license",
+      "key": "cargo:selectors@0.38.0",
+      "owner": "hortcmd maintainers",
+      "reason": "MPL: unmodified file-level copyleft components; retain notices and make upstream source available via exact package version. CC-BY: caniuse-lite attribution preserved in notices. Applies equally to build/test dependencies.",
+      "expires": "2026-12-24",
+      "fingerprint": "MPL-2.0"
+    },
+    {
+      "kind": "install",
+      "key": "cargo:selectors@0.38.0",
+      "fingerprint": "8adfa1c298912827b8a28b223b3b874357397ae706e6190acd9bf28cee99114d",
+      "owner": "hortcmd maintainers",
+      "reason": "Rust build script: compiles native code, generates bindings or configures platform linking. Run only from the checksum-verified source in the CI build environment. Any source/version change invalidates this review. Version reviewed for ticket 377 (tauri-utils 2.10 drops the rust-unic crates).",
+      "expires": "2026-12-24"
     }
   ],
   "advisoryExceptions": [],

@@ -2,7 +2,7 @@
 
 All tickets below 100 and tickets 100–110 have been completed.
 Tickets 125–126, 128, 131, 134, 137 and the discovered issues 300–301 and 303–316 are also complete. There are
-**29 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
+**28 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
 issues 317–379 (excluding completed tickets listed below). Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
@@ -157,7 +157,7 @@ CVSS ratings. Tickets 376–377 cover maintenance findings.
 | [374](374-suppaftp-control-channel-command-injection.md) | Prevent FTP control-channel command injection | 1 |
 | [375](done/375-time-parser-stack-exhaustion.done.md) | Remove the time parser stack-exhaustion finding | 1 |
 | [376](376-replace-unmaintained-proc-macro-error.md) | Replace the unmaintained proc-macro-error dependency | 1 |
-| [377](377-replace-unmaintained-unic-dependency-family.md) | Replace the five unmaintained rust-unic crates | 5 |
+| [377](done/377-replace-unmaintained-unic-dependency-family.done.md) | Replace the five unmaintained rust-unic crates | 5 |
 
 Use each ticket’s pinned audit evidence and verification criteria. Refresh the
 audit before implementation; releases remain blocked until all findings have a
