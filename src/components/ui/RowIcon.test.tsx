@@ -1,6 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { RowIcon, iconRequest } from "./RowIcon";
+import { RowIcon, RowIconSettingsProvider, iconRequest } from "./RowIcon";
 import { row } from "@/test/fixtures";
 import { useTauri } from "@/test/tauri";
 import { useSettings } from "@/store/settingsStore";
@@ -46,4 +46,31 @@ it("ignores late answers after navigation and switching to simple mode", async (
   act(() => useSettings.setState({ fileIcons: "simple" }));
   await act(() => vi.advanceTimersByTimeAsync(20));
   expect(view.container.querySelector("img")).toBeNull();
+});
+
+it("does not subscribe to the settings store per row", () => {
+  // Ticket 354: every visible row plus overscan mounts at once, and a
+  // reactive `useSettings` hook in each of them is the pattern that produced
+  // "Cannot update a component while rendering a different component" for
+  // `dialogSizeStore`/`AppDialog`. Without a provider a row reads the store
+  // once and stays put — proof that it holds no subscription of its own.
+  useTauri({ commands: {} });
+  useSettings.setState({ fileIcons: "simple", language: "de" });
+  render(<RowIcon row={row("link", { is_symlink: true })} />);
+  expect(screen.getAllByRole("img", { name: "Symbolischer Link" })).toHaveLength(1);
+  act(() => useSettings.setState({ language: "en" }));
+  expect(screen.getAllByRole("img", { name: "Symbolischer Link" })).toHaveLength(1);
+});
+
+it("still follows a settings change through the provider", () => {
+  useTauri({ commands: {} });
+  useSettings.setState({ fileIcons: "simple", language: "de" });
+  render(
+    <RowIconSettingsProvider>
+      <RowIcon row={row("link", { is_symlink: true })} />
+    </RowIconSettingsProvider>,
+  );
+  expect(screen.getAllByRole("img", { name: "Symbolischer Link" })).toHaveLength(1);
+  act(() => useSettings.setState({ language: "en" }));
+  expect(screen.getAllByRole("img", { name: "Symbolic link" })).toHaveLength(1);
 });

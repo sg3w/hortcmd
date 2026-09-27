@@ -2,7 +2,7 @@
 
 All tickets below 100 and tickets 100–110 have been completed.
 Tickets 125–126, 128, 131, 134, 137 and the discovered issues 300–301 and 303–316 are also complete. There are
-**33 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
+**32 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
 issues 317–377 (excluding completed tickets listed below). Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
@@ -119,7 +119,7 @@ Correctness (backend):
 Correctness (frontend):
 [336](done/336-fill-params-placeholder-resubstitution.done.md), [337](done/337-index-ipc-missing-hastauri-guard.done.md),
 [338](done/338-use-tauri-hastauri-not-reactive.done.md), [348](348-progress-overlay-no-focus-trap.md),
-[354](354-reactive-settings-subscription-bulk-mount.md), [355](done/355-normalize-associations-dead-code.done.md),
+[354](done/354-reactive-settings-subscription-bulk-mount.done.md), [355](done/355-normalize-associations-dead-code.done.md),
 [356](done/356-run-edit-unhandled-rejection.done.md), [357](done/357-run-mkdir-silent-failure.done.md),
 [358](done/358-extract-no-confirm-double-submit-guard.done.md), [359](done/359-rename-preview-case-sensitivity-mismatch.done.md),
 [365](done/365-connections-dialog-no-busy-guard.done.md), [366](done/366-plugins-ui-raw-error-display.done.md),

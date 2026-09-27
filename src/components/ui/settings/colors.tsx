@@ -10,6 +10,7 @@
 import { cn } from "@/lib/cn";
 import { type CustomColorRule, type FileColorDef, type FileColorOverrides, type ThemeMode, customColorId, fileColorDefs, fileColorLabel, fileColorRef, fileColorValue, normalizeColor } from "@/lib/fileColors";
 import { useSettings, useT } from "@/store/settingsStore";
+import type { TransKey } from "@/i18n/dictionaries";
 import {
   ChevronDown,
   ChevronUp,
@@ -24,6 +25,15 @@ const COLOR_GRID = "grid grid-cols-[1fr_3rem_3rem_1.5rem] items-center gap-2";
 
 const iconBtn =
   "flex h-6 w-6 items-center justify-center rounded text-dim hover:bg-header hover:text-text disabled:opacity-30 disabled:hover:bg-transparent";
+
+/**
+ * Translator and store actions are taken once in `ColorsForm` and handed
+ * down. Every row here mounts at the same time, and a row that subscribes
+ * to the persisted settings store itself is the pattern that produced
+ * "Cannot update a component while rendering a different component"
+ * elsewhere in this codebase (ticket 354).
+ */
+type T = (key: TransKey) => string;
 
 function ColorPicker({
   value,
@@ -54,12 +64,13 @@ function ColorRow({
   def,
   overrides,
   onChange,
+  t,
 }: {
   def: FileColorDef;
   overrides: FileColorOverrides;
   onChange: (id: string, theme: ThemeMode, color: string | null) => void;
+  t: T;
 }) {
-  const t = useT();
   const overridden = !!overrides[def.id];
   return (
     <li className={COLOR_GRID}>
@@ -112,13 +123,14 @@ function ColorGroup({
   defs,
   overrides,
   onChange,
+  t,
 }: {
   label: string;
   defs: FileColorDef[];
   overrides: FileColorOverrides;
   onChange: (id: string, theme: ThemeMode, color: string | null) => void;
+  t: T;
 }) {
-  const t = useT();
   if (defs.length === 0) return null;
   return (
     <div className="flex flex-col gap-1">
@@ -140,6 +152,7 @@ function ColorGroup({
             def={def}
             overrides={overrides}
             onChange={onChange}
+            t={t}
           />
         ))}
       </ul>
@@ -152,15 +165,19 @@ function CustomRuleRow({
   rule,
   first,
   last,
+  t,
+  update,
+  remove,
+  move,
 }: {
   rule: CustomColorRule;
   first: boolean;
   last: boolean;
+  t: T;
+  update: (id: string, patch: Partial<CustomColorRule>) => void;
+  remove: (id: string) => void;
+  move: (id: string, delta: number) => void;
 }) {
-  const t = useT();
-  const update = useSettings((s) => s.updateColorRule);
-  const remove = useSettings((s) => s.removeColorRule);
-  const move = useSettings((s) => s.moveColorRule);
   return (
     <li className="flex flex-col gap-2 rounded border border-edge bg-panel-inactive p-2">
       <div className={COLOR_GRID}>
@@ -226,6 +243,9 @@ export function ColorsForm() {
   const resetFileColors = useSettings((s) => s.resetFileColors);
   const customRules = useSettings((s) => s.customColorRules);
   const addColorRule = useSettings((s) => s.addColorRule);
+  const updateColorRule = useSettings((s) => s.updateColorRule);
+  const removeColorRule = useSettings((s) => s.removeColorRule);
+  const moveColorRule = useSettings((s) => s.moveColorRule);
 
   // Whatever the registry holds: a newly registered rule appears here
   // without any change to this component.
@@ -241,12 +261,14 @@ export function ColorsForm() {
           defs={defs.filter((d) => d.kind === "rule")}
           overrides={overrides}
           onChange={setFileColor}
+          t={t}
         />
         <ColorGroup
           label={t("settings.colors.states")}
           defs={defs.filter((d) => d.kind === "state")}
           overrides={overrides}
           onChange={setFileColor}
+          t={t}
         />
         <button
           onClick={resetFileColors}
@@ -279,6 +301,10 @@ export function ColorsForm() {
                 rule={r}
                 first={i === 0}
                 last={i === customRules.length - 1}
+                t={t}
+                update={updateColorRule}
+                remove={removeColorRule}
+                move={moveColorRule}
               />
             ))}
           </ul>
