@@ -257,7 +257,7 @@ Running `npm run test:harness` for ticket 370 showed the protocol harness is
 already red on `main` — 15 of 22 tests fail there — for two reasons that have
 nothing to do with the advisory work:
 
-- [378](378-webdav-collection-trailing-slash-redirect.md): WebDAV collection
+- [378](done/378-webdav-collection-trailing-slash-redirect.done.md): WebDAV collection
   requests are not retried with a trailing slash, so every `mod_dav` server
   that answers `301` breaks listing, stat, mkdir, delete, staging and transfers.
   A product bug, not a harness bug.

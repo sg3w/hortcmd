@@ -22,6 +22,7 @@ use crate::commands::fs::dir::{DirEntry, DirListing};
 use crate::errors::{code, AppError, AppResult};
 use crate::net::session::{runtime, Profile};
 use reqwest_dav::list_cmd::ListEntity;
+use reqwest_dav::re_exports::reqwest::Response;
 use reqwest_dav::{Auth, Client, ClientBuilder, Depth};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
@@ -210,7 +211,181 @@ fn norm(s: &str) -> String {
     }
 }
 
+/// The collection form of a request path: WebDAV addresses a collection
+/// with a trailing slash.
+///
+/// Apache `mod_dav` answers a collection addressed without it with `301`
+/// and a `Location` that only adds the slash — and automatic redirect
+/// following stays off (ticket 047), so every request whose target is
+/// known to be a collection is addressed correctly from the start
+/// (ticket 378).
+fn collection(path: &str) -> String {
+    if path.ends_with('/') {
+        path.to_string()
+    } else {
+        format!("{path}/")
+    }
+}
+
+/// Whether a `3xx` answer may be retried, and against which path.
+///
+/// The only redirect hortcmd follows is the collection delimiter on the
+/// very same resource: same scheme, same host, same port, and a target
+/// path that is the request path plus a trailing slash. Anything else —
+/// another origin, a scheme downgrade, a different port, an unrelated
+/// path — returns `None`, so no credential is ever replayed elsewhere.
+fn slash_redirect(base: &str, request: &str, location: &str) -> Option<String> {
+    use reqwest_dav::re_exports::url::Url;
+
+    let from = Url::parse(&format!(
+        "{}/{}",
+        base.trim_end_matches('/'),
+        request.trim_start_matches('/')
+    ))
+    .ok()?;
+    let to = from.join(location).ok()?;
+    let same_origin = to.scheme() == from.scheme()
+        && to.host_str() == from.host_str()
+        && to.port_or_known_default() == from.port_or_known_default();
+    if !same_origin || to.query().is_some() || to.fragment().is_some() {
+        return None;
+    }
+    if to.path() != collection(from.path()) {
+        return None;
+    }
+    Some(collection(request))
+}
+
+/// Whether a `3xx` that only adds the collection delimiter is followed.
+#[derive(Clone, Copy)]
+enum Redirect {
+    /// Retry the request once against the collection form.
+    Follow,
+    /// Report the redirect — this operation's target is not a collection.
+    Refuse,
+}
+
+/// A redirect that cannot be resolved as a collection delimiter. Reported
+/// as a protocol error instead of leaking a status mismatch as
+/// `internal.unexpected`.
+fn redirect_error(path: &str, status: u16, location: &str) -> AppError {
+    AppError::new(code::NET_PROTOCOL)
+        .op("webdav-redirect")
+        .provider("webdav")
+        .with("path", path)
+        .with("status", status)
+        .detail(format!("HTTP {status} → {location}"))
+}
+
 impl WebdavProvider {
+    /// Sends one request and, for a `3xx`, retries it once against a
+    /// `Location` that only adds the collection delimiter (ticket 378).
+    ///
+    /// `send` is called with the request path, so the retry rebuilds the
+    /// request — headers and body included — for the corrected target.
+    async fn send<F, Fut>(&self, path: &str, redirect: Redirect, send: F) -> AppResult<Response>
+    where
+        F: Fn(String) -> Fut,
+        Fut: std::future::Future<Output = Result<Response, reqwest_dav::Error>>,
+    {
+        let first = send(path.to_string())
+            .await
+            .map_err(|e| AppError::from(format!("{}: {}", path, e)))?;
+        if !first.status().is_redirection() {
+            return Ok(first);
+        }
+        let status = first.status().as_u16();
+        let location = first
+            .headers()
+            .get(reqwest_dav::re_exports::reqwest::header::LOCATION)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_owned();
+        let retry = match redirect {
+            Redirect::Follow => slash_redirect(&self.base, path, &location),
+            Redirect::Refuse => None,
+        }
+        .ok_or_else(|| redirect_error(path, status, &location))?;
+        let second = send(retry.clone())
+            .await
+            .map_err(|e| AppError::from(format!("{}: {}", retry, e)))?;
+        if second.status().is_redirection() {
+            let status = second.status().as_u16();
+            return Err(redirect_error(&retry, status, &location));
+        }
+        Ok(second)
+    }
+
+    /// PROPFIND, driven from the raw response: `reqwest_dav`'s own helper
+    /// turns a redirect into a bare status mismatch, which leaves no way
+    /// to read the `Location` (ticket 378).
+    fn propfind(&self, path: &str, depth: Depth, redirect: Redirect) -> AppResult<Vec<ListEntity>> {
+        runtime().block_on(self.propfind_async(path, depth, redirect))
+    }
+
+    async fn propfind_async(
+        &self,
+        path: &str,
+        depth: Depth,
+        redirect: Redirect,
+    ) -> AppResult<Vec<ListEntity>> {
+        let response = self
+            .send(path, redirect, |target| {
+                let depth = depth.clone();
+                async move { self.client.list_raw(&target, depth).await }
+            })
+            .await?;
+        let status = response.status();
+        if !status.is_success() {
+            return Err(AppError::from(format!(
+                "{}: PROPFIND HTTP {}",
+                path,
+                status.as_u16()
+            )));
+        }
+        let body = response
+            .text()
+            .await
+            .map_err(|e| AppError::from(format!("{}: {}", path, e)))?;
+        let multistatus: reqwest_dav::list_cmd::ListMultiStatus =
+            reqwest_dav::re_exports::serde_xml_rs::from_str(&body)
+                .map_err(|e| AppError::from(format!("{}: {}", path, e)))?;
+        multistatus
+            .responses
+            .into_iter()
+            .map(|response| {
+                ListEntity::try_from(response)
+                    .map_err(|e| AppError::from(format!("{}: {}", path, e)))
+            })
+            .collect()
+    }
+
+    /// One redirect-aware request whose body is not read — MKCOL, DELETE
+    /// and MOVE all answer with a status only.
+    async fn command<F, Fut>(
+        &self,
+        label: &str,
+        path: &str,
+        redirect: Redirect,
+        send: F,
+    ) -> io::Result<()>
+    where
+        F: Fn(String) -> Fut,
+        Fut: std::future::Future<Output = Result<Response, reqwest_dav::Error>>,
+    {
+        let response = self.send(path, redirect, send).await.map_err(to_io)?;
+        if response.status().is_success() {
+            Ok(())
+        } else {
+            Err(io::Error::other(format!(
+                "{} {}: HTTP {}",
+                label,
+                path,
+                response.status()
+            )))
+        }
+    }
+
     /// PROPFIND with depth 0 — metadata of the entry itself.
     /// Entries of one collection, charged to `budget` while the PROPFIND
     /// answer is walked so a fabricated multistatus stops here (ticket 321).
@@ -219,9 +394,12 @@ impl WebdavProvider {
             &crate::vfs::StreamPath::remote(path)?,
             super::Scheme::Webdav,
         )?;
-        let items = runtime()
-            .block_on(self.client.list(&encode_path(path), Depth::Number(1)))
-            .map_err(|e| AppError::from(format!("{}: {}", path, e)))?;
+        // Depth 1 always addresses a collection, so ask for it as one.
+        let items = self.propfind(
+            &collection(&encode_path(path)),
+            Depth::Number(1),
+            Redirect::Follow,
+        )?;
 
         let self_key = norm(&encode_path(path));
         let mut entries = Vec::new();
@@ -273,9 +451,8 @@ impl WebdavProvider {
     }
 
     fn stat_entity(&self, path: &str) -> AppResult<ListEntity> {
-        let items = runtime()
-            .block_on(self.client.list(&encode_path(path), Depth::Number(0)))
-            .map_err(|e| AppError::from(format!("{}: {}", path, e)))?;
+        // Depth 0 may address either kind, so the redirect decides.
+        let items = self.propfind(&encode_path(path), Depth::Number(0), Redirect::Follow)?;
         items
             .into_iter()
             .next()
@@ -288,12 +465,15 @@ impl Provider for WebdavProvider {
         runtime().block_on(async {
             tokio::time::timeout(
                 timeout,
-                self.client
-                    .list(&encode_path(&self.health_path), Depth::Number(0)),
+                self.propfind_async(
+                    &encode_path(&self.health_path),
+                    Depth::Number(0),
+                    Redirect::Follow,
+                ),
             )
             .await
             .map_err(|_| io::Error::from(io::ErrorKind::TimedOut))?
-            .map_err(|e| io::Error::other(e.to_string()))?;
+            .map_err(to_io)?;
             Ok(super::Health::Alive)
         })
     }
@@ -396,7 +576,13 @@ impl Provider for WebdavProvider {
                 continue;
             }
             // Ignore "already exists"; the final check reports real failures.
-            let _ = runtime().block_on(self.client.mkcol(&encode_path(&acc)));
+            // MKCOL creates a collection, so it is addressed as one.
+            let _ = runtime().block_on(self.command(
+                "MKCOL",
+                &collection(&encode_path(&acc)),
+                Redirect::Follow,
+                |target| async move { self.client.mkcol_raw(&target).await },
+            ));
         }
         if self.is_dir(path) {
             Ok(())
@@ -417,46 +603,59 @@ impl Provider for WebdavProvider {
         super::provider_path::validate(to, super::Scheme::Webdav)?;
         use reqwest_dav::re_exports::reqwest::Method;
 
-        let destination = format!("{}{}", self.base, e(to));
-        runtime().block_on(async {
-            let method = Method::from_bytes(b"MOVE").map_err(to_io)?;
-            let response = self
-                .client
-                .start_request(method, &e(from))
-                .await
-                .map_err(to_io)?
-                .header("Destination", destination)
-                // Match the local semantics: never clobber an existing target.
-                .header("Overwrite", "F")
-                .send()
-                .await
-                .map_err(to_io)?;
-            if response.status().is_success() {
-                Ok(())
-            } else {
-                Err(io::Error::other(format!(
-                    "MOVE {} → {}: HTTP {}",
-                    p(from),
-                    p(to),
-                    response.status()
-                )))
-            }
-        })
+        let base = self.base.clone();
+        let target = e(to);
+        runtime().block_on(self.command(
+            "MOVE",
+            &e(from),
+            // A directory is redirected to its collection form; the
+            // destination then names a collection too.
+            Redirect::Follow,
+            |source| {
+                let destination = if source.ends_with('/') {
+                    format!("{}{}", base, collection(&target))
+                } else {
+                    format!("{}{}", base, target)
+                };
+                async move {
+                    let method = Method::from_bytes(b"MOVE")?;
+                    Ok(self
+                        .client
+                        .start_request(method, &source)
+                        .await?
+                        .header("Destination", destination)
+                        // Match the local semantics: never clobber an
+                        // existing target.
+                        .header("Overwrite", "F")
+                        .send()
+                        .await?)
+                }
+            },
+        ))
     }
 
     fn remove_file(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
         super::provider_path::validate(path, super::Scheme::Webdav)?;
-        runtime()
-            .block_on(self.client.delete(&e(path)))
-            .map_err(to_io)
+        // A redirect to the collection form would mean this is a
+        // collection — DELETE there removes a whole tree, so it is
+        // refused rather than followed.
+        runtime().block_on(self.command(
+            "DELETE",
+            &e(path),
+            Redirect::Refuse,
+            |target| async move { self.client.delete_raw(&target).await },
+        ))
     }
 
     fn remove_dir_all(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
         super::provider_path::validate(path, super::Scheme::Webdav)?;
         // DELETE on a collection removes it recursively.
-        runtime()
-            .block_on(self.client.delete(&e(path)))
-            .map_err(to_io)
+        runtime().block_on(self.command(
+            "DELETE",
+            &collection(&e(path)),
+            Redirect::Follow,
+            |target| async move { self.client.delete_raw(&target).await },
+        ))
     }
 
     // ----- Failure-safe transfers (ticket 029) -----
@@ -641,7 +840,8 @@ mod tests {
             let mut reader = BufReader::new(&mut socket);
             let mut line = String::new();
             reader.read_line(&mut line).unwrap();
-            assert!(line.starts_with("PROPFIND /root "));
+            // Depth 1 addresses the collection with its delimiter (ticket 378).
+            assert!(line.starts_with("PROPFIND /root/ "), "{line}");
             let mut length = 0;
             loop {
                 line.clear();
@@ -777,6 +977,74 @@ mod tests {
             let encoded = encode_path(&format!("/tree/{}", name));
             assert_eq!(name_of(&encoded), name, "round trip of {}", name);
         }
+    }
+
+    /// A collection is addressed with its delimiter, and asking twice
+    /// does not add a second one.
+    #[test]
+    fn collection_paths_end_in_one_slash() {
+        assert_eq!(collection("/work"), "/work/");
+        assert_eq!(collection("/work/"), "/work/");
+        assert_eq!(collection("/"), "/");
+        assert_eq!(collection(""), "/");
+    }
+
+    /// The redirect predicate: only the collection delimiter on the very
+    /// same resource is followed. Everything else keeps the credential
+    /// where it was sent (ticket 378).
+    #[test]
+    fn only_a_trailing_slash_on_the_same_origin_is_followed() {
+        let base = "https://dav.test:8443";
+        // The redirect Apache mod_dav actually sends, absolute and relative.
+        assert_eq!(
+            slash_redirect(base, "/work", "https://dav.test:8443/work/"),
+            Some("/work/".to_string())
+        );
+        assert_eq!(
+            slash_redirect(base, "/work", "/work/"),
+            Some("/work/".to_string())
+        );
+        assert_eq!(
+            slash_redirect(base, "/tree/.hidden-dir", "/tree/.hidden-dir/"),
+            Some("/tree/.hidden-dir/".to_string())
+        );
+        // Another host, a scheme downgrade, another port.
+        assert_eq!(
+            slash_redirect(base, "/work", "https://evil.test:8443/work/"),
+            None
+        );
+        assert_eq!(
+            slash_redirect(base, "/work", "http://dav.test:8443/work/"),
+            None
+        );
+        assert_eq!(
+            slash_redirect(base, "/work", "https://dav.test:9443/work/"),
+            None
+        );
+        // Same origin, but not the same resource.
+        assert_eq!(slash_redirect(base, "/work", "/other/"), None);
+        assert_eq!(slash_redirect(base, "/work", "/work/sub/"), None);
+        assert_eq!(slash_redirect(base, "/work", "/work"), None);
+        assert_eq!(slash_redirect(base, "/work", "/"), None);
+        assert_eq!(slash_redirect(base, "/work", "/work/?login=1"), None);
+        assert_eq!(slash_redirect(base, "/work", ""), None);
+        // An encoded name keeps its encoding in the retry path.
+        assert_eq!(
+            slash_redirect(base, "/tree/a%20b", "/tree/a%20b/"),
+            Some("/tree/a%20b/".to_string())
+        );
+    }
+
+    /// A redirect that is not the collection delimiter surfaces as a
+    /// protocol error, not as `internal.unexpected`.
+    #[test]
+    fn an_unresolvable_redirect_is_a_protocol_error() {
+        let error = redirect_error("/work", 302, "https://evil.test/work/");
+        assert!(error.is(code::NET_PROTOCOL));
+        assert_eq!(
+            error.params().get("status").map(String::as_str),
+            Some("302")
+        );
     }
 
     #[test]
