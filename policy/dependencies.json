@@ -3449,9 +3449,9 @@
       "kind": "source",
       "key": "cargo:suppaftp@6.3.0",
       "owner": "hortcmd maintainers",
-      "reason": "Ticket 320: pinned crates.io source with a caller-configured socket API for implicit TLS timeouts. See vendor/suppaftp/HORTCMD-PATCH.md. No dependency, feature or license changes; outstanding advisory remains ticket 374.",
+      "reason": "In-tree reviewed patch of the published suppaftp 6.3.0: the ticket-320 socket entry point and the ticket-374 backport of the RUSTSEC-2026-0271 control-channel CRLF validation. See vendor/suppaftp/HORTCMD-PATCH.md. The exact tree fingerprint prevents unreviewed changes; upstream replacement remains tracked in tickets.",
       "expires": "2026-12-24",
-      "fingerprint": "30eac8f5fb41062ce660c51306a7c262e71610ae01ab762c60143b7d3e9db9f5"
+      "fingerprint": "8c92d54cb0099652094ff473511c0e8f01f52d6dadb1eb0bc11d2d544071304a"
     },
     {
       "kind": "duplicate",

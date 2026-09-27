@@ -197,6 +197,32 @@ impl fmt::Display for ProtectionLevel {
     }
 }
 
+/// The single gate every control-channel line passes through
+/// (hortcmd backport of upstream's RUSTSEC-2026-0271 fix).
+///
+/// A command is rendered as `VERB args\r\n`. A CR or LF *inside* the
+/// arguments therefore ends the line early and turns the remainder into a
+/// second command the server executes in the same authenticated session —
+/// so a user name, a path or a `SITE` argument becomes protocol. TLS does
+/// not help: the injected command is inside the encrypted channel.
+///
+/// Rendering and validating in one place means no call site can forget:
+/// every `perform` in both the sync and the async client goes through here.
+/// Rejection is `InvalidInput`, which surfaces as
+/// [`FtpError::ConnectionError`], matching upstream 10.0.2. As there, a
+/// `Custom` command can no longer carry several CRLF-joined commands.
+pub(crate) fn render(command: &Command) -> Result<String, crate::FtpError> {
+    let line = command.to_string();
+    let body = line.strip_suffix("\r\n").unwrap_or(&line);
+    if body.contains('\r') || body.contains('\n') {
+        return Err(crate::FtpError::ConnectionError(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "FTP command arguments must not contain CR or LF",
+        )));
+    }
+    Ok(line)
+}
+
 #[cfg(test)]
 mod test {
 
@@ -368,6 +394,47 @@ mod test {
                 .as_str(),
             "TEST TEST ABC\r\n"
         );
+    }
+
+    #[test]
+    fn should_render_an_ordinary_command_unchanged() {
+        // Spaces and non-ASCII are ordinary argument content, not injection.
+        for command in [
+            Command::Cwd(String::from("/a folder/Ümlaut-Grüße")),
+            Command::Rename(String::from("a b.txt")),
+            Command::Custom(String::from("SITE CHMOD 644 a.txt")),
+        ] {
+            assert_eq!(render(&command).unwrap(), command.to_string());
+        }
+    }
+
+    #[test]
+    fn should_refuse_cr_or_lf_in_an_argument() {
+        // One case per affected argument class: credentials, paths, rename,
+        // listing, transfer, SITE and custom commands.
+        let injected = [
+            Command::User(String::from("omar\r\nPASS hunter2")),
+            Command::Pass(String::from("hunter2\r\nDELE a.txt")),
+            Command::Cwd(String::from("/a\r\nDELE a.txt")),
+            Command::Mkdir(String::from("a\nDELE a.txt")),
+            Command::Rmdir(String::from("a\rDELE a.txt")),
+            Command::Dele(String::from("a\r\nQUIT")),
+            Command::Rename(String::from("a\r\nPORT 127,0,0,1,0,21")),
+            Command::List(Some(String::from("/a\r\nQUIT"))),
+            Command::Retr(String::from("a\r\nQUIT")),
+            Command::Store(String::from("a\r\nQUIT")),
+            Command::Site(String::from("CHMOD 777 a\r\nQUIT")),
+            Command::Custom(String::from("NOOP\r\nDELE a.txt")),
+        ];
+        for command in injected {
+            let error = render(&command).expect_err("a second command must not be sendable");
+            match error {
+                crate::FtpError::ConnectionError(e) => {
+                    assert_eq!(e.kind(), std::io::ErrorKind::InvalidInput)
+                }
+                other => panic!("unexpected error: {other}"),
+            }
+        }
     }
 
     #[cfg(any(feature = "secure", feature = "async-secure"))]
