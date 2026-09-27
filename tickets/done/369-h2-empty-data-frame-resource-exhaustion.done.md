@@ -47,3 +47,32 @@ Exercise a local HTTP/2 peer sending repeated empty DATA frames to stalled strea
       and security-sensitive duplicate versions.
 - [ ] Follow the per-ticket branch, local commit and merge workflow. Move this
       ticket to `done/` only after its remediation and verification are complete.
+
+## Resolution (2026-09-27)
+
+The advisory was refreshed before implementation (cargo-deny 0.19.5, RustSec
+revision `e2111519ba6d14a5da59a7b2e5c8083ae8a37c01`) and still reported
+`h2@0.4.15 RUSTSEC-2026-0258`. h2 is a transitive dependency only, reached
+through hyper 1.10.1 and reqwest 0.13.4 for the WebDAV/HTTP client; neither
+constrains the patch level, so the locked instance was raised in place with
+`cargo update -p h2 --precise 0.4.19` — the newest release compatible with the
+declared MSRV — which is past the recorded minimum 0.4.16. No other component
+changed: the resolved graph gained and lost no packages, so no direct,
+duplicate, install-script, native-source or license review became stale and
+`policy/dependencies.json` is unchanged.
+
+The queuing bound is wholly inside h2's `FramedWrite`/stream accounting, so
+upstream regression coverage owns it; hortcmd adds no test that would only
+re-assert h2's internal behavior. HTTP connection cancellation and the existing
+WebDAV/FTP timeout regressions (ticket 320) still pass unchanged.
+
+- `npm run audit:dependencies` after the change: 16 Rust findings, none for h2 —
+  `RUSTSEC-2026-0258` is gone and no new advisory appeared. The remaining
+  findings belong to tickets 371–373, 375–377. Note that the refreshed audit no
+  longer reports `suppaftp@6.3.0` at all, because that crate resolves through
+  the in-tree `[patch.crates-io]` path source, which cargo-deny does not scan;
+  ticket 374 owns that finding and must fix the vendored copy rather than rely
+  on the scanner.
+- `npm run check` passed on macOS (arm64), including the offline supply-chain
+  gate, and `npm run supply:bundle` plus `npm run supply:verify` regenerated and
+  verified the release evidence for the new lockfile hash.
