@@ -11,9 +11,9 @@
 
 [package]
 edition = "2024"
-rust-version = "1.85.0"
+rust-version = "1.89.0"
 name = "smb"
-version = "0.11.1"
+version = "0.12.1"
 authors = ["Aviv N <avivnaaman04@gmail.com>"]
 build = false
 autolib = false
@@ -178,14 +178,14 @@ name = "rpc"
 path = "tests/rpc.rs"
 
 [dependencies.aead]
-version = "0.6.0-rc.2"
+version = "^0.6"
 optional = true
 
 [dependencies.aes]
-version = "0.9.0-rc.1"
+version = "^0.9"
 
 [dependencies.aes-gcm]
-version = "0.11.0-rc.1"
+version = "^0.11"
 optional = true
 
 [dependencies.binrw]
@@ -196,15 +196,15 @@ version = "1.5.0"
 optional = true
 
 [dependencies.ccm]
-version = "0.6.0-pre.0"
+version = "^0.6"
 optional = true
 
 [dependencies.cmac]
-version = "0.8.0-rc.1"
+version = "^0.8"
 optional = true
 
 [dependencies.crypto-common]
-version = "0.2.0-rc.4"
+version = "0.2.1"
 
 [dependencies.futures]
 version = "0.3"
@@ -219,10 +219,10 @@ version = "0.3"
 optional = true
 
 [dependencies.hmac]
-version = "0.13.0-rc.2"
+version = "^0.13"
 
 [dependencies.kbkdf]
-version = "0.1.0-pre.0"
+version = "0.1.0-rc.1"
 
 [dependencies.log]
 version = "0.4.22"
@@ -251,28 +251,28 @@ optional = true
 default-features = false
 
 [dependencies.sha2]
-version = "0.11.0-rc.2"
+version = "^0.11"
 
 [dependencies.smb-dtyp]
-version = "=0.11.1"
+version = "=0.12.1"
 
 [dependencies.smb-fscc]
-version = "=0.11.1"
+version = "=0.12.1"
 
 [dependencies.smb-msg]
-version = "=0.11.1"
+version = "=0.12.1"
 features = ["client"]
 default-features = false
 
 [dependencies.smb-rpc]
-version = "=0.11.1"
+version = "=0.12.1"
 
 [dependencies.smb-transport]
-version = "=0.11.1"
+version = "=0.12.1"
 default-features = false
 
 [dependencies.sspi]
-version = "0.18.0"
+version = "=0.22.0"
 features = ["ring"]
 default-features = false
 
@@ -280,7 +280,7 @@ default-features = false
 version = "2.0"
 
 [dependencies.time]
-version = "0.3.37"
+version = "0.3.45"
 features = ["macros"]
 
 [dependencies.tokio]
