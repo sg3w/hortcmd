@@ -19,7 +19,7 @@ use std::path::Path;
 /// Where a test may write. Seeded next to the fixture tree so a failure
 /// never damages what the next assertion reads.
 fn work_dir(root: &str, name: &str) -> String {
-    format!("{}/work/{}", root.trim_end_matches('/'), name)
+    format!("{}/work/{}", root, name)
 }
 
 fn read_all(p: &dyn Provider, path: &str) -> Vec<u8> {
@@ -66,7 +66,7 @@ fn harness_listing_matches_the_seeded_tree() {
     for_each_service(&h, "listing", |h, name| {
         let svc = h.service(name);
         let p = h.connect(name);
-        let root = svc.root.trim_end_matches('/');
+        let root = svc.prefix();
 
         // What the harness says is there, by directory.
         let mut expected: BTreeMap<String, Vec<&SeedEntry>> = BTreeMap::new();
@@ -123,7 +123,7 @@ fn harness_stat_agrees_with_the_listing() {
     for_each_service(&h, "stat", |h, name| {
         let svc = h.service(name);
         let p = h.connect(name);
-        let root = svc.root.trim_end_matches('/');
+        let root = svc.prefix();
 
         for entry in &svc.seed {
             let path = format!("{}/{}", root, entry.path);
@@ -187,7 +187,7 @@ fn harness_streams_large_content_unchanged() {
     for_each_service(&h, "streaming", |h, name| {
         let svc = h.service(name);
         let p = h.connect(name);
-        let root = svc.root.trim_end_matches('/');
+        let root = svc.prefix();
 
         // Read the seeded large file and compare with what was written.
         let large = format!("{}/tree/large.bin", root);
@@ -272,7 +272,7 @@ fn harness_creates_renames_and_deletes() {
     for_each_service(&h, "mutation", |h, name| {
         let svc = h.service(name);
         let p = h.connect(name);
-        let root = svc.root.trim_end_matches('/');
+        let root = svc.prefix();
         let dir = work_dir(root, "mutate");
         let _ = p.remove_dir_all(
             &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
@@ -383,7 +383,7 @@ fn harness_stages_and_commits() {
             name
         );
 
-        let root = svc.root.trim_end_matches('/');
+        let root = svc.prefix();
         let dir = work_dir(root, "stage");
         let _ = p.remove_dir_all(
             &crate::vfs::StreamPath::remote(&(Path::new(&dir)).to_string_lossy()).unwrap(),
@@ -455,9 +455,20 @@ fn harness_stages_and_commits() {
 
 /// A `..` in a path must not walk out of the served tree.
 ///
-/// Where the server confines the account — every service here except
-/// SSH — that is a hard assertion: nothing outside the tree may be read
-/// or written, whatever path is handed in.
+/// The guarantee has two halves, and both are asserted here.
+///
+/// A literal `..` component never reaches a provider at all: the
+/// versioned locations refuse it while the path is constructed
+/// (`vfs/location.rs`, `validation.badInput` with `reason: "traversal"`).
+/// That is where the refusal belongs, and asserting it here is what
+/// notices if it ever moves back into the providers.
+///
+/// What *is* still constructible is a traversal the server would have to
+/// decode — `%2e%2e`, or a `%2f` hiding the separator. Those are single
+/// components as far as hortcmd is concerned, they are handed to the
+/// provider, and there the second half applies: where the server
+/// confines the account — every service here except SSH — nothing
+/// outside the tree may be read or written, whatever path is handed in.
 ///
 /// Where it does not, hortcmd cannot invent a confinement. An SSH
 /// account is a login account, and a client that silently rewrote the
@@ -472,12 +483,39 @@ fn harness_refuses_to_escape_the_root() {
     for_each_service(&h, "traversal", |h, name| {
         let svc = h.service(name);
         let p = h.connect(name);
-        let root = svc.root.trim_end_matches('/');
+        let root = svc.prefix();
 
-        let attempts = [
+        // Half one: a literal `..` is refused before any provider is asked.
+        for escape in [
             format!("{}/tree/../../etc/passwd", root),
             format!("{}/tree/../../../etc/passwd", root),
             format!("{}/../etc/passwd", root),
+            format!("{}/tree/../../escaped-{}.txt", root, h.id),
+            format!("{}/tree/./readme.txt", root),
+        ] {
+            let error = crate::vfs::StreamPath::remote(&escape)
+                .expect_err(&format!("{}: {} was constructed", name, escape));
+            assert!(
+                error.is(crate::errors::code::VALIDATION_BAD_INPUT),
+                "{}: {} gave {:?}",
+                name,
+                escape,
+                error.code
+            );
+            assert_eq!(
+                error.params().get("reason").map(String::as_str),
+                Some("traversal"),
+                "{}: {} was refused for the wrong reason",
+                name,
+                escape
+            );
+        }
+
+        // Half two: an encoded traversal is a name, reaches the provider,
+        // and must not leave the tree there either.
+        let attempts = [
+            format!("{}/tree/%2e%2e/%2e%2e/etc/passwd", root),
+            format!("{}/tree/..%2f..%2fetc/passwd", root),
         ];
 
         for escape in &attempts {
@@ -507,7 +545,7 @@ fn harness_refuses_to_escape_the_root() {
 
         // Writing outside is the dangerous direction, and the entry must
         // never appear under the name that was asked for either way.
-        let out = format!("{}/tree/../../escaped-{}.txt", root, h.id);
+        let out = format!("{}/tree/%2e%2e/%2e%2e/escaped-{}.txt", root, h.id);
         if let Ok(mut w) = p.create_write(
             &crate::vfs::StreamPath::remote(&(Path::new(&out)).to_string_lossy()).unwrap(),
         ) {
@@ -557,7 +595,7 @@ fn harness_maps_failures_to_errors() {
     for_each_service(&h, "error mapping", |h, name| {
         let svc = h.service(name);
         let p = h.connect(name);
-        let root = svc.root.trim_end_matches('/');
+        let root = svc.prefix();
         let missing_dir = format!("{}/no-such-directory-{}", root, h.id);
 
         /// One thing that must fail, and the name to report it under.

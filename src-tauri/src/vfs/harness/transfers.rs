@@ -138,7 +138,7 @@ fn harness_copies_between_local_and_remote() {
     for_each_service(&h, "local ↔ remote", |h, name| {
         let remote = h.connect(name);
         let local: Arc<dyn Provider> = Arc::new(LocalProvider);
-        let root = h.service(name).root.trim_end_matches('/').to_string();
+        let root = h.service(name).prefix().to_string();
         let want = seeded_large(h, name);
 
         for safe in [false, true] {
@@ -220,7 +220,7 @@ fn harness_copies_within_one_server() {
     let h = harness_or_skip!("harness_copies_within_one_server");
     for_each_service(&h, "remote → same remote", |h, name| {
         let p = h.connect(name);
-        let root = h.service(name).root.trim_end_matches('/').to_string();
+        let root = h.service(name).prefix().to_string();
         let want = seeded_large(h, name);
 
         let dir = format!("{}/work/{}-same", root, name);
@@ -293,8 +293,8 @@ fn harness_copies_between_different_servers() {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let srcp = h.connect(from);
             let dstp = h.connect(to);
-            let src_root = h.service(from).root.trim_end_matches('/').to_string();
-            let dst_root = h.service(to).root.trim_end_matches('/').to_string();
+            let src_root = h.service(from).prefix().to_string();
+            let dst_root = h.service(to).prefix().to_string();
             let want = seeded_large(&h, from);
 
             let dir = format!("{}/work/{}-from-{}", dst_root, to, from);
