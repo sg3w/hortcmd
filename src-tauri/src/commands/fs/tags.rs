@@ -4,8 +4,13 @@
 // Finder stores tags in the extended attribute
 // `com.apple.metadata:_kMDItemUserTags` as a **binary plist**: an array
 // of strings, each "Name" or "Name\nColorIndex" (color 0–7, 0 = none).
-// On non-macOS platforms the commands return empty values or a
-// clear error.
+//
+// There is no non-macOS behaviour to describe: `Capability::FinderTags`
+// is added to `local_caps()` on macOS alone and is never a remote
+// capability, so `caps::require` refuses every address on the other
+// platforms before any tag code runs. The `#[cfg(not(macos))]` arms below
+// exist only because the compiler needs a value there; they repeat the
+// same refusal rather than inventing a second answer (ticket 344).
 // ============================================================
 
 use crate::errors::AppResult;
@@ -37,8 +42,7 @@ pub fn get_tags(path: String) -> AppResult<Vec<Tag>> {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = path;
-        Ok(Vec::new())
+        Err(unreachable_without_macos(&path))
     }
 }
 
@@ -58,9 +62,22 @@ pub fn set_tags(path: String, tags: Vec<Tag>) -> AppResult<()> {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (path, tags);
-        Err(AppError::from("Finder-Tags gibt es nur unter macOS"))
+        let _ = tags;
+        Err(unreachable_without_macos(&path))
     }
+}
+
+/// The refusal `caps::require` has already produced on this platform.
+/// Defense in depth: it keeps the unreachable arms from drifting into a
+/// different answer than the gate above them.
+#[cfg(not(target_os = "macos"))]
+fn unreachable_without_macos(path: &str) -> crate::errors::AppError {
+    caps::require(path, Capability::FinderTags)
+        .err()
+        .unwrap_or_else(|| {
+            crate::errors::AppError::new(crate::errors::code::CAPABILITY_UNSUPPORTED)
+                .with("capability", Capability::FinderTags.id())
+        })
 }
 
 #[cfg(target_os = "macos")]

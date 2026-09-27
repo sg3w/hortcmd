@@ -2,7 +2,7 @@
 
 All tickets below 100 and tickets 100–110 have been completed.
 Tickets 125–126, 128, 131, 134, 137 and the discovered issues 300–301 and 303–316 are also complete. There are
-**35 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
+**34 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
 issues 317–377 (excluding completed tickets listed below). Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
@@ -110,7 +110,7 @@ Correctness (backend):
 [335](done/335-cancel-token-map-orphan-leak.done.md), [339](done/339-smb-ensure-share-race-condition.done.md),
 [340](done/340-webdav-list-dot-dotdot-not-filtered.done.md), [341](done/341-smb-shares-error-generic-code.done.md),
 [342](done/342-mcp-mutex-lock-expect-poison-panic.done.md), [343](done/343-dir-size-blocking-call-not-spawn-blocking.done.md),
-[344](344-finder-tags-dead-fallback-code.md), [345](done/345-git-status-canonicalize-fallback-scope-widening.done.md),
+[344](done/344-finder-tags-dead-fallback-code.done.md), [345](done/345-git-status-canonicalize-fallback-scope-widening.done.md),
 [346](done/346-dir-size-cancel-token-leak.done.md), [347](done/347-dir-size-generic-not-a-directory-error.done.md),
 [349](done/349-pack-sources-count-not-bounded-early.done.md), [350](done/350-archive-unknown-format-generic-error.done.md),
 [351](done/351-error-code-all-missing-tls-codes.done.md), [352](done/352-menu-language-apply-failure-silent.done.md),
