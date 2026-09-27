@@ -188,6 +188,46 @@ describe("the preview's conflict detection", () => {
     ]);
   });
 
+  it("flags a target that collides case-insensitively with an existing file", () => {
+    // "Readme.txt" is not part of the batch; on macOS/Windows the OS treats
+    // the two names as one file, so the preview must say so up front instead
+    // of letting the backend fail the rename afterwards (ticket 359).
+    const items = buildPreview(
+      [row("notes.txt")],
+      new Set(["notes.txt", "Readme.txt"]),
+      () => "readme.txt",
+    );
+    expect(items[0].status).toBe("exists");
+  });
+
+  it("allows the same rename where the location is case-sensitive", () => {
+    const items = buildPreview(
+      [row("notes.txt")],
+      new Set(["notes.txt", "Readme.txt"]),
+      () => "readme.txt",
+      true,
+    );
+    expect(items[0].status).toBe("ok");
+  });
+
+  it("treats two targets differing only in case as duplicates", () => {
+    const items = buildPreview(
+      [row("a.txt"), row("b.txt")],
+      new Set(["a.txt", "b.txt"]),
+      (entry) => (entry.name === "a.txt" ? "Same.txt" : "same.txt"),
+    );
+    expect(items.map((i) => i.status)).toEqual(["duplicate", "duplicate"]);
+  });
+
+  it("still allows a case-only rename of an entry in the batch", () => {
+    const items = buildPreview(
+      [row("Readme.txt")],
+      new Set(["Readme.txt"]),
+      () => "readme.txt",
+    );
+    expect(items[0].status).toBe("ok");
+  });
+
   it("keeps the folder flag so the caller can tell them apart", () => {
     const items = buildPreview([row("d", true)], new Set(["d"]), () => "e");
     expect(items[0]).toMatchObject({ from: "d", to: "e", isDir: true, status: "ok" });

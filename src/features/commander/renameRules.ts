@@ -137,12 +137,23 @@ export interface RenamePreviewItem {
 /**
  * Computes the preview for the target set and detects conflicts.
  * `folderNames` = all names actually present in the folder (incl. hidden ones).
+ *
+ * Collisions are looked up the way the *target* filesystem resolves names.
+ * The default targets — macOS and Windows — are case-insensitive, so exact
+ * string comparison used to call a rename to "readme.txt" safe next to an
+ * existing "Readme.txt" and let the backend fail it afterwards with
+ * `fs.exists` (ticket 359). Callers that know the location is case-sensitive
+ * pass `caseSensitive: true`; unknown stays case-insensitive, which warns
+ * about a collision that may not happen instead of hiding one that will.
  */
 export function buildPreview(
   targets: Row[],
   folderNames: Set<string>,
   rename: (entry: Row, index: number) => string,
+  caseSensitive = false,
 ): RenamePreviewItem[] {
+  const key = (name: string) => (caseSensitive ? name : name.toLowerCase());
+
   const items = targets.map((entry, i) => ({
     from: entry.name,
     to: rename(entry, i),
@@ -151,10 +162,12 @@ export function buildPreview(
 
   // Count the target names (for duplicate detection).
   const toCount = new Map<string, number>();
-  for (const it of items) toCount.set(it.to, (toCount.get(it.to) ?? 0) + 1);
+  for (const it of items) toCount.set(key(it.to), (toCount.get(key(it.to)) ?? 0) + 1);
 
-  // Names of the involved sources (their old slots become free).
-  const sourceNames = new Set(items.map((it) => it.from));
+  // Names of the involved sources (their old slots become free). A
+  // case-only rename of one of them lands here, so it stays "ok".
+  const sourceNames = new Set(items.map((it) => key(it.from)));
+  const existing = new Set([...folderNames].map(key));
 
   return items.map((it): RenamePreviewItem => {
     let status: RenameStatus;
@@ -162,9 +175,9 @@ export function buildPreview(
       status = "unchanged";
     } else if (!it.to || it.to.includes("/") || it.to.includes("\\")) {
       status = "invalid";
-    } else if ((toCount.get(it.to) ?? 0) > 1) {
+    } else if ((toCount.get(key(it.to)) ?? 0) > 1) {
       status = "duplicate";
-    } else if (folderNames.has(it.to) && !sourceNames.has(it.to)) {
+    } else if (existing.has(key(it.to)) && !sourceNames.has(key(it.to))) {
       status = "exists";
     } else {
       status = "ok";
