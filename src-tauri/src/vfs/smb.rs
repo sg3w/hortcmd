@@ -288,6 +288,19 @@ impl SmbProvider {
         let _ = dir.close();
         Ok(collected)
     }
+
+    /// Deletes a reparse point itself rather than what it points at.
+    ///
+    /// `FILE_OPEN_REPARSE_POINT` keeps the server from resolving the link,
+    /// so the junction disappears and its target stays untouched.
+    fn remove_reparse_point(&self, path: &str, is_dir: bool) -> io::Result<()> {
+        let mut args = FileCreateArgs::make_open_existing(FileAccessMask::new().with_delete(true));
+        args.options = CreateOptions::new()
+            .with_delete_on_close(true)
+            .with_open_reparse_point(true)
+            .with_directory_file(is_dir);
+        close_resource(self.open(path, &args).map_err(to_io)?)
+    }
 }
 
 impl Provider for SmbProvider {
@@ -503,12 +516,25 @@ impl Provider for SmbProvider {
 
     fn remove_dir_all(&self, path: &crate::vfs::StreamPath) -> io::Result<()> {
         super::provider_path::validate(path, super::Scheme::Smb)?;
-        // A directory must be empty before it can be deleted.
-        for child in self.read_dir(path)? {
-            if self.is_dir(&child) {
-                self.remove_dir_all(&child)?;
-            } else {
-                self.remove_file(&child)?;
+        let base = p(path);
+        if split_share(&base).is_none() {
+            return Err(io::Error::other(
+                "Der Verbindungsroot listet Shares und kann nicht gelöscht werden",
+            ));
+        }
+        // A directory must be empty before it can be deleted. The listing's
+        // own attributes decide how each child goes: `stat` resolves a
+        // reparse point, so asking it whether the child is a directory would
+        // send a junction pointing back at an ancestor into unbounded
+        // recursion (ticket 319).
+        for entry in self.dir_entries(&base).map_err(to_io)? {
+            let child = path.join(&entry.name)?;
+            match child_action(&entry) {
+                ChildAction::Descend => self.remove_dir_all(&child)?,
+                ChildAction::DeleteLink { is_dir } => {
+                    self.remove_reparse_point(&p(&child), is_dir)?
+                }
+                ChildAction::DeleteFile => self.remove_file(&child)?,
             }
         }
         let mut args = FileCreateArgs::make_open_existing(FileAccessMask::new().with_delete(true));
@@ -530,6 +556,27 @@ impl Provider for SmbProvider {
     /// replacement goes through the backup rename.
     fn rename_replaces(&self) -> bool {
         false
+    }
+}
+
+/// How `remove_dir_all` has to treat one listed child.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ChildAction {
+    /// A plain directory: recurse into it.
+    Descend,
+    /// A reparse point (junction/symlink): delete the link, never its
+    /// target — following it can loop back into an ancestor (ticket 319).
+    DeleteLink { is_dir: bool },
+    /// A plain file: unlink it.
+    DeleteFile,
+}
+
+/// Classifies a listed child from its link-level directory attributes.
+fn child_action(entry: &DirEntry) -> ChildAction {
+    match (entry.is_dir, entry.is_symlink) {
+        (is_dir, true) => ChildAction::DeleteLink { is_dir },
+        (true, false) => ChildAction::Descend,
+        (false, false) => ChildAction::DeleteFile,
     }
 }
 
@@ -618,7 +665,40 @@ impl Drop for SmbWriter {
 
 #[cfg(test)]
 mod tests {
-    use super::split_share;
+    use super::{child_action, split_share, ChildAction};
+    use crate::commands::fs::dir::DirEntry;
+
+    fn entry(is_dir: bool, is_symlink: bool) -> DirEntry {
+        DirEntry {
+            name: "child".into(),
+            hidden: false,
+            readonly: false,
+            executable: false,
+            is_dir,
+            is_symlink,
+            size: 0,
+            modified: 0,
+            mode: None,
+        }
+    }
+
+    #[test]
+    fn a_directory_reparse_point_is_never_descended_into() {
+        assert_eq!(
+            child_action(&entry(true, true)),
+            ChildAction::DeleteLink { is_dir: true }
+        );
+        assert_eq!(
+            child_action(&entry(false, true)),
+            ChildAction::DeleteLink { is_dir: false }
+        );
+    }
+
+    #[test]
+    fn plain_entries_keep_their_ordinary_handling() {
+        assert_eq!(child_action(&entry(true, false)), ChildAction::Descend);
+        assert_eq!(child_action(&entry(false, false)), ChildAction::DeleteFile);
+    }
 
     #[test]
     fn root_has_no_share() {
