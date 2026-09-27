@@ -3,7 +3,7 @@
 All tickets below 100 and tickets 100–110 have been completed.
 Tickets 125–126, 128, 131, 134, 137 and the discovered issues 300–301 and 303–316 are also complete. There are
 **26 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
-issues 317–379 (excluding completed tickets listed below). Dependencies use the current paths.
+issues 317–380 (excluding completed tickets listed below). Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
 filenames ending in `.done.md`. This also applies to previously completed support
@@ -153,7 +153,7 @@ CVSS ratings. Tickets 376–377 cover maintenance findings.
 | [370](done/370-rustls-handshake-encryption-level-boundaries.done.md) | Upgrade rustls to enforce TLS handshake encryption levels | 1 |
 | [371](done/371-quick-xml-parser-resource-exhaustion.done.md) | Remove both quick-xml denial-of-service vulnerabilities from both dependency lines | 4 |
 | [372](done/372-russh-and-cryptovec-allocation-bounds.done.md) | Fix SSH transport and CryptoVec allocation bounds | 2 |
-| [373](373-rsa-marvin-timing-side-channel.md) | Remediate or prove mitigation for both RSA Marvin findings | 2 |
+| [373](done/373-rsa-marvin-timing-side-channel.done.md) | Remediate or prove mitigation for both RSA Marvin findings | 2 |
 | [374](done/374-suppaftp-control-channel-command-injection.done.md) | Prevent FTP control-channel command injection | 1 |
 | [375](done/375-time-parser-stack-exhaustion.done.md) | Remove the time parser stack-exhaustion finding | 1 |
 | [376](376-replace-unmaintained-proc-macro-error.md) | Replace the unmaintained proc-macro-error dependency | 1 |
@@ -266,3 +266,20 @@ nothing to do with the advisory work:
   unwraps a path the versioned locations now reject up front, and the
   certificate test lists an empty path because a `"/"` root trims to nothing —
   so neither test asserts what it claims.
+
+## Advisory remediation outcome (2026-09-27)
+
+Completed: **369, 370, 371, 372, 373, 374, 375, 377**. The live gate went from 18
+findings to **2**. Two remain, each owned by an open ticket, and the release stays
+blocked until they have a disposition:
+
+- [376](376-replace-unmaintained-proc-macro-error.md): `proc-macro-error@1.0.4`,
+  unmaintained, reached through the Linux GTK macro crates. Untouched — it needs a
+  Linux build with real GTK/WebKit prerequisites.
+- [380](380-rsa-marvin-successor-version.md): `rsa@0.10.0-rc.18`. Ticket 373
+  removed both of its originally recorded pairs and traced the remaining
+  exposure; this successor pair has no fix and no exception, by design.
+
+Ticket 372 raised the declared MSRV from 1.85.1 to **1.93** deliberately: the
+fixed releases for the quick-xml, suppaftp, time and urlpattern findings, and the
+sspi release that lets a patched russh resolve at all, have no version below it.
