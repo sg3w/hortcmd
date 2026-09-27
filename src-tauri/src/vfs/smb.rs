@@ -14,6 +14,7 @@
 // remembered for the lifetime of the connection.
 // ============================================================
 
+use super::listing::{self, ListingBudget};
 use super::{Provider, Stat};
 use crate::commands::fs::dir::{DirEntry, DirListing};
 use crate::errors::{AppError, AppResult};
@@ -78,7 +79,7 @@ pub fn connect(profile: &Profile, secret: Option<&str>) -> AppResult<Arc<dyn Pro
         Some((share, _)) => provider.ensure_share(&share)?,
         None => {
             provider
-                .shares()
+                .shares(&mut ListingBudget::default())
                 .map_err(|e| AppError::from(format!("Verbindung fehlgeschlagen: {}", e)))?;
         }
     }
@@ -182,7 +183,7 @@ impl SmbProvider {
     }
 
     /// The server's shares, as directory entries.
-    fn shares(&self) -> AppResult<Vec<DirEntry>> {
+    fn shares(&self, budget: &mut ListingBudget) -> AppResult<Vec<DirEntry>> {
         // Enumerating shares talks to the `srvsvc` named pipe, which lives
         // on the hidden IPC$ share — that has to be attached first.
         {
@@ -206,17 +207,19 @@ impl SmbProvider {
                 e
             )
         })?;
-        Ok(shares
-            .iter()
-            .map(|s| {
-                s.netname
-                    .as_ref()
-                    .map(|n| n.to_string())
-                    .unwrap_or_default()
-            })
-            .filter(|name| !name.is_empty())
+        let mut entries = Vec::new();
+        for share in &shares {
+            let name = share
+                .netname
+                .as_ref()
+                .map(|n| n.to_string())
+                .unwrap_or_default();
+            if name.is_empty() {
+                continue;
+            }
+            budget.charge(&name)?;
             // Administrative shares end with `$` — keep them, but hidden.
-            .map(|name| DirEntry {
+            entries.push(DirEntry {
                 hidden: name.ends_with('$'),
                 readonly: false,
                 executable: false,
@@ -226,8 +229,9 @@ impl SmbProvider {
                 modified: 0,
                 mode: None,
                 name,
-            })
-            .collect())
+            });
+        }
+        Ok(entries)
     }
 
     /// Opens a resource with the given create arguments.
@@ -251,7 +255,7 @@ impl SmbProvider {
     /// The directory handle is closed before returning — leaving it open
     /// locks the directory server-side and makes a later rename/delete
     /// fail with a sharing violation.
-    fn dir_entries(&self, path: &str) -> AppResult<Vec<DirEntry>> {
+    fn dir_entries(&self, path: &str, budget: &mut ListingBudget) -> AppResult<Vec<DirEntry>> {
         let resource = self.open_existing(path)?;
         let dir = resource
             .is_dir()
@@ -270,6 +274,9 @@ impl SmbProvider {
                 if name == "." || name == ".." {
                     continue;
                 }
+                // Charged before the entry is built, so an oversized
+                // enumeration ends here instead of being read to its end.
+                budget.charge(&name)?;
                 let is_dir = info.file_attributes.directory();
                 entries.push(DirEntry {
                     hidden: info.file_attributes.hidden() || name.starts_with('.'),
@@ -329,9 +336,10 @@ impl Provider for SmbProvider {
     fn list(&self, path: &str) -> AppResult<DirListing> {
         super::provider_path::validate(&crate::vfs::StreamPath::remote(path)?, super::Scheme::Smb)?;
         // The connection root lists the server's shares.
+        let mut budget = ListingBudget::default();
         let entries = match split_share(path) {
-            None => self.shares()?,
-            Some(_) => self.dir_entries(path)?,
+            None => self.shares(&mut budget)?,
+            Some(_) => self.dir_entries(path, &mut budget)?,
         };
         // Full address so the pane keeps its remote context.
         Ok(DirListing {
@@ -360,7 +368,9 @@ impl Provider for SmbProvider {
         // it yields size + kind together).
         let (parent, name) = full.rsplit_once('/').unwrap_or(("/", full.as_str()));
         let parent = if parent.is_empty() { "/" } else { parent };
-        let entries = self.dir_entries(parent).map_err(to_io)?;
+        let entries = self
+            .dir_entries(parent, &mut ListingBudget::default())
+            .map_err(to_io)?;
         entries
             .into_iter()
             .find(|e| e.name == name)
@@ -388,11 +398,20 @@ impl Provider for SmbProvider {
     }
 
     fn read_dir(&self, path: &crate::vfs::StreamPath) -> io::Result<Vec<crate::vfs::StreamPath>> {
+        self.read_dir_bounded(path, listing::MAX_ENTRIES)
+    }
+
+    fn read_dir_bounded(
+        &self,
+        path: &crate::vfs::StreamPath,
+        limit: usize,
+    ) -> io::Result<Vec<crate::vfs::StreamPath>> {
         super::provider_path::validate(path, super::Scheme::Smb)?;
         let base = p(path);
+        let mut budget = ListingBudget::new(limit);
         let entries = match split_share(&base) {
-            None => self.shares().map_err(to_io)?,
-            Some(_) => self.dir_entries(&base).map_err(to_io)?,
+            None => self.shares(&mut budget).map_err(to_io)?,
+            Some(_) => self.dir_entries(&base, &mut budget).map_err(to_io)?,
         };
         entries
             .iter()
@@ -527,7 +546,8 @@ impl Provider for SmbProvider {
         // reparse point, so asking it whether the child is a directory would
         // send a junction pointing back at an ancestor into unbounded
         // recursion (ticket 319).
-        for entry in self.dir_entries(&base).map_err(to_io)? {
+        let mut budget = ListingBudget::default();
+        for entry in self.dir_entries(&base, &mut budget).map_err(to_io)? {
             let child = path.join(&entry.name)?;
             match child_action(&entry) {
                 ChildAction::Descend => self.remove_dir_all(&child)?,

@@ -11,6 +11,7 @@
 // file handles.
 // ============================================================
 
+use super::listing::{self, ListingBudget};
 use super::sftp_metadata::{self, EntryKind};
 use super::{Provider, Stat};
 use crate::commands::fs::dir::DirListing;
@@ -159,12 +160,16 @@ impl Provider for SftpProvider {
             .block_on(self.sftp().read_dir(path))
             .map_err(|e| AppError::from(format!("{}: {}", path, e)))?;
 
+        let mut budget = ListingBudget::default();
         let mut entries = Vec::new();
         for item in dir {
             let name = item.file_name();
             if name == "." || name == ".." {
                 continue;
             }
+            // Charged before the entry (and any symlink round trip) is
+            // built, so an oversized listing ends here (ticket 321).
+            budget.charge(&name)?;
             let attrs = item.metadata();
             let is_symlink = sftp_metadata::kind(&attrs) == Some(EntryKind::Symlink);
             // SFTP `READDIR` attributes are link-level, exactly like a local
@@ -215,17 +220,27 @@ impl Provider for SftpProvider {
     }
 
     fn read_dir(&self, path: &crate::vfs::StreamPath) -> io::Result<Vec<crate::vfs::StreamPath>> {
+        self.read_dir_bounded(path, listing::MAX_ENTRIES)
+    }
+
+    fn read_dir_bounded(
+        &self,
+        path: &crate::vfs::StreamPath,
+        limit: usize,
+    ) -> io::Result<Vec<crate::vfs::StreamPath>> {
         super::provider_path::validate(path, super::Scheme::Sftp)?;
         let base = p(path);
         let dir = runtime()
             .block_on(self.sftp().read_dir(&base))
             .map_err(to_io)?;
+        let mut budget = ListingBudget::new(limit);
         let mut out = Vec::new();
         for item in dir {
             let name = item.file_name();
             if name == "." || name == ".." {
                 continue;
             }
+            budget.charge_io(&name)?;
             out.push(path.join(name)?);
         }
         Ok(out)

@@ -241,6 +241,7 @@ pub mod code {
     pub const TRASH_FAILED: &str = "trash.failed";
     pub const TRASH_FINDER_FAILED: &str = "trash.finderFailed";
     pub const FS_TOO_LARGE: &str = "fs.tooLarge";
+    pub const FS_TOO_MANY_ENTRIES: &str = "fs.tooManyEntries";
 
     // --- transfers ---
     pub const TRANSFER_JOURNAL_LIMIT: &str = "transfer.journalLimit";
@@ -324,6 +325,7 @@ pub mod code {
         FS_IO,
         FS_INVALID_NAME,
         FS_TOO_LARGE,
+        FS_TOO_MANY_ENTRIES,
         TRASH_FAILED,
         TRASH_FINDER_FAILED,
         TRANSFER_JOURNAL_LIMIT,

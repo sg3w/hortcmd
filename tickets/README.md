@@ -2,7 +2,7 @@
 
 All tickets below 100 and tickets 100–110 have been completed.
 Tickets 125–126, 128, 131, 134, 137 and the discovered issues 300–301 and 303–316 are also complete. There are
-**38 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
+**37 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
 issues 317–377 (excluding completed tickets listed below). Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
@@ -100,7 +100,7 @@ Data-safety (transfer/archive/undo/search):
 
 Correctness (backend):
 [319](done/319-smb-remove-dir-all-reparse-point-recursion.done.md), [320](done/320-ftp-webdav-missing-connection-timeout.done.md),
-[321](321-vfs-listing-unbounded-memory-allocation.md), [322](322-native-plugin-windows-orphan-process.md),
+[321](done/321-vfs-listing-unbounded-memory-allocation.done.md), [322](322-native-plugin-windows-orphan-process.md),
 [323](done/323-plugin-fs-preview-missing-capability-check.done.md), [324](done/324-checksums-missing-capability-check.done.md),
 [325](done/325-selection-save-load-missing-capability-check.done.md), [326](done/326-compare-dirs-aborts-on-single-entry-error.done.md),
 [327](done/327-filecompare-utf8-truncation-misclassification.done.md), [328](done/328-compare-dirs-stack-overflow-recursion.done.md),
