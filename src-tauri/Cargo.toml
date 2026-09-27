@@ -82,7 +82,7 @@ reqwest = { version = "0.13", features = ["stream"] }
 # neuere Versionen verlangen `hmac ^0.13` (stabil), während `smb`/`sspi` auf
 # `hmac =0.13.0-rc.2` festnageln — Cargo kann das nicht vereinen. 0.10.5 ist
 # die neueste auflösbare Version; prüfen, sobald `sspi` das Pre-Release verlässt.
-keepass = { version = "=0.10.5", features = ["save_kdbx4"] }
+keepass = { version = "=0.15.0", features = ["save_kdbx4"] }
 fs2 = "0.4.3"
 rustls-platform-verifier = "0.7"
 x509-parser = "0.18"

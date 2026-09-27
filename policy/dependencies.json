@@ -293,16 +293,16 @@
     },
     {
       "kind": "direct",
-      "key": "cargo:keepass@0.10.5",
+      "key": "cargo:keepass@0.15.0",
       "owner": "hortcmd maintainers",
-      "reason": "Existing locked direct dependency baseline. Feature/platform metadata is captured in the SBOM; current advisory scans and CI/MSRV checks govern this exact version. New versions/additions require the dependency review checklist.",
+      "reason": "Upgraded for ticket 371: the 0.10.5 line pins quick-xml 0.39, which carries RUSTSEC-2026-0194 and -0195.",
       "expires": "2026-12-24",
       "checklist": {
-        "changelog": "Baseline version retained; no API upgrade",
-        "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
-        "platforms": "Windows/macOS/Linux CI",
-        "features": "Cargo manifest and generated SBOM feature graph"
+        "changelog": "0.10.5 -> 0.15.0: the database became arena-based, so Database::root/root_mut return GroupRef/GroupMut handles, group and entry collections are private with add_group/add_entry/remove, icons are set through set_icon_builtin and Database::new takes no config. net/credentials.rs is migrated accordingly and the whole-tree entry lookup now uses the flat iter_all_entries. KDBX 4 read and write, Argon2 and the KeePassXC metadata hortcmd fills in are unchanged.",
+        "security": "quick-xml moves to 0.42.0, past the 0.41.0 minimum for both advisories; the crypto dependencies move from RustCrypto pre-releases to stable releases.",
+        "msrv": "keepass 0.15.0 declares 1.89, below the project floor of 1.93.",
+        "platforms": "Windows/macOS/Linux CI; the KDBX round-trip tests are portable.",
+        "features": "save_kdbx4 only, as before."
       }
     },
     {
@@ -441,16 +441,16 @@
     },
     {
       "kind": "direct",
-      "key": "cargo:plist@1.8.0",
+      "key": "cargo:plist@1.10.1",
       "owner": "hortcmd maintainers",
-      "reason": "Existing locked direct dependency baseline. Feature/platform metadata is captured in the SBOM; current advisory scans and CI/MSRV checks govern this exact version. New versions/additions require the dependency review checklist.",
+      "reason": "Upgraded for ticket 371: the 1.8.0 line pins quick-xml 0.38, which carries RUSTSEC-2026-0194 and -0195.",
       "expires": "2026-12-24",
       "checklist": {
-        "changelog": "Baseline version retained; no API upgrade",
-        "security": "Pinned advisory gate covers locked graph",
-        "msrv": "Rust 1.93 CI; npm Node engines in package.json",
-        "platforms": "Windows/macOS/Linux CI",
-        "features": "Cargo manifest and generated SBOM feature graph"
+        "changelog": "1.8.0 -> 1.10.1: quick-xml moves to 0.42, time to 0.3.47+ and base64 to 0.23; the Value/Dictionary API hortcmd uses for Finder tags is unchanged.",
+        "security": "quick-xml 0.42.0 is past the 0.41.0 minimum for both advisories.",
+        "msrv": "plist 1.10.1 declares 1.88, below the project floor of 1.93.",
+        "platforms": "Windows/macOS/Linux CI; the binary-plist Finder-tag path is macOS-only.",
+        "features": "Default features, as before."
       }
     },
     {
@@ -1491,9 +1491,9 @@
       "kind": "duplicate",
       "key": "cargo:base64",
       "owner": "hortcmd maintainers",
-      "reason": "Locked compatibility lines retained for hortcmd, hyper-util, keepass, pem, picky, picky-asn1-x509, plist, reqwest, rust-argon2, serde_with, swift-rs, tauri-codegen, wry. Forcing a unification can break protocol/crypto APIs; each version stays advisory-scanned. Remove when upstream version requirements converge.",
+      "reason": "Locked compatibility lines retained for hortcmd, hyper-util, keepass (0.23 from ticket 371), pem, picky, picky-asn1-x509, plist, reqwest, rust-argon2, serde_with, swift-rs, tauri-codegen, wry. Forcing a unification can break protocol/crypto APIs; each version stays advisory-scanned. Remove when upstream version requirements converge.",
       "expires": "2026-12-24",
-      "fingerprint": "0.21.7,0.22.1"
+      "fingerprint": "0.21.7,0.22.1,0.23.1"
     },
     {
       "kind": "duplicate",
