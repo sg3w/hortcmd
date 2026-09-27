@@ -101,6 +101,9 @@ pub(crate) struct Harness {
     pub user: String,
     pub password: String,
     pub ca_cert: String,
+    /// The run's client key files, by algorithm (`rsa`, `ecdsa`,
+    /// `ed25519`), all three in the SSH account's `authorized_keys`.
+    pub client_keys: std::collections::BTreeMap<String, String>,
     pub services: std::collections::BTreeMap<String, Service>,
 }
 
@@ -174,19 +177,40 @@ impl Harness {
         }
     }
 
+    /// Connects with one of the run's client key files instead of the
+    /// password, so public-key authentication is exercised per algorithm
+    /// (ticket 380).
+    pub fn connect_with_key(&self, name: &str, algorithm: &str) -> Arc<dyn Provider> {
+        let mut profile = self.profile(name);
+        profile.auth = "key".to_string();
+        profile.key_path = Some(
+            self.client_keys
+                .get(algorithm)
+                .unwrap_or_else(|| panic!("the harness has no {:?} client key", algorithm))
+                .clone(),
+        );
+        match self.connect_profile(&profile) {
+            Ok(p) => p,
+            Err(e) => panic!("{}: {} key auth failed: {}", name, algorithm, e),
+        }
+    }
+
     /// The same, for callers that expect failure — or that are waiting
     /// for a restarted service and need to ask again.
     pub fn try_connect(&self, name: &str) -> Result<Arc<dyn Provider>, String> {
-        let profile = self.profile(name);
+        self.connect_profile(&self.profile(name))
+    }
+
+    fn connect_profile(&self, profile: &Profile) -> Result<Arc<dyn Provider>, String> {
         let secret = self.password.as_str();
-        match connect_raw(&profile, secret) {
+        match connect_raw(profile, secret) {
             Ok(p) => Ok(p),
             Err(ConnectError::HostKey(challenge)) => {
                 let token = challenge
                     .token
                     .ok_or_else(|| "host key mismatch".to_string())?;
                 hostkey::trust(&token).map_err(|e| e.to_string())?;
-                connect_raw(&profile, secret).map_err(|e| e.to_string())
+                connect_raw(profile, secret).map_err(|e| e.to_string())
             }
             Err(e) => Err(e.to_string()),
         }

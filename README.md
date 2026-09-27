@@ -181,6 +181,14 @@ rewritten) and a hortcmd-managed store at `<config>/hortcmd/known_hosts`:
 A conflict in *either* source blocks the connection; a match in one never
 overrides it.
 
+**SSH client keys** (TICKET-380). Public-key authentication with an RSA key is
+signed by AWS-LC, not by the `rsa` crate, which has no constant-time private-key
+path (RUSTSEC-2023-0071, the Marvin attack) — SSH authentication over a network is
+exactly the observable setting that advisory names. One consequence is visible:
+only `rsa-sha2-512` and `rsa-sha2-256` are offered, never SHA-1 `ssh-rsa`, which
+OpenSSH itself has refused by default since 8.8. Ed25519 and ECDSA keys,
+ssh-agent and password authentication are unchanged.
+
 **Failure-safe transfers** (TICKET-029, Settings → File operations, **off by
 default**). Normally a copy writes straight to the final name and an accepted
 overwrite deletes the old destination first, so a failed or cancelled overwrite

@@ -66,6 +66,9 @@ regex = "1"          # Regex für die Suche (Name + Inhalt)
 jwalk = "0.9"
 keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 russh = "0.63"       # SSH-Client (reines Rust, async) für den SFTP-Provider
+# AWS-LC (schon über russh im Graphen): signiert die RSA-Public-Key-Auth,
+# damit dafür keine nicht-konstantzeitige RSA-Implementierung läuft (380).
+aws-lc-rs = "1.18.1"
 russh-sftp = "2.4.0" # SFTP-Client über einen russh-Kanal
 tokio = { version = "1", features = ["rt-multi-thread", "io-util", "net", "sync", "time", "macros", "fs", "process"] }
 # FTP/FTPS (synchron, Rustls mit Plattform-Zertifikatsprüfung). `deprecated` liefert

@@ -288,7 +288,28 @@ function makeSecrets(dir, hostnames) {
     if (r.status !== 0) throw new Error(`ssh-keygen: ${r.stderr}`);
   }
 
-  return password;
+  // Client keys, one per algorithm the SSH provider must be able to
+  // authenticate with — RSA is the reason this exists (ticket 380: the
+  // signature has to come out right with AWS-LC doing the signing), and
+  // the other two are what says a shared path did not break.
+  const keys = {};
+  for (const [name, args] of [
+    ["rsa", ["-t", "rsa", "-b", "2048"]],
+    ["ecdsa", ["-t", "ecdsa", "-b", "256"]],
+    ["ed25519", ["-t", "ed25519"]],
+  ]) {
+    const path = join(dir, `client_${name}`);
+    const r = run("ssh-keygen", ["-q", ...args, "-N", "", "-C", `hortcmd-harness-${name}`, "-f", path]);
+    if (r.status !== 0) throw new Error(`ssh-keygen ${name}: ${r.stderr}`);
+    keys[name] = path;
+  }
+  writeFileSync(
+    join(dir, "authorized_keys"),
+    Object.values(keys).map((path) => readFileSync(`${path}.pub`, "utf8")).join(""),
+    { mode: 0o600 },
+  );
+
+  return { password, keys };
 }
 
 // ---------- provisioning ----------
@@ -343,7 +364,7 @@ async function provision({ id = randomBytes(3).toString("hex") } = {}) {
   const ftpsiPasv = await freeRange(6, taken);
 
   mkdirSync(dir, { recursive: true });
-  const password = makeSecrets(join(dir, "secrets"), ["127.0.0.1", "localhost"]);
+  const { password, keys } = makeSecrets(join(dir, "secrets"), ["127.0.0.1", "localhost"]);
 
   // Seed first: the manifest below is read back from what actually
   // landed on disk, so it describes this host and not an intention.
@@ -381,6 +402,7 @@ async function provision({ id = randomBytes(3).toString("hex") } = {}) {
     password,
     share,
     caCert: join(dir, "secrets", "ca.crt"),
+    clientKeys: keys,
     startedAt: new Date().toISOString(),
     services,
   };
@@ -452,6 +474,9 @@ function collectLogs(info) {
     secrets.push(readFileSync(join(info.dir, "secrets", "ca.key"), "utf8"));
     secrets.push(readFileSync(join(info.dir, "secrets", "server.key"), "utf8"));
     secrets.push(readFileSync(join(info.dir, "secrets", "ssh_host_ed25519_key"), "utf8"));
+    for (const path of Object.values(info.clientKeys ?? {})) {
+      secrets.push(readFileSync(path, "utf8"));
+    }
   } catch {
     // A run that failed during provisioning may not have all of them.
   }

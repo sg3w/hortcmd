@@ -76,6 +76,16 @@ maps all 18 findings to tickets 369–377.
 These need remediation/justified narrowly scoped mitigation before release; this
 governance ticket does not certify the existing dependency graph vulnerability-free.
 
+As of 2026-09-27 two findings remain and the gate holds exactly one advisory
+exception: `cargo:rsa@0.10.0-rc.18:RUSTSEC-2023-0071`, expiring 2026-12-27
+([ticket 380](../tickets/done/380-rsa-marvin-successor-version.done.md)). Its
+compensating control is a code change, not an argument: SSH RSA signing was moved
+to AWS-LC, so no reachable RSA private-key operation is left in the `rsa` crate,
+which stays in the graph only for key parsing and public-key verification. The
+second finding, `proc-macro-error@1.0.4`
+([ticket 376](../tickets/376-replace-unmaintained-proc-macro-error.md)), has no
+exception and still blocks release.
+
 Unknown git/path sources, registries, missing checksums, npm install hooks and Rust
 build scripts fail without exact reviews. CI uses `npm ci --ignore-scripts`; a
 review never implicitly executes a script. Duplicate versions are reported in full;

@@ -580,6 +580,37 @@ fn harness_refuses_to_escape_the_root() {
     });
 }
 
+/// Public-key authentication works for every key algorithm hortcmd
+/// offers, against a real OpenSSH server.
+///
+/// RSA is the reason this test exists: its signature is produced by
+/// AWS-LC rather than by the `rsa` crate (ticket 380), and a signature
+/// that is encoded or padded wrong is something only a server can tell
+/// us. ECDSA and Ed25519 are here so the shared path is covered too.
+#[test]
+#[ignore]
+fn harness_authenticates_with_client_keys() {
+    let h = harness_or_skip!("harness_authenticates_with_client_keys");
+    let root = h.service("sftp").dir().to_string();
+    for algorithm in ["rsa", "ecdsa", "ed25519"] {
+        let p = h.connect_with_key("sftp", algorithm);
+        let listing = p
+            .list(&root)
+            .unwrap_or_else(|e| panic!("{} key: list {}: {}", algorithm, root, e));
+        assert!(
+            listing.entries.iter().any(|entry| entry.name == "tree"),
+            "{} key: the seeded tree is missing from {:?}",
+            algorithm,
+            listing
+                .entries
+                .iter()
+                .map(|entry| entry.name.as_str())
+                .collect::<Vec<_>>()
+        );
+        println!("   {} key accepted", algorithm);
+    }
+}
+
 // ---------- 5. Error mapping ----------
 
 /// Failures come back as failures, of the right shape.
