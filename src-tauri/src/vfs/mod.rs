@@ -17,6 +17,7 @@ pub mod caps;
 pub mod ftp;
 pub mod identity;
 pub mod limits;
+pub mod listing;
 pub mod local;
 mod local_path;
 pub mod location;
@@ -222,7 +223,23 @@ pub trait Provider: Send + Sync {
     fn is_dir(&self, path: &StreamPath) -> bool;
 
     /// Child paths of a directory (errors propagate).
+    ///
+    /// Every implementation bounds what it collects: how many entries a
+    /// directory reports is the server's answer, not ours (ticket 321).
     fn read_dir(&self, path: &StreamPath) -> io::Result<Vec<StreamPath>>;
+
+    /// Child paths, refusing a listing longer than `limit` *while* it is
+    /// read. The default cannot stop early, so it still bounds the
+    /// allocation through `read_dir`'s own cap and then applies the
+    /// caller's stricter limit; providers that can stop mid-enumeration
+    /// override this and pass `limit` down to the protocol adapter.
+    fn read_dir_bounded(&self, path: &StreamPath, limit: usize) -> io::Result<Vec<StreamPath>> {
+        let entries = self.read_dir(path)?;
+        if entries.len() > limit {
+            return Err(io::Error::other("preflight directory limit"));
+        }
+        Ok(entries)
+    }
 
     /// Bounded traversal hook. Streaming providers can stop without materializing
     /// the entire directory. Legacy protocol APIs still have their own read bound.
@@ -232,11 +249,7 @@ pub trait Provider: Send + Sync {
         limit: usize,
         visit: &mut dyn FnMut(StreamPath) -> io::Result<()>,
     ) -> io::Result<()> {
-        let entries = self.read_dir(path)?;
-        if entries.len() > limit {
-            return Err(io::Error::other("preflight directory limit"));
-        }
-        for entry in entries {
+        for entry in self.read_dir_bounded(path, limit)? {
             visit(entry)?;
         }
         Ok(())

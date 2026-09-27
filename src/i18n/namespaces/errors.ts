@@ -33,6 +33,8 @@ export const errors = ns(
     "error.trash.finderFailed": "Finder konnte den Eintrag nicht in den Papierkorb verschieben. Prüfe Finder und gegebenenfalls Systemeinstellungen → Datenschutz & Sicherheit → Automation. Die Ursache ist nicht eindeutig.",
     "error.fs.invalidName": "Ungültiger Name",
     "error.fs.tooLarge": "Zu groß",
+    "error.fs.tooManyEntries":
+      "Der Ordner meldet mehr als {limit} Einträge und wurde nicht geladen",
 
     // --- transfers ---
     "error.transfer.journalLimit": "Wiederherstellungsgrenze erreicht. Prüfe offene Aufträge oder teile den Auftrag in kleinere Gruppen.",
@@ -138,6 +140,8 @@ export const errors = ns(
     "error.trash.finderFailed": "Finder could not move the entry to Trash. Check Finder and, if needed, System Settings → Privacy & Security → Automation. The cause is uncertain.",
     "error.fs.invalidName": "Invalid name",
     "error.fs.tooLarge": "Too large",
+    "error.fs.tooManyEntries":
+      "The folder reports more than {limit} entries and was not loaded",
 
     // --- transfers ---
     "error.transfer.journalLimit": "Recovery limit reached. Review pending jobs or split this job into smaller groups.",

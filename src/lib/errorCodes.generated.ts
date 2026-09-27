@@ -22,6 +22,7 @@ export const ERROR_CODES = [
   "trash.failed",
   "trash.finderFailed",
   "fs.tooLarge",
+  "fs.tooManyEntries",
   "transfer.journalLimit",
   "transfer.journalUnavailable",
   "transfer.checksum",

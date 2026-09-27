@@ -16,6 +16,7 @@
 // requirement). HTTP requires an explicit scheme and both plaintext opt-ins.
 // ============================================================
 
+use super::listing::{self, ListingBudget};
 use super::{Provider, Stat};
 use crate::commands::fs::dir::{DirEntry, DirListing};
 use crate::errors::{code, AppError, AppResult};
@@ -211,6 +212,66 @@ fn norm(s: &str) -> String {
 
 impl WebdavProvider {
     /// PROPFIND with depth 0 — metadata of the entry itself.
+    /// Entries of one collection, charged to `budget` while the PROPFIND
+    /// answer is walked so a fabricated multistatus stops here (ticket 321).
+    fn entries_of(&self, path: &str, budget: &mut ListingBudget) -> AppResult<Vec<DirEntry>> {
+        super::provider_path::validate(
+            &crate::vfs::StreamPath::remote(path)?,
+            super::Scheme::Webdav,
+        )?;
+        let items = runtime()
+            .block_on(self.client.list(&encode_path(path), Depth::Number(1)))
+            .map_err(|e| AppError::from(format!("{}: {}", path, e)))?;
+
+        let self_key = norm(&encode_path(path));
+        let mut entries = Vec::new();
+        for item in items {
+            let (href, is_dir, size, modified) = match item {
+                ListEntity::File(f) => (
+                    f.href,
+                    false,
+                    f.content_length.max(0) as u64,
+                    f.last_modified.timestamp().max(0) as u64,
+                ),
+                ListEntity::Folder(d) => (
+                    d.href,
+                    true,
+                    0u64,
+                    d.last_modified.timestamp().max(0) as u64,
+                ),
+            };
+            // PROPFIND depth 1 includes the collection itself — skip it.
+            if norm(&href) == self_key {
+                continue;
+            }
+            let name = name_of(&href);
+            budget.charge(&name)?;
+            if name == "." || name == ".." {
+                continue;
+            }
+            if name.is_empty() {
+                return Err(AppError::from(
+                    "empty WebDAV entry name cannot be traversed",
+                ));
+            }
+            entries.push(DirEntry {
+                hidden: name.starts_with('.'),
+                readonly: false,
+                executable: false,
+                name,
+                is_dir,
+                // WebDAV has no symlink concept — a collection is a
+                // collection — so there is nothing to resolve (TICKET-018).
+                is_symlink: false,
+                size,
+                modified,
+                mode: None,
+            });
+        }
+
+        Ok(entries)
+    }
+
     fn stat_entity(&self, path: &str) -> AppResult<ListEntity> {
         let items = runtime()
             .block_on(self.client.list(&encode_path(path), Depth::Number(0)))
@@ -245,59 +306,7 @@ impl Provider for WebdavProvider {
     }
 
     fn list(&self, path: &str) -> AppResult<DirListing> {
-        super::provider_path::validate(
-            &crate::vfs::StreamPath::remote(path)?,
-            super::Scheme::Webdav,
-        )?;
-        let items = runtime()
-            .block_on(self.client.list(&encode_path(path), Depth::Number(1)))
-            .map_err(|e| AppError::from(format!("{}: {}", path, e)))?;
-
-        let self_key = norm(&encode_path(path));
-        let mut entries = Vec::new();
-        for item in items {
-            let (href, is_dir, size, modified) = match item {
-                ListEntity::File(f) => (
-                    f.href,
-                    false,
-                    f.content_length.max(0) as u64,
-                    f.last_modified.timestamp().max(0) as u64,
-                ),
-                ListEntity::Folder(d) => (
-                    d.href,
-                    true,
-                    0u64,
-                    d.last_modified.timestamp().max(0) as u64,
-                ),
-            };
-            // PROPFIND depth 1 includes the collection itself — skip it.
-            if norm(&href) == self_key {
-                continue;
-            }
-            let name = name_of(&href);
-            if name == "." || name == ".." {
-                continue;
-            }
-            if name.is_empty() {
-                return Err(AppError::from(
-                    "empty WebDAV entry name cannot be traversed",
-                ));
-            }
-            entries.push(DirEntry {
-                hidden: name.starts_with('.'),
-                readonly: false,
-                executable: false,
-                name,
-                is_dir,
-                // WebDAV has no symlink concept — a collection is a
-                // collection — so there is nothing to resolve (TICKET-018).
-                is_symlink: false,
-                size,
-                modified,
-                mode: None,
-            });
-        }
-
+        let entries = self.entries_of(path, &mut ListingBudget::default())?;
         // Full address so the pane keeps its remote context.
         Ok(DirListing {
             path: super::location::remote_uri("webdav", &self.key, path)?,
@@ -335,11 +344,20 @@ impl Provider for WebdavProvider {
     }
 
     fn read_dir(&self, path: &crate::vfs::StreamPath) -> io::Result<Vec<crate::vfs::StreamPath>> {
+        self.read_dir_bounded(path, listing::MAX_ENTRIES)
+    }
+
+    fn read_dir_bounded(
+        &self,
+        path: &crate::vfs::StreamPath,
+        limit: usize,
+    ) -> io::Result<Vec<crate::vfs::StreamPath>> {
         super::provider_path::validate(path, super::Scheme::Webdav)?;
         let base = p(path);
-        let listing = self.list(&base).map_err(to_io)?;
-        listing
-            .entries
+        let entries = self
+            .entries_of(&base, &mut ListingBudget::new(limit))
+            .map_err(to_io)?;
+        entries
             .iter()
             .map(|e| path.join(&e.name))
             .collect::<io::Result<Vec<_>>>()

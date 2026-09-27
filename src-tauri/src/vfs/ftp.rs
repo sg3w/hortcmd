@@ -17,6 +17,7 @@
 // with certificate validation by the platform verifier through Rustls.
 // ============================================================
 
+use super::listing::{self, ListingBudget};
 use super::{Provider, Stat};
 use crate::commands::fs::dir::{DirEntry, DirListing};
 use crate::errors::{code, AppError, AppResult};
@@ -262,7 +263,7 @@ fn to_io<E: std::fmt::Display>(e: E) -> io::Error {
 
 impl FtpProvider {
     /// Parses a directory listing into VFS entries.
-    fn entries_of(&self, path: &str) -> AppResult<Vec<DirEntry>> {
+    fn entries_of(&self, path: &str, budget: &mut ListingBudget) -> AppResult<Vec<DirEntry>> {
         // Plain `LIST` hides dotfiles — the server runs the equivalent of
         // `ls`, not `ls -a`, so `.config` and friends are simply absent
         // from a remote pane while being right there on the server
@@ -288,43 +289,49 @@ impl FtpProvider {
             }
         };
 
-        Ok(lines
-            .iter()
-            .filter_map(|line| FtpFile::from_str(line).ok())
-            .filter(|f| f.name() != "." && f.name() != "..")
-            .map(|f| {
-                let is_dir = f.is_directory();
-                let modified = f
-                    .modified()
-                    .duration_since(UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0);
-                DirEntry {
-                    hidden: f.name().starts_with('.'),
-                    readonly: false,
-                    executable: false,
-                    name: f.name().to_string(),
-                    is_dir,
-                    // No target resolution here (TICKET-018): FTP has no
-                    // `stat`, so the only way to learn whether a link
-                    // points at a directory is to probe it with `CWD` —
-                    // one extra round trip per link on a protocol that
-                    // already pays for every one. The LIST line's own
-                    // type character is what we report.
-                    is_symlink: f.is_symlink(),
-                    size: if is_dir { 0 } else { f.size() as u64 },
-                    modified,
-                    mode: None,
-                }
-            })
-            .collect())
+        let mut entries = Vec::new();
+        for line in &lines {
+            let Ok(f) = FtpFile::from_str(line) else {
+                continue;
+            };
+            if f.name() == "." || f.name() == ".." {
+                continue;
+            }
+            // Charged before the entry is built, so a server answering with
+            // millions of LIST lines stops the listing here (ticket 321).
+            budget.charge(f.name())?;
+            let is_dir = f.is_directory();
+            let modified = f
+                .modified()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            entries.push(DirEntry {
+                hidden: f.name().starts_with('.'),
+                readonly: false,
+                executable: false,
+                name: f.name().to_string(),
+                is_dir,
+                // No target resolution here (TICKET-018): FTP has no
+                // `stat`, so the only way to learn whether a link
+                // points at a directory is to probe it with `CWD` —
+                // one extra round trip per link on a protocol that
+                // already pays for every one. The LIST line's own
+                // type character is what we report.
+                is_symlink: f.is_symlink(),
+                size: if is_dir { 0 } else { f.size() as u64 },
+                modified,
+                mode: None,
+            });
+        }
+        Ok(entries)
     }
 
     /// FTP has no `stat`: look the entry up in its parent listing.
     fn lookup(&self, path: &crate::vfs::StreamPath) -> Option<DirEntry> {
         let parent = path.parent()?;
         let name = path.file_name()?.to_str()?;
-        self.entries_of(&p(&parent))
+        self.entries_of(&p(&parent), &mut ListingBudget::default())
             .ok()?
             .into_iter()
             .find(|e| e.name == name)
@@ -373,7 +380,7 @@ impl Provider for FtpProvider {
 
     fn list(&self, path: &str) -> AppResult<DirListing> {
         super::provider_path::validate(&crate::vfs::StreamPath::remote(path)?, super::Scheme::Ftp)?;
-        let entries = self.entries_of(path)?;
+        let entries = self.entries_of(path, &mut ListingBudget::default())?;
         // Full address so the pane keeps its remote context.
         Ok(DirListing {
             path: super::location::remote_uri("ftp", &self.key, path)?,
@@ -417,9 +424,19 @@ impl Provider for FtpProvider {
     }
 
     fn read_dir(&self, path: &crate::vfs::StreamPath) -> io::Result<Vec<crate::vfs::StreamPath>> {
+        self.read_dir_bounded(path, listing::MAX_ENTRIES)
+    }
+
+    fn read_dir_bounded(
+        &self,
+        path: &crate::vfs::StreamPath,
+        limit: usize,
+    ) -> io::Result<Vec<crate::vfs::StreamPath>> {
         super::provider_path::validate(path, super::Scheme::Ftp)?;
         let base = p(path);
-        let entries = self.entries_of(&base).map_err(to_io)?;
+        let entries = self
+            .entries_of(&base, &mut ListingBudget::new(limit))
+            .map_err(to_io)?;
         entries
             .iter()
             .map(|e| path.join(&e.name))
