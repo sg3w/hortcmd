@@ -66,6 +66,8 @@ export const errors = ns(
     "error.net.noProfile": "Verbindungsprofil nicht gefunden",
     "error.net.unsupportedProtocol": "Protokoll „{protocol}“ wird nicht unterstützt",
     "error.net.noShell": "Dieses Protokoll bietet keine Shell",
+    "error.net.shareListingUnsupported":
+      "Dieser Server unterstützt die Share-Auflistung nicht — bitte im Verbindungsprofil einen Startpfad mit Share angeben, z. B. /Freigabe",
     "error.net.certificateChanged": "Das freigegebene Zertifikat oder das Verbindungsprofil wurde geändert. Prüfe die Freigabe in der Profilbearbeitung.",
     "error.net.certificateInvalid": "Die Datei enthält kein unterstütztes einzelnes Zertifikat.",
     "error.net.certificateExpired": "Das Serverzertifikat ist abgelaufen.",
@@ -173,6 +175,8 @@ export const errors = ns(
     "error.net.noProfile": "Connection profile not found",
     "error.net.unsupportedProtocol": "Protocol “{protocol}” is not supported",
     "error.net.noShell": "This protocol offers no shell",
+    "error.net.shareListingUnsupported":
+      "This server does not support share listing — set a start path that includes a share in the connection profile, for example /Freigabe",
     "error.net.certificateChanged": "The approved certificate or connection profile changed. Review approval in the profile editor.",
     "error.net.certificateInvalid": "The file does not contain a supported single certificate.",
     "error.net.certificateExpired": "The server certificate has expired.",
