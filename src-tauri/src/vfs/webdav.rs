@@ -709,8 +709,11 @@ impl Read for WebdavReader {
 
 /// Upload: WebDAV PUT needs a body, so the data is spooled to a temp
 /// file and streamed to the server on `flush` (the transfer engine
-/// calls it, so upload errors reach the caller); `drop` is the safety
-/// net for un-flushed streams.
+/// calls it, so upload errors reach the caller). A stream that is dropped
+/// without a `flush` is an abandoned transfer — cancel drops the writer and
+/// then deletes the destination — so `drop` discards the spool instead of
+/// uploading it (ticket 383). Every other writer here streams its bytes as
+/// they are written, so only this one can withhold a whole upload.
 struct WebdavWriter {
     client: Client,
     path: String,
@@ -786,6 +789,14 @@ impl WebdavWriter {
         let _ = std::fs::remove_file(&self.spool_path);
         result
     }
+
+    /// Throws the spool away without a `PUT`. Nothing was published, so
+    /// there is nothing to report to a caller that is no longer listening.
+    fn abandon(&mut self) {
+        self.finished = true;
+        self.spool = None;
+        let _ = std::fs::remove_file(&self.spool_path);
+    }
 }
 
 impl Write for WebdavWriter {
@@ -803,8 +814,7 @@ impl Write for WebdavWriter {
 
 impl Drop for WebdavWriter {
     fn drop(&mut self) {
-        let _ = self.finish();
-        let _ = std::fs::remove_file(&self.spool_path);
+        self.abandon();
     }
 }
 
@@ -900,6 +910,110 @@ mod tests {
         );
         assert!(listing.entries[0].hidden);
         assert!(listing.entries.iter().all(|entry| entry.is_dir));
+    }
+
+    /// Cancel drops the writer without flushing it. Nothing may reach the
+    /// server then — uploading the partial spool and deleting it afterwards is
+    /// exactly what ticket 383 removed — while a flushed stream still PUTs its
+    /// whole body.
+    #[test]
+    fn a_dropped_upload_sends_nothing_and_a_flushed_one_sends_everything() {
+        use std::io::{BufRead, BufReader};
+        use std::net::TcpListener;
+        use std::time::Duration;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let agent = reqwest_dav::re_exports::reqwest::Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
+        let client = ClientBuilder::new()
+            .set_host(format!("http://127.0.0.1:{port}"))
+            .set_auth(Auth::Anonymous)
+            .set_agent(agent)
+            .build()
+            .unwrap();
+
+        let mut abandoned = WebdavWriter::new(client.clone(), "/cancelled.bin".into()).unwrap();
+        abandoned.write_all(&[7u8; 4096]).unwrap();
+        let spool = abandoned.spool_path.clone();
+        assert!(spool.exists());
+        drop(abandoned);
+        assert!(
+            !spool.exists(),
+            "the spool file survived the abandoned upload"
+        );
+        listener.set_nonblocking(true).unwrap();
+        assert_eq!(
+            listener.accept().unwrap_err().kind(),
+            io::ErrorKind::WouldBlock,
+            "a cancelled upload contacted the server"
+        );
+        listener.set_nonblocking(false).unwrap();
+
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            socket
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            socket
+                .set_write_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut reader = BufReader::new(&mut socket);
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            let request = line.clone();
+            let mut length = 0;
+            let mut chunked = false;
+            loop {
+                line.clear();
+                assert!(reader.read_line(&mut line).unwrap() > 0);
+                if line == "\r\n" {
+                    break;
+                }
+                let lower = line.to_ascii_lowercase();
+                if let Some(value) = lower.strip_prefix("content-length:") {
+                    length = value.trim().parse::<usize>().unwrap();
+                }
+                chunked |= lower.starts_with("transfer-encoding:") && lower.contains("chunked");
+            }
+            let mut body = Vec::new();
+            if chunked {
+                loop {
+                    line.clear();
+                    reader.read_line(&mut line).unwrap();
+                    let size = usize::from_str_radix(line.trim(), 16).unwrap();
+                    let mut chunk = vec![0u8; size + 2];
+                    reader.read_exact(&mut chunk).unwrap();
+                    if size == 0 {
+                        break;
+                    }
+                    body.extend_from_slice(&chunk[..size]);
+                }
+            } else {
+                body.resize(length, 0);
+                reader.read_exact(&mut body).unwrap();
+            }
+            write!(
+                socket,
+                "HTTP/1.1 201 Created\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            )
+            .unwrap();
+            (request, body)
+        });
+
+        let mut committed = WebdavWriter::new(client, "/kept.bin".into()).unwrap();
+        let payload = vec![9u8; 4096];
+        committed.write_all(&payload).unwrap();
+        let spool = committed.spool_path.clone();
+        committed.flush().unwrap();
+        drop(committed);
+        let (request, body) = server.join().unwrap();
+        assert!(request.starts_with("PUT /kept.bin "), "{request}");
+        assert_eq!(body, payload);
+        assert!(!spool.exists());
     }
 
     #[test]

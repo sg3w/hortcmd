@@ -2,7 +2,7 @@
 
 All tickets below 100 and tickets 100–110 have been completed.
 Tickets 125–126, 128, 131, 134, 137 and the discovered issues 300–301 and 303–316 are also complete. There are
-**29 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
+**28 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
 issues 317–387 (excluding completed tickets listed below). Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
@@ -299,7 +299,7 @@ the backend halves of frontend-only fixes (359, 326).
 - [382](done/382-backend-rejects-case-only-renames.done.md) (P1, done): `rename_entry` and
   `rename_batch_on`'s pre-check refuse a case-only rename on macOS/Windows, so
   the rename ticket 359 made the preview allow still fails at execution.
-- [383](383-webdav-cancelled-upload-still-puts.md) (P1): `WebdavWriter::drop`
+- [383](done/383-webdav-cancelled-upload-still-puts.done.md) (P1, done): `WebdavWriter::drop`
   performs the `PUT`, so cancelling a WebDAV upload uploads the partial file
   and only then deletes it.
 - [384](384-compare-aborts-on-unreadable-subdirectory.md) (P2): a

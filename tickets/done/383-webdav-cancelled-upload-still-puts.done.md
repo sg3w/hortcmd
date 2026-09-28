@@ -70,3 +70,44 @@ spooled to the server, waits for it, and then issues a `DELETE`. Consequences:
 - Rust test: write, `flush()`, assert the `PUT` arrives with the full body.
 - `npm run test:harness`: the WebDAV transfer tests stay green.
 - `npm run check`.
+
+## Implementation
+
+`WebdavWriter` now has two exits instead of one.
+
+- `finish()` is unchanged and remains the commit: `flush()` calls it, and its
+  error reaches the transfer engine.
+- `abandon()` marks the stream finished, closes the spool handle and removes
+  the spool file — without a `PUT`. `Drop` calls it.
+
+A writer that is dropped without a `flush` is by definition an abandoned
+transfer: the engine flushes on every success path (`copy.rs`, `parallel.rs`),
+and the cancel closure drops the writer precisely to throw the partial write
+away. Pressing Cancel therefore no longer uploads the spooled prefix, no
+truncated object is ever published under the destination name, and the
+following `remove_file(dst)` has nothing to clean up on a direct-mode upload
+that never started.
+
+### The other writers
+
+Checked, and none has the same asymmetry. `SmbWriter`, `SyncSftpFile` and
+`FtpWriter` all put their bytes on the wire as they are written; their `finish`
+/ `Drop` only closes the handle (and, for FTP, finalizes the data stream and
+reads the reply). A partial file at the destination is already there when
+cancel arrives, which is the local-filesystem behaviour the cancel path is
+written for — it deletes the destination. WebDAV was the only writer that
+withheld the whole body until the end, so it was the only one whose `Drop`
+could publish.
+
+### Verification
+
+- `vfs::webdav::tests::a_dropped_upload_sends_nothing_and_a_flushed_one_sends_everything`:
+  a `WebdavWriter` pointed at a local `TcpListener` is written to and dropped;
+  the listener never receives a connection (non-blocking `accept` answers
+  `WouldBlock`) and the spool file is gone. The second half writes 4 KiB,
+  flushes, and the stand-in server receives `PUT /kept.bin` with the complete
+  body.
+- `npm run check` passed on macOS (arm64).
+- `npm run test:harness` was not run: the Docker daemon is not available in
+  this environment. The change removes a request rather than adding one, and
+  the harness's WebDAV transfers all commit through `flush()`.
