@@ -98,3 +98,16 @@ it("disables copying when capabilities disappear after comparison",async()=>{
   expect(screen.getByText(t("compare.copyUnavailable"))).toBeVisible();
   expect(h.calls.filter(c=>c.cmd==="sync_copy")).toHaveLength(0);
 });
+
+it("keeps delivered batches when the walk fails late and shows the unreadable level",async()=>{
+  const h=setup([]);
+  h.setCommand("compare_dirs",({onBatch})=>{
+    (onBatch as {onmessage:(rows:DiffEntry[])=>void}).onmessage([pair("kept.txt","left_only",true,false),pair("locked","unreadable",false,false)]);
+    return Promise.reject({code:"fs.permission",params:{},id:"compare-late",v:1});
+  });
+  render(<CompareDialog/>);
+  expect(await screen.findByRole("checkbox",{name:"kept.txt"})).toBeInTheDocument();
+  await waitFor(()=>expect(screen.getByRole("alert")).toBeInTheDocument());
+  expect(screen.getByRole("checkbox",{name:"kept.txt"})).toBeInTheDocument();
+  expect(screen.getByRole("gridcell",{name:t("compare.status.unreadable")})).toHaveTextContent("!");
+});

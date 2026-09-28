@@ -70,3 +70,44 @@ already treats unreadable directories as counted, never fatal
 - Frontend test: a rejected `compareDirs` after batches have been delivered
   keeps the delivered rows and shows the error.
 - `npm run check`.
+
+## Implementation
+
+`walk_compare` now decides per level who may fail.
+
+The two roots keep propagating: they are what the user asked to compare, and a
+comparison of something that cannot be opened is a failed comparison, not an
+empty one. Below the root both sides are read with `read_level(_, true)` and
+zipped — if either side fails for any reason other than the `NotFound` that
+already meant "this subdirectory exists only on the other side", the level is
+skipped and the walk carries on with its siblings.
+
+The skip is reported rather than silent: `unreadable_level` emits a `DiffEntry`
+for the directory itself with the new status `unreadable`, counted against
+`MAX_ENTRIES` like any other row. Neither `left` nor `right` is set, so the row
+offers no copy direction and cannot be dragged into a sync by "select all".
+`CompareResults` renders it as `!` with `compare.status.unreadable` (German and
+English), so it is not confused with the `?` that means "metadata unknown".
+
+Frontend: `CompareDialog.run` no longer clears `entries` and `selected` in its
+`catch` — those batches were correct when they arrived — and the dialog renders
+the error *above* the result list instead of in place of it. With no entries the
+appearance is unchanged; the list only stays when there is something to keep.
+
+Also fixed in passing: the test helper `temp()` built its directory name from
+the clock alone, so two comparison tests starting in the same nanosecond
+collided. It now adds a counter — the new tests made the collision reproducible.
+
+### Verification
+
+- `compare::paired_safety_tests::an_unreadable_subdirectory_is_reported_and_the_walk_continues`
+  (unix): one subdirectory is `chmod 000` on the left. `walk_compare` returns
+  `Ok(false)`, the row `("locked", "unreadable", false, false)` is streamed, the
+  readable siblings (`root`, `open/file`) are still compared, nothing claims the
+  hidden file was seen, and the counter matches the rows delivered.
+- `an_unreadable_root_still_fails` (unix): a `chmod 000` root is an error, and
+  nothing is streamed before it.
+- `CompareDialog.test.tsx`: a `compare_dirs` that rejects after delivering a
+  batch keeps the delivered row, shows the error beside it, and renders the
+  unreadable level as `!`.
+- `npm run check` passed on macOS (arm64).

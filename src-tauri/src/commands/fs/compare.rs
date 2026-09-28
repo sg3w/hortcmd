@@ -107,6 +107,24 @@ fn status_of(l: Option<&Meta>, r: Option<&Meta>) -> &'static str {
     }
 }
 
+/// A level that could not be opened. Reported as an entry of its own so the
+/// gap is visible in the dialog instead of reading as "these directories are
+/// identical". Neither side is marked present: there is nothing to copy, only
+/// something that could not be compared (ticket 384).
+fn unreadable_level(rel: &str) -> DiffEntry {
+    DiffEntry {
+        rel: rel.to_owned(),
+        name: rel.rsplit('/').next().unwrap_or(rel).to_owned(),
+        left: false,
+        right: false,
+        left_size: 0,
+        right_size: 0,
+        left_modified: 0,
+        right_modified: 0,
+        status: "unreadable".to_string(),
+    }
+}
+
 /// Compares level by level and sends each directory batch immediately
 /// over the channel to the frontend (streaming), before descending into
 /// subfolders using an explicit stack. `count` counts the already-sent entries; on
@@ -132,8 +150,26 @@ pub(crate) fn walk_compare(
         } else {
             rroot.join(&rel)
         };
-        let (lfiles, lsubs) = read_level(&ljoin, !rel.is_empty())?;
-        let (rfiles, rsubs) = read_level(&rjoin, !rel.is_empty())?;
+        let root = rel.is_empty();
+        let left = read_level(&ljoin, !root);
+        let right = read_level(&rjoin, !root);
+        // Only the two roots hard-fail: those are what the user asked to
+        // compare. A subdirectory that cannot be opened — no permission, a
+        // share that went away mid-walk — is reported and skipped, so it
+        // never discards the levels already streamed (ticket 384).
+        let level = if root {
+            Some((left?, right?))
+        } else {
+            left.ok().zip(right.ok())
+        };
+        let Some(((lfiles, lsubs), (rfiles, rsubs))) = level else {
+            channel(vec![unreadable_level(&rel)]);
+            *count += 1;
+            if *count >= MAX_ENTRIES {
+                return Ok(true);
+            }
+            continue;
+        };
 
         // Compare the files of this level (names of both sides, sorted).
         let mut names: BTreeSet<&String> = BTreeSet::new();
@@ -534,13 +570,17 @@ mod paired_safety_tests {
         }
     }
     fn temp() -> Temp {
+        // A counter, not only the clock: two tests starting in the same
+        // nanosecond must not share a directory.
+        static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let path = std::env::temp_dir().join(format!(
-            "hortcmd-compare-{}-{}",
+            "hortcmd-compare-{}-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_nanos()
+                .as_nanos(),
+            SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         ));
         fs::create_dir(&path).unwrap();
         Temp(path)
@@ -571,6 +611,79 @@ mod paired_safety_tests {
             .unwrap()
             .unwrap();
         assert_eq!(result, (1, false));
+    }
+
+    /// One unreadable subdirectory must not throw away the rest of the walk.
+    /// The level is reported as its own entry, its siblings survive, and the
+    /// comparison still succeeds (ticket 384).
+    #[cfg(unix)]
+    #[test]
+    fn an_unreadable_subdirectory_is_reported_and_the_walk_continues() {
+        use std::os::unix::fs::PermissionsExt;
+        let t = temp();
+        let left = t.0.join("left");
+        let right = t.0.join("right");
+        fs::create_dir_all(left.join("locked")).unwrap();
+        fs::create_dir_all(left.join("open")).unwrap();
+        fs::create_dir_all(right.join("locked")).unwrap();
+        fs::create_dir_all(right.join("open")).unwrap();
+        fs::write(left.join("open/file"), "x").unwrap();
+        fs::write(left.join("locked/hidden"), "x").unwrap();
+        fs::write(left.join("root"), "x").unwrap();
+        fs::set_permissions(left.join("locked"), fs::Permissions::from_mode(0o000)).unwrap();
+
+        let seen = std::cell::RefCell::new(Vec::new());
+        let mut count = 0;
+        let truncated = walk_compare(
+            &left,
+            &right,
+            "",
+            true,
+            &|batch| {
+                seen.borrow_mut().extend(
+                    batch
+                        .into_iter()
+                        .map(|entry| (entry.rel, entry.status, entry.left, entry.right)),
+                );
+            },
+            &mut count,
+        );
+        fs::set_permissions(left.join("locked"), fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(!truncated.unwrap());
+        let seen = seen.into_inner();
+        assert!(
+            seen.contains(&("locked".to_string(), "unreadable".to_string(), false, false)),
+            "{seen:?}"
+        );
+        // The readable siblings are still compared, and nothing claims the
+        // hidden file was seen.
+        assert!(seen
+            .iter()
+            .any(|(rel, status, ..)| rel == "root" && status == "left_only"));
+        assert!(seen
+            .iter()
+            .any(|(rel, status, ..)| rel == "open/file" && status == "left_only"));
+        assert!(!seen.iter().any(|(rel, ..)| rel.contains("hidden")));
+        assert_eq!(count, seen.len());
+    }
+
+    /// The roots stay strict: comparing something the user cannot open is a
+    /// failed comparison, not an empty one.
+    #[cfg(unix)]
+    #[test]
+    fn an_unreadable_root_still_fails() {
+        use std::os::unix::fs::PermissionsExt;
+        let t = temp();
+        let left = t.0.join("left");
+        let right = t.0.join("right");
+        fs::create_dir(&left).unwrap();
+        fs::create_dir(&right).unwrap();
+        fs::set_permissions(&left, fs::Permissions::from_mode(0o000)).unwrap();
+        let mut count = 0;
+        let result = walk_compare(&left, &right, "", true, &|_| {}, &mut count);
+        fs::set_permissions(&left, fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(result.is_err());
+        assert_eq!(count, 0);
     }
 
     #[test]
