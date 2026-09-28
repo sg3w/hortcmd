@@ -64,3 +64,38 @@ Two smaller points in the same function:
 - Rust test (unix): the temporary file's mode during the write is 0600, and a
   pre-existing file at the temporary name is not truncated.
 - `npm run check`.
+
+## Implementation
+
+`write_atomic` now finishes the sequence it started.
+
+- After the rename it calls `recovery::durability::sync_parent(path)` — the same
+  helper the transfer engine and archive staging use after every publishing
+  rename, rather than a second implementation of it. Its failure is reported
+  with `CRED_STORE`: the caller must not be told the secret was stored when the
+  directory entry may still be lost.
+- The temporary sibling is created by `create_temp`: `create_new(true)` so a
+  stale or hostile file at the name is never truncated or reused, a random
+  suffix with 16 bounded retries so a collision is a retry rather than a
+  failure, and mode 0600 on Unix so the vault is not briefly readable by other
+  users. That is the shape `create_spool` and the recovery journal already use.
+- The two error identities are unchanged: a failure to write the temporary file
+  still reads "KeePass-Datei nicht schreibbar", a failure to publish is still
+  `CRED_STORE`, and every failure path removes the temporary file.
+
+`create_temp_with` takes the candidate generator as a parameter, which is what
+lets the collision behaviour be tested without depending on a random name.
+
+### Verification
+
+- `net::credentials::tests::keepass_write_publishes_the_vault_and_leaves_no_temporary`:
+  after `KeepassStore::set` the `.kdbx` is a file at the configured path, no
+  `*.hortcmd-tmp*` sibling remains in the directory, and a freshly opened store
+  reads the new entry back.
+- `keepass_temporary_is_private_and_never_truncated` (mode assertion under
+  unix): an occupied candidate is retried around with its content intact, the
+  file that is created has mode 0600, and a generator that only ever offers the
+  occupied name fails with `AlreadyExists` instead of truncating it.
+- The existing KeePass round-trip and persistence tests still pass, so the
+  publishing path itself is unchanged in behaviour.
+- `npm run check` passed on macOS (arm64).
