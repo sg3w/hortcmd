@@ -2,8 +2,8 @@
 
 All tickets below 100 and tickets 100–110 have been completed.
 Tickets 125–126, 128, 131, 134, 137 and the discovered issues 300–301 and 303–316 are also complete. There are
-**24 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
-issues 317–381 (excluding completed tickets listed below). Dependencies use the current paths.
+**30 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
+issues 317–387 (excluding completed tickets listed below). Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
 filenames ending in `.done.md`. This also applies to previously completed support
@@ -289,6 +289,32 @@ blocked until they have a disposition:
   reachable RSA private-key operation in the crate, and that control earns the
   gate's single bounded exception (expiring 2026-12-27). One finding still
   blocks release — 376's.
+
+## Discovered in the 2026-09-28 bugfix review
+
+Six findings from a full read of the transfer, archive, comparison, rename,
+credential and WebDAV paths. None duplicates an earlier ticket; 382 and 384 are
+the backend halves of frontend-only fixes (359, 326).
+
+- [382](382-backend-rejects-case-only-renames.md) (P1): `rename_entry` and
+  `rename_batch_on`'s pre-check refuse a case-only rename on macOS/Windows, so
+  the rename ticket 359 made the preview allow still fails at execution.
+- [383](383-webdav-cancelled-upload-still-puts.md) (P1): `WebdavWriter::drop`
+  performs the `PUT`, so cancelling a WebDAV upload uploads the partial file
+  and only then deletes it.
+- [384](384-compare-aborts-on-unreadable-subdirectory.md) (P2): a
+  `PermissionDenied` on any subdirectory aborts the whole recursive compare;
+  the dialog then discards every batch it already received.
+- [385](385-transfers-drop-timestamps-and-permissions.md) (P2): copies preserve
+  no timestamp or mode — the `Provider` trait has no metadata operation — and
+  `LocalProvider::limits` never answers `preserves_metadata`, so every plan
+  carries a `metadataUnknown` advisory.
+- [386](386-keepass-write-not-durable.md) (P2): the `.kdbx` write renames
+  without syncing the parent directory, unlike every other publishing rename in
+  the codebase.
+- [387](387-extract-second-pass-name-handling.md) (P3): `extract_zip_one`
+  slices `&name[base.len()..]` unchecked across a second archive open (panic),
+  and 7z pass 1 normalizes separators while pass 2 does not.
 
 Ticket 372 raised the declared MSRV from 1.85.1 to **1.93** deliberately: the
 fixed releases for the quick-xml, suppaftp, time and urlpattern findings, and the
