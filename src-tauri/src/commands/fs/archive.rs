@@ -465,7 +465,9 @@ pub fn create_archive(app: AppHandle, id: String, sources: Vec<String>, dest_zip
 
 #[cfg(test)]
 mod tests {
-    use super::extract::{extract_7z, extract_tar, extract_zip, match_target, write_entry};
+    use super::extract::{
+        extract_7z, extract_tar, extract_zip, extract_zip_one, match_target, write_entry,
+    };
     use super::*;
     use std::collections::HashSet;
     use std::fs;
@@ -888,6 +890,147 @@ mod tests {
                 fs::remove_dir_all(root).unwrap();
             }
         }
+    }
+
+    /// Pass 2 indexes a *reopened* archive with pass 1's numbers. If the file
+    /// changed in between, an index can name a member outside the chosen level
+    /// — or one shorter than it, where the old unchecked `&name[base.len()..]`
+    /// panicked instead of reporting. Both are item errors now (ticket 387).
+    #[test]
+    fn a_zip_member_outside_the_chosen_level_is_an_error_not_a_panic() {
+        let root = tmp_dir("zip-index-mismatch");
+        let archive = root.join("mixed.zip");
+        let mut zip = ZipWriter::new(File::create(&archive).unwrap());
+        let options = SimpleFileOptions::default();
+        for name in ["approved/inside.txt", "other/outside.txt", "ä.txt"] {
+            zip.start_file(name, options).unwrap();
+            zip.write_all(b"payload").unwrap();
+        }
+        zip.finish().unwrap();
+
+        let destination = root.join("out");
+        fs::create_dir(&destination).unwrap();
+        let path = archive.to_str().unwrap();
+        let mut manifest = preflight(path, &None, safety::Limits::default()).unwrap();
+        let mut stage = staging::Stage::new(&destination).unwrap();
+        let mut prog = progress();
+        let mut open = ZipArchive::new(budget::open(path).unwrap()).unwrap();
+        let indices: Vec<(String, usize)> = ["approved/inside.txt", "other/outside.txt", "ä.txt"]
+            .into_iter()
+            .map(|name| (name.to_owned(), open.index_for_name(name).unwrap()))
+            .collect();
+        let index = |wanted: &str| {
+            indices
+                .iter()
+                .find(|(name, _)| name == wanted)
+                .map(|(_, index)| *index)
+                .unwrap()
+        };
+
+        // Every member the manifest knows, but outside `base`: the one in
+        // another level, and the one whose name is shorter than `base` and
+        // begins with a multi-byte character.
+        for name in ["other/outside.txt", "ä.txt"] {
+            let error = extract_zip_one(
+                &mut open,
+                index(name),
+                "approved/",
+                true,
+                &HashSet::new(),
+                &mut stage,
+                &None,
+                &mut prog,
+                &mut manifest,
+            )
+            .unwrap_err();
+            assert!(error.is(code::ARCHIVE_CORRUPT), "{name}: {error:?}");
+            assert_eq!(error.op.as_deref(), Some("extract-changed"), "{name}");
+        }
+
+        // The member that does belong to the level still extracts.
+        extract_zip_one(
+            &mut open,
+            index("approved/inside.txt"),
+            "approved/",
+            true,
+            &HashSet::new(),
+            &mut stage,
+            &None,
+            &mut prog,
+            &mut manifest,
+        )
+        .unwrap();
+        stage.commit(&prog.cancel).unwrap();
+        stage.cleanup().unwrap();
+        assert_eq!(
+            fs::read(destination.join("inside.txt")).unwrap(),
+            b"payload"
+        );
+        assert_eq!(fs::read_dir(&destination).unwrap().count(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    /// Every format reads its archive twice: pass 1 sums the totals, pass 2
+    /// writes the members. A disagreement between them surfaces as
+    /// `extract-incomplete` rather than as its real cause, so the two passes
+    /// are held to the same selection for each format (ticket 387).
+    #[test]
+    fn both_extraction_passes_select_the_same_members() {
+        let root = tmp_dir("passes-agree");
+        for (name, make) in [
+            ("a.zip", make_zip as fn(&Path)),
+            ("a.tar", make_tar),
+            ("a.tar.gz", make_tar_gz),
+            ("a.7z", make_7z),
+        ] {
+            let archive = root.join(name);
+            make(&archive);
+            let path = archive.to_str().unwrap();
+            for targets in [HashSet::new(), HashSet::from(["sub".to_owned()])] {
+                let expected = if targets.is_empty() { 2 } else { 1 };
+                let destination = root.join(format!("{name}-out-{expected}"));
+                fs::create_dir(&destination).unwrap();
+                let manifest = preflight(path, &None, safety::Limits::default()).unwrap();
+                let mut stage = staging::Stage::new(&destination).unwrap();
+                let mut prog = progress();
+                let (ok, errors) = match archive_kind(path).unwrap() {
+                    ArchiveKind::Zip => {
+                        extract_zip(path, "", manifest, &targets, &mut stage, &None, &mut prog)
+                    }
+                    ArchiveKind::SevenZ => {
+                        extract_7z(path, "", manifest, &targets, &mut stage, &None, &mut prog)
+                    }
+                    kind => extract_tar(kind, path, "", manifest, &targets, &mut stage, &mut prog),
+                }
+                .unwrap();
+                assert!(errors.is_empty(), "{name}: {errors:?}");
+                // Pass 1's total is exactly what pass 2 wrote.
+                assert_eq!(prog.files_total, ok, "{name}");
+                assert_eq!(prog.files_total, expected, "{name}");
+                stage.commit(&prog.cancel).unwrap();
+                stage.cleanup().unwrap();
+            }
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    /// Why pass 1 no longer normalizes separators: a member whose name carries
+    /// a backslash never reaches extraction at all — preflight refuses it
+    /// (ticket 387).
+    #[test]
+    fn a_backslash_member_is_refused_during_preflight() {
+        let root = tmp_dir("backslash-member");
+        let archive = root.join("windowsish.zip");
+        let mut zip = ZipWriter::new(File::create(&archive).unwrap());
+        zip.start_file("dir\\file.txt", SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(b"payload").unwrap();
+        zip.finish().unwrap();
+        let error = preflight(archive.to_str().unwrap(), &None, safety::Limits::default())
+            .err()
+            .expect("a backslash member must not pass preflight");
+        assert!(error.is(code::ARCHIVE_UNSAFE_ENTRY), "{error:?}");
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

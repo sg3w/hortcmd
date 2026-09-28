@@ -92,3 +92,46 @@ backslash names are handled.
 - Rust test: 7z pass 1 and pass 2 select the same member set for the same
   `base` and `targets`.
 - `npm run check`.
+
+## Implementation
+
+Both passes of every format now derive the relative name the same way, through
+`match_target`.
+
+**ZIP.** `extract_zip_one` takes `all` and `targets` and runs the name it read
+from the *reopened* archive through `match_target` instead of slicing it at
+`base.len()`. A member that no longer belongs to the chosen level — because the
+file on disk changed between the two opens — becomes
+`ARCHIVE_CORRUPT`/`extract-changed`, the same answer `manifest.verify` gives for
+the neighbouring case, and is reported as an item error rather than panicking.
+The unchecked slice could panic two ways, out of range for a name shorter than
+`base` and on a char boundary for one sharing a multi-byte prefix; neither is
+reachable any more. The function is `pub(super)` so the mismatch can be
+exercised directly, which is the only way to reach it: the swap happens between
+two opens inside `extract_zip`.
+
+**7z.** Pass 1 no longer normalizes separators. `safety::path` refuses any
+member whose name contains a backslash during preflight, so such a member never
+reaches either pass — normalizing in pass 1 could only make the two disagree,
+and the dead `replace` suggested backslash names were handled. The comment
+records where they are actually validated.
+
+**tar** was already consistent — it re-derives the name per entry in both
+passes — and is now covered by the same test as the other formats.
+
+### Verification
+
+- `archive::tests::a_zip_member_outside_the_chosen_level_is_an_error_not_a_panic`:
+  `extract_zip_one` is called with `base = "approved/"` and the indices of
+  `other/outside.txt` and `ä.txt` — a member in another level and one shorter
+  than `base` beginning with a multi-byte character, both of which the old
+  slice panicked on. Both answer `archive.corrupt` / `extract-changed`, the
+  member that does belong to the level still extracts, and the destination ends
+  up holding exactly that one file.
+- `both_extraction_passes_select_the_same_members`: for zip, tar, tar.gz and
+  7z, with the whole archive and with a single selected subfolder, pass 1's
+  `files_total` equals the number of members pass 2 wrote.
+- `a_backslash_member_is_refused_during_preflight`: a zip member named
+  `dir\file.txt` is rejected with `archive.unsafeEntry` before extraction —
+  the reason the normalization could be dropped rather than duplicated.
+- `npm run check` passed on macOS (arm64).

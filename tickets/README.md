@@ -2,7 +2,7 @@
 
 All tickets below 100 and tickets 100–110 have been completed.
 Tickets 125–126, 128, 131, 134, 137 and the discovered issues 300–301 and 303–316 are also complete. There are
-**25 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
+**24 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
 issues 317–387 (excluding completed tickets listed below). Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
@@ -312,7 +312,7 @@ the backend halves of frontend-only fixes (359, 326).
 - [386](done/386-keepass-write-not-durable.done.md) (P2, done): the `.kdbx` write renames
   without syncing the parent directory, unlike every other publishing rename in
   the codebase.
-- [387](387-extract-second-pass-name-handling.md) (P3): `extract_zip_one`
+- [387](done/387-extract-second-pass-name-handling.done.md) (P3, done): `extract_zip_one`
   slices `&name[base.len()..]` unchecked across a second archive open (panic),
   and 7z pass 1 normalizes separators while pass 2 does not.
 
