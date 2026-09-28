@@ -302,6 +302,7 @@ fn run_extract(
         last: Instant::now(),
         cancel: cancel.clone(),
         pause: pause.clone(),
+        notes: Default::default(),
     };
 
     let run = recovery::optional_begin(&id, || {
@@ -379,6 +380,7 @@ fn run_pack(
         last: Instant::now(),
         cancel,
         pause,
+        notes: Default::default(),
     };
     let run = recovery::optional_begin(&id, || {
         Intent::transfer(
@@ -635,6 +637,7 @@ mod tests {
             last: Instant::now(),
             cancel: Arc::new(AtomicBool::new(false)),
             pause: Arc::new(AtomicBool::new(false)),
+            notes: Default::default(),
         }
     }
 

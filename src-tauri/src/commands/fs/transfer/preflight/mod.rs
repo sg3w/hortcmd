@@ -246,6 +246,12 @@ pub fn build(
         let same_store = provider.store_id() == destination_provider.store_id();
         if !same_store {
             issue(&mut plan, "decision", "crossProvider", Some(index));
+            // The destination's own fidelity says nothing about what the
+            // source can report: a streamed cross-store copy reproduces only
+            // what both ends can name (ticket 385).
+            if plan.limits.preserves_metadata == Some(true) {
+                issue(&mut plan, "advisory", "metadataUnknown", Some(index));
+            }
         }
         let containment_source = if provider.store_id() == "local" {
             std::fs::canonicalize(source.native()?)?.into()

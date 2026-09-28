@@ -510,3 +510,47 @@ fn old_transfer_settings_keep_space_checks_enabled() {
             .checks_space()
     );
 }
+
+/// The advisory has to mean something: a plain local plan preserves timestamps
+/// and modes, so it no longer fires there, while a store that cannot say —
+/// every remote adapter, which takes the trait's default limits — still does
+/// (ticket 385).
+#[test]
+fn metadata_advisory_fires_only_where_fidelity_is_unknown() {
+    let (_root, src, dst) = fixture();
+    std::fs::write(Path::new(&src).join("a"), b"hello").unwrap();
+    let plan = build(
+        RecoveryKind::Copy,
+        std::slice::from_ref(&src),
+        &dst,
+        RecoverySettings::default(),
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    assert!(
+        !plan.issues.iter().any(|i| i.code == "metadataUnknown"),
+        "{:?}",
+        plan.issues
+    );
+
+    let path = crate::vfs::StreamPath::from(Path::new(&dst));
+    assert_eq!(
+        vfs::local::LocalProvider
+            .limits(&path, false)
+            .unwrap()
+            .preserves_metadata,
+        Some(true)
+    );
+    // A provider that implements only the required operations keeps the
+    // unknown answer, so its plans keep the advisory.
+    assert_eq!(
+        Capacity {
+            store: Some("sftp:test".into()),
+            ..Default::default()
+        }
+        .limits(&path, false)
+        .unwrap()
+        .preserves_metadata,
+        None
+    );
+}

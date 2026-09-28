@@ -613,6 +613,62 @@ mod paired_safety_tests {
         assert_eq!(result, (1, false));
     }
 
+    /// The comparison is built on size + modification time, so a tree hortcmd
+    /// copied itself must compare `same` against its source — otherwise every
+    /// synchronisation wants to copy everything again (ticket 385).
+    #[test]
+    fn a_copied_file_compares_equal_to_its_source() {
+        let t = temp();
+        let src = t.0.join("src");
+        let dst = t.0.join("dst");
+        fs::create_dir(&src).unwrap();
+        fs::write(src.join("a.txt"), "payload").unwrap();
+        let then =
+            std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000_000);
+        let file = fs::OpenOptions::new()
+            .write(true)
+            .open(src.join("a.txt"))
+            .unwrap();
+        file.set_times(fs::FileTimes::new().set_modified(then))
+            .unwrap();
+        drop(file);
+
+        let mut prog = crate::commands::fs::transfer::progress::Prog::silent("copy");
+        crate::commands::fs::transfer::copy::copy_tree(
+            &crate::vfs::local::LocalProvider,
+            &crate::vfs::local::LocalProvider,
+            &crate::vfs::StreamPath::from(&src),
+            &crate::vfs::StreamPath::from(&dst),
+            &mut prog,
+            crate::commands::fs::transfer::copy::CopyTuning {
+                limit: 0,
+                verify: false,
+                buf_size: 4096,
+            },
+        )
+        .unwrap();
+
+        let level = |dir: &Path| -> Vec<LevelEntry> {
+            fs::read_dir(dir)
+                .unwrap()
+                .map(|entry| {
+                    let entry = entry.unwrap();
+                    let meta = entry.metadata().unwrap();
+                    LevelEntry {
+                        name: entry.file_name().to_string_lossy().into_owned(),
+                        is_dir: meta.is_dir(),
+                        is_symlink: false,
+                        size: meta.len(),
+                        modified: super::super::walk::mtime_of(&meta),
+                    }
+                })
+                .collect()
+        };
+        let diffs = compare_levels_impl(level(&src), level(&dst));
+        assert_eq!(diffs.len(), 1);
+        assert_eq!(diffs[0].status, "same", "{:?}", diffs[0].status);
+    }
+
     /// One unreadable subdirectory must not throw away the rest of the walk.
     /// The level is reported as its own entry, its siblings survive, and the
     /// comparison still succeeds (ticket 384).

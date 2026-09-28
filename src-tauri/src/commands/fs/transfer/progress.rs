@@ -38,6 +38,30 @@ impl ProgressSink for AppHandle {
     }
 }
 
+/// Per-item remarks a transfer collects while it runs: things that did not
+/// stop the bytes from arriving but that the user is still told about — a
+/// timestamp or mode the destination refused (ticket 385). Shared, because the
+/// parallel workers fill the same list.
+pub(crate) type Notes = Arc<Mutex<Vec<super::events::ItemError>>>;
+
+/// Records one remark. A poisoned lock loses the remark rather than the
+/// transfer: nothing here is worth failing a committed copy for.
+pub(crate) fn note(notes: &Notes, item: &str, error: crate::errors::AppError) {
+    if let Ok(mut notes) = notes.lock() {
+        if notes.len() < 1000 {
+            notes.push(super::events::ItemError::new(item, error));
+        }
+    }
+}
+
+/// Takes the collected remarks, leaving the list empty.
+pub(crate) fn drain_notes(notes: &Notes) -> Vec<super::events::ItemError> {
+    notes
+        .lock()
+        .map(|mut notes| std::mem::take(&mut *notes))
+        .unwrap_or_default()
+}
+
 /// Holds the cumulative counters + cancel flag and sends throttled events.
 /// Also used by the archive module (extract/pack).
 pub(crate) struct Prog {
@@ -51,6 +75,8 @@ pub(crate) struct Prog {
     pub(crate) last: Instant,
     pub(crate) cancel: Arc<AtomicBool>,
     pub(crate) pause: Arc<AtomicBool>,
+    /// Remarks about items that were copied but not fully reproduced.
+    pub(crate) notes: Notes,
 }
 
 impl Prog {
@@ -104,6 +130,31 @@ impl Prog {
     }
 }
 
+#[cfg(test)]
+impl Prog {
+    /// A progress object whose reports go nowhere. For tests that drive a real
+    /// copy and care about its file-system effects, not about its events.
+    pub(crate) fn silent(op: &str) -> Self {
+        struct Discard;
+        impl ProgressSink for Discard {
+            fn progress(&self, _: OpProgress) {}
+        }
+        Self {
+            sink: Arc::new(Discard),
+            id: "test".into(),
+            op: op.into(),
+            files_total: 0,
+            bytes_total: 0,
+            files_done: 0,
+            bytes_done: 0,
+            last: Instant::now(),
+            cancel: Arc::new(AtomicBool::new(false)),
+            pause: Arc::new(AtomicBool::new(false)),
+            notes: Default::default(),
+        }
+    }
+}
+
 /// Thread-safe progress for the parallel copy path.
 pub(crate) struct SharedProg {
     pub(crate) srcp: Arc<dyn Provider>,
@@ -119,6 +170,8 @@ pub(crate) struct SharedProg {
     pub(crate) rate: Mutex<(Instant, u64)>, // (Fensterbeginn, Bytes im Fenster)
     pub(crate) cancel: Arc<AtomicBool>,
     pub(crate) pause: Arc<AtomicBool>,
+    /// Remarks about items that were copied but not fully reproduced.
+    pub(crate) notes: Notes,
 }
 
 impl SharedProg {

@@ -10,6 +10,22 @@ use crate::vfs::StreamPath;
 // the bytes, *then* commit, and only then remove the source. It takes
 // the copy as a parameter precisely so a test can fail each step in
 // turn and check that nothing is lost.
+//
+// What a transfer promises about metadata (ticket 385)
+// ----------------------------------------------------
+// A same-store `rename` — the fast path of a move within one device —
+// keeps the object, so its timestamps, mode and extended attributes are
+// untouched by definition. Everything else is a streamed copy, which
+// reproduces only what both ends can name: `preserve_metadata` applies the
+// source's modification time and, on Unix, its permission bits, to files and
+// to directories. Extended attributes, ACLs, ownership and creation times are
+// *not* carried, on any path.
+//
+// A move across devices is therefore a copy: it keeps mtime and mode, and
+// loses the rest, rather than silently differing from the rename it falls back
+// from. A cross-provider copy keeps whatever the source can report and the
+// destination can apply — today that is nothing, because no remote adapter
+// implements either half, so such a plan keeps its `metadataUnknown` advisory.
 // ============================================================
 
 use super::events::ItemError;
@@ -132,9 +148,47 @@ pub(crate) fn copy_file_prog(
         }
     }
 
+    // The bytes are committed; the fidelity is reported, never fatal.
+    if let Err(error) = preserve_metadata(srcp, dstp, src, dst) {
+        super::progress::note(&prog.notes, &name, metadata_error(error));
+    }
+
     prog.files_done += 1;
     prog.emit(&name, file_total, file_total, true);
     Ok(())
+}
+
+/// Reproduces the source's timestamp and mode on the entry just written.
+///
+/// Applied to the name the bytes were written under — in safe mode that is the
+/// staging name, and the publishing rename carries the metadata with it. Both
+/// halves are optional: a source that reports nothing and a destination that
+/// cannot apply anything both leave the target exactly as written, which is
+/// what the plan's `metadataUnknown` advisory tells the user beforehand
+/// (ticket 385).
+pub(crate) fn preserve_metadata(
+    srcp: &dyn Provider,
+    dstp: &dyn Provider,
+    src: &StreamPath,
+    dst: &StreamPath,
+) -> std::io::Result<()> {
+    let Some(metadata) = srcp.read_metadata(src)? else {
+        return Ok(());
+    };
+    if metadata.is_empty() {
+        return Ok(());
+    }
+    match dstp.apply_metadata(dst, &metadata) {
+        Err(error) if error.kind() == ErrorKind::Unsupported => Ok(()),
+        other => other,
+    }
+}
+
+/// A failed metadata step is reported against the item, not the operation.
+pub(crate) fn metadata_error(error: std::io::Error) -> AppError {
+    AppError::from(error)
+        .op("preserve-metadata")
+        .action(ErrorAction::Report)
 }
 
 /// SHA-256 of a file (for the copy verification).
@@ -170,6 +224,11 @@ pub(crate) fn copy_tree(
         for child in srcp.read_dir(src)? {
             let name = child.file_name().unwrap_or_default();
             copy_tree(srcp, dstp, &child, &dst.join(name)?, prog, tune)?;
+        }
+        // After the children: writing them is what last changed this
+        // directory's own timestamp.
+        if let Err(error) = preserve_metadata(srcp, dstp, src, dst) {
+            super::progress::note(&prog.notes, &src.to_string_lossy(), metadata_error(error));
         }
     } else {
         if let Some(parent) = dst.parent() {
