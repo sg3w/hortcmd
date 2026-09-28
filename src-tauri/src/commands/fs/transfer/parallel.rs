@@ -36,22 +36,26 @@ pub(crate) struct CopyTask {
 /// phase before any directory is created or a worker starts writing files.
 pub(crate) fn flatten_tree(
     srcp: &dyn Provider,
-    directories: &mut Vec<StreamPath>,
+    directories: &mut Vec<(Option<StreamPath>, StreamPath)>,
     src: &StreamPath,
     dst: &StreamPath,
     idx: usize,
     tasks: &mut Vec<CopyTask>,
 ) -> std::io::Result<()> {
     if srcp.stat(src)?.is_dir {
-        directories.push(dst.to_owned());
+        // The source is remembered so the finished tree can inherit its
+        // directory timestamps and modes (ticket 385).
+        directories.push((Some(src.to_owned()), dst.to_owned()));
         for child in srcp.read_dir(src)? {
             let name = child.file_name().unwrap_or_default();
             flatten_tree(srcp, directories, &child, &dst.join(name)?, idx, tasks)?;
         }
     } else {
         if let Some(parent) = dst.parent() {
-            if directories.last() != Some(&parent) {
-                directories.push(parent);
+            // A parent created only to hold a file: it is not a copied
+            // directory, so nothing of the source is applied to it.
+            if directories.last().map(|(_, dir)| dir) != Some(&parent) {
+                directories.push((None, parent));
             }
         }
         tasks.push(CopyTask {
@@ -63,14 +67,17 @@ pub(crate) fn flatten_tree(
     Ok(())
 }
 
+type Directories = Vec<(Option<StreamPath>, StreamPath)>;
+
 pub(crate) fn prepare_jobs(
     srcp: &dyn Provider,
     dstp: &dyn Provider,
     jobs: &[(StreamPath, Plan)],
-) -> Result<Vec<CopyTask>, Vec<ItemError>> {
+) -> Result<(Vec<CopyTask>, Directories), Vec<ItemError>> {
     let mut tasks = Vec::new();
     let mut directories = Vec::new();
     let mut created = Vec::new();
+    let mut copied_dirs: Directories = Vec::new();
     let result = (|| -> Result<(), Vec<ItemError>> {
         // A failure reading any source leaves every destination untouched.
         for (i, (src, plan)) in jobs.iter().enumerate() {
@@ -82,7 +89,7 @@ pub(crate) fn prepare_jobs(
         for (i, ((src, plan), dirs)) in jobs.iter().zip(directories).enumerate() {
             plan.writing()
                 .map_err(|error| vec![ItemError::new(src.display().to_string(), error.into())])?;
-            for dir in dirs {
+            for (source, dir) in dirs {
                 let existed = dstp.exists(&dir);
                 let result = dstp.create_dir_all(&dir);
                 if !existed && dstp.exists(&dir) {
@@ -91,6 +98,7 @@ pub(crate) fn prepare_jobs(
                 result.map_err(|error| {
                     vec![ItemError::new(dir.display().to_string(), error.into())]
                 })?;
+                copied_dirs.push((source, dir));
             }
         }
         Ok(())
@@ -112,7 +120,7 @@ pub(crate) fn prepare_jobs(
         }
         return Err(errors);
     }
-    Ok(tasks)
+    Ok((tasks, copied_dirs))
 }
 
 /// Copies a file block by block with shared bookkeeping (parallel path).
@@ -182,6 +190,11 @@ pub(crate) fn parallel_copy_file(
         }
     }
 
+    // The bytes are committed; the fidelity is reported, never fatal.
+    if let Err(error) = super::copy::preserve_metadata(srcp, dstp, &task.src, &task.dst) {
+        super::progress::note(&sp.notes, &name, super::copy::metadata_error(error));
+    }
+
     sp.files_done.fetch_add(1, Ordering::Relaxed);
     sp.emit(&name, file_total, file_total, true, false);
     Ok(())
@@ -204,8 +217,8 @@ pub(crate) fn run_parallel_copy(
     files_total: u32,
     bytes_total: u64,
 ) -> (u32, Vec<ItemError>) {
-    let tasks = match prepare_jobs(&*srcp, &*dstp, &jobs) {
-        Ok(tasks) => tasks,
+    let (tasks, directories) = match prepare_jobs(&*srcp, &*dstp, &jobs) {
+        Ok(prepared) => prepared,
         Err(errors) => return (0, errors),
     };
 
@@ -223,6 +236,7 @@ pub(crate) fn run_parallel_copy(
         rate: Mutex::new((Instant::now(), 0)),
         cancel,
         pause,
+        notes: Default::default(),
     });
     let tasks = Arc::new(tasks);
     let next = Arc::new(AtomicUsize::new(0));
@@ -274,6 +288,20 @@ pub(crate) fn run_parallel_copy(
     let mut errors = Arc::try_unwrap(errors)
         .map(|m| m.into_inner().unwrap())
         .unwrap_or_default();
+
+    // Directory metadata last, deepest first: writing a child is what last
+    // changed its parent's timestamp (ticket 385).
+    for (source, dir) in directories.iter().rev() {
+        let Some(source) = source else { continue };
+        if let Err(error) = super::copy::preserve_metadata(&*sp.srcp, &*sp.dstp, source, dir) {
+            super::progress::note(
+                &sp.notes,
+                &source.to_string_lossy(),
+                super::copy::metadata_error(error),
+            );
+        }
+    }
+    errors.extend(super::progress::drain_notes(&sp.notes));
 
     // Commit phase. Only now — with every worker joined — is a job's
     // staging entry known to be complete, so publishing here is what

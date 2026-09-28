@@ -34,6 +34,7 @@ fn progress(op: &str) -> Prog {
         last: Instant::now(),
         cancel: execution::cancel_flag(),
         pause: Arc::new(AtomicBool::new(false)),
+        notes: Default::default(),
     }
 }
 

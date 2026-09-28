@@ -64,6 +64,7 @@ fn progress() -> Prog {
         last: Instant::now(),
         cancel: Arc::new(AtomicBool::new(false)),
         pause: Arc::new(AtomicBool::new(false)),
+        notes: Default::default(),
     }
 }
 
@@ -273,6 +274,7 @@ fn crash_child() {
             rate: Mutex::new((Instant::now(), 0)),
             cancel: Arc::new(AtomicBool::new(false)),
             pause: Arc::new(AtomicBool::new(false)),
+            notes: Default::default(),
         };
         plan.writing().unwrap();
         parallel_copy_file(

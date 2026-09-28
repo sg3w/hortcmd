@@ -1072,7 +1072,9 @@ fn flattening_assigns_every_file_to_its_top_level_source() {
     // The index identifies which top-level source a file came from,
     // which is what lets one failing job be discarded on its own.
     assert!(tasks.iter().all(|t| t.idx == 7));
-    assert!(directories.contains(&fake.path("/dst/sub")));
+    assert!(directories
+        .iter()
+        .any(|(_, dir)| *dir == fake.path("/dst/sub")));
     assert!(
         !fake.exists(&fake.path("/dst")),
         "collection must not create directories"
@@ -1159,6 +1161,7 @@ fn prog_with_cancel(cancel: Arc<AtomicBool>) -> Prog {
         last: Instant::now(),
         cancel,
         pause: Arc::new(AtomicBool::new(false)),
+        notes: Default::default(),
     }
 }
 
@@ -1177,6 +1180,7 @@ fn shared_prog(fake: Arc<Fake>, cancel: Arc<AtomicBool>) -> SharedProg {
         rate: Mutex::new((Instant::now(), 0)),
         cancel,
         pause: Arc::new(AtomicBool::new(false)),
+        notes: Default::default(),
     }
 }
 
@@ -1230,7 +1234,9 @@ fn flatten_tree_collects_files_and_plans_dirs() {
     .unwrap();
 
     assert_eq!(tasks.len(), 2, "zwei Dateien erwartet");
-    assert!(directories.contains(&crate::vfs::StreamPath::from(&dst.join("sub"))));
+    assert!(directories
+        .iter()
+        .any(|(_, dir)| *dir == crate::vfs::StreamPath::from(&dst.join("sub"))));
     assert!(!dst.exists());
     let names: Vec<String> = tasks
         .iter()
@@ -1240,7 +1246,8 @@ fn flatten_tree_collects_files_and_plans_dirs() {
     assert!(names.contains(&"b.txt".to_string()));
     assert!(tasks.iter().all(|t| t.idx == 0));
     let jobs = vec![((&src).into(), Plan::direct((&dst).into()))];
-    let prepared = super::parallel::prepare_jobs(&LocalProvider, &LocalProvider, &jobs).unwrap();
+    let (prepared, _) =
+        super::parallel::prepare_jobs(&LocalProvider, &LocalProvider, &jobs).unwrap();
     assert_eq!(prepared.len(), 2);
     assert!(dst.join("sub").is_dir());
     assert!(
@@ -1796,5 +1803,140 @@ fn directory_creation_failure_reports_direct_remnants_but_cleans_staging() {
         );
         assert_eq!(fs::read(&blocked).unwrap(), b"keep");
     }
+    fs::remove_dir_all(root).unwrap();
+}
+
+/// A copy is not finished when the bytes are there: the file's own timestamp
+/// and — on Unix — its mode belong to it, and both the sequential and the
+/// parallel path reproduce them (ticket 385).
+#[test]
+fn a_copy_keeps_the_timestamp_and_the_mode() {
+    let root = tmp_dir();
+    let src = root.join("src");
+    fs::create_dir_all(src.join("sub")).unwrap();
+    write(&src, "script.sh", "#!/bin/sh\n");
+    fs::write(src.join("sub/data.bin"), "payload").unwrap();
+    // Well in the past, so "today's date" cannot pass by accident.
+    let then = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000_000);
+    for name in ["script.sh", "sub/data.bin"] {
+        let file = fs::OpenOptions::new()
+            .write(true)
+            .open(src.join(name))
+            .unwrap();
+        file.set_times(fs::FileTimes::new().set_modified(then))
+            .unwrap();
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(src.join("script.sh"), fs::Permissions::from_mode(0o755)).unwrap();
+        fs::set_permissions(src.join("sub/data.bin"), fs::Permissions::from_mode(0o600)).unwrap();
+    }
+
+    let check = |dst: &Path| {
+        for name in ["script.sh", "sub/data.bin"] {
+            let meta = fs::metadata(dst.join(name)).unwrap();
+            assert_eq!(meta.modified().unwrap(), then, "{name}");
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let expected = if name == "script.sh" { 0o755 } else { 0o600 };
+                assert_eq!(meta.permissions().mode() & 0o777, expected, "{name}");
+            }
+        }
+    };
+
+    // Sequential, through the whole tree walk.
+    let sequential = root.join("sequential");
+    let mut prog = silent_prog();
+    copy_tree(
+        &LocalProvider,
+        &LocalProvider,
+        &crate::vfs::StreamPath::from(&src),
+        &crate::vfs::StreamPath::from(&sequential),
+        &mut prog,
+        plain_tuning(),
+    )
+    .unwrap();
+    check(&sequential);
+    assert!(super::progress::drain_notes(&prog.notes).is_empty());
+    // The copied directory carries its source's timestamp too.
+    assert_eq!(
+        fs::metadata(sequential.join("sub"))
+            .unwrap()
+            .modified()
+            .unwrap(),
+        fs::metadata(src.join("sub")).unwrap().modified().unwrap()
+    );
+
+    // Parallel, one task at a time through the worker entry point.
+    let parallel = root.join("parallel");
+    fs::create_dir_all(parallel.join("sub")).unwrap();
+    let sp = SharedProg {
+        srcp: Arc::new(LocalProvider),
+        dstp: Arc::new(LocalProvider),
+        sink: Arc::new(Recorder::default()),
+        id: "test".into(),
+        op: "copy".into(),
+        files_total: 2,
+        bytes_total: 0,
+        bytes_done: AtomicU64::new(0),
+        files_done: AtomicU32::new(0),
+        last: Mutex::new(Instant::now()),
+        rate: Mutex::new((Instant::now(), 0)),
+        cancel: Arc::new(AtomicBool::new(false)),
+        pause: Arc::new(AtomicBool::new(false)),
+        notes: Default::default(),
+    };
+    for name in ["script.sh", "sub/data.bin"] {
+        parallel_copy_file(
+            &CopyTask {
+                idx: 0,
+                src: crate::vfs::StreamPath::from(&src.join(name)),
+                dst: crate::vfs::StreamPath::from(&parallel.join(name)),
+            },
+            &sp,
+            plain_tuning(),
+        )
+        .unwrap();
+    }
+    check(&parallel);
+    assert!(super::progress::drain_notes(&sp.notes).is_empty());
+    fs::remove_dir_all(root).unwrap();
+}
+
+/// A destination that cannot take the metadata does not fail the transfer:
+/// the bytes are correct, so the shortfall is a remark against the item.
+#[test]
+fn a_refused_metadata_step_is_a_note_not_a_failure() {
+    let root = tmp_dir();
+    write(&root, "a.txt", "hello");
+    let fake = Fake::new(false);
+    let mut prog = silent_prog();
+    // The fake provider implements no metadata operation, so the default
+    // "unsupported" applies and nothing is remarked.
+    copy_file_prog(
+        &LocalProvider,
+        &*fake,
+        &crate::vfs::StreamPath::from(&root.join("a.txt")),
+        &fake.path("/dst/a.txt"),
+        &mut prog,
+        plain_tuning(),
+    )
+    .unwrap();
+    assert!(super::progress::drain_notes(&prog.notes).is_empty());
+
+    // A real refusal — the target is gone by the time metadata is applied —
+    // is reported against the item and leaves the copy successful.
+    let missing = crate::vfs::StreamPath::from(&root.join("gone/never.txt"));
+    let error = super::copy::preserve_metadata(
+        &LocalProvider,
+        &LocalProvider,
+        &crate::vfs::StreamPath::from(&root.join("a.txt")),
+        &missing,
+    )
+    .unwrap_err();
+    let reported = super::copy::metadata_error(error);
+    assert_eq!(reported.op.as_deref(), Some("preserve-metadata"));
     fs::remove_dir_all(root).unwrap();
 }

@@ -7,7 +7,7 @@
 // before so local paths keep working unchanged.
 // ============================================================
 
-use super::{Provider, Stat};
+use super::{FileMetadata, Provider, Stat};
 use crate::commands::fs::attrs;
 use crate::commands::fs::dir::{DirEntry, DirListing};
 use crate::errors::{AppError, AppResult};
@@ -167,6 +167,10 @@ impl Provider for LocalProvider {
                 None
             },
             staging: true,
+            // The transfer engine applies the source timestamp and mode after
+            // the bytes are committed (ticket 385), so the local store's
+            // fidelity is known rather than unknown.
+            preserves_metadata: Some(true),
             reserved_names: Some(vec![".".into(), "..".into()]),
             forbidden_characters: Some("/\0".into()),
             ..Default::default()
@@ -190,6 +194,59 @@ impl Provider for LocalProvider {
             }
         }
         Ok(limits)
+    }
+
+    /// Timestamp and, on Unix, the permission bits of an existing entry.
+    fn read_metadata(&self, path: &crate::vfs::StreamPath) -> io::Result<Option<FileMetadata>> {
+        let meta = fs::metadata(path.native()?)?;
+        Ok(Some(FileMetadata {
+            modified: meta.modified().ok(),
+            #[cfg(unix)]
+            mode: Some({
+                use std::os::unix::fs::PermissionsExt;
+                meta.permissions().mode() & 0o7777
+            }),
+            #[cfg(not(unix))]
+            mode: None,
+        }))
+    }
+
+    /// Applies what the source reported to a freshly written entry.
+    ///
+    /// The timestamp goes first: restoring a read-only mode before it would
+    /// close the handle the timestamp needs. A directory is opened read-only,
+    /// which is what `futimens` wants; on a platform without that guarantee
+    /// its timestamp is left alone rather than failing the transfer.
+    fn apply_metadata(
+        &self,
+        path: &crate::vfs::StreamPath,
+        metadata: &FileMetadata,
+    ) -> io::Result<()> {
+        let path = path.native()?;
+        if let Some(modified) = metadata.modified {
+            let times = fs::FileTimes::new().set_modified(modified);
+            let handle = if path.is_dir() {
+                #[cfg(unix)]
+                {
+                    Some(fs::File::open(path)?)
+                }
+                #[cfg(not(unix))]
+                {
+                    None
+                }
+            } else {
+                Some(fs::OpenOptions::new().write(true).open(path)?)
+            };
+            if let Some(handle) = handle {
+                handle.set_times(times)?;
+            }
+        }
+        #[cfg(unix)]
+        if let Some(mode) = metadata.mode {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(path, fs::Permissions::from_mode(mode & 0o7777))?;
+        }
+        Ok(())
     }
 
     fn planning_identity(&self, path: &crate::vfs::StreamPath) -> io::Result<Option<String>> {

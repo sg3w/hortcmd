@@ -273,6 +273,7 @@ pub(crate) fn run_transfer(
         last: Instant::now(),
         cancel: cancel.clone(),
         pause: pause.clone(),
+        notes: Default::default(),
     };
     prog.emit("", 0, 0, true); // initialer 0%-Tick
 
@@ -455,6 +456,9 @@ pub(crate) fn run_transfer(
         ok += pok;
         errors.extend(perrors);
     }
+
+    // Items that arrived intact but could not be fully reproduced (ticket 385).
+    errors.extend(super::progress::drain_notes(&prog.notes));
 
     let cancelled = prog.cancelled();
     let reason = if cancelled {

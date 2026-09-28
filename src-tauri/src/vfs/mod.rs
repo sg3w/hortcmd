@@ -166,6 +166,23 @@ pub struct Stat {
     pub len: u64,
 }
 
+/// What a freshly written copy should inherit from its source: the
+/// modification time and, where the store has one, the Unix permission bits.
+/// A field is `None` when the source cannot report it — never a guess, so the
+/// destination is never given an invented timestamp (ticket 385).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FileMetadata {
+    pub modified: Option<std::time::SystemTime>,
+    pub mode: Option<u32>,
+}
+
+impl FileMetadata {
+    /// Nothing to apply — the source reported no field this store could carry.
+    pub fn is_empty(&self) -> bool {
+        self.modified.is_none() && self.mode.is_none()
+    }
+}
+
 /// Uniform file-system interface. Every provider (local, sftp, …)
 /// implements these operations; the commands call only through
 /// [`resolve`], never `std::fs` directly.
@@ -274,6 +291,23 @@ pub trait Provider: Send + Sync {
     /// A cheap stable object/version token where supported. Never a cached answer.
     fn planning_identity(&self, _path: &StreamPath) -> io::Result<Option<String>> {
         Ok(None)
+    }
+
+    /// The metadata of an existing entry that a copy of it should inherit.
+    /// The default reports nothing, which is what an adapter whose protocol
+    /// has no such notion should say (ticket 385).
+    fn read_metadata(&self, _path: &StreamPath) -> io::Result<Option<FileMetadata>> {
+        Ok(None)
+    }
+
+    /// Applies `metadata` to an entry this transfer has just written.
+    /// Unsupported by default: a store that cannot set a timestamp or a mode
+    /// says so instead of silently succeeding.
+    fn apply_metadata(&self, _path: &StreamPath, _metadata: &FileMetadata) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "this store does not set timestamps or permissions",
+        ))
     }
 
     /// Opens a file for streaming reads (transfer / checksum).

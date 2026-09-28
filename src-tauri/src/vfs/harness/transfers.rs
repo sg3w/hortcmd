@@ -54,6 +54,7 @@ fn prog(sink: Arc<Recorder>, files: u32, bytes: u64) -> Prog {
         last: Instant::now(),
         cancel: Arc::new(AtomicBool::new(false)),
         pause: Arc::new(AtomicBool::new(false)),
+        notes: Default::default(),
     }
 }
 
