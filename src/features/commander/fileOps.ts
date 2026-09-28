@@ -608,8 +608,12 @@ export function runRename(side: Side): void {
         return;
       }
       // Report a name conflict localized up front (the backend also checks).
+      // Folded like the batch preview (`buildPreview`), and excluding the
+      // entry being renamed: a case-only rename is the same object under a
+      // new spelling, so it is submitted rather than blocked here (382).
+      const folded = name.toLowerCase();
       const exists = panelOf(usePanes.getState(), side).entries.some(
-        (e) => !e.parent && e.name === name,
+        (e) => !e.parent && e.name !== oldName && e.name.toLowerCase() === folded,
       );
       if (exists) {
         reportMessage(translate("op.collision.exists").replace("{name}", name));

@@ -7,7 +7,7 @@ import { useCaps } from "@/store/capsStore";
 import { useOps } from "@/store/opsStore";
 import { translate, useSettings } from "@/store/settingsStore";
 import { describeErrorFull } from "@/store/errorText";
-import { runEdit, runMkdir } from "./fileOps";
+import { runEdit, runMkdir, runRename } from "./fileOps";
 import { openEntry } from "./navigate";
 
 it.each([runEdit, (side: "left" | "right") => openEntry(side, 0)])("reports failed default-program launches", async action => {
@@ -36,4 +36,40 @@ it("reports mkdir failures and releases the busy state", async () => {
   await waitFor(() => expect(useOps.getState().confirm?.message).toBe(describeErrorFull(error)));
   expect(useOps.getState().busy).toBe(false);
   expect(runtime.calls.filter(call => call.cmd === "make_dir")).toEqual([{ cmd: "make_dir", args: { path: "/source/taken" } }]);
+});
+
+it("submits a case-only rename instead of reporting it as a conflict", async () => {
+  const runtime = useTauri({ commands: { rename_entry: () => Promise.resolve(null) } });
+  useCaps.setState({ known: { local: ["move", "copyTo"] } });
+  const entries = [file("Readme.txt"), file("notes.txt")];
+  usePanes.setState(s => ({ left: { ...s.left, activeTab: 0, tabs: [{ ...s.left.tabs[0], path: "/source", archive: null, entries, raw: entries, cursor: 0 }] } }));
+
+  runRename("left");
+  const prompt = useOps.getState().prompt;
+  expect(prompt).not.toBeNull();
+  useOps.getState().closeDialogs();
+  prompt!.onSubmit("readme.txt", false);
+
+  await waitFor(() =>
+    expect(runtime.calls.filter(call => call.cmd === "rename_entry")).toEqual([
+      { cmd: "rename_entry", args: { from: "/source/Readme.txt", to: "/source/readme.txt" } },
+    ]),
+  );
+  expect(useOps.getState().confirm).toBeNull();
+});
+
+it("still reports a name taken by another entry, whatever its spelling", async () => {
+  const runtime = useTauri({ commands: { rename_entry: () => Promise.resolve(null) } });
+  useCaps.setState({ known: { local: ["move", "copyTo"] } });
+  useSettings.setState({ language: "en" });
+  const entries = [file("Readme.txt"), file("notes.txt")];
+  usePanes.setState(s => ({ left: { ...s.left, activeTab: 0, tabs: [{ ...s.left.tabs[0], path: "/source", archive: null, entries, raw: entries, cursor: 1 }] } }));
+
+  runRename("left");
+  const prompt = useOps.getState().prompt;
+  useOps.getState().closeDialogs();
+  prompt!.onSubmit("README.TXT", false);
+
+  await waitFor(() => expect(useOps.getState().confirm?.message).toContain("README.TXT"));
+  expect(runtime.calls.filter(call => call.cmd === "rename_entry")).toHaveLength(0);
 });

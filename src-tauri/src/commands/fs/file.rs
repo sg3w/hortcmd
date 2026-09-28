@@ -69,10 +69,10 @@ pub fn rename_entry(from: String, to: String) -> AppResult<()> {
     let from_p = &from_r;
     let to_p = &to_r;
     if !provider.exists(from_p) {
-        return Err(AppError::from("Quelle existiert nicht"));
+        return Err(AppError::new(code::FS_NOT_FOUND));
     }
-    if provider.exists(to_p) {
-        return Err(AppError::from("Zielname existiert bereits"));
+    if taken_by_other(provider.as_ref(), from_p, to_p) {
+        return Err(AppError::new(code::FS_EXISTS).with("name", &to));
     }
     let undo = super::undo::prepare("rename", &from, &to)?;
     provider.rename(from_p, to_p).map_err(AppError::from)?;
@@ -80,6 +80,56 @@ pub fn rename_entry(from: String, to: String) -> AppResult<()> {
         undo.finish()?;
     }
     Ok(())
+}
+
+/// Whether `to` is occupied by an entry other than `from` itself.
+///
+/// On a case-folding filesystem `exists("readme.txt")` is true while
+/// `Readme.txt` is the entry on disk, so a plain existence check refuses a
+/// case-only rename of the very file being renamed (ticket 382). Identity
+/// decides instead: if both names resolve to the same object it is a rename,
+/// not a collision. Where the store cannot report an identity (no stable file
+/// id), fall back to a case-folded name comparison — such a store folds case,
+/// which is why it reported the target as existing in the first place.
+fn taken_by_other(
+    provider: &dyn Provider,
+    from: &crate::vfs::StreamPath,
+    to: &crate::vfs::StreamPath,
+) -> bool {
+    if !provider.exists(to) {
+        return false;
+    }
+    !same_object(provider, from, to)
+}
+
+/// Whether both paths name the same object. `false` whenever that cannot be
+/// established, so a collision is never waved through on a guess.
+fn same_object(
+    provider: &dyn Provider,
+    from: &crate::vfs::StreamPath,
+    to: &crate::vfs::StreamPath,
+) -> bool {
+    match (
+        provider.planning_identity(from),
+        provider.planning_identity(to),
+    ) {
+        (Ok(Some(source)), Ok(Some(target))) => source == target,
+        // Without a file id only the local store may fall back to spelling:
+        // the platforms that report no identity are the ones that fold case,
+        // so two names differing only in case are one entry there. A remote
+        // store keeps the strict answer — its case rules are the server's.
+        _ => cfg!(not(unix)) && provider.store_id() == "local" && folds_onto(from, to),
+    }
+}
+
+/// Last components equal up to case — the fallback for stores without a file id.
+fn folds_onto(from: &crate::vfs::StreamPath, to: &crate::vfs::StreamPath) -> bool {
+    match (from.file_name(), to.file_name()) {
+        (Some(from), Some(to)) => {
+            from.to_string_lossy().to_lowercase() == to.to_string_lossy().to_lowercase()
+        }
+        _ => false,
+    }
 }
 
 /// Distinguishes the temporary names a batch rename uses within one
@@ -140,6 +190,12 @@ fn rename_batch_on(
 
     // Source names (for the check "the target is itself being renamed").
     let sources: HashSet<&str> = renames.iter().map(|(f, _)| f.as_str()).collect();
+    // The same set as paths, so a target that merely spells a source
+    // differently can still be recognised as one of them.
+    let sources_paths: Vec<crate::vfs::StreamPath> = renames
+        .iter()
+        .filter_map(|(f, _)| base.join(f).ok())
+        .collect();
     // Frequency of each target name (detect duplicate targets).
     let mut target_count: HashMap<&str, u32> = HashMap::new();
     for (_, to) in &renames {
@@ -180,8 +236,13 @@ fn rename_batch_on(
             errors.push(ItemError::new(from, AppError::new(code::FS_NOT_FOUND)));
             continue;
         }
-        // Foreign collision: the target exists and is not itself being renamed.
-        if provider.exists(&target) && !sources.contains(to.as_str()) {
+        // Foreign collision: the target exists and is not one of the entries
+        // this batch is renaming away. `sources` is matched by exact spelling,
+        // so the identity test carries the case-only pairs a case-folding
+        // store reports as existing (ticket 382).
+        if !sources.contains(to.as_str())
+            && taken_by_batch_foreigner(provider, &sources_paths, &target)
+        {
             errors.push(ItemError::new(
                 from,
                 AppError::new(code::FS_EXISTS).with("name", to),
@@ -278,6 +339,22 @@ fn rename_batch_on(
         }
     }
     OpResult { ok, errors }
+}
+
+/// Whether `target` exists and belongs to no source of the batch. Every source
+/// is about to be staged away, so an existing target that *is* one of them is a
+/// chain or a case-only rename, not a collision (ticket 382).
+fn taken_by_batch_foreigner(
+    provider: &dyn Provider,
+    sources: &[crate::vfs::StreamPath],
+    target: &crate::vfs::StreamPath,
+) -> bool {
+    if !provider.exists(target) {
+        return false;
+    }
+    !sources
+        .iter()
+        .any(|source| same_object(provider, source, target))
 }
 
 /// Keep the staged data and expose its location if restoring would replace a
@@ -573,6 +650,67 @@ mod tests {
         assert_eq!(read(&d, "b.txt"), "BBB");
         assert_eq!(result.ok, 0);
         assert!(!result.errors.is_empty());
+        fs::remove_dir_all(d).unwrap();
+    }
+
+    /// A case-only rename is the same object under a new spelling. On a
+    /// case-folding store the target "exists" — it is the source — and must
+    /// not be reported as a collision (ticket 382).
+    #[test]
+    fn case_only_rename_is_not_a_collision() {
+        let d = tmp_dir();
+        write(&d, "Readme.txt", "R");
+        let r = rename_batch(
+            d.to_string_lossy().into(),
+            vec![ren("Readme.txt", "readme.txt")],
+        );
+        assert_eq!(r.ok, 1, "errors: {:?}", r.errors);
+        assert!(r.errors.is_empty());
+        let names: Vec<String> = fs::read_dir(&d)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, vec!["readme.txt".to_string()]);
+        assert_eq!(read(&d, "readme.txt"), "R");
+        fs::remove_dir_all(d).unwrap();
+    }
+
+    /// The relaxation is limited to the source itself: a different entry
+    /// occupying the target name is still a collision, whatever its spelling.
+    #[test]
+    fn foreign_collision_is_still_reported() {
+        let d = tmp_dir();
+        write(&d, "Readme.txt", "R");
+        write(&d, "notes.txt", "N");
+        let r = rename_batch(
+            d.to_string_lossy().into(),
+            vec![ren("notes.txt", "Readme.txt")],
+        );
+        assert_eq!(r.ok, 0);
+        assert_eq!(r.errors.len(), 1);
+        assert_eq!(&*r.errors[0].error.code, crate::errors::code::FS_EXISTS);
+        assert_eq!(read(&d, "Readme.txt"), "R");
+        assert_eq!(read(&d, "notes.txt"), "N");
+        fs::remove_dir_all(d).unwrap();
+    }
+
+    /// The single-file command shares the rule, and answers with the codes the
+    /// frontend can localize instead of free text.
+    #[test]
+    fn rename_entry_allows_case_only_and_codes_its_refusals() {
+        let d = tmp_dir();
+        write(&d, "Readme.txt", "R");
+        write(&d, "notes.txt", "N");
+        let path = |name: &str| d.join(name).to_string_lossy().into_owned();
+
+        super::rename_entry(path("Readme.txt"), path("readme.txt")).unwrap();
+        assert_eq!(read(&d, "readme.txt"), "R");
+
+        let taken = super::rename_entry(path("notes.txt"), path("readme.txt")).unwrap_err();
+        assert_eq!(&*taken.code, crate::errors::code::FS_EXISTS);
+
+        let missing = super::rename_entry(path("gone.txt"), path("other.txt")).unwrap_err();
+        assert_eq!(&*missing.code, crate::errors::code::FS_NOT_FOUND);
         fs::remove_dir_all(d).unwrap();
     }
 
