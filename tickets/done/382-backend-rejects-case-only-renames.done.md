@@ -84,3 +84,56 @@ codes for the same two conditions.
 - Frontend: the single-rename conflict check in `fileOps.ts` must not diverge
   from `buildPreview` — a case-only rename is submitted, not blocked locally.
 - `npm run check`.
+
+## Implementation
+
+Identity decides the collision now, not spelling.
+
+`taken_by_other` (`src-tauri/src/commands/fs/file.rs`) answers "the target is
+occupied by something else": it is a collision only if the target exists *and*
+is not the same object as the source. `same_object` compares
+`Provider::planning_identity` — on the local store that is
+`recovery::durability::rename_identity`, the dev/inode token the preflight
+walker already uses. Where no identity is available it falls back to a
+case-folded comparison of the last components, but only for the local store on
+a platform that reports no identity: those are exactly the platforms that fold
+case. A remote store keeps the strict answer, because its case rules belong to
+the server, not to us.
+
+`rename_entry` uses it, and now answers `code::FS_NOT_FOUND` and
+`code::FS_EXISTS` (with the `name` parameter) instead of free-text German, so
+the frontend can localize both.
+
+`rename_batch_on` keeps its exact-spelling `sources` set as the cheap path and
+adds `taken_by_batch_foreigner`: an existing target that is the same object as
+*any* source of the batch is a chain or a case-only rename, not a collision.
+That covers the folded cases the exact set misses without having to decide
+whether the store folds. Phase 2's `provider.exists(target)` check is unchanged
+and remains the authority — by then every source carries a `.rcren-tmp-…` name.
+
+Frontend: `runRename` (`src/features/commander/fileOps.ts`) now folds its local
+conflict check the way `buildPreview` does and excludes the entry being
+renamed, so a case-only rename is submitted rather than blocked, and a name
+held by a *different* entry is reported locally in both spellings.
+
+Not in scope, noticed here: `rename_batch_on` counts duplicate targets by exact
+spelling, so a batch renaming two entries to names that differ only in case
+(`a.txt`→`X.txt`, `b.txt`→`x.txt`) would publish both on a case-folding store
+and the second would replace the first. The frontend preview already rejects
+that pair, and this ticket does not change the behaviour either way.
+
+### Verification
+
+- `commands::fs::file::tests::case_only_rename_is_not_a_collision`: `Readme.txt`
+  → `readme.txt` through `rename_batch` succeeds and the directory afterwards
+  holds exactly `readme.txt` with the original content. Meaningful on a
+  case-sensitive filesystem too — there the target simply does not exist.
+- `foreign_collision_is_still_reported`: `notes.txt` → `Readme.txt` next to an
+  untouched `Readme.txt` reports `fs.exists` and leaves both files alone.
+- `rename_entry_allows_case_only_and_codes_its_refusals`: the single-file
+  command performs the case-only rename and answers `fs.exists` /
+  `fs.not_found` for the two refusals.
+- Frontend (`fileOpsErrors.test.ts`): a case-only rename reaches
+  `rename_entry`; `README.TXT` while another entry is `Readme.txt` is reported
+  locally and never submitted.
+- `npm run check` passed on macOS (arm64).
