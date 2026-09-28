@@ -25,6 +25,7 @@
 // the keychain it replaces.
 // ============================================================
 
+use crate::commands::fs::transfer::recovery::durability;
 use crate::errors::{code, AppError, AppResult, ErrorAction};
 use keepass::db::{fields, EntryId, GroupId, GroupMut, Times};
 use keepass::{Database, DatabaseKey};
@@ -613,25 +614,69 @@ fn write_atomic(path: &Path, db: &Database, key: DatabaseKey) -> AppResult<()> {
             .detail(other),
     })?;
 
-    let tmp = path.with_extension("kdbx.hortcmd-tmp");
-    let write = |tmp: &Path| -> std::io::Result<()> {
-        let mut file = std::fs::File::create(tmp)?;
-        file.write_all(&buffer)?;
-        file.sync_all()
-    };
-    if let Err(e) = write(&tmp) {
-        let _ = std::fs::remove_file(&tmp);
-        return Err(AppError::from(format!(
-            "KeePass-Datei nicht schreibbar: {}",
-            e
-        )));
+    let unwritable =
+        |e: std::io::Error| AppError::from(format!("KeePass-Datei nicht schreibbar: {e}"));
+    let (tmp, mut file) = create_temp(path).map_err(unwritable)?;
+    if let Err(e) = file
+        .write_all(&buffer)
+        .and_then(|()| file.sync_all())
+        .inspect_err(|_| drop(std::fs::remove_file(&tmp)))
+    {
+        return Err(unwritable(e));
     }
-    std::fs::rename(&tmp, path).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
-        AppError::new(code::CRED_STORE)
-            .action(ErrorAction::Report)
-            .detail(e)
+    drop(file);
+    std::fs::rename(&tmp, path)
+        // The rename publishes the vault, and a rename is a change to the
+        // *directory*: without syncing it the entry can still be lost after
+        // `set` returned, leaving the old contents — or no `.kdbx` at all and
+        // only the temporary sibling (ticket 386). Reported, never swallowed:
+        // the caller must not be told the secret was stored when it may not be.
+        .and_then(|()| durability::sync_parent(path))
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&tmp);
+            AppError::new(code::CRED_STORE)
+                .action(ErrorAction::Report)
+                .detail(e)
+        })
+}
+
+/// Reserves a private sibling of the vault exclusively.
+///
+/// `create_new` so a stale or hostile file at the name is never silently
+/// truncated or reused, a random suffix so a collision is a retry rather than
+/// a failure, and 0600 so the encrypted vault is not even briefly world
+/// readable — the same three properties as the upload spool and the recovery
+/// journal (ticket 386).
+fn create_temp(path: &Path) -> std::io::Result<(PathBuf, std::fs::File)> {
+    create_temp_with(|| {
+        let mut random = [0u8; 8];
+        getrandom::fill(&mut random).map_err(std::io::Error::other)?;
+        Ok(path.with_extension(format!("kdbx.hortcmd-tmp-{}", hex::encode(random))))
     })
+}
+
+fn create_temp_with(
+    mut candidate: impl FnMut() -> std::io::Result<PathBuf>,
+) -> std::io::Result<(PathBuf, std::fs::File)> {
+    for _ in 0..16 {
+        let tmp = candidate()?;
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        match options.open(&tmp) {
+            Ok(file) => return Ok((tmp, file)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Err(std::io::Error::new(
+        std::io::ErrorKind::AlreadyExists,
+        "temporary KeePass name collisions",
+    ))
 }
 
 /// hortcmd's own group, created on first write. Entries the user filed
@@ -815,6 +860,65 @@ pub(crate) mod tests {
         let raw = std::fs::read(&path).unwrap();
         assert!(!raw.windows(7).any(|w| w == b"changed"));
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    /// The vault is published by a rename, and the rename is only durable once
+    /// the directory has been synced. Observable from the outside: after a
+    /// `set` the `.kdbx` holds the entry and no temporary sibling is left
+    /// behind (ticket 386).
+    #[test]
+    fn keepass_write_publishes_the_vault_and_leaves_no_temporary() {
+        let (path, cfg) = kdbx_config("durable");
+        let s = KeepassStore::default();
+        s.unlock(&cfg, "master", true, true).unwrap();
+        s.set("c1", "hunter2").unwrap();
+
+        let leftovers: Vec<String> = std::fs::read_dir(path.parent().unwrap())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|name| name.contains("hortcmd-tmp"))
+            .collect();
+        assert!(leftovers.is_empty(), "{leftovers:?}");
+        assert!(path.is_file());
+
+        let fresh = KeepassStore::default();
+        fresh.unlock(&cfg, "master", true, false).unwrap();
+        assert_eq!(fresh.get("c1").unwrap().as_deref(), Some("hunter2"));
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    /// The temporary sibling is private and exclusive: a file already sitting
+    /// at the name is retried around, never truncated (ticket 386).
+    #[test]
+    fn keepass_temporary_is_private_and_never_truncated() {
+        let dir = std::env::temp_dir().join(format!(
+            "hortcmd-kdbx-tmp-{}-{}",
+            std::process::id(),
+            crate::net::unique_id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let occupied = dir.join("occupied");
+        std::fs::write(&occupied, b"keep").unwrap();
+        let free = dir.join("free");
+        let mut candidates = [occupied.clone(), free.clone()].into_iter();
+
+        let (tmp, file) = super::create_temp_with(|| Ok(candidates.next().unwrap())).unwrap();
+        assert_eq!(tmp, free);
+        assert_eq!(std::fs::read(&occupied).unwrap(), b"keep");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(file.metadata().unwrap().permissions().mode() & 0o777, 0o600);
+        }
+        drop(file);
+        assert_eq!(
+            super::create_temp_with(|| Ok(occupied.clone()))
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::AlreadyExists
+        );
+        assert_eq!(std::fs::read(&occupied).unwrap(), b"keep");
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
