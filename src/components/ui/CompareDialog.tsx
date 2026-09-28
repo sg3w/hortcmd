@@ -110,11 +110,10 @@ export function CompareDialog() {
       });
       if (runToken.current === token) setTruncated(cut);
     } catch (e) {
-      if (runToken.current === token) {
-        setEntries([]);
-        setSelected(new Set());
-        setError(describeErrorFull(e));
-      }
+      // A late failure does not invalidate the batches already delivered:
+      // they were correct when they arrived (ticket 384). The error is shown
+      // beside them instead of replacing them.
+      if (runToken.current === token) setError(describeErrorFull(e));
     } finally {
       if (runToken.current === token) setLoading(false);
     }
@@ -371,7 +370,10 @@ export function CompareDialog() {
             )}
 
             <p className="text-[11px] text-dim">{t("compare.method")}</p>
-            {error ? <div role="alert" className="text-red-400">{t("compare.error").replace("{err}",error)}</div> :
+            {/* The error is shown beside the results, not instead of them: a
+                walk that failed late still delivered correct batches (384). */}
+            {error && <div role="alert" className="text-red-400">{t("compare.error").replace("{err}",error)}</div>}
+            {(!error || entries.length > 0) &&
               <CompareResults left={left} right={right} entries={visible} selected={selected} toggle={toggleRow} toggleAll={toggleAll} run={runToken.current}/>}
             <div role="status" className="text-[12px] text-dim">{loading?t("compare.loading"):!entries.length?t("compare.noPairs"):!visible.length?t("compare.empty"):""}</div>
           </div>

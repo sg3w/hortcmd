@@ -12,6 +12,9 @@ const statuses: Record<string, [string, TransKey]> = {
   same: ["=", "compare.status.same"], different: ["≠", "compare.status.different"],
   left_only: ["→", "compare.status.left_only"], right_only: ["←", "compare.status.right_only"],
   newer_left: ["›", "compare.status.newer_left"], newer_right: ["‹", "compare.status.newer_right"],
+  // A level the walk could not open: reported so the gap is visible, with
+  // neither side present, so it offers no copy direction (ticket 384).
+  unreadable: ["!", "compare.status.unreadable"],
 };
 export function CompareResults({entries, selected, toggle, toggleAll, run, left, right}: {
   left:string; right:string; entries: DiffEntry[]; selected: Set<string>; toggle: (rel:string)=>void; toggleAll:()=>void; run:number;
