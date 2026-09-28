@@ -203,7 +203,17 @@ pub(super) fn extract_zip(
             break;
         }
         let name = zip.name_for_index(i).unwrap_or_default().to_string();
-        match extract_zip_one(&mut zip, i, base, dest, pw, prog, &mut manifest) {
+        match extract_zip_one(
+            &mut zip,
+            i,
+            base,
+            all,
+            targets,
+            dest,
+            pw,
+            prog,
+            &mut manifest,
+        ) {
             Ok(()) => ok += 1,
             // A wrong password is fatal → abort immediately and report.
             Err(e) if is_password_error(&e) => return Err(e),
@@ -213,10 +223,20 @@ pub(super) fn extract_zip(
     Ok((ok, errors))
 }
 
-fn extract_zip_one(
+/// Extracts the member at `index` of the *reopened* archive.
+///
+/// The index comes from the first pass, over a different handle: if the file
+/// on disk changed in between, it can now name a member outside `base`. The
+/// name is therefore run through `match_target` again instead of being sliced
+/// at `base.len()` — an unchecked slice would panic, out of range or on a
+/// char boundary, on exactly the input `manifest.verify` exists for (387).
+#[allow(clippy::too_many_arguments)]
+pub(super) fn extract_zip_one(
     zip: &mut ZipArchive<archive_budget::Reader<File>>,
     index: usize,
     base: &str,
+    all: bool,
+    targets: &HashSet<String>,
     dest: &mut staging::Stage,
     pw: &Option<String>,
     prog: &mut Prog,
@@ -234,7 +254,10 @@ fn extract_zip_one(
         )?;
         (e.name().to_string(), e.encrypted(), e.size())
     };
-    let rel = &name[base.len()..];
+    let Some(rel) = match_target(&name, base, all, targets) else {
+        return Err(AppError::new(code::ARCHIVE_CORRUPT).op("extract-changed"));
+    };
+    let rel = rel.as_str();
     if encrypted {
         let pw = pw.as_deref().ok_or_else(password_required)?;
         let mut e = zip
@@ -341,8 +364,10 @@ pub(super) fn extract_7z(
             }
             continue;
         }
-        let name = f.name.replace('\\', "/");
-        if match_target(&name, base, all, targets).is_some() {
+        // The raw name, exactly as pass 2 sees it: `safety::path` refuses any
+        // member whose name contains a backslash during preflight, so
+        // normalizing here would only make the two passes disagree (387).
+        if match_target(&f.name, base, all, targets).is_some() {
             prog.files_total += 1;
             prog.bytes_total += f.size;
         }
