@@ -402,7 +402,7 @@ fn run_pack(
             )
         })
     }) {
-        Ok(count) => (count, Vec::new()),
+        Ok(result) => result,
         Err(error) => (0, vec![ItemError::new(&dest_zip, error)]),
     };
     if let Ok(Some(run)) = &run {
@@ -687,17 +687,16 @@ mod tests {
         fs::write(source.join("payload"), b"archive contents").unwrap();
         let target = root.join("result.zip");
         fs::write(&target, b"old archive").unwrap();
-        assert_eq!(
-            pack::run(
-                &[source.to_string_lossy().into_owned()],
-                target.to_str().unwrap(),
-                &mut progress(),
-                safety::Limits::default(),
-                &|_| Ok(())
-            )
-            .unwrap(),
-            1
-        );
+        let (ok, errors) = pack::run(
+            &[source.to_string_lossy().into_owned()],
+            target.to_str().unwrap(),
+            &mut progress(),
+            safety::Limits::default(),
+            &|_| Ok(()),
+        )
+        .unwrap();
+        assert_eq!(ok, 1);
+        assert!(errors.is_empty());
         let mut zip = ZipArchive::new(File::open(&target).unwrap()).unwrap();
         assert!(zip.by_name("source/empty/").unwrap().is_dir());
         let mut content = String::new();
@@ -742,44 +741,175 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    /// A name the manifest refuses is one member less, not one archive less
+    /// (ticket 388) — the archive stays unambiguous either way.
     #[test]
-    fn duplicate_packed_names_leave_the_destination_intact() {
+    fn duplicate_packed_names_are_skipped_once_and_reported() {
         let root = tmp_dir("pack-duplicates");
         let source = root.join("payload");
         fs::write(&source, b"payload").unwrap();
         let target = root.join("result.zip");
         fs::write(&target, b"old archive").unwrap();
         let source = source.to_string_lossy().into_owned();
-        assert!(pack::run(
+        let (ok, errors) = pack::run(
             &[source.clone(), source],
             target.to_str().unwrap(),
             &mut progress(),
             safety::Limits::default(),
-            &|_| Ok(())
+            &|_| Ok(()),
         )
-        .is_err());
-        assert_eq!(fs::read(&target).unwrap(), b"old archive");
+        .unwrap();
+        assert_eq!(ok, 1);
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].error.is(code::ARCHIVE_CONFLICT));
+        let mut zip = ZipArchive::new(File::open(&target).unwrap()).unwrap();
+        assert_eq!(zip.len(), 1);
+        assert!(zip.by_name("payload").is_ok());
+        drop(zip);
         fs::remove_dir_all(root).unwrap();
     }
 
+    /// What a real tree holds and a ZIP member cannot: a link that would
+    /// recurse, a FIFO, and one ordinary file that must still arrive
+    /// (ticket 388).
     #[cfg(unix)]
     #[test]
-    fn packing_refuses_directory_links_without_losing_the_old_archive() {
+    fn packing_skips_links_and_special_files_and_still_finishes() {
         let root = tmp_dir("pack-links");
         let source = root.join("source");
         fs::create_dir(&source).unwrap();
         std::os::unix::fs::symlink(&source, source.join("cycle")).unwrap();
+        fs::write(source.join("payload"), b"archive contents").unwrap();
+        let fifo =
+            std::ffi::CString::new(source.join("pipe").to_string_lossy().into_owned()).unwrap();
+        // SAFETY: a libc call with a valid NUL-terminated path and a mode.
+        assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
         let target = root.join("result.zip");
         fs::write(&target, b"old archive").unwrap();
-        assert!(pack::run(
+        let (ok, errors) = pack::run(
             &[source.to_string_lossy().into_owned()],
             target.to_str().unwrap(),
             &mut progress(),
             safety::Limits::default(),
-            &|_| Ok(())
+            &|_| Ok(()),
         )
-        .is_err());
+        .unwrap();
+        assert_eq!(ok, 1);
+        assert_eq!(errors.len(), 2);
+        assert!(errors
+            .iter()
+            .all(|e| e.error.is(code::ARCHIVE_UNSAFE_ENTRY)));
+        let mut zip = ZipArchive::new(File::open(&target).unwrap()).unwrap();
+        assert!(zip.by_name("source/cycle").is_err());
+        assert!(zip.by_name("source/pipe").is_err());
+        let mut content = String::new();
+        zip.by_name("source/payload")
+            .unwrap()
+            .read_to_string(&mut content)
+            .unwrap();
+        assert_eq!(content, "archive contents");
+        drop(zip);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    /// A source root that is itself a link is one skipped root; when it is the
+    /// only one, nothing is published and the old archive survives.
+    #[cfg(unix)]
+    #[test]
+    fn packing_nothing_usable_fails_without_touching_the_destination() {
+        let root = tmp_dir("pack-nothing");
+        let source = root.join("source");
+        fs::create_dir(&source).unwrap();
+        let link = root.join("link");
+        std::os::unix::fs::symlink(&source, &link).unwrap();
+        let target = root.join("result.zip");
+        fs::write(&target, b"old archive").unwrap();
+        let error = pack::run(
+            &[link.to_string_lossy().into_owned()],
+            target.to_str().unwrap(),
+            &mut progress(),
+            safety::Limits::default(),
+            &|_| Ok(()),
+        )
+        .unwrap_err();
+        assert!(error.is(code::ARCHIVE_UNSAFE_ENTRY));
         assert_eq!(fs::read(&target).unwrap(), b"old archive");
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 3);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    /// A directory this user cannot open costs its contents, not the archive.
+    #[cfg(unix)]
+    #[test]
+    fn packing_skips_an_unreadable_directory_and_packs_its_siblings() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tmp_dir("pack-unreadable");
+        let source = root.join("source");
+        let closed = source.join("closed");
+        fs::create_dir_all(&closed).unwrap();
+        fs::write(closed.join("hidden"), b"unreachable").unwrap();
+        fs::write(source.join("payload"), b"archive contents").unwrap();
+        fs::set_permissions(&closed, fs::Permissions::from_mode(0o000)).unwrap();
+        let target = root.join("result.zip");
+        let (ok, errors) = pack::run(
+            &[source.to_string_lossy().into_owned()],
+            target.to_str().unwrap(),
+            &mut progress(),
+            safety::Limits::default(),
+            &|_| Ok(()),
+        )
+        .unwrap();
+        fs::set_permissions(&closed, fs::Permissions::from_mode(0o700)).unwrap();
+        assert_eq!(ok, 1);
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].error.is(code::FS_PERMISSION));
+        let mut zip = ZipArchive::new(File::open(&target).unwrap()).unwrap();
+        // The folder is recorded as empty rather than silently absent.
+        assert!(zip.by_name("source/closed/").unwrap().is_dir());
+        assert!(zip.by_name("source/payload").is_ok());
+        drop(zip);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    /// A file that grows between the two passes is left out of the archive
+    /// instead of aborting it, and no truncated member is left under its name.
+    #[test]
+    fn packing_skips_a_source_that_changed_between_the_passes() {
+        let root = tmp_dir("pack-changed");
+        let source = root.join("source");
+        fs::create_dir(&source).unwrap();
+        let moving = source.join("moving");
+        fs::write(&moving, b"small").unwrap();
+        fs::write(source.join("payload"), b"archive contents").unwrap();
+        let target = root.join("result.zip");
+        // Every entry is checked once while collecting and once while writing.
+        // Growing the file on its second check puts the change exactly between
+        // the two passes, whatever order the directory was read in.
+        let seen = std::cell::Cell::new(0);
+        let (ok, errors) = pack::run(
+            &[source.to_string_lossy().into_owned()],
+            target.to_str().unwrap(),
+            &mut progress(),
+            safety::Limits::default(),
+            &|path| {
+                if path.file_name().is_some_and(|n| n == "moving") {
+                    seen.set(seen.get() + 1);
+                    if seen.get() == 2 {
+                        fs::write(&moving, b"much larger than before").unwrap();
+                    }
+                }
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert_eq!(ok, 1);
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].error.is(code::FS_IO));
+        let mut zip = ZipArchive::new(File::open(&target).unwrap()).unwrap();
+        assert_eq!(zip.len(), 2);
+        assert!(zip.by_name("source/moving").is_err());
+        assert!(zip.by_name("source/payload").is_ok());
+        drop(zip);
         fs::remove_dir_all(root).unwrap();
     }
 

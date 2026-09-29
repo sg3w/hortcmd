@@ -3,7 +3,7 @@
 All tickets below 100 and tickets 100–110 have been completed.
 Tickets 125–126, 128, 131, 134, 137 and the discovered issues 300–301 and 303–316 are also complete. There are
 **24 open tickets**: 111–124, 127, 129–130, 132–133, 135–136 and the discovered
-issues 317–387 (excluding completed tickets listed below). Dependencies use the current paths.
+issues 317–389 (excluding completed tickets listed below). Dependencies use the current paths.
 
 Completed tickets retain their original numbers and live in `tickets/done/`, with
 filenames ending in `.done.md`. This also applies to previously completed support
@@ -315,6 +315,9 @@ the backend halves of frontend-only fixes (359, 326).
 - [387](done/387-extract-second-pass-name-handling.done.md) (P3, done): `extract_zip_one`
   slices `&name[base.len()..]` unchecked across a second archive open (panic),
   and 7z pass 1 normalizes separators while pass 2 does not.
+- [388](done/388-pack-aborts-on-one-unpackable-entry.done.md) (P1, done): one
+  symlink, socket, unreadable directory or file that changed mid-run aborted the
+  entire ZIP, so packing a real folder produced nothing at all.
 
 Ticket 372 raised the declared MSRV from 1.85.1 to **1.93** deliberately: the
 fixed releases for the quick-xml, suppaftp, time and urlpattern findings, and the

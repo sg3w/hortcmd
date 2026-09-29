@@ -168,13 +168,18 @@ pub fn create_archive(args: &Args) -> AppResult<Value> {
     let destination = args.str("to")?;
     let (provider, _) = ScopedProvider::resolve(&destination, args.config)?;
     let mut prog = progress("pack");
-    let files = pack::run(
+    // An entry the packer skips is a failure here, not a partial result: an
+    // MCP caller asked for these sources and gets told when one was left out.
+    let (files, errors) = pack::run(
         &sources,
         &destination,
         &mut prog,
         Limits::load()?,
         &|path| provider.check(&path.into()).map_err(AppError::from),
     )?;
+    if !errors.is_empty() {
+        return Err(AppError::new(code::FS_IO).detail(serde_json::to_string(&errors)?));
+    }
     Ok(json!({"files":files,"bytes":prog.bytes_done}))
 }
 
