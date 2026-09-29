@@ -41,6 +41,7 @@ import {
   type SizeFormat,
   type Theme,
 } from "@/store/settingsSchema";
+import type { ArchiveNameOptions } from "@/features/commander/archiveName";
 import type { Lang } from "@/i18n/dictionaries";
 
 /**
@@ -58,6 +59,7 @@ const SCALES: readonly Scale[] = ["sm", "md", "lg"];
 const SIZE_FORMATS: readonly SizeFormat[] = ["auto", "bytes"];
 const DATE_FORMATS: readonly DateFormat[] = ["medium", "short", "iso"];
 const EDITOR_TRIGGERS: readonly EditorTrigger[] = ["shiftF4", "contextOnly", "f4"];
+const ARCHIVE_BASES: readonly ArchiveNameOptions["base"][] = ["selection", "generic"];
 const LANGS: readonly Lang[] = ["de", "en"];
 const THEME_MODES: readonly ThemeMode[] = ["dark", "light"];
 
@@ -138,6 +140,29 @@ function colorRule(v: unknown, r: Repairs) {
 }
 
 /**
+ * The pack dialog's name options (TICKET-394), each part on its own, so one
+ * unknown base does not also cost the two checkboxes.
+ *
+ * The defaults are stated here rather than imported from `archiveName`: this
+ * module is eager and the pack dialog is lazy. A test holds them together with
+ * `DEFAULT_NAME_OPTIONS`.
+ */
+function packOptions(v: unknown, r: Repairs): ArchiveNameOptions {
+  const o = obj(v);
+  return {
+    base: oneOf(
+      o.base,
+      ARCHIVE_BASES,
+      "selection",
+      "packNameOptions.base",
+      r,
+    ),
+    date: bool(o.date, true, "packNameOptions.date", r),
+    time: bool(o.time, true, "packNameOptions.time", r),
+  };
+}
+
+/**
  * Every persisted setting, checked and clamped.
  *
  * Returns a complete object: the caller merges it over the store's own
@@ -192,6 +217,7 @@ export function validateSettings(
       "reportPersistRecovery",
       r,
     ),
+    packNameOptions: packOptions(s.packNameOptions, r),
 
     foldersFirst: bool(s.foldersFirst, true, "foldersFirst", r),
     showExtColumn: bool(s.showExtColumn, true, "showExtColumn", r),

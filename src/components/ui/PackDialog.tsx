@@ -4,6 +4,9 @@
 // Base, date and time are switches rather than characters to delete out of
 // a proposed string. Editing the field by hand takes it out of the options'
 // hands; one checkbox hands it back.
+//
+// The switches are a setting, not a form: the dialog opens on what was chosen
+// last (TICKET-394), because archives are made in series.
 // ============================================================
 
 import "@/i18n/namespaces/pack";
@@ -11,7 +14,6 @@ import { useEffect, useId, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { FileArchive } from "lucide-react";
 import {
-  DEFAULT_NAME_OPTIONS,
   composeArchiveName,
   genericBase,
   selectionBase,
@@ -19,7 +21,7 @@ import {
   type ArchiveNameOptions,
 } from "@/features/commander/archiveName";
 import { useOps } from "@/store/opsStore";
-import { useT } from "@/store/settingsStore";
+import { useSettings, useT } from "@/store/settingsStore";
 import { consumeDialogKey } from "@/lib/keys";
 import { SimpleDialog } from "./SimpleDialog";
 
@@ -37,7 +39,13 @@ export function PackDialog() {
   // yields the same name instead of a drifting one.
   const openedAt = useRef(new Date());
 
-  const [options, setOptions] = useState<ArchiveNameOptions>(DEFAULT_NAME_OPTIONS);
+  // The options are a setting, not a form: read when the dialog opens and
+  // written as they change (TICKET-394). Read through `getState` rather than
+  // subscribed — a change made here must not re-run the opening effect and
+  // throw away what is in the field.
+  const [options, setOptions] = useState<ArchiveNameOptions>(
+    () => useSettings.getState().packNameOptions,
+  );
   const [value, setValue] = useState("");
   /** False once the field was typed into: the options no longer describe it. */
   const [auto, setAuto] = useState(true);
@@ -47,9 +55,10 @@ export function PackDialog() {
   useEffect(() => {
     if (!pack) return;
     openedAt.current = new Date();
-    setOptions(DEFAULT_NAME_OPTIONS);
+    const stored = useSettings.getState().packNameOptions;
+    setOptions(stored);
     setAuto(true);
-    const initial = composeArchiveName(pack.entries, DEFAULT_NAME_OPTIONS, openedAt.current);
+    const initial = composeArchiveName(pack.entries, stored, openedAt.current);
     setValue(initial);
     requestAnimationFrame(() => {
       const el = inputRef.current;
@@ -64,6 +73,9 @@ export function PackDialog() {
   const changeOptions = (next: Partial<ArchiveNameOptions>) => {
     const merged = { ...options, ...next };
     setOptions(merged);
+    // Stored on the change, not on a successful pack: the next opening shows
+    // what was last chosen, whether or not that archive was created.
+    useSettings.getState().setPackNameOptions(merged);
     setValue(composeArchiveName(entries, merged, openedAt.current));
   };
 

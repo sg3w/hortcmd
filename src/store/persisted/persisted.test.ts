@@ -205,6 +205,36 @@ describe("settings validation", () => {
     expect(repairs.count).toBe(3);
   });
 
+  /**
+   * Three places state this default — the store, the validator and
+   * `DEFAULT_NAME_OPTIONS` — because the eager settings must not import the
+   * lazy pack feature (TICKET-394). This is what keeps them one value.
+   */
+  it("ships the pack options the dialog composes with", async () => {
+    const { useSettings } = await import("@/store/settingsStore");
+    const { DEFAULT_NAME_OPTIONS } = await import("@/features/commander/archiveName");
+    expect(useSettings.getState().packNameOptions).toEqual(DEFAULT_NAME_OPTIONS);
+    expect(load({}, SETTINGS_VERSION).value.packNameOptions).toEqual(DEFAULT_NAME_OPTIONS);
+  });
+
+  it("repairs the pack options part by part", () => {
+    // Each part falls back on its own, so one unknown base does not cost
+    // the user the two checkboxes as well (TICKET-394).
+    const { value, repairs } = load(
+      { packNameOptions: { base: "whatever", date: false, time: "yes" } },
+      SETTINGS_VERSION,
+    );
+    expect(value.packNameOptions).toEqual({ base: "selection", date: false, time: true });
+    expect(repairs.fields).toEqual(["packNameOptions.base", "packNameOptions.time"]);
+  });
+
+  it("keeps stored pack options", () => {
+    const stored = { base: "generic", date: false, time: false };
+    const { value, repairs } = load({ packNameOptions: stored }, SETTINGS_VERSION);
+    expect(value.packNameOptions).toEqual(stored);
+    expect(repairs.fields).toEqual([]);
+  });
+
   it("rejects a colour that is not one", () => {
     const { value } = load(
       {

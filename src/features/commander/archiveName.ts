@@ -20,7 +20,11 @@ export interface ArchiveNameOptions {
   time: boolean;
 }
 
-/** What the pack dialog opens with: the TICKET-390 proposal, unchanged. */
+/**
+ * The TICKET-390 proposal, unchanged — what the pack dialog starts from until
+ * the user chooses otherwise, and what a stored choice falls back to
+ * (`packNameOptions`, TICKET-394).
+ */
 export const DEFAULT_NAME_OPTIONS: ArchiveNameOptions = {
   base: "selection",
   date: true,
