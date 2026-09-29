@@ -283,7 +283,10 @@ function PromptDialog() {
       onOpenChange={(o) => !o && closeDialogs()}
       overlayZ="z-[60]"
       contentZ="z-[61]"
-      className="w-[420px]"
+      // Wider than the confirm dialog: a proposed archive name carries a
+      // timestamp, and a name the user cannot see whole is one they retype
+      // (TICKET-390).
+      className="w-[520px]"
       noDescription
     >
           <Dialog.Title className="flex items-center gap-2 border-b border-edge px-4 py-2.5 text-text">

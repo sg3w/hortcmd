@@ -1,13 +1,13 @@
 import { expect, it } from "vitest";
 import { waitFor } from "@testing-library/react";
 import { useTauri } from "@/test/tauri";
-import { file } from "@/test/fixtures";
+import { dir, file } from "@/test/fixtures";
 import { usePanes } from "@/store/panesStore";
 import { useCaps } from "@/store/capsStore";
 import { useOps } from "@/store/opsStore";
 import { translate, useSettings } from "@/store/settingsStore";
 import { describeErrorFull } from "@/store/errorText";
-import { runEdit, runMkdir, runRename } from "./fileOps";
+import { runEdit, runMkdir, runPack, runRename } from "./fileOps";
 import { openEntry } from "./navigate";
 
 it.each([runEdit, (side: "left" | "right") => openEntry(side, 0)])("reports failed default-program launches", async action => {
@@ -72,4 +72,31 @@ it("still reports a name taken by another entry, whatever its spelling", async (
 
   await waitFor(() => expect(useOps.getState().confirm?.message).toContain("README.TXT"));
   expect(runtime.calls.filter(call => call.cmd === "rename_entry")).toHaveLength(0);
+});
+
+it("proposes the folder name with a timestamp when packing, preselecting all but the extension", async () => {
+  const runtime = useTauri({ commands: { create_archive: () => Promise.resolve(null) } });
+  useCaps.setState({ known: { local: ["archivePackFrom", "archivePackTo"] } });
+  const entries = [file("notes.txt"), dir("Fotos"), dir("Videos")];
+  usePanes.setState(s => ({
+    left: { ...s.left, activeTab: 0, tabs: [{ ...s.left.tabs[0], path: "/source", archive: null, entries, raw: entries, cursor: 0, selected: new Set(["notes.txt", "Videos", "Fotos"]) }] },
+    right: { ...s.right, activeTab: 0, tabs: [{ ...s.right.tabs[0], path: "/target", archive: null }] },
+  }));
+
+  runPack("left");
+  const prompt = useOps.getState().prompt;
+  expect(prompt).not.toBeNull();
+  // Folder wins over the file, and the list order decides between the two
+  // folders — not the order they were marked in.
+  expect(prompt!.initial).toMatch(/^Fotos_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.zip$/);
+  expect(prompt!.selectRange).toEqual([0, prompt!.initial.length - 4]);
+
+  useOps.getState().closeDialogs();
+  prompt!.onSubmit(prompt!.initial, false);
+
+  await waitFor(() =>
+    expect(runtime.calls.filter(call => call.cmd === "create_archive")).toMatchObject([
+      { cmd: "create_archive", args: { sources: expect.arrayContaining(["/source/Fotos"]), destZip: `/target/${prompt!.initial}` } },
+    ]),
+  );
 });
