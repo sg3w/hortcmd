@@ -1121,7 +1121,15 @@ The *design* those changes settled is described where it belongs, in §3–§9.
       extension) or the generic `archiv`, and **date** and **time**
       (`_YYYY-MM-DD`, `_HH-MM-SS`, both on by default) are checkboxes. Typing
       into the field disables the options; one checkbox hands the field back to
-      them. Everything but `.zip` is preselected on open.
+      them. Everything but `.zip` is preselected on open. The three options are
+      **remembered** (`packNameOptions`, ticket 394): they are written as they
+      change and read when the dialog opens, so a series of archives keeps the
+      naming the user chose for the first one; the composing mode itself always
+      starts fresh. The private staging a pack publishes from is removed with a
+      recursive delete that **tolerates an entry that vanishes underneath it**
+      (ticket 393) — FAT/exFAT deletes an AppleDouble `._x` sidecar together
+      with its entry, which used to report „Nicht gefunden" for a finished
+      archive and left the staging directory behind.
 - [x] **Search**: search dialog (command-bar button + **Alt+F7**; `SearchDialog.tsx` ↔
       backend `commands/fs/search.rs`, command `search`) with four modes:
       **Files** (name as glob/regex + **file contents** as text/regex,
