@@ -68,6 +68,36 @@ it("disables the options once the name is typed and hands them back on request",
   expect(input.value).toMatch(new RegExp(`^Fotos_${STAMP.source}\\.zip$`));
 });
 
+it("opens with the options chosen last time", async () => {
+  useSettings.setState({ packNameOptions: { base: "generic", date: false, time: true } });
+  const { input } = await open();
+  expect(input.value).toMatch(/^archiv_\d{2}-\d{2}-\d{2}\.zip$/);
+  expect(screen.getByRole("checkbox", { name: translate("archive.addDate") })).not.toBeChecked();
+  expect(screen.getByRole("combobox", { name: translate("archive.base") })).toHaveValue("generic");
+});
+
+it("stores an option change even when nothing is packed", async () => {
+  const user = userEvent.setup();
+  await open();
+  await user.click(screen.getByRole("checkbox", { name: translate("archive.addTime") }));
+  expect(useSettings.getState().packNameOptions).toEqual({
+    base: "selection",
+    date: true,
+    time: false,
+  });
+
+  // Closed without packing — and the next archive still starts where the
+  // last decision left it (TICKET-394).
+  await user.keyboard("{Escape}");
+  useOps.getState().requestPack({ entries: ENTRIES, onSubmit: vi.fn() });
+  await waitFor(() => {
+    const reopened: HTMLInputElement = screen.getByRole("textbox", {
+      name: translate("archive.label"),
+    });
+    expect(reopened.value).toMatch(/^Fotos_\d{4}-\d{2}-\d{2}\.zip$/);
+  });
+});
+
 it("submits the name in the field", async () => {
   const user = userEvent.setup();
   const { input, onSubmit } = await open();

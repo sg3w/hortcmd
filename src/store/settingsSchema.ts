@@ -11,6 +11,7 @@
 // to know this file exists.
 // ============================================================
 
+import type { ArchiveNameOptions } from "@/features/commander/archiveName";
 import type { Lang } from "@/i18n/dictionaries";
 import type {
   CustomColorRule,
@@ -116,6 +117,18 @@ export interface PersistedSettings {
    */
   safeTransfers: boolean;
   checkTransferSpace: boolean;
+
+  /**
+   * What the pack dialog composes the archive name from: the base, and
+   * whether the date and the time come along (TICKET-394).
+   *
+   * Persisted because packing is done in series — a folder of projects,
+   * one archive each — and an option that has to be set again for every
+   * one of them costs more than it saves. Only the options are stored:
+   * the dialog always opens composing, never on a name typed by hand for
+   * a previous archive.
+   */
+  packNameOptions: ArchiveNameOptions;
 
   /**
    * Whether the startup notice about recovered persisted state is shown

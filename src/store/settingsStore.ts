@@ -19,6 +19,7 @@ import {
   validateSettings,
 } from "./persisted/settings";
 import { DICT, type Lang, type TransKey } from "@/i18n/dictionaries";
+import type { ArchiveNameOptions } from "@/features/commander/archiveName";
 import type { CustomColorRule, ThemeMode } from "@/lib/fileColors";
 import {
   DEFAULT_COLUMN_WIDTHS,
@@ -55,6 +56,7 @@ interface SettingsStore extends PersistedSettings {
   setCopyThreads: (v: number) => void;
   setCheckTransferSpace: (v: boolean) => void;
   setReportPersistRecovery: (v: boolean) => void;
+  setPackNameOptions: (v: ArchiveNameOptions) => void;
   setSafeTransfers: (v: boolean) => void;
   setFoldersFirst: (v: boolean) => void;
   setShowExtColumn: (v: boolean) => void;
@@ -108,6 +110,11 @@ export const useSettings = create<SettingsStore>()(
       safeTransfers: true,
       checkTransferSpace: true,
       reportPersistRecovery: true,
+      // Spelled out rather than imported from `archiveName`: this store is
+      // eager and the pack dialog is not, and one value import would pull the
+      // whole feature into the entry chunk (TICKET-392's budget). A test holds
+      // this and `DEFAULT_NAME_OPTIONS` together.
+      packNameOptions: { base: "selection", date: true, time: true },
 
       foldersFirst: true,
       showExtColumn: true,
@@ -153,6 +160,7 @@ export const useSettings = create<SettingsStore>()(
       setReportPersistRecovery: (reportPersistRecovery) =>
         set({ reportPersistRecovery }),
       setSafeTransfers: (safeTransfers) => set({ safeTransfers }),
+      setPackNameOptions: (packNameOptions) => set({ packNameOptions }),
       setFoldersFirst: (foldersFirst) => set({ foldersFirst }),
       setShowExtColumn: (showExtColumn) => set({ showExtColumn }),
       setShowPermissions: (showPermissions) => set({ showPermissions }),
