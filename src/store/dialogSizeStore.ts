@@ -8,7 +8,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { guardedStorage } from "./persisted/storage";
-import { acceptVersion, PERSISTED_KEYS, rehydrate } from "./persisted/gate";
+import { onRecovered,
+  acceptVersion, PERSISTED_KEYS, rehydrate } from "./persisted/gate";
 import {
   DIALOG_SIZES_VERSION,
   validateDialogSizes,
@@ -46,3 +47,9 @@ export const useDialogSizeStore = create<DialogSizeStore>()(
     },
   ),
 );
+
+// A repair made on the way in is written back once at startup, so the
+// same value is not repaired — and reported — again on the next one
+// (TICKET-389). `setState({})` is what makes `persist` write: it merges
+// nothing and notifies, which is exactly a save of the current state.
+onRecovered("dialogSizes", () => useDialogSizeStore.setState({}));

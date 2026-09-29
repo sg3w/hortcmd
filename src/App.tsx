@@ -27,7 +27,11 @@ import { useTransfers } from "@/store/transfersStore";
 import { useOps } from "@/store/opsStore";
 import { useSettings, useT } from "@/store/settingsStore";
 import { initWindowState } from "@/lib/windowState";
-import { recoveredDomains } from "@/store/persisted/gate";
+import {
+  recoveredDomainsAt,
+  settleRecovered,
+  type PersistedDomain,
+} from "@/store/persisted/gate";
 import type { TransKey } from "@/i18n/dictionaries";
 import { notify } from "@/store/noticeStore";
 import type { ThemeMode } from "@/lib/fileColors";
@@ -73,6 +77,7 @@ export default function App() {
   const active = usePanes((s) => s.active);
   const theme = useSettings((s) => s.theme);
   const paneSplit = useSettings((s) => s.paneSplit);
+  const reportRecovery = useSettings((s) => s.reportPersistRecovery);
   const setPaneSplit = useSettings((s) => s.setPaneSplit);
   const t = useT();
   const mainRef = useRef<HTMLDivElement>(null);
@@ -152,16 +157,31 @@ export default function App() {
   // stores rehydrate while the modules load — long before anything can
   // show a message — and because a shell that works must never be held
   // up by an explanation.
+  //
+  // Two notices, in fact, since TICKET-389: a blob that could not be
+  // parsed really is lost and reads as an error, while a clamped number
+  // is not, and saying "unusable, reset" for the second one taught the
+  // user to ignore the first. The repaired values are written back in
+  // the same pass, so neither notice returns on the next start for the
+  // same cause — and a user who wants neither can switch them off.
   useEffect(() => {
-    const domains = recoveredDomains();
-    if (!domains.length) return;
-    notify(
-      "left",
-      "persist.recovered",
-      { domains: domains.map((d) => t(`persist.domain.${d}` as TransKey)).join(", ") },
-      "error",
-    );
-  }, [t]);
+    settleRecovered();
+    if (!reportRecovery) return;
+    const names = (domains: PersistedDomain[]) =>
+      domains.map((d) => t(`persist.domain.${d}` as TransKey)).join(", ");
+    const reset = recoveredDomainsAt("reset");
+    const repaired = recoveredDomainsAt("repaired");
+    // One notice slot per pane, so one notice: a reset means something
+    // was actually lost and wins whenever both happened.
+    if (reset.length) {
+      notify("left", "persist.recovered", { domains: names(reset) }, "error");
+    } else if (repaired.length) {
+      notify("left", "persist.repaired", { domains: names(repaired) }, "info");
+    }
+    // Deliberately startup-only: `t` changing means the user switched
+    // language, which is not a reason to report the same event again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     (async () => {

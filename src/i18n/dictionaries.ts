@@ -20,6 +20,7 @@ import { recovery } from "./namespaces/recovery";
 import { chrome } from "./namespaces/chrome";
 import { compare } from "./namespaces/compare";
 import { errors } from "./namespaces/errors";
+import type { backup } from "./namespaces/backup";
 import type { exporting } from "./namespaces/exporting";
 import { net } from "./namespaces/net";
 import { persist } from "./namespaces/persist";
@@ -51,7 +52,8 @@ const CORE_NAMESPACES = [
 /** The key union includes unloaded features without importing their values. */
 type Keys<T> = T extends {de: infer D} ? keyof D : never;
 export type TransKey = Keys<(typeof CORE_NAMESPACES)[number]>
-  | keyof typeof rename.de | keyof typeof exporting.de | keyof typeof preview.de;
+  | keyof typeof rename.de | keyof typeof exporting.de | keyof typeof preview.de
+  | keyof typeof backup.de;
 
 export { DICT } from "./registry";
 import { registerTranslations } from "./registry";

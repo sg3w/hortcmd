@@ -11,7 +11,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { guardedStorage } from "./persisted/storage";
-import { acceptVersion, PERSISTED_KEYS, rehydrate } from "./persisted/gate";
+import { onRecovered,
+  acceptVersion, PERSISTED_KEYS, rehydrate } from "./persisted/gate";
 import {
   migrateSettings,
   SETTINGS_VERSION,
@@ -52,6 +53,7 @@ interface SettingsStore extends PersistedSettings {
   setBufferSizeKb: (v: number) => void;
   setCopyThreads: (v: number) => void;
   setCheckTransferSpace: (v: boolean) => void;
+  setReportPersistRecovery: (v: boolean) => void;
   setSafeTransfers: (v: boolean) => void;
   setFoldersFirst: (v: boolean) => void;
   setShowExtColumn: (v: boolean) => void;
@@ -103,6 +105,7 @@ export const useSettings = create<SettingsStore>()(
       copyThreads: 1,
       safeTransfers: true,
       checkTransferSpace: true,
+      reportPersistRecovery: true,
 
       foldersFirst: true,
       showExtColumn: true,
@@ -144,6 +147,8 @@ export const useSettings = create<SettingsStore>()(
       setCopyThreads: (copyThreads) =>
         set({ copyThreads: Math.min(16, Math.max(1, Math.floor(copyThreads))) }),
       setCheckTransferSpace: (checkTransferSpace) => set({ checkTransferSpace }),
+      setReportPersistRecovery: (reportPersistRecovery) =>
+        set({ reportPersistRecovery }),
       setSafeTransfers: (safeTransfers) => set({ safeTransfers }),
       setFoldersFirst: (foldersFirst) => set({ foldersFirst }),
       setShowExtColumn: (showExtColumn) => set({ showExtColumn }),
@@ -289,3 +294,9 @@ export function useT(): (key: TransKey) => string {
   const lang = useSettings((s) => s.language);
   return (key: TransKey) => DICT[lang][key];
 }
+
+// A repair made on the way in is written back once at startup, so the
+// same value is not repaired — and reported — again on the next one
+// (TICKET-389). `setState({})` is what makes `persist` write: it merges
+// nothing and notifies, which is exactly a save of the current state.
+onRecovered("settings", () => useSettings.setState({}));

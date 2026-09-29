@@ -98,6 +98,19 @@ export interface PersistedSettings {
   safeTransfers: boolean;
   checkTransferSpace: boolean;
 
+  /**
+   * Whether the startup notice about recovered persisted state is shown
+   * (TICKET-389).
+   *
+   * On by default: an application that resets a setting and says nothing
+   * is one that "forgets things". Off is a real choice all the same —
+   * the notice is unavoidable when it is wrong, and a user who has read
+   * it once should not have to read it on every start. Turning it off
+   * silences the toast only; the console diagnostics and the quarantined
+   * copy are what a support bundle is read from and are unaffected.
+   */
+  reportPersistRecovery: boolean;
+
   // ----- File view -----
   /** Always sort folders before files. */
   foldersFirst: boolean;

@@ -318,6 +318,9 @@ the backend halves of frontend-only fixes (359, 326).
 - [388](done/388-pack-aborts-on-one-unpackable-entry.done.md) (P1, done): one
   symlink, socket, unreadable directory or file that changed mid-run aborted the
   entire ZIP, so packing a real folder produced nothing at all.
+- [389](done/389-persist-recovery-notice-repeats-forever.done.md) (P1, done): a
+  repaired value was never written back, so "stored data was unusable" was
+  raised at every start — for a dialog width the app itself had rounded off.
 
 Ticket 372 raised the declared MSRV from 1.85.1 to **1.93** deliberately: the
 fixed releases for the quick-xml, suppaftp, time and urlpattern findings, and the
