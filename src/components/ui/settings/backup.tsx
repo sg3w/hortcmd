@@ -15,7 +15,7 @@
 // ============================================================
 
 import { useState } from "react";
-import { Download, RotateCcw, Upload } from "lucide-react";
+import { BellRing, Download, RotateCcw, Upload } from "lucide-react";
 import { readPreview, writeTextFile } from "@/ipc/client";
 import { openFileBrowser } from "@/store/fileBrowserStore";
 import { useSettings, useT } from "@/store/settingsStore";
@@ -23,6 +23,8 @@ import { PERSISTED_KEYS, type PersistedDomain } from "@/store/persisted/gate";
 import { buildExport, readImport, type ImportRefusal } from "@/store/persisted/transfer";
 import { fillVars } from "@/store/noticeStore";
 import { useOps } from "@/store/opsStore";
+import "@/i18n/namespaces/backup";
+import { Toggle } from "./controls";
 import type { TransKey } from "@/i18n/dictionaries";
 
 /** The default file name an export is offered under. */
@@ -44,6 +46,8 @@ export function BackupSection() {
   const t = useT();
   const [message, setMessage] = useState<{ text: string; bad: boolean } | null>(null);
   const requestConfirm = useOps((s) => s.requestConfirm);
+  const reportRecovery = useSettings((s) => s.reportPersistRecovery);
+  const setReportRecovery = useSettings((s) => s.setReportPersistRecovery);
 
   const say = (key: TransKey, vars?: Record<string, string | number>, bad = false) =>
     setMessage({ text: fillVars(t(key), vars), bad });
@@ -174,6 +178,17 @@ export function BackupSection() {
           danger
         />
       </div>
+
+      {/* The startup notice belongs with the rest of the persisted-state
+          controls: it is the only place the application talks about this
+          data at all (TICKET-389). */}
+      <Toggle
+        checked={reportRecovery}
+        onChange={setReportRecovery}
+        icon={BellRing}
+        label={t("persist.report")}
+        hint={t("persist.report.hint")}
+      />
 
       {message && (
         <span

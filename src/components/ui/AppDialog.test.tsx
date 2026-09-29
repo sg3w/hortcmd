@@ -12,7 +12,9 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { isDialogKey } from "@/lib/keys";
-import { AppDialog } from "./AppDialog";
+import { AppDialog, clamp } from "./AppDialog";
+import { validateDialogSizes } from "@/store/persisted/domains";
+import { Repairs } from "@/lib/schema";
 
 function open(props: Partial<Parameters<typeof AppDialog>[0]> = {}) {
   const onClose = vi.fn();
@@ -133,5 +135,33 @@ describe("focus", () => {
     outside.focus();
     expect(document.activeElement).toBe(outside);
     outside.remove();
+  });
+});
+
+// ------------------------------------------------------------
+// The size that reaches storage (TICKET-389).
+// ------------------------------------------------------------
+
+describe("clamp", () => {
+  it("returns whole pixels for a window width the 90 % bound cannot divide", () => {
+    vi.stubGlobal("innerWidth", 1437);
+    vi.stubGlobal("innerHeight", 903);
+    const size = clamp({ w: 5000, h: 5000 }, { w: 400, h: 300 });
+
+    expect(size.w).toBe(Math.round(1437 * 0.9));
+    expect(size.h).toBe(Math.round(903 * 0.9));
+    expect(Number.isInteger(size.w) && Number.isInteger(size.h)).toBe(true);
+    vi.unstubAllGlobals();
+  });
+
+  it("produces a size the persistence gate reads back without repairing it", () => {
+    vi.stubGlobal("innerWidth", 1437);
+    vi.stubGlobal("innerHeight", 903);
+    const size = clamp({ w: 5000, h: 5000 }, { w: 400, h: 300 });
+
+    const r = new Repairs();
+    expect(validateDialogSizes({ test: size }, r)).toEqual({ test: size });
+    expect(r.any).toBe(false);
+    vi.unstubAllGlobals();
   });
 });

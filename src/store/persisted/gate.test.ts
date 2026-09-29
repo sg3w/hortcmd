@@ -13,12 +13,15 @@ import { Repairs } from "@/lib/schema";
 import {
   acceptVersion,
   clearQuarantine,
+  onRecovered,
   PERSISTED_KEYS,
   quarantinedKeys,
   recoveredDomains,
+  recoveredDomainsAt,
   rehydrate,
   reportUnreadable,
   resetRecovered,
+  settleRecovered,
   wasRecovered,
 } from "./gate";
 import { guardedStorage } from "./storage";
@@ -198,5 +201,75 @@ describe("the storage adapter", () => {
 
     expect(() => storage.setItem("k", { state: { n: 1 }, version: 1 })).not.toThrow();
     expect(() => storage.removeItem("k")).not.toThrow();
+  });
+});
+
+// ------------------------------------------------------------
+// Telling the two kinds of recovery apart, and not making the same
+// one twice (TICKET-389).
+// ------------------------------------------------------------
+
+describe("recovery levels", () => {
+  it("separates a value that was corrected from data that was lost", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    rehydrate("dialogSizes", "not a number", clampToTen);
+    reportUnreadable("history", "{ truncated");
+
+    expect(recoveredDomainsAt("repaired")).toEqual(["dialogSizes"]);
+    expect(recoveredDomainsAt("reset")).toEqual(["history"]);
+  });
+
+  it("does not let a repair downgrade a reset on the same domain", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    reportUnreadable("settings", "{ truncated");
+    rehydrate("settings", "not a number", clampToTen);
+
+    expect(recoveredDomainsAt("reset")).toEqual(["settings"]);
+    expect(recoveredDomainsAt("repaired")).toEqual([]);
+  });
+
+  it("takes the worse level whichever order the two arrive in", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    rehydrate("settings", "not a number", clampToTen);
+    expect(recoveredDomainsAt("repaired")).toEqual(["settings"]);
+    reportUnreadable("settings", "{ truncated");
+    expect(recoveredDomainsAt("reset")).toEqual(["settings"]);
+  });
+});
+
+describe("settleRecovered", () => {
+  it("writes every recovered domain back so the repair is not made again", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const written: string[] = [];
+    onRecovered("settings", () => written.push("settings"));
+    onRecovered("history", () => written.push("history"));
+    rehydrate("settings", "not a number", clampToTen);
+
+    settleRecovered();
+
+    // Only what actually needed recovering — a healthy domain is not
+    // rewritten just because it registered a writer.
+    expect(written).toEqual(["settings"]);
+  });
+
+  it("carries on when one domain cannot be written back", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const written: string[] = [];
+    onRecovered("settings", () => {
+      throw new Error("store is gone");
+    });
+    onRecovered("history", () => written.push("history"));
+    rehydrate("settings", "bad", clampToTen);
+    rehydrate("history", "bad", clampToTen);
+
+    expect(() => settleRecovered()).not.toThrow();
+    expect(written).toEqual(["history"]);
+  });
+
+  it("is a no-op when nothing was recovered", () => {
+    const written: string[] = [];
+    onRecovered("settings", () => written.push("settings"));
+    settleRecovered();
+    expect(written).toEqual([]);
   });
 });

@@ -45,12 +45,24 @@ interface Props {
 
 const MAX_FRAC = 0.9; // at most 90 % of the main window size
 
-function clamp(size: DialogSize, min: DialogSize): DialogSize {
+/**
+ * The size, inside the per-dialog minimum and 90 % of the window.
+ *
+ * Rounded, and not only for tidiness: `innerWidth * 0.9` is fractional
+ * for every odd window width, and a fractional size is what the stored
+ * value was made of. The persistence gate stores whole pixels, so it
+ * repaired that value on every start and reported the repair as lost
+ * data — for a number this component had written itself (TICKET-389).
+ *
+ * Exported for the tests: it is pure, and it is what decides whether the
+ * value that reaches storage is one the gate will accept.
+ */
+export function clamp(size: DialogSize, min: DialogSize): DialogSize {
   const maxW = Math.max(min.w, window.innerWidth * MAX_FRAC);
   const maxH = Math.max(min.h, window.innerHeight * MAX_FRAC);
   return {
-    w: Math.min(maxW, Math.max(min.w, size.w)),
-    h: Math.min(maxH, Math.max(min.h, size.h)),
+    w: Math.round(Math.min(maxW, Math.max(min.w, size.w))),
+    h: Math.round(Math.min(maxH, Math.max(min.h, size.h))),
   };
 }
 

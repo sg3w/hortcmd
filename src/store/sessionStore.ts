@@ -9,7 +9,8 @@ import { migrateLegacyLocation } from "@/lib/location";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { guardedStorage } from "./persisted/storage";
-import { acceptVersion, PERSISTED_KEYS, rehydrate } from "./persisted/gate";
+import { onRecovered,
+  acceptVersion, PERSISTED_KEYS, rehydrate } from "./persisted/gate";
 import { SESSION_VERSION, validateSession } from "./persisted/domains";
 import { usePanes, type Side, type ViewMode } from "./panesStore";
 import { parentPath } from "@/lib/path";
@@ -88,3 +89,9 @@ function migrateLocations(stored: unknown): unknown {
     catch { return value; }
   }) as unknown;
 }
+
+// A repair made on the way in is written back once at startup, so the
+// same value is not repaired — and reported — again on the next one
+// (TICKET-389). `setState({})` is what makes `persist` write: it merges
+// nothing and notifies, which is exactly a save of the current state.
+onRecovered("session", () => useSession.setState({}));
