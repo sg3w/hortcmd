@@ -90,6 +90,7 @@ pub fn run() {
             commands::fs::cache::cache_metrics,
             commands::fs::transfer::preflight::transfer_preflight,
             commands::fs::transfer::preflight::cancel_preflight,
+            commands::fs::undo::undo_set_enabled,
             commands::fs::undo::undo_preview,
             commands::fs::undo::undo_forget,
             commands::fs::undo::undo_classify,

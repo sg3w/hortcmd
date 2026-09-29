@@ -72,6 +72,25 @@ export interface PersistedSettings {
   /** Move to the trash when deleting (Shift = permanent). */
   useTrash: boolean;
 
+  /**
+   * File undo (TICKET-391), a **beta** feature and therefore off by
+   * default — for new installations and for every existing one.
+   *
+   * What it costs while on is real and invisible: every rename, folder
+   * creation, metadata change and transfer writes a journal entry, and a
+   * copy's undo keeps the copied bytes in a `.hortcmd-undo-*` sibling of
+   * the destination rather than deleting them. What it delivers is
+   * conditional by its own contract and local-macOS-only for now, so it
+   * is not a bargain anyone should be entered into silently.
+   *
+   * Off hides the command, the ⌘⌥Z shortcut and the reversibility
+   * sentence in the operation dialogs, and — pushed through to the
+   * backend — stops the journal being written at all. It never deletes a
+   * journal or a retained copy that already exists: those come back when
+   * the switch does.
+   */
+  undoEnabled: boolean;
+
   // ----- Transfers (copy/move) -----
   /** Verify copies against the source via SHA-256 after writing. */
   verifyCopies: boolean;

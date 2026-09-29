@@ -48,7 +48,7 @@ import { openExport } from "@/store/exportStore";
 import { openFileCompare } from "@/store/fileCompareStore";
 import { openProps } from "@/store/propsStore";
 import { openRename } from "@/store/renameStore";
-import { openUndo } from "@/store/undoStore";
+import { openUndo, undoAvailable } from "@/store/undoStore";
 import { openRecovery } from "@/store/recoveryStore";
 import { openSearch } from "@/store/searchStore";
 import { openAbout, openSettings, openShortcuts } from "@/store/uiStore";
@@ -470,7 +470,9 @@ export const COMMANDS = {
 
   // ----- Markieren (TICKET-059) -----
   // Group 1 – what is marked.
-  "file.undo": { label: "undo.title", dialog: true, shortcut: { key: "Z", mods: ["Mod", "Alt"] }, run: openUndo },
+  // Beta and off by default (TICKET-391): hidden, not disabled — a
+  // feature nobody switched on has no reason to occupy a menu line.
+  "file.undo": { label: "undo.title", dialog: true, shortcut: { key: "Z", mods: ["Mod", "Alt"] }, run: openUndo, state: () => ({ hidden: !undoAvailable() }) },
   "cmd.recovery": { label: "recovery.title", dialog: true, run: openRecovery },
   "mark.selectGroup": {
     label: "menu.mark.selectGroup",

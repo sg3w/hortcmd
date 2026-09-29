@@ -124,6 +124,22 @@ describe("File operations", () => {
     expect(useSettings.getState().safeTransfers).toBe(true);
   });
 
+  // File undo is beta and off by default (TICKET-391): the page has to
+  // say so, and the standing warning belongs to the state that costs
+  // something — here the on state, unlike failure-safe transfers.
+  it("offers file undo off, marked BETA, and warns once it is on", async () => {
+    const user = userEvent.setup();
+    expect(useSettings.getState().undoEnabled).toBe(false);
+    render(<OperationsForm />);
+    expect(screen.getByText(translate("settings.beta"))).toBeInTheDocument();
+    expect(screen.queryByText(translate("settings.undo.warning"))).toBeNull();
+    const undo = screen.getByRole("switch", { name: translate("settings.undo") });
+    expect(undo).toHaveAttribute("aria-checked", "false");
+    await user.click(undo);
+    expect(useSettings.getState().undoEnabled).toBe(true);
+    expect(screen.getByText(translate("settings.undo.warning"))).toBeInTheDocument();
+  });
+
   it("accepts a speed limit", async () => {
     const user = userEvent.setup();
     useSettings.setState({ speedLimit: 0 });

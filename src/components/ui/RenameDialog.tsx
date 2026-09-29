@@ -27,6 +27,7 @@ import type { AppError } from "@/ipc/bindings/AppError";
 import { describeErrorFull, describeItemErrors } from "@/store/errorText";
 import { useOps } from "@/store/opsStore";
 import { useT } from "@/store/settingsStore";
+import { useUndoAvailable } from "@/store/undoStore";
 import { renameBatch } from "@/ipc/client";
 import type { TransKey } from "@/i18n/dictionaries";
 import {
@@ -66,6 +67,9 @@ export function RenameDialog() {
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => { setRequestError(null); }, [revision]);
   const t = useT();
+  // Beta gate (TICKET-391): while file undo is off nothing is recorded,
+  // so its contract is not described either.
+  const undoAvailable = useUndoAvailable();
 
   // Snapshot of the active list taken when the dialog opens.
   const snapshot = useMemo(() => {
@@ -162,7 +166,7 @@ export function RenameDialog() {
       minSize={{ w: MIN_W, h: MIN_H }}
     >
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4">
-            <p className="text-sm text-dim">{t("undo.conditional")}</p>
+            {undoAvailable && <p className="text-sm text-dim">{t("undo.conditional")}</p>}
             {requestError && <p role="alert" className="text-sm text-red-400">{describeErrorFull(requestError)}</p>}
             {/* Configuration – compact, wraps when needed. */}
             <fieldset disabled={busy} className="flex flex-wrap items-start gap-x-6 gap-y-4">

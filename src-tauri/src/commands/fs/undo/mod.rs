@@ -1,6 +1,7 @@
 //! File undo is deliberately separate from native text-editing undo.
 use crate::errors::{AppError, AppResult};
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
 use ts_rs::TS;
 
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
@@ -25,6 +26,29 @@ fn unavailable() -> AppError {
     AppError::new(crate::errors::code::VALIDATION_BAD_INPUT).op("file-undo")
 }
 
+/// File undo is a beta feature and is off until it is switched on
+/// (TICKET-391).
+///
+/// The backend keeps its own copy of the setting rather than trusting a
+/// per-call flag, because the journal is written from seven commands that
+/// carry no settings, and because recording is the part that costs the user
+/// something: a journal entry plus, for a copy, the retained bytes next to
+/// the destination. Off is therefore also the backend's default — a browser
+/// build, a renderer that died before it could speak, a plugin or an MCP
+/// client driving a file command all record nothing until someone says
+/// otherwise.
+static ENABLED: AtomicBool = AtomicBool::new(false);
+
+pub fn enabled() -> bool {
+    ENABLED.load(Ordering::Relaxed)
+}
+
+/// Pushed by the frontend at startup and on every change of the setting.
+#[tauri::command]
+pub fn undo_set_enabled(enabled: bool) {
+    ENABLED.store(enabled, Ordering::Relaxed);
+}
+
 pub struct Pending {
     #[cfg(target_os = "macos")]
     inner: local::Pending,
@@ -40,6 +64,9 @@ impl Pending {
 /// Unsupported providers and overwrites never receive an undo entry. The plan is
 /// durable before callers mutate anything; incomplete plans confer no authority.
 pub fn prepare(kind: &str, source: &str, target: &str) -> AppResult<Option<Pending>> {
+    if !enabled() {
+        return Ok(None);
+    }
     #[cfg(all(target_os = "macos", not(test)))]
     {
         local::prepare(kind, source, target).map(|p| p.map(|inner| Pending { inner }))
@@ -53,6 +80,9 @@ pub fn prepare(kind: &str, source: &str, target: &str) -> AppResult<Option<Pendi
 
 #[tauri::command]
 pub async fn undo_preview() -> AppResult<Vec<UndoEntry>> {
+    if !enabled() {
+        return Ok(Vec::new());
+    }
     #[cfg(target_os = "macos")]
     return tauri::async_runtime::spawn_blocking(local::preview)
         .await
@@ -63,6 +93,9 @@ pub async fn undo_preview() -> AppResult<Vec<UndoEntry>> {
 
 #[tauri::command]
 pub async fn undo_execute(id: String) -> AppResult<Vec<UndoEntry>> {
+    if !enabled() {
+        return Err(unavailable());
+    }
     #[cfg(target_os = "macos")]
     return tauri::async_runtime::spawn_blocking(move || local::execute(&id))
         .await
@@ -83,6 +116,9 @@ pub fn prepare_group(
     group: &str,
     allow_target: bool,
 ) -> AppResult<Option<Pending>> {
+    if !enabled() {
+        return Ok(None);
+    }
     #[cfg(all(target_os = "macos", not(test)))]
     {
         local::prepare_group(kind, source, target, group, allow_target)
@@ -96,6 +132,9 @@ pub fn prepare_group(
 }
 
 pub fn seal(group: &str) -> AppResult<()> {
+    if !enabled() {
+        return Ok(());
+    }
     #[cfg(all(target_os = "macos", not(test)))]
     {
         local::seal(group)
@@ -124,6 +163,9 @@ pub async fn undo_classify(
     target: String,
     directory: bool,
 ) -> AppResult<UndoClassification> {
+    if !enabled() {
+        return Ok(UndoClassification::Irreversible);
+    }
     #[cfg(target_os = "macos")]
     {
         let eligible = tauri::async_runtime::spawn_blocking(move || {
@@ -146,6 +188,9 @@ pub async fn undo_classify(
 
 #[tauri::command]
 pub async fn undo_forget(id: String) -> AppResult<Vec<UndoEntry>> {
+    if !enabled() {
+        return Err(unavailable());
+    }
     #[cfg(target_os = "macos")]
     return tauri::async_runtime::spawn_blocking(move || local::forget(&id))
         .await
@@ -154,5 +199,47 @@ pub async fn undo_forget(id: String) -> AppResult<Vec<UndoEntry>> {
     {
         let _ = id;
         Err(unavailable())
+    }
+}
+
+/// The beta gate (TICKET-391), checked on every platform: the adapter behind it
+/// is macOS-only, but "records nothing until switched on" is a promise the
+/// whole build makes.
+///
+/// One test, because the flag is process-wide and a second one running beside
+/// it would be reading the first one's writes.
+#[cfg(test)]
+mod gate_tests {
+    use super::*;
+
+    #[test]
+    fn records_nothing_and_refuses_execution_until_switched_on() {
+        assert!(!enabled(), "file undo must start off");
+
+        assert!(prepare("rename", "/a", "/b").unwrap().is_none());
+        assert!(prepare_group("copy", "/a", "/b", "g", false)
+            .unwrap()
+            .is_none());
+        seal("g").unwrap();
+
+        let preview = tauri::async_runtime::block_on(undo_preview()).unwrap();
+        assert!(preview.is_empty());
+        assert!(tauri::async_runtime::block_on(undo_execute("id".into())).is_err());
+        assert!(tauri::async_runtime::block_on(undo_forget("id".into())).is_err());
+        assert!(matches!(
+            tauri::async_runtime::block_on(undo_classify(
+                "copy".into(),
+                vec!["/a".into()],
+                "/b".into(),
+                false,
+            ))
+            .unwrap(),
+            UndoClassification::Irreversible
+        ));
+
+        undo_set_enabled(true);
+        assert!(enabled());
+        undo_set_enabled(false);
+        assert!(!enabled());
     }
 }

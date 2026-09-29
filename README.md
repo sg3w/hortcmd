@@ -8,9 +8,11 @@ Architecture and design details: see [Concept.md](Concept.md).
 Directory freshness and resource limits: [directory refresh](docs/directory-refresh.md).
 Contributing: see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Local macOS file undo is available in **Dateien → Dateiaktion rückgängig machen**
-(Cmd+Option+Z). See [File undo](docs/file-undo.md) for supported operations,
-preview/conflict checks, retained copies and history limits.
+Local macOS file undo is a **beta** feature and ships **off**. Switch it on in
+**Einstellungen → Dateioperationen → Datei-Undo**; it then appears in **Dateien →
+Dateiaktion rückgängig machen** (Cmd+Option+Z). See [File undo](docs/file-undo.md)
+for the beta gate, supported operations, preview/conflict checks, retained copies
+and history limits.
 
 Copy/move confirmation includes [transfer preflight](docs/transfer-preflight.md)
 with capacity estimates, provider constraints and revalidation of queued plans.
