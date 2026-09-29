@@ -51,6 +51,8 @@ export const LAZY = {
     "PropertiesDialog",
   ),
   rename: asDefault(() => import("@/components/ui/RenameDialog"), "RenameDialog"),
+  /** The archive-name options of "Pack" (TICKET-392). */
+  pack: asDefault(() => import("@/components/ui/PackDialog"), "PackDialog"),
   export: asDefault(() => import("@/components/ui/ExportDialog"), "ExportDialog"),
   selectionFile: asDefault(
     () => import("@/components/ui/SelectionFileDialog"),

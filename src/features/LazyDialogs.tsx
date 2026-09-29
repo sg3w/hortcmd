@@ -44,6 +44,7 @@ export function LazyDialogs() {
   const shortcutsOpen = useUi((s) => s.shortcutsOpen);
   const aboutOpen = useUi((s) => s.aboutOpen);
   const previewOpen = useOps((s) => s.preview !== null);
+  const packOpen = useOps((s) => s.pack !== null);
   const browserOpen = useFileBrowser((s) => s.request !== null);
   const renameOpen = useRenameDialog((s) => s.side !== null);
   const compareOpen = useCompareDialog((s) => s.open);
@@ -80,6 +81,7 @@ export function LazyDialogs() {
         load={LAZY.rename}
         label={t("menu.file.batchRename")}
       />
+      <LazyFeature open={packOpen} load={LAZY.pack} label={t("archive.title")} />
       <LazyFeature
         open={compareOpen}
         load={LAZY.compareDirs}

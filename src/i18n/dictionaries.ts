@@ -27,6 +27,7 @@ import { persist } from "./namespaces/persist";
 import { operations } from "./namespaces/operations";
 import type { preview } from "./namespaces/preview";
 import { properties } from "./namespaces/properties";
+import type { pack } from "./namespaces/pack";
 import type { rename } from "./namespaces/rename";
 import { search } from "./namespaces/search";
 import { settings } from "./namespaces/settings";
@@ -53,7 +54,7 @@ const CORE_NAMESPACES = [
 type Keys<T> = T extends {de: infer D} ? keyof D : never;
 export type TransKey = Keys<(typeof CORE_NAMESPACES)[number]>
   | keyof typeof rename.de | keyof typeof exporting.de | keyof typeof preview.de
-  | keyof typeof backup.de;
+  | keyof typeof backup.de | keyof typeof pack.de;
 
 export { DICT } from "./registry";
 import { registerTranslations } from "./registry";
