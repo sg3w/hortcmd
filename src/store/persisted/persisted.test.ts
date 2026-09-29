@@ -129,6 +129,23 @@ describe("settings fixtures", () => {
     expect(load({}, SETTINGS_VERSION).value.safeTransfers).toBe(true);
   });
 
+  /**
+   * File undo is beta (TICKET-391). Off has to hold for a fresh
+   * installation *and* for every existing one — an absent value is an
+   * older installation meeting a new field, not a repair — while an
+   * explicit `true` survives, so switching it on is not undone on the
+   * next start.
+   */
+  it("ships file undo off, for existing installations too", async () => {
+    const { useSettings } = await import("@/store/settingsStore");
+    expect(useSettings.getState().undoEnabled).toBe(false);
+    expect(load({}, SETTINGS_VERSION).value.undoEnabled).toBe(false);
+    expect(load(V0, 0).value.undoEnabled).toBe(false);
+    const repairs = load({ ...V0, undoEnabled: "yes" }, SETTINGS_VERSION);
+    expect(repairs.value.undoEnabled).toBe(false);
+    expect(load({ ...V0, undoEnabled: true }, SETTINGS_VERSION).value.undoEnabled).toBe(true);
+  });
+
   it("leaves an explicit choice alone once the schema is current", () => {
     expect(load({ ...V0, safeTransfers: false }, 1).value.safeTransfers).toBe(false);
     expect(load({ ...V0, safeTransfers: true }, 1).value.safeTransfers).toBe(true);

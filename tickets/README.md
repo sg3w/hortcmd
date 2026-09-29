@@ -322,6 +322,14 @@ the backend halves of frontend-only fixes (359, 326).
   repaired value was never written back, so "stored data was unusable" was
   raised at every start — for a dialog width the app itself had rounded off.
 
+## Requested on 2026-09-29
+
+- [391](done/391-undo-off-by-default-beta.done.md) (P1, done): every undo
+  function ships **off by default** and is marked **BETA** in Settings ▸ File
+  operations. Frontend and backend hold the same switch and both default to
+  off, so no journal entry and no retained copy is written until it is turned
+  on; turning it back off deletes neither.
+
 Ticket 372 raised the declared MSRV from 1.85.1 to **1.93** deliberately: the
 fixed releases for the quick-xml, suppaftp, time and urlpattern findings, and the
 sspi release that lets a patched russh resolve at all, have no version below it.

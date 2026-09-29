@@ -18,18 +18,37 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { useSettings, useT } from "@/store/settingsStore";
 
+/**
+ * The mark on a setting whose feature is not finished yet (TICKET-391).
+ *
+ * It sits next to the label rather than in it, so the label stays the
+ * accessible name of the switch and screen readers are not made to read
+ * "BETA" as part of every announcement of the control's state.
+ */
+export function Beta() {
+  const t = useT();
+  return (
+    <span className="rounded border border-amber-500/40 bg-amber-500/10 px-1 py-px text-[9px] font-semibold tracking-wide text-amber-400">
+      {t("settings.beta")}
+    </span>
+  );
+}
+
 export function Toggle({
   checked,
   onChange,
   icon: Icon,
   label,
   hint,
+  badge,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   icon: LucideIcon;
   label: string;
   hint?: string;
+  /** Rendered after the label, e.g. `<Beta />`. */
+  badge?: ReactNode;
 }) {
   const hintId = useId();
   return (
@@ -50,7 +69,10 @@ export function Toggle({
       <span className="flex items-center gap-2">
         <Icon size={15} className="text-dim" />
         <span className="flex flex-col">
-          <span className="text-[13px] text-text">{label}</span>
+          <span className="flex items-center gap-1.5 text-[13px] text-text">
+            {label}
+            {badge}
+          </span>
           {hint && <span id={hintId} className="text-[11px] text-dim">{hint}</span>}
         </span>
       </span>

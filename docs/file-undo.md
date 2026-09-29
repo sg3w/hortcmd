@@ -1,5 +1,27 @@
 # File undo
 
+## Beta, and off by default
+
+File undo is a beta feature and ships **off** — for new installations and for
+existing ones alike (TICKET-391). It is switched on in **Einstellungen →
+Dateioperationen → Datei-Undo**, where it carries a BETA badge, and the page
+states what being on costs: every rename, directory creation, metadata change
+and transfer writes a journal entry, and undoing a copy retains the copied bytes
+instead of deleting them.
+
+The backend holds the same switch and also defaults to off, so nothing is
+recorded before the frontend has pushed the setting — which matters for a
+browser build, a renderer that died early, and for plugin or MCP clients driving
+a file command. While the switch is off, `prepare`, `prepare_group` and `seal`
+record nothing, `undo_classify` answers `Irreversible`, `undo_preview` is empty
+and `undo_execute`/`undo_forget` refuse; the menu command and its ⌘⌥Z shortcut
+are gone and the operation dialogs print no reversibility sentence at all.
+
+Switching it back off never deletes an existing journal or a retained copy. Both
+stay on disk and become reachable again when the switch is turned back on.
+
+## Where it lives
+
 File undo lives in **Dateien → Dateiaktion rückgängig machen**. The shortcut is
 **Cmd+Option+Z** on macOS; native Edit-menu Cmd+Z continues editing text. File
 shortcuts never operate through an input, contenteditable element, dialog or menu.
@@ -72,6 +94,9 @@ external changes, not an undo guarantee.
 Local tests cover restart, corruption/locking, identity replacement, changed
 content, collisions, grouped swaps, empty/nonempty directories, permissions,
 owner/tags, unsupported/overwriting operations, read-only assessment, retention
-and interrupted state. UI tests cover DE/EN preview and confirmation, rejected
-changed entries, the actual selected operation, and text-focus shortcut isolation.
+and interrupted state. A gate test covers the off state across platforms: no
+pending entry, an empty preview, refused execution and an `Irreversible`
+assessment. UI tests cover DE/EN preview and confirmation, rejected changed
+entries, the actual selected operation, text-focus shortcut isolation, and the
+beta gate — no shortcut, no menu entry, no classification IPC while off.
 The full project gate is `npm run check`.

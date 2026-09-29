@@ -7,3 +7,7 @@ export interface UndoRequest { kind: string; sources: string[]; target: string; 
 export const classifyUndo = (request: UndoRequest): Promise<UndoClassification> => hasTauri() ? invoke("undo_classify", { ...request }) : Promise.resolve("irreversible");
 
 export const forgetUndo = (id: string): Promise<UndoEntry[]> => invoke("undo_forget", { id });
+
+/** Pushes the beta setting to the backend, which holds its own copy (TICKET-391). */
+export const setUndoEnabled = (enabled: boolean): Promise<void> =>
+  hasTauri() ? invoke("undo_set_enabled", { enabled }) : Promise.resolve();

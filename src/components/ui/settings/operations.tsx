@@ -7,7 +7,7 @@
 // ============================================================
 
 import { useSettings, useT } from "@/store/settingsStore";
-import { Toggle } from "./controls";
+import { Beta, Toggle } from "./controls";
 import {
   Trash2,
   FileCheck2,
@@ -17,6 +17,7 @@ import {
   Gauge,
   ListOrdered,
   Cpu,
+  Undo2,
 } from "lucide-react";
 
 export function OperationsForm() {
@@ -38,6 +39,8 @@ export function OperationsForm() {
 
   const checkSpace = useSettings(s => s.checkTransferSpace);
   const setCheckSpace = useSettings(s => s.setCheckTransferSpace);
+  const undoEnabled = useSettings((s) => s.undoEnabled);
+  const setUndoEnabled = useSettings((s) => s.setUndoEnabled);
 
   return (
     <div className="flex flex-col gap-4">
@@ -86,6 +89,27 @@ export function OperationsForm() {
           </div>
         )}
       </div>
+      {/* File undo (TICKET-391). Beta and off by default: while it is on,
+          every file operation writes a journal entry and undone copies
+          leave a retained backup behind, so the state that costs the user
+          something is the one that explains itself. */}
+      <div className="flex flex-col gap-2">
+        <Toggle
+          checked={undoEnabled}
+          onChange={setUndoEnabled}
+          icon={Undo2}
+          label={t("settings.undo")}
+          hint={t("settings.undo.hint")}
+          badge={<Beta />}
+        />
+        {undoEnabled && (
+          <div className="ml-[27px] flex items-start gap-2 rounded border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-400">
+            <ShieldAlert size={14} className="mt-px shrink-0" />
+            <span>{t("settings.undo.warning")}</span>
+          </div>
+        )}
+      </div>
+
       {/* Speed limit (0 = unlimited). */}
       <label className="flex items-start gap-3">
         <Gauge size={15} className="mt-0.5 shrink-0 text-dim" />

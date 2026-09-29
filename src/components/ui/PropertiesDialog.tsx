@@ -15,6 +15,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { Copy, HardDrive, Info, Loader2, ShieldCheck, X } from "lucide-react";
 import { usePropsDialog } from "@/store/propsStore";
 import { useT } from "@/store/settingsStore";
+import { useUndoAvailable } from "@/store/undoStore";
 import {
   cancelDirSize,
   dirSize,
@@ -149,6 +150,9 @@ export function PropertiesDialog() {
   const gitStatus = usePropsDialog((s) => s.gitStatus);
   const close = usePropsDialog((s) => s.close);
   const t = useT();
+  // Beta gate (TICKET-391): while file undo is off nothing is recorded,
+  // so its contract is not described either.
+  const undoAvailable = useUndoAvailable();
   const colorRules = useFileColorRules();
 
   const [data, setData] = useState<FileProps | null>(null);
@@ -343,7 +347,7 @@ export function PropertiesDialog() {
           </Dialog.Title>
 
           <div className="flex min-h-0 flex-col gap-4 overflow-auto p-4">
-            <p className="text-sm text-dim">{t("undo.conditional")}</p>
+            {undoAvailable && <p className="text-sm text-dim">{t("undo.conditional")}</p>}
             {!data && !error && (
               <div className="flex items-center gap-2 text-[13px] text-dim">
                 <Loader2 size={14} className="animate-spin" aria-hidden />

@@ -170,6 +170,9 @@ export function validateSettings(
     terminalProgram: str(s.terminalProgram, "", "terminalProgram", r, MAX_PATH),
     gitEnabled: bool(s.gitEnabled, true, "gitEnabled", r),
     useTrash: bool(s.useTrash, true, "useTrash", r),
+    // Beta, off by default (TICKET-391). An absent value is an older
+    // installation meeting a new field, so it simply gets the default.
+    undoEnabled: bool(s.undoEnabled, false, "undoEnabled", r),
     verifyCopies: bool(s.verifyCopies, false, "verifyCopies", r),
     speedLimit: num(s.speedLimit, 0, "speedLimit", r, { min: 0, int: true }),
     queueTransfers: bool(s.queueTransfers, true, "queueTransfers", r),

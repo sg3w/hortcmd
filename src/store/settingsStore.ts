@@ -47,6 +47,7 @@ interface SettingsStore extends PersistedSettings {
   setTerminalProgram: (v: string) => void;
   setGitEnabled: (v: boolean) => void;
   setUseTrash: (v: boolean) => void;
+  setUndoEnabled: (v: boolean) => void;
   setVerifyCopies: (v: boolean) => void;
   setSpeedLimit: (v: number) => void;
   setQueueTransfers: (v: boolean) => void;
@@ -98,6 +99,7 @@ export const useSettings = create<SettingsStore>()(
       terminalProgram: "",
       gitEnabled: true,
       useTrash: true,
+      undoEnabled: false,
       verifyCopies: false,
       speedLimit: 0,
       queueTransfers: true,
@@ -139,6 +141,7 @@ export const useSettings = create<SettingsStore>()(
       setTerminalProgram: (terminalProgram) => set({ terminalProgram }),
       setGitEnabled: (gitEnabled) => set({ gitEnabled }),
       setUseTrash: (useTrash) => set({ useTrash }),
+      setUndoEnabled: (undoEnabled) => set({ undoEnabled }),
       setVerifyCopies: (verifyCopies) => set({ verifyCopies }),
       setSpeedLimit: (speedLimit) => set({ speedLimit: Math.max(0, speedLimit) }),
       setQueueTransfers: (queueTransfers) => set({ queueTransfers }),

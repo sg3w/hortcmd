@@ -1072,8 +1072,15 @@ The *design* those changes settled is described where it belongs, in §3–§9.
       in the frontend (`fileOps.ts`: `startNextQueued`/`dequeueTransfer`, `settings.queue`),
       waiting ones show "Waiting …". Background jobs/minimize/cancel already existed.
       Transfer window: pause/resume button, "Paused"/"Waiting" status.
-      **Undo deliberately deferred** (data safety: only provably reversible
-      operations; its own careful step).
+      **Undo** arrived as its own careful step (data safety: only provably
+      reversible operations) and stays **beta and off by default**
+      (TICKET-391): the setting `settings.undo` in Settings ▸ File operations
+      carries a BETA badge and is off for new *and* existing installations,
+      the backend holds the same switch and also defaults to off
+      (`undo_set_enabled`), and while it is off no journal entry and no
+      retained copy is written, the menu command and ⌘⌥Z are hidden, and the
+      operation dialogs print no reversibility sentence. Turning it off never
+      deletes an existing journal or retained copy.
       **Failure-safe transfers** (TICKET-029) close the engine's remaining
       data-safety hole: a resolved overwrite used to delete the destination
       *before* copying, so any failure in between lost it. With the opt-in

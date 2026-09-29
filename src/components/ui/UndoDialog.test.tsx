@@ -2,10 +2,11 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
 import { useDemo, useTauri } from "@/test/tauri";
-import { useUndo } from "@/store/undoStore";
+import { openUndo, useUndo } from "@/store/undoStore";
 import { useSettings } from "@/store/settingsStore";
 import { usePanes } from "@/store/panesStore";
 import { useKeyboard } from "@/features/commander/useKeyboard";
+import { COMMANDS } from "@/features/commander/commands";
 import { UndoDialog } from "./UndoDialog";
 it.each(["de", "en"] as const)("reviews exact paths and disables changed entries before undo in %s", async language => {
   const entry = { id: "a", group: null, kind: "rename", path: "/new", target: "/old", status: "ready", retained: null };
@@ -23,11 +24,31 @@ it.each(["de", "en"] as const)("reviews exact paths and disables changed entries
 function Keyboard() { useKeyboard(); return <input aria-label="text" />; }
 it("leaves text editing undo and its modifier variants in the focused field", async () => {
   useTauri({ commands: {} }); useUndo.setState({ open: false });
+  useSettings.setState({ undoEnabled: true });
   render(<Keyboard />); const user = userEvent.setup();
   const input = screen.getByRole("textbox"); await user.click(input);
   await user.keyboard("{Control>}{Alt>}z{/Alt}{/Control}");
   expect(useUndo.getState().open).toBe(false);
   input.blur(); await user.keyboard("{Control>}{Alt>}z{/Alt}{/Control}");
+  expect(useUndo.getState().open).toBe(true);
+});
+
+// The beta gate (TICKET-391): off is the default, and while it is off the
+// feature has no entry point at all — not the shortcut, not the menu, not
+// `openUndo` itself, which is what everything else goes through.
+it("offers no entry point while file undo is switched off", async () => {
+  useTauri({ commands: {} }); useUndo.setState({ open: false });
+  expect(useSettings.getState().undoEnabled).toBe(false);
+  render(<Keyboard />); const user = userEvent.setup();
+  screen.getByRole("textbox").blur();
+  await user.keyboard("{Control>}{Alt>}z{/Alt}{/Control}");
+  expect(useUndo.getState().open).toBe(false);
+  openUndo();
+  expect(useUndo.getState().open).toBe(false);
+  expect(COMMANDS["file.undo"].state?.()).toEqual({ hidden: true });
+  useSettings.setState({ undoEnabled: true });
+  expect(COMMANDS["file.undo"].state?.()).toEqual({ hidden: false });
+  openUndo();
   expect(useUndo.getState().open).toBe(true);
 });
 

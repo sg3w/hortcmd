@@ -32,3 +32,22 @@ it.each(["de","en"] as const)("keeps item names and translated causes on partial
 it.each([{errors:[]},{errors:[failure("one.txt","cancelled")]}])("does not open an empty error confirmation",async ({errors})=>{
   const {useOps,refresh}=await setup(errors,"en");expect(useOps.getState().confirm).toBeNull();expect(refresh).toHaveBeenCalledTimes(2);
 });
+
+// The beta gate (TICKET-391): the dialog describes the undo contract only
+// while file undo is on. Off, nothing is recorded, so there is nothing to
+// describe — and a sentence about undo in a rename dialog that records none
+// is worse than silence.
+it.each([false, true])("shows the undo contract only while file undo is on (%s)", async on => {
+  vi.resetModules();
+  useTauri({ commands: { rename_batch: () => ({ ok: 0, errors: [] }) } });
+  const { usePanes } = await import("@/store/panesStore");
+  const { useSettings, translate } = await import("@/store/settingsStore");
+  const { useRenameDialog } = await import("@/store/renameStore");
+  const { RenameDialog } = await import("./RenameDialog");
+  useSettings.setState({ language: "de", undoEnabled: on });
+  usePanes.setState(s => ({ left: { ...s.left, tabs: [{ ...s.left.tabs[0], path: "/files", entries: [row("one.txt")], raw: [row("one.txt")], selected: new Set<string>() }], activeTab: 0 } }));
+  useRenameDialog.getState().open("left");
+  render(<RenameDialog />);
+  const sentence = screen.queryByText(translate("undo.conditional"));
+  expect(on ? sentence : sentence === null).toBeTruthy();
+});

@@ -55,6 +55,7 @@ import { OperationDialogs } from "@/components/ui/OperationDialogs";
 import { ConnectionAnnouncements } from "@/features/net/ConnectionAnnouncements";
 import { TransferTray, TransferWindow } from "@/components/ui/TransferView";
 import { LazyDialogs } from "@/features/LazyDialogs";
+import { useUndoGate } from "@/features/settings/useUndoGate";
 import { useFileColorVars } from "@/store/fileColorRules";
 
 import { useRefresh } from "@/features/panel/useRefresh";
@@ -118,6 +119,9 @@ export default function App() {
     document.documentElement.dataset.theme = resolvedTheme;
   }, [resolvedTheme]);
   useFileColorVars(resolvedTheme);
+  // File undo is beta and off by default; the backend holds the same
+  // switch and has to be told about it (TICKET-391).
+  useUndoGate();
 
   // Forward transfer events from the backend to the transfers store.
   useEffect(() => {
