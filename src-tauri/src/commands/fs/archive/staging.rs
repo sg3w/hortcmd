@@ -12,6 +12,58 @@ use std::collections::BTreeSet;
 use std::io;
 use std::path::{Path, PathBuf};
 
+/// Whether an error says the thing a removal wanted gone is already gone.
+fn gone(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::NotFound
+}
+
+/// Removes a staged tree, tolerating entries that vanish while it runs.
+///
+/// `Dir::remove_dir_all` lists a directory and then deletes what it listed, and
+/// a `NotFound` on the second half is fatal to it. On FAT and exFAT macOS keeps
+/// an AppleDouble sidecar `._x` beside every entry `x` carrying metadata the
+/// filesystem cannot hold, and deletes that sidecar together with `x` — so the
+/// listing still names `._data` after `data` has taken it along, and cleaning up
+/// a finished archive reported "not found" for the one thing it had already
+/// achieved (TICKET-393). A missing entry is the goal of a removal, not a
+/// failure; anything really left over still fails, with its own error.
+fn remove_tree(parent: &Dir, name: &Path) -> io::Result<()> {
+    let dir = match parent.open_dir(name) {
+        Ok(dir) => dir,
+        Err(error) if gone(&error) => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    for entry in dir.entries()? {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) if gone(&error) => continue,
+            Err(error) => return Err(error),
+        };
+        // From the listing, so a symlink reads as a symlink: it is unlinked
+        // rather than descended into.
+        let directory = match entry.file_type() {
+            Ok(kind) => kind.is_dir(),
+            Err(error) if gone(&error) => continue,
+            Err(error) => return Err(error),
+        };
+        let child = entry.file_name();
+        let removed = if directory {
+            remove_tree(&dir, Path::new(&child))
+        } else {
+            dir.remove_file(&child)
+        };
+        match removed {
+            Ok(()) => {}
+            Err(error) if gone(&error) => {}
+            Err(error) => return Err(error),
+        }
+    }
+    match parent.remove_dir(name) {
+        Err(error) if gone(&error) => Ok(()),
+        other => other,
+    }
+}
+
 pub struct Stage<'a> {
     check: &'a dyn Fn(&Path) -> AppResult<()>,
     recovery: Option<Handle>,
@@ -103,7 +155,7 @@ impl<'a> Stage<'a> {
                 keep: false,
             }),
             Err(error) => {
-                root.remove_dir_all(&name)?;
+                remove_tree(&root, Path::new(&name))?;
                 Err(error.into())
             }
         }
@@ -317,7 +369,7 @@ impl<'a> Stage<'a> {
     /// Always called explicitly; a failed cleanup becomes a visible error.
     pub fn cleanup(&self) -> AppResult<()> {
         if !self.keep {
-            self.root.remove_dir_all(&self.name).map_err(|error| {
+            remove_tree(&self.root, Path::new(&self.name)).map_err(|error| {
                 AppError::from(error)
                     .op("extract-cleanup")
                     .detail(format!("Staging cleanup failed; inspect {}", self.name))
@@ -462,6 +514,69 @@ mod tests {
         stage.cleanup().unwrap();
         assert_eq!(std::fs::read_to_string(path.join("a")).unwrap(), "old");
         assert_eq!(std::fs::read_dir(&path).unwrap().count(), 1);
+        std::fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn a_nested_tree_is_removed_and_one_already_gone_is_not_an_error() {
+        let path = temp();
+        std::fs::create_dir_all(path.join("tree/deep/deeper")).unwrap();
+        std::fs::write(path.join("tree/file"), "x").unwrap();
+        std::fs::write(path.join("tree/deep/deeper/file"), "x").unwrap();
+        let root = Dir::open_ambient_dir(&path, cap_std::ambient_authority()).unwrap();
+        remove_tree(&root, Path::new("tree")).unwrap();
+        assert!(!path.join("tree").exists());
+        // The state a lost race leaves behind: the name is already gone, which
+        // is what the removal wanted (TICKET-393).
+        remove_tree(&root, Path::new("tree")).unwrap();
+        std::fs::remove_dir_all(path).unwrap();
+    }
+
+    /// The real case of TICKET-393: a volume that keeps an AppleDouble sidecar
+    /// `._x` beside every entry `x` and deletes it together with `x`, so a
+    /// listing made before the removal names entries that no longer exist.
+    ///
+    /// Needs such a volume, so it is `#[ignore]`d and skips without one:
+    ///
+    /// ```text
+    /// HORTCMD_SIDECAR_DIR=/Volumes/<stick> cargo test --manifest-path src-tauri/Cargo.toml -- --ignored sidecar
+    /// ```
+    #[cfg(unix)]
+    #[test]
+    #[ignore = "needs a FAT/exFAT directory in HORTCMD_SIDECAR_DIR"]
+    fn a_stage_beside_sidecars_cleans_up_without_an_error() {
+        let Some(volume) = std::env::var_os("HORTCMD_SIDECAR_DIR") else {
+            eprintln!("skipped: set HORTCMD_SIDECAR_DIR to a directory on a FAT/exFAT volume");
+            return;
+        };
+        let path = PathBuf::from(volume).join(format!("hortcmd-stage-{}", crate::net::unique_id()));
+        std::fs::create_dir(&path).unwrap();
+        let mut stage = Stage::new(&path).unwrap();
+        stage
+            .file("a.zip", &safety::Limits::default())
+            .unwrap()
+            .write_all(b"archive")
+            .unwrap();
+        // What the volume does by itself for the mode of a private staging
+        // directory; written explicitly so the test does not depend on which
+        // piece of metadata this mount happens to refuse.
+        for name in ["data", "backups"] {
+            xattr::set(path.join(&stage.name).join(name), "com.apple.test", b"x").unwrap();
+        }
+        stage
+            .commit(&std::sync::atomic::AtomicBool::new(false))
+            .unwrap();
+        stage.cleanup().unwrap();
+        assert_eq!(
+            std::fs::read_to_string(path.join("a.zip")).unwrap(),
+            "archive"
+        );
+        let left: Vec<_> = std::fs::read_dir(&path)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|name| name.contains("hortcmd-extract"))
+            .collect();
+        assert!(left.is_empty(), "staging left behind: {left:?}");
         std::fs::remove_dir_all(path).unwrap();
     }
 }
