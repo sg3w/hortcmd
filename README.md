@@ -529,6 +529,16 @@ of connection errors.
 `net/credentials.rs`) stay local-only: they need a desktop keyring and an
 interactive session, which is exactly what CI does not have.
 
+**Sidecar filesystems.** FAT and exFAT cannot hold every piece of metadata
+macOS attaches, so it keeps an AppleDouble file `._x` beside the entry `x` and
+deletes the two together — which used to make the staging cleanup of a finished
+archive report "not found" (TICKET-393). The regression test needs such a
+volume, so it is `#[ignore]`d and skips without one:
+
+```bash
+HORTCMD_SIDECAR_DIR=/Volumes/<stick> cargo test --manifest-path src-tauri/Cargo.toml -- --ignored sidecar
+```
+
 **Architecture boundaries.** `scripts/check-boundaries.mjs` walks the import
 graph and fails on an import cycle or on a violation of the documented layer
 rules — `lib/` stays leaf, the IPC foundation sits below its domain clients,
