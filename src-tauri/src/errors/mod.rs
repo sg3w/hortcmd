@@ -259,6 +259,10 @@ pub mod code {
     pub const ARCHIVE_UNKNOWN_FORMAT: &str = "archive.unknownFormat";
     pub const ARCHIVE_UNSAFE_ENTRY: &str = "archive.unsafeEntry";
     pub const ARCHIVE_LIMIT: &str = "archive.limit";
+    /// More entries than an archive operation is allowed to hold (TICKET-395).
+    pub const ARCHIVE_TOO_MANY_ENTRIES: &str = "archive.tooManyEntries";
+    /// More bytes than an archive operation is allowed to hold (TICKET-395).
+    pub const ARCHIVE_TOO_LARGE: &str = "archive.tooLarge";
     pub const ARCHIVE_CONFLICT: &str = "archive.conflict";
     pub const ARCHIVE_CORRUPT: &str = "archive.corrupt";
 
@@ -343,6 +347,8 @@ pub mod code {
         ARCHIVE_CORRUPT,
         ARCHIVE_UNSAFE_ENTRY,
         ARCHIVE_LIMIT,
+        ARCHIVE_TOO_MANY_ENTRIES,
+        ARCHIVE_TOO_LARGE,
         ARCHIVE_CONFLICT,
         NET_UNREACHABLE,
         NET_TIMEOUT,

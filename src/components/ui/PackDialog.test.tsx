@@ -117,3 +117,11 @@ it("refuses a blank name and closes on Escape", async () => {
   expect(onSubmit).not.toHaveBeenCalled();
   expect(useOps.getState().pack).toBeNull();
 });
+
+it("puts the name field before the options that compose it", async () => {
+  const { input } = await open();
+  const base = screen.getByRole("combobox", { name: translate("archive.base") });
+  // `DOCUMENT_POSITION_FOLLOWING`: the select comes after the field in the
+  // document, which is the reading order the dialog is laid out in (395).
+  expect(input.compareDocumentPosition(base) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});

@@ -396,7 +396,9 @@ fn run_pack(
                 &sources,
                 &dest_zip,
                 &mut prog,
-                limits,
+                // Writing an archive is bounded by its own ceilings, not by
+                // the ones that defend extraction (TICKET-395).
+                limits.for_packing(),
                 &|_| Ok(()),
                 run.as_ref().map(|run| &run.0),
             )
@@ -661,7 +663,7 @@ mod tests {
             &|_| panic!("oversized requests must not reach path authorization"),
         )
         .unwrap_err();
-        assert!(error.is(code::ARCHIVE_LIMIT));
+        assert!(error.is(code::ARCHIVE_TOO_MANY_ENTRIES));
         assert_eq!(prog.files_total, 0);
         assert_eq!(prog.bytes_total, 0);
     }
@@ -738,6 +740,57 @@ mod tests {
         assert!(prog.bytes_done > 0 && prog.bytes_done < 512 * 1024);
         assert_eq!(fs::read(&target).unwrap(), b"old archive");
         assert_eq!(fs::read_dir(&root).unwrap().count(), 2);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    /// Packing is measured against its own ceilings (TICKET-395): a tree the
+    /// extraction limits refuse is packed, and the pack ceiling still binds.
+    #[test]
+    fn packing_uses_its_own_ceilings_and_names_the_one_it_refuses() {
+        let root = tmp_dir("pack-limits");
+        let source = root.join("source");
+        fs::create_dir(&source).unwrap();
+        for n in 0..4 {
+            fs::write(source.join(format!("file-{n}")), b"payload").unwrap();
+        }
+        let target = root.join("result.zip");
+        // Three entries and ten bytes: what extraction would allow an
+        // untrusted archive, and far less than this ordinary directory holds.
+        let limits = safety::Limits {
+            entries: 3,
+            total_bytes: 10,
+            entry_bytes: 4,
+            pack_entries: 100,
+            pack_total_bytes: 1024,
+            pack_entry_bytes: 1024,
+            ..Default::default()
+        };
+        let sources = [source.to_string_lossy().into_owned()];
+        let (ok, errors) = pack::run(
+            &sources,
+            target.to_str().unwrap(),
+            &mut progress(),
+            limits.clone().for_packing(),
+            &|_| Ok(()),
+        )
+        .unwrap();
+        assert_eq!(ok, 4);
+        assert!(errors.is_empty());
+        // The pack ceiling is a real bound, and the refusal says which.
+        let error = pack::run(
+            &sources,
+            target.to_str().unwrap(),
+            &mut progress(),
+            safety::Limits {
+                pack_entries: 2,
+                ..limits
+            }
+            .for_packing(),
+            &|_| Ok(()),
+        )
+        .unwrap_err();
+        assert!(error.is(code::ARCHIVE_TOO_MANY_ENTRIES));
+        assert_eq!(error.params().get("limit").map(String::as_str), Some("2"));
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -1312,7 +1365,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(ok, 0);
-        assert!(errors.iter().any(|e| e.error.is(code::ARCHIVE_LIMIT)));
+        assert!(errors.iter().any(|e| e.error.is(code::ARCHIVE_TOO_LARGE)));
         assert_eq!(
             fs::read(destination.join("hello.txt")).unwrap(),
             b"original"

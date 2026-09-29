@@ -7,6 +7,9 @@
 //! whole archive over one of them is what made the ZIP command unusable. What
 //! stays fatal is what a skip would defeat: the archive limits, a destination
 //! inside a source, an authorization that says no, and cancellation.
+//!
+//! The limits packing is measured against are its own (TICKET-395), not the
+//! ceilings extraction defends an untrusted archive with.
 use super::{safety, staging};
 use crate::commands::fs::transfer::events::ItemError;
 use crate::commands::fs::transfer::Prog;
@@ -55,7 +58,10 @@ impl Skips {
 /// A limit is the bound the process promised to stay inside, and a cancel is
 /// the user asking to stop: skipping past either would defeat it.
 fn fatal(error: &AppError) -> bool {
-    error.is(code::ARCHIVE_LIMIT) || error.is(code::CANCELLED)
+    error.is(code::ARCHIVE_LIMIT)
+        || error.is(code::ARCHIVE_TOO_MANY_ENTRIES)
+        || error.is(code::ARCHIVE_TOO_LARGE)
+        || error.is(code::CANCELLED)
 }
 
 /// A source that changed under the packer between the two passes.
@@ -106,7 +112,7 @@ pub(crate) fn run_with_recovery(
     }
     // Bound caller-supplied roots before any capability or filesystem work.
     if sources.len() as u64 > limits.entries {
-        return Err(safety::limit());
+        return Err(safety::too_many_entries(limits.entries));
     }
     caps::require(destination, Capability::ArchivePackTo)?;
     let (_, destination) = vfs::resolve(destination)?;
@@ -181,11 +187,14 @@ pub(crate) fn run_with_recovery(
             }
         }
         if !directory {
-            prog.files_total = prog.files_total.checked_add(1).ok_or_else(safety::limit)?;
+            prog.files_total = prog
+                .files_total
+                .checked_add(1)
+                .ok_or_else(|| safety::too_many_entries(limits.entries))?;
             prog.bytes_total = prog
                 .bytes_total
                 .checked_add(size)
-                .ok_or_else(safety::limit)?;
+                .ok_or_else(|| safety::too_large(limits.total_bytes))?;
         }
         entries.push((path.clone(), name.clone(), directory, size));
         if !directory {
@@ -214,7 +223,7 @@ pub(crate) fn run_with_recovery(
             };
             pending.push((child.path(), format!("{name}/{child_name}")));
             if pending.len().saturating_add(entries.len()) as u64 > limits.entries {
-                return Err(safety::limit());
+                return Err(safety::too_many_entries(limits.entries));
             }
         }
     }
@@ -227,7 +236,10 @@ pub(crate) fn run_with_recovery(
         &parent.clone().into(),
         crate::commands::fs::transfer::recovery::types::RecoveryKind::Pack,
         prog.bytes_total,
-        entries.len().try_into().map_err(|_| safety::limit())?,
+        entries
+            .len()
+            .try_into()
+            .map_err(|_| safety::too_many_entries(limits.entries))?,
     )?;
     let mut stage = staging::Stage::new_with_recovery(&parent, recovery)?;
     let result = (|| -> AppResult<u32> {
@@ -316,7 +328,9 @@ fn pack_one(
         if bytes == 0 {
             break;
         }
-        done = done.checked_add(bytes as u64).ok_or_else(safety::limit)?;
+        done = done
+            .checked_add(bytes as u64)
+            .ok_or_else(|| safety::too_large(size))?;
         if done > size {
             zip.abort_file()?;
             return Ok(Outcome::Skipped(changed()));

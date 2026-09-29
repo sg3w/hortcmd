@@ -509,28 +509,13 @@ fn find_duplicates(
                 continue;
             }
             group_id += 1;
-            let detail = format!("{} × {}", dups.len(), human_size(size));
+            let detail = format!("{} × {}", dups.len(), super::human_size(size));
             for (p, mt) in &dups {
                 if !sink.push(hit(p, size, *mt, detail.clone(), group_id)) {
                     return;
                 }
             }
         }
-    }
-}
-
-fn human_size(bytes: u64) -> String {
-    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
-    let mut v = bytes as f64;
-    let mut u = 0;
-    while v >= 1024.0 && u < UNITS.len() - 1 {
-        v /= 1024.0;
-        u += 1;
-    }
-    if u == 0 {
-        format!("{} {}", bytes, UNITS[0])
-    } else {
-        format!("{:.1} {}", v, UNITS[u])
     }
 }
 

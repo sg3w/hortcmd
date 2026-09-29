@@ -14,6 +14,12 @@ pub struct Limits {
     pub depth: usize,
     pub path_bytes: usize,
     pub ratio: u64,
+    /// The ceilings packing is measured against (TICKET-395). Separate from
+    /// the three above, which defend extraction against an archive somebody
+    /// else wrote and are far too small for a directory tree this user picked.
+    pub pack_entries: u64,
+    pub pack_total_bytes: u64,
+    pub pack_entry_bytes: u64,
 }
 
 impl Default for Limits {
@@ -25,6 +31,13 @@ impl Default for Limits {
             depth: 64,
             path_bytes: 4096,
             ratio: 1000,
+            // A memory bound, not a defence: collection holds one entry and
+            // one manifest node per path component before a byte is written,
+            // so a million entries is roughly half a gigabyte of bookkeeping.
+            // How much fits on the disk is `archive_capacity`'s question.
+            pack_entries: 1_000_000,
+            pack_total_bytes: 4 * 1024 * 1024 * 1024 * 1024,
+            pack_entry_bytes: 1024 * 1024 * 1024 * 1024,
         }
     }
 }
@@ -52,10 +65,29 @@ impl Limits {
             || limits.ratio == 0
             || limits.depth == 0
             || limits.path_bytes == 0
+            || limits.pack_entries == 0
+            || limits.pack_total_bytes == 0
+            || limits.pack_entry_bytes == 0
         {
             return Err(limit());
         }
         Ok(limits)
+    }
+
+    /// The same rules, measured for writing an archive instead of reading one
+    /// (TICKET-395).
+    ///
+    /// Only the three ceilings move. The per-name rules — depth, length,
+    /// reserved and ambiguous spellings — are about what a ZIP member may be
+    /// called, which does not depend on the direction, and the ratio guards a
+    /// decoder the packer never runs.
+    pub fn for_packing(self) -> Self {
+        Self {
+            entries: self.pack_entries,
+            total_bytes: self.pack_total_bytes,
+            entry_bytes: self.pack_entry_bytes,
+            ..self
+        }
     }
 }
 
@@ -64,6 +96,16 @@ pub fn unsafe_entry() -> AppError {
 }
 pub fn limit() -> AppError {
     AppError::new(code::ARCHIVE_LIMIT).op("extract")
+}
+/// A count refusal, carrying the bound it was measured against (TICKET-395).
+/// A limit that names itself is one the user can raise; a bare "a limit was
+/// exceeded" is only something to report.
+pub fn too_many_entries(limit: u64) -> AppError {
+    AppError::new(code::ARCHIVE_TOO_MANY_ENTRIES).with("limit", limit)
+}
+/// A size refusal, carrying the bound it was measured against (TICKET-395).
+pub fn too_large(limit: u64) -> AppError {
+    AppError::new(code::ARCHIVE_TOO_LARGE).with("limit", crate::commands::fs::human_size(limit))
 }
 fn conflict() -> AppError {
     AppError::new(code::ARCHIVE_CONFLICT).op("extract")
@@ -139,8 +181,12 @@ impl Manifest {
             .values()
             .filter(|n| !n.directory && selected(&n.spelling))
         {
-            count = count.checked_add(1).ok_or_else(limit)?;
-            bytes = bytes.checked_add(node.size).ok_or_else(limit)?;
+            count = count
+                .checked_add(1)
+                .ok_or_else(|| too_many_entries(self.limits.entries))?;
+            bytes = bytes
+                .checked_add(node.size)
+                .ok_or_else(|| too_large(self.limits.total_bytes))?;
         }
         Ok((count, bytes))
     }
@@ -161,11 +207,20 @@ impl Manifest {
             return Err(unsafe_entry());
         }
         let name = path(name, directory, &self.limits)?;
-        self.count = self.count.checked_add(1).ok_or_else(limit)?;
-        if self.count > self.limits.entries || size > self.limits.entry_bytes {
-            return Err(limit());
+        self.count = self
+            .count
+            .checked_add(1)
+            .ok_or_else(|| too_many_entries(self.limits.entries))?;
+        if self.count > self.limits.entries {
+            return Err(too_many_entries(self.limits.entries));
         }
-        self.declared = self.declared.checked_add(size).ok_or_else(limit)?;
+        if size > self.limits.entry_bytes {
+            return Err(too_large(self.limits.entry_bytes));
+        }
+        self.declared = self
+            .declared
+            .checked_add(size)
+            .ok_or_else(|| too_large(self.limits.total_bytes))?;
         self.check_bytes(self.declared)?;
         let parts: Vec<_> = name.split('/').collect();
         for end in 1..=parts.len() {
@@ -223,9 +278,12 @@ impl Manifest {
     }
 
     fn check_bytes(&self, bytes: u64) -> AppResult<()> {
-        if bytes > self.limits.total_bytes
-            || u128::from(bytes) > u128::from(self.compressed) * u128::from(self.limits.ratio)
-        {
+        if bytes > self.limits.total_bytes {
+            return Err(too_large(self.limits.total_bytes));
+        }
+        // The ratio is a bomb guard rather than a size the user chose, so it
+        // keeps the unnamed code.
+        if u128::from(bytes) > u128::from(self.compressed) * u128::from(self.limits.ratio) {
             return Err(limit());
         }
         Ok(())
@@ -233,11 +291,21 @@ impl Manifest {
 
     /// Charge before writing. A lying size cannot overrun a limit by one buffer.
     pub fn charge(&mut self, file_done: u64, bytes: u64, declared: u64) -> AppResult<u64> {
-        let done = file_done.checked_add(bytes).ok_or_else(limit)?;
-        if done > declared || done > self.limits.entry_bytes {
+        let done = file_done
+            .checked_add(bytes)
+            .ok_or_else(|| too_large(self.limits.entry_bytes))?;
+        // A member longer than its own declared size is a lying header, not a
+        // ceiling the user could raise; only the second bound is one of ours.
+        if done > declared {
             return Err(limit());
         }
-        let actual = self.actual.checked_add(bytes).ok_or_else(limit)?;
+        if done > self.limits.entry_bytes {
+            return Err(too_large(self.limits.entry_bytes));
+        }
+        let actual = self
+            .actual
+            .checked_add(bytes)
+            .ok_or_else(|| too_large(self.limits.total_bytes))?;
         self.check_bytes(actual)?;
         self.actual = actual;
         Ok(done)
@@ -300,6 +368,57 @@ mod tests {
         assert!(m.add("link", false, 0, true).is_err());
     }
 
+    /// A limits file written before TICKET-395 still means what it said, and
+    /// the packing ceilings it does not mention are the defaults.
+    #[test]
+    fn a_limits_file_without_the_pack_ceilings_keeps_its_meaning() {
+        let limits: Limits = serde_json::from_str(
+            r#"{"entries":5,"totalBytes":6,"entryBytes":7,"depth":8,"pathBytes":9,"ratio":10}"#,
+        )
+        .unwrap();
+        assert_eq!((limits.entries, limits.total_bytes), (5, 6));
+        assert_eq!(limits.pack_entries, Limits::default().pack_entries);
+        // Packing swaps the three ceilings and keeps every name rule.
+        let packing = limits.clone().for_packing();
+        assert_eq!(packing.entries, limits.pack_entries);
+        assert_eq!(packing.total_bytes, limits.pack_total_bytes);
+        assert_eq!(packing.entry_bytes, limits.pack_entry_bytes);
+        assert_eq!(
+            (packing.depth, packing.path_bytes, packing.ratio),
+            (8, 9, 10)
+        );
+    }
+
+    /// A refusal names the bound it was measured against (TICKET-395), so the
+    /// user learns what to raise rather than only that something was hit.
+    #[test]
+    fn count_and_size_refusals_carry_their_bound() {
+        let limits = Limits {
+            entries: 1,
+            entry_bytes: 2048,
+            ..Default::default()
+        };
+        let mut manifest = Manifest::new(limits, u64::MAX);
+        manifest.add("a", false, 0, false).unwrap();
+        let error = manifest.add("b", false, 0, false).unwrap_err();
+        assert!(error.is(code::ARCHIVE_TOO_MANY_ENTRIES));
+        assert_eq!(error.params().get("limit").map(String::as_str), Some("1"));
+        // A fresh manifest: the count refusal above would otherwise win again.
+        let mut manifest = Manifest::new(
+            Limits {
+                entry_bytes: 2048,
+                ..Default::default()
+            },
+            u64::MAX,
+        );
+        let error = manifest.add("c", false, 4096, false).unwrap_err();
+        assert!(error.is(code::ARCHIVE_TOO_LARGE));
+        assert_eq!(
+            error.params().get("limit").map(String::as_str),
+            Some("2.0 KB")
+        );
+    }
+
     #[test]
     fn checks_metadata_and_real_bytes_with_overflow_safe_arithmetic() {
         let limits = Limits {
@@ -309,6 +428,7 @@ mod tests {
             depth: 2,
             path_bytes: 10,
             ratio: 2,
+            ..Default::default()
         };
         let mut m = Manifest::new(limits.clone(), 5);
         m.add("a", false, 8, false).unwrap();

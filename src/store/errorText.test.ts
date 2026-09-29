@@ -134,6 +134,15 @@ describe("localization", () => {
     expect(describeError(err("net.unreachable"))).toContain("{host}");
   });
 
+  it("names the archive limit that was exceeded", () => {
+    // TICKET-395: "a limit was exceeded" is only reportable; the bound and
+    // its value are what tells the user what to raise or split.
+    const many = describeError(err("archive.tooManyEntries", { params: { limit: "1000000" } }));
+    expect(many).toContain("1000000");
+    const large = describeError(err("archive.tooLarge", { params: { limit: "4.0 TB" } }));
+    expect(large).toContain("4.0 TB");
+  });
+
   it("passes a non-backend error through as its own text", () => {
     expect(describeError("etwas ging schief")).toBe("etwas ging schief");
   });

@@ -174,7 +174,7 @@ pub fn create_archive(args: &Args) -> AppResult<Value> {
         &sources,
         &destination,
         &mut prog,
-        Limits::load()?,
+        Limits::load()?.for_packing(),
         &|path| provider.check(&path.into()).map_err(AppError::from),
     )?;
     if !errors.is_empty() {
