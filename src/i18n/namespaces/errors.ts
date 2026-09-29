@@ -53,6 +53,8 @@ export const errors = ns(
     "error.archive.unknownFormat": "Unbekanntes Archivformat",
     "error.archive.unsafeEntry": "Archiv enthält einen unsicheren Pfad oder Link",
     "error.archive.limit": "Sicherheitsgrenze für Archive überschritten",
+    "error.archive.tooManyEntries": "Grenze von {limit} Einträgen überschritten",
+    "error.archive.tooLarge": "Größengrenze von {limit} überschritten",
     "error.archive.conflict": "Archiv enthält kollidierende Namen oder Dateitypen",
     "error.archive.corrupt": "Archiv ist beschädigt oder nicht lesbar",
 
@@ -162,6 +164,8 @@ export const errors = ns(
     "error.archive.unknownFormat": "Unknown archive format",
     "error.archive.unsafeEntry": "The archive contains an unsafe path or link",
     "error.archive.limit": "An archive safety limit was exceeded",
+    "error.archive.tooManyEntries": "The limit of {limit} entries was exceeded",
+    "error.archive.tooLarge": "The size limit of {limit} was exceeded",
     "error.archive.conflict": "The archive contains conflicting names or entry types",
     "error.archive.corrupt": "The archive is damaged or unreadable",
 

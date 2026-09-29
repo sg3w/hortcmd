@@ -7,6 +7,10 @@
 //
 // The switches are a setting, not a form: the dialog opens on what was chosen
 // last (TICKET-394), because archives are made in series.
+//
+// The name field comes first (TICKET-395). It is what the dialog focuses and
+// pre-selects, and in the common case the only control touched; the switches
+// that compose it read as its options rather than as the form above it.
 // ============================================================
 
 import "@/i18n/namespaces/pack";
@@ -116,39 +120,7 @@ export function PackDialog() {
         {t("archive.title")}
       </Dialog.Title>
       <div className="px-4 py-3">
-        <label htmlFor={baseId} className="mb-1 block text-[12px] text-dim">
-          {t("archive.base")}
-        </label>
-        <select
-          id={baseId}
-          value={options.base}
-          disabled={!auto}
-          onChange={(e) => changeOptions({ base: e.target.value as ArchiveNameOptions["base"] })}
-          className={FIELD}
-        >
-          <option value="selection">{withBase("archive.base.selection", selectionBase(entries))}</option>
-          <option value="generic">{withBase("archive.base.generic", genericBase())}</option>
-        </select>
-
-        <div className="mt-2.5 flex gap-6">
-          {([["archive.addDate", "date"], ["archive.addTime", "time"]] as const).map(([label, key]) => (
-            <label
-              key={key}
-              className="flex cursor-pointer items-center gap-2 text-[12px] text-text has-[:disabled]:cursor-default has-[:disabled]:opacity-40"
-            >
-              <input
-                type="checkbox"
-                checked={options[key]}
-                disabled={!auto}
-                onChange={(e) => changeOptions({ [key]: e.target.checked })}
-                className="accent-accent"
-              />
-              {t(label)}
-            </label>
-          ))}
-        </div>
-
-        <label htmlFor={inputId} className="mb-1 mt-3 block text-[12px] text-dim">
+        <label htmlFor={inputId} className="mb-1 block text-[12px] text-dim">
           {t("archive.label")}
         </label>
         <input
@@ -187,6 +159,39 @@ export function PackDialog() {
           {t("archive.auto")}
         </label>
         {!auto && <p className="mt-1 text-[12px] text-dim">{t("archive.auto.hint")}</p>}
+
+        <label htmlFor={baseId} className="mb-1 mt-3 block text-[12px] text-dim">
+          {t("archive.base")}
+        </label>
+        <select
+          id={baseId}
+          value={options.base}
+          disabled={!auto}
+          onChange={(e) => changeOptions({ base: e.target.value as ArchiveNameOptions["base"] })}
+          className={FIELD}
+        >
+          <option value="selection">{withBase("archive.base.selection", selectionBase(entries))}</option>
+          <option value="generic">{withBase("archive.base.generic", genericBase())}</option>
+        </select>
+
+        <div className="mt-2.5 flex gap-6">
+          {([["archive.addDate", "date"], ["archive.addTime", "time"]] as const).map(([label, key]) => (
+            <label
+              key={key}
+              className="flex cursor-pointer items-center gap-2 text-[12px] text-text has-[:disabled]:cursor-default has-[:disabled]:opacity-40"
+            >
+              <input
+                type="checkbox"
+                checked={options[key]}
+                disabled={!auto}
+                onChange={(e) => changeOptions({ [key]: e.target.checked })}
+                className="accent-accent"
+              />
+              {t(label)}
+            </label>
+          ))}
+        </div>
+
       </div>
       <div className="flex justify-end gap-2 border-t border-edge px-4 py-2.5">
         <button

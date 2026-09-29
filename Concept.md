@@ -1129,7 +1129,17 @@ The *design* those changes settled is described where it belongs, in §3–§9.
       recursive delete that **tolerates an entry that vanishes underneath it**
       (ticket 393) — FAT/exFAT deletes an AppleDouble `._x` sidecar together
       with its entry, which used to report „Nicht gefunden" for a finished
-      archive and left the staging directory behind.
+      archive and left the staging directory behind. The **name field is the
+      first control** in the dialog (ticket 395), above the switches that
+      compose it. Packing is measured against **its own ceilings**
+      (`Limits::for_packing`, ticket 395) — the entry count and byte limits in
+      `archive-limits.json` defend *extraction* against an archive somebody
+      else wrote, and applying them to a tree the user picked refused ordinary
+      selections (264,689 entries, 44 GB) as though they were an attack; the
+      pack ceilings are a memory bound on the collection pass, free space stays
+      `archive_capacity`'s question, and the per-name rules are unchanged and
+      shared. A refusal now **names its bound**: `archive.tooManyEntries` and
+      `archive.tooLarge` carry the limit they were measured against.
 - [x] **Search**: search dialog (command-bar button + **Alt+F7**; `SearchDialog.tsx` ↔
       backend `commands/fs/search.rs`, command `search`) with four modes:
       **Files** (name as glob/regex + **file contents** as text/regex,

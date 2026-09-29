@@ -36,6 +36,8 @@ export const ERROR_CODES = [
   "archive.unknownFormat",
   "archive.unsafeEntry",
   "archive.limit",
+  "archive.tooManyEntries",
+  "archive.tooLarge",
   "archive.conflict",
   "archive.corrupt",
   "net.unreachable",

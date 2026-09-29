@@ -51,3 +51,20 @@ pub mod staging_test_support {
 pub mod search_index;
 
 pub mod icons;
+
+/// A byte count as a short, readable size — for the few places a number has
+/// to appear inside a sentence rather than in a sized column.
+pub(crate) fn human_size(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+    let mut v = bytes as f64;
+    let mut u = 0;
+    while v >= 1024.0 && u < UNITS.len() - 1 {
+        v /= 1024.0;
+        u += 1;
+    }
+    if u == 0 {
+        format!("{} {}", bytes, UNITS[0])
+    } else {
+        format!("{:.1} {}", v, UNITS[u])
+    }
+}
