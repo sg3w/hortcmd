@@ -455,6 +455,14 @@ Ticket 097 adds the compact transfer review, settings handoff and localized quot
 option. The measured entry becomes 324.3 KiB; its budget is deliberately raised
 to 325 KiB. Existing lazy feature boundaries remain intact.
 
+Ticket 389 needed more than the 0.8 KiB of headroom that was left, and moved a
+boundary rather than the budget. The `persist` namespace held both the startup
+recovery notice and the twenty-two strings of the Settings ▸ Back up settings
+panel; only the first is read before a dialog opens. The panel's text became the
+`backup` namespace, registered by `components/ui/settings/backup.tsx` and so carried by the
+settings chunk. The measured entry falls from 324.3 to 322.4 KiB with the new
+feature included; the budget is unchanged at 325 KiB.
+
 **The budget.** `EAGER_BUDGET_KB = 325` in `vite.config.ts`, enforced by
 `scripts/bundle-report.mjs` (`npm run check:bundle`, part of `npm run check` and
 of CI). The report reads the build manifest, walks the entry chunk's import
@@ -757,6 +765,9 @@ is organized into the following categories. Legend: **✅ present · ⏳ planned
 - Font ⏳ · Font size ✅ · Icon size ✅ · Compact list view ⏳
 - Animations on/off 💭 · Save window position ✅ · Restore last tabs ✅
 - Remember pane split ✅ *(splitter draggable, persisted in localStorage)*
+- Back up settings: export / import / reset ✅
+- Report recovered data at startup ✅ *(TICKET-389; off silences the notice
+  only — the log and the quarantined copy are kept either way)*
 
 ### Favorites
 - Manage favorite folders (add/remove) ✅
