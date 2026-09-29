@@ -406,7 +406,11 @@ and must never wait on a fetch) and the transfer surface
 `features/LazyDialogs.tsx` pairs each with the store flag that opens it. The
 heavyweights are the preview (marked + highlight.js + DOMPurify, 146 kB) and the
 SSH terminal (xterm, 330 kB); the larger dialogs — settings, connections,
-properties, rename, compare, search, export — get their own chunks too.
+properties, rename, compare, search, export, pack — get their own chunks too.
+A lazy dialog's own text goes with it: `PackDialog` registers the
+`namespaces/pack` translations on import (ticket 392), the way `rename`,
+`preview` and `export` already do, so its strings are not in the entry chunk
+either.
 
 Result: the eager application chunk is **230 kB** (70 kB gzipped), down from
 1,306 kB (372 kB).
@@ -1109,11 +1113,15 @@ The *design* those changes settled is described where it belongs, in §3–§9.
       ZIP (AES/ZipCrypto) and 7z archives: password sentinels (`PASSWORD_REQUIRED`/
       `PASSWORD_WRONG`) from the backend, the frontend asks masked, cached
       per archive (`archivePw.ts`) and reused automatically when extracting. Packing
-      still produces ZIP. (Encrypted/cross-format packing: open.) The name prompt
-      **proposes a name from the selection** (`archiveName.ts`, ticket 390):
-      the first folder in list order, otherwise the first file without its
-      extension, plus `_YYYY-MM-DD_HH-MM-SS`, with everything but `.zip`
-      preselected.
+      still produces ZIP. (Encrypted/cross-format packing: open.) Packing opens
+      a **dialog of its own** (`PackDialog.tsx`, lazy, ticket 392) that
+      **composes** the name instead of offering one string: the base is either
+      the one derived from the selection (`archiveName.ts`, ticket 390 — the
+      first folder in list order, otherwise the first file without its
+      extension) or the generic `archiv`, and **date** and **time**
+      (`_YYYY-MM-DD`, `_HH-MM-SS`, both on by default) are checkboxes. Typing
+      into the field disables the options; one checkbox hands the field back to
+      them. Everything but `.zip` is preselected on open.
 - [x] **Search**: search dialog (command-bar button + **Alt+F7**; `SearchDialog.tsx` ↔
       backend `commands/fs/search.rs`, command `search`) with four modes:
       **Files** (name as glob/regex + **file contents** as text/regex,

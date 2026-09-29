@@ -10,7 +10,22 @@ import type { DirEntry } from "@/ipc/bindings";
 import { splitName } from "@/lib/format";
 
 /** Everything the proposal needs from an entry. */
-type Packable = Pick<DirEntry, "name" | "is_dir">;
+export type Packable = Pick<DirEntry, "name" | "is_dir">;
+
+/** The parts of the name the pack dialog lets the user switch (TICKET-392). */
+export interface ArchiveNameOptions {
+  /** `selection`: the folder or file below the cursor; `generic`: `archiv`. */
+  base: "selection" | "generic";
+  date: boolean;
+  time: boolean;
+}
+
+/** What the pack dialog opens with: the TICKET-390 proposal, unchanged. */
+export const DEFAULT_NAME_OPTIONS: ArchiveNameOptions = {
+  base: "selection",
+  date: true,
+  time: true,
+};
 
 /** Used when nothing packable is known, and when a name sanitizes to nothing. */
 const FALLBACK_BASE = "archiv";
@@ -42,17 +57,52 @@ function sanitize(base: string): string {
   return cleaned || FALLBACK_BASE;
 }
 
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/** `YYYY-MM-DD` in local time. */
+function datePart(now: Date): string {
+  return [now.getFullYear(), pad(now.getMonth() + 1), pad(now.getDate())].join("-");
+}
+
+/** `HH-MM-SS` in local time — no colon, so it is legal in a name. */
+function timePart(now: Date): string {
+  return [now.getHours(), now.getMinutes(), now.getSeconds()].map(pad).join("-");
+}
+
 /** `YYYY-MM-DD_HH-MM-SS` in local time — sortable, and legal in a name. */
 export function timestamp(now: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const date = [now.getFullYear(), pad(now.getMonth() + 1), pad(now.getDate())];
-  const time = [now.getHours(), now.getMinutes(), now.getSeconds()].map(pad);
-  return `${date.join("-")}_${time.join("-")}`;
+  return `${datePart(now)}_${timePart(now)}`;
+}
+
+/** The base derived from `entries`, ready to be shown as a choice. */
+export function selectionBase(entries: Packable[]): string {
+  return sanitize(baseOf(entries));
+}
+
+/** The base the dialog offers instead of the derived one. */
+export function genericBase(): string {
+  return FALLBACK_BASE;
+}
+
+/**
+ * The `.zip` name for `entries` under `options` (TICKET-392): the base first,
+ * then whichever of date and time is switched on, each separated by `_`.
+ */
+export function composeArchiveName(
+  entries: Packable[],
+  options: ArchiveNameOptions,
+  now: Date,
+): string {
+  const base = options.base === "generic" ? genericBase() : selectionBase(entries);
+  const parts = [base];
+  if (options.date) parts.push(datePart(now));
+  if (options.time) parts.push(timePart(now));
+  return `${parts.join("_")}.zip`;
 }
 
 /** The `.zip` name proposed for packing `entries`, in list order. */
 export function proposedArchiveName(entries: Packable[], now: Date): string {
-  return `${sanitize(baseOf(entries))}_${timestamp(now)}.zip`;
+  return composeArchiveName(entries, DEFAULT_NAME_OPTIONS, now);
 }
 
 /**

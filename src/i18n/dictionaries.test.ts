@@ -13,7 +13,8 @@ import { CORE_NAMESPACES, DICT } from "./dictionaries";
 import { rename } from "./namespaces/rename";
 import { exporting } from "./namespaces/exporting";
 import { preview } from "./namespaces/preview";
-const ALL_NAMESPACES = [...CORE_NAMESPACES, rename, exporting, preview];
+import { pack } from "./namespaces/pack";
+const ALL_NAMESPACES = [...CORE_NAMESPACES, rename, exporting, preview, pack];
 
 describe("language parity", () => {
   it("has the same keys in German and English", () => {

@@ -15,9 +15,9 @@ import { useOps } from "@/store/opsStore";
 import { useTransfers } from "@/store/transfersStore";
 import { cancelTransfer, resolveCollision } from "@/ipc/client";
 import { useT } from "@/store/settingsStore";
-import { useDialogFocusReturn } from "./useDialogFocusReturn";
 import { cn } from "@/lib/cn";
-import { consumeDialogKey, markDialogKey } from "@/lib/keys";
+import { consumeDialogKey } from "@/lib/keys";
+import { SimpleDialog } from "./SimpleDialog";
 
 export function OperationDialogs() {
   return (
@@ -104,59 +104,6 @@ function basename(path: string): string {
   if (!path) return "";
   const parts = path.replace(/[\\/]+$/, "").split(/[\\/]/);
   return parts[parts.length - 1] || path;
-}
-
-/**
- * The chrome the blocking dialogs in this file share: a modal
- * `Dialog.Root`, its overlay, and a centered `Dialog.Content` that returns
- * focus to wherever it came from. The fixed-size sibling of `AppDialog`
- * (no resizing, no stored size). Everything here used to be copied per
- * dialog, which is how `ProgressOverlay` ended up without a focus trap at
- * all — a chrome fix now lands in one place (ticket 348).
- */
-function SimpleDialog({
-  open,
-  onOpenChange,
-  overlayZ,
-  contentZ,
-  className,
-  noDescription,
-  onOpenAutoFocus,
-  children,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  overlayZ: string;
-  contentZ: string;
-  /** Width and any per-dialog overflow behaviour. */
-  className: string;
-  /** Opts out of Radix's description wiring for a dialog without one. */
-  noDescription?: boolean;
-  /** Overrides where focus lands on open (Radix picks the first tabbable). */
-  onOpenAutoFocus?: (event: Event) => void;
-  children: React.ReactNode;
-}) {
-  const returnFocus = useDialogFocusReturn();
-  return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className={cn("fixed inset-0 bg-black/50", overlayZ)} />
-        <Dialog.Content
-          onCloseAutoFocus={returnFocus}
-          onOpenAutoFocus={onOpenAutoFocus}
-          {...(noDescription ? { "aria-describedby": undefined } : {})}
-          onKeyDownCapture={markDialogKey}
-          className={cn(
-            "fixed left-1/2 top-1/2 max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-edge bg-panel shadow-2xl",
-            contentZ,
-            className,
-          )}
-        >
-          {children}
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
 }
 
 // ---------- Confirmation ----------

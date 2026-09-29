@@ -8,6 +8,7 @@ import { useOps } from "@/store/opsStore";
 import { translate, useSettings } from "@/store/settingsStore";
 import { describeErrorFull } from "@/store/errorText";
 import { runEdit, runMkdir, runPack, runRename } from "./fileOps";
+import { proposedArchiveName } from "./archiveName";
 import { openEntry } from "./navigate";
 
 it.each([runEdit, (side: "left" | "right") => openEntry(side, 0)])("reports failed default-program launches", async action => {
@@ -74,7 +75,7 @@ it("still reports a name taken by another entry, whatever its spelling", async (
   expect(runtime.calls.filter(call => call.cmd === "rename_entry")).toHaveLength(0);
 });
 
-it("proposes the folder name with a timestamp when packing, preselecting all but the extension", async () => {
+it("opens the pack dialog with the packed rows in list order", async () => {
   const runtime = useTauri({ commands: { create_archive: () => Promise.resolve(null) } });
   useCaps.setState({ known: { local: ["archivePackFrom", "archivePackTo"] } });
   const entries = [file("notes.txt"), dir("Fotos"), dir("Videos")];
@@ -84,19 +85,19 @@ it("proposes the folder name with a timestamp when packing, preselecting all but
   }));
 
   runPack("left");
-  const prompt = useOps.getState().prompt;
-  expect(prompt).not.toBeNull();
-  // Folder wins over the file, and the list order decides between the two
-  // folders — not the order they were marked in.
-  expect(prompt!.initial).toMatch(/^Fotos_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.zip$/);
-  expect(prompt!.selectRange).toEqual([0, prompt!.initial.length - 4]);
+  const pack = useOps.getState().pack;
+  expect(pack).not.toBeNull();
+  // The dialog derives the base itself; what reaches it is the list order,
+  // not the order the entries were marked in (TICKET-390).
+  expect(pack!.entries.map(e => e.name)).toEqual(["notes.txt", "Fotos", "Videos"]);
+  expect(proposedArchiveName(pack!.entries, new Date())).toMatch(/^Fotos_/);
 
   useOps.getState().closeDialogs();
-  prompt!.onSubmit(prompt!.initial, false);
+  pack!.onSubmit("Fotos.zip");
 
   await waitFor(() =>
     expect(runtime.calls.filter(call => call.cmd === "create_archive")).toMatchObject([
-      { cmd: "create_archive", args: { sources: expect.arrayContaining(["/source/Fotos"]), destZip: `/target/${prompt!.initial}` } },
+      { cmd: "create_archive", args: { sources: expect.arrayContaining(["/source/Fotos"]), destZip: "/target/Fotos.zip" } },
     ]),
   );
 });

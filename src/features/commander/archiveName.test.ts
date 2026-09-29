@@ -1,6 +1,13 @@
 import { expect, it } from "vitest";
 import { dir, file } from "@/test/fixtures";
-import { proposedArchiveName, stemRange, timestamp } from "./archiveName";
+import {
+  composeArchiveName,
+  genericBase,
+  proposedArchiveName,
+  selectionBase,
+  stemRange,
+  timestamp,
+} from "./archiveName";
 
 const NOW = new Date(2026, 8, 29, 15, 4, 7);
 const STAMP = "2026-09-29_15-04-07";
@@ -48,4 +55,31 @@ it("preselects everything but the extension", () => {
   expect(stemRange(name)).toEqual([0, name.length - 4]);
   expect(name.slice(...stemRange(name))).toBe(`Fotos_${STAMP}`);
   expect(stemRange("noext")).toEqual([0, 5]);
+});
+
+// ---------- Composed name (TICKET-392) ----------
+
+const ENTRIES = [file("notes.txt"), dir("Fotos")];
+
+it.each([
+  [{ base: "selection", date: true, time: true }, `Fotos_2026-09-29_15-04-07.zip`],
+  [{ base: "selection", date: true, time: false }, "Fotos_2026-09-29.zip"],
+  [{ base: "selection", date: false, time: true }, "Fotos_15-04-07.zip"],
+  [{ base: "selection", date: false, time: false }, "Fotos.zip"],
+  [{ base: "generic", date: true, time: true }, `archiv_2026-09-29_15-04-07.zip`],
+  [{ base: "generic", date: false, time: false }, "archiv.zip"],
+] as const)("composes %o into %s", (options, expected) => {
+  expect(composeArchiveName(ENTRIES, options, NOW)).toBe(expected);
+});
+
+it("offers both bases the dialog lets the user choose between", () => {
+  expect(selectionBase(ENTRIES)).toBe("Fotos");
+  expect(selectionBase([])).toBe(genericBase());
+  expect(genericBase()).toBe("archiv");
+});
+
+it("still proposes the composed default", () => {
+  expect(proposedArchiveName(ENTRIES, NOW)).toBe(
+    composeArchiveName(ENTRIES, { base: "selection", date: true, time: true }, NOW),
+  );
 });

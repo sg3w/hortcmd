@@ -29,7 +29,6 @@ import {
 import { joinPath } from "@/lib/path";
 import { allows } from "@/store/capsStore";
 import { guard, guardPair } from "./guard";
-import { proposedArchiveName, stemRange } from "./archiveName";
 import { splitName } from "@/lib/format";
 import { isArchive } from "@/lib/archive";
 import {
@@ -439,17 +438,11 @@ export function runPack(side: Side): void {
     return;
   }
 
-  // The proposal is derived from the entries in list order, so the same
-  // selection always proposes the same name — the marking order does not
-  // reach here (TICKET-390).
-  const initial = proposedArchiveName(packedRows(side), new Date());
-
-  useOps.getState().requestPrompt({
-    title: translate("archive.title"),
-    label: translate("archive.label"),
-    initial,
-    selectRange: stemRange(initial),
-    confirmLabel: translate("op.create"),
+  // The name is composed in the dialog from the entries in list order, so the
+  // same selection always starts from the same name — the marking order does
+  // not reach here (TICKET-390).
+  useOps.getState().requestPack({
+    entries: packedRows(side),
     onSubmit: (name) => {
       let zipName = name.trim();
       if (!zipName) return;
