@@ -1102,7 +1102,11 @@ The *design* those changes settled is described where it belongs, in §3–§9.
       ZIP (AES/ZipCrypto) and 7z archives: password sentinels (`PASSWORD_REQUIRED`/
       `PASSWORD_WRONG`) from the backend, the frontend asks masked, cached
       per archive (`archivePw.ts`) and reused automatically when extracting. Packing
-      still produces ZIP. (Encrypted/cross-format packing: open.)
+      still produces ZIP. (Encrypted/cross-format packing: open.) The name prompt
+      **proposes a name from the selection** (`archiveName.ts`, ticket 390):
+      the first folder in list order, otherwise the first file without its
+      extension, plus `_YYYY-MM-DD_HH-MM-SS`, with everything but `.zip`
+      preselected.
 - [x] **Search**: search dialog (command-bar button + **Alt+F7**; `SearchDialog.tsx` ↔
       backend `commands/fs/search.rs`, command `search`) with four modes:
       **Files** (name as glob/regex + **file contents** as text/regex,

@@ -7,7 +7,7 @@ import type { RecoverySettings } from "@/ipc/bindings/RecoverySettings";
 // via events); delete/mkdir are short synchronous operations.
 // ============================================================
 
-import { panelOf, usePanes, type Side } from "@/store/panesStore";
+import { panelOf, usePanes, type Row, type Side } from "@/store/panesStore";
 import { useOps } from "@/store/opsStore";
 import { useTransfers } from "@/store/transfersStore";
 import { useClipboard } from "@/store/clipboardStore";
@@ -29,6 +29,7 @@ import {
 import { joinPath } from "@/lib/path";
 import { allows } from "@/store/capsStore";
 import { guard, guardPair } from "./guard";
+import { proposedArchiveName, stemRange } from "./archiveName";
 import { splitName } from "@/lib/format";
 import { isArchive } from "@/lib/archive";
 import {
@@ -74,6 +75,19 @@ export function targetPaths(side: Side): string[] {
           return cur && !cur.parent ? [cur.name] : [];
         })();
   return names.map((n) => joinPath(p.path, n));
+}
+
+/**
+ * The same entries `targetPaths` resolves, as rows and in list order — what
+ * the archive-name proposal is derived from (TICKET-390).
+ */
+function packedRows(side: Side): Row[] {
+  const p = panelOf(usePanes.getState(), side);
+  if (p.selected.size > 0) {
+    return p.entries.filter((e) => !e.parent && p.selected.has(e.name));
+  }
+  const cur = p.entries[p.cursor];
+  return cur && !cur.parent ? [cur] : [];
 }
 
 /** Reload the active tabs of both sides (after an operation completes).
@@ -425,10 +439,16 @@ export function runPack(side: Side): void {
     return;
   }
 
+  // The proposal is derived from the entries in list order, so the same
+  // selection always proposes the same name — the marking order does not
+  // reach here (TICKET-390).
+  const initial = proposedArchiveName(packedRows(side), new Date());
+
   useOps.getState().requestPrompt({
     title: translate("archive.title"),
     label: translate("archive.label"),
-    initial: "archiv.zip",
+    initial,
+    selectRange: stemRange(initial),
     confirmLabel: translate("op.create"),
     onSubmit: (name) => {
       let zipName = name.trim();
