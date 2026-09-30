@@ -360,6 +360,20 @@ the current generation and not cancelled. Everything follows from that:
 * `net_disconnect` cancels a pending attempt first, so an attempt in flight
   cannot install its provider behind the teardown.
 
+**Delivered while it runs.** The lifecycle's cancel was only reachable in
+theory until TICKET-397: `net_connect` was a *synchronous* Tauri command, and a
+synchronous command runs on the thread that dispatches IPC, so an attempt held
+the whole channel for up to its 45-second budget — `net_cancel_connect` was not
+delivered until there was nothing left to cancel. `net_connect`,
+`net_trust_host_key`, `net_disconnect` and `net_cancel_connect` now hand their
+blocking work to a worker (`off_thread`, which also carries the correlation id
+across the thread boundary), so the controls a running operation offers keep
+working while it runs. On top of that the manager row **says the cancel was
+taken**: the phase deliberately only moves once the worker settles, so a row the
+user has cancelled shows a spinner and "cancelling" instead of the same button
+again, and a row stuck in `connecting` on an attempt the backend no longer names
+falls back to a disconnect rather than doing nothing.
+
 **Typed outcomes.** `FailureKind` separates `timeout`, `cancelled`, `auth`,
 `hostKey`, `unreachable`, `protocol` and `keychain`. Cancellation, timeout, host
 key, keychain and unreachable are *structural* — they come from the phase that
@@ -1297,8 +1311,12 @@ The *design* those changes settled is described where it belongs, in §3–§9.
       (`timeout`/`cancelled`/`auth`/`hostKey`/`unreachable`/`protocol`/
       `keychain`), the manager shows a spinner with a cancel action while
       an attempt runs, and a lost connection reaches the manager and the
-      location pickers as one `net-state` snapshot. Details in §4
-      "Connection lifecycle".
+      location pickers as one `net-state` snapshot. The cancel is also
+      **actually delivered** (TICKET-397): the connect, trust, disconnect
+      and cancel commands run off the IPC dispatch thread, a cancelled row
+      says "cancelling" until the attempt settles, and a row stuck in
+      `connecting` without an attempt id falls back to a disconnect.
+      Details in §4 "Connection lifecycle".
       The **connection manager has its own toolbar button** (`CommandBar`, `Server`
       icon in its own section between navigation and file actions; TICKET-016) and
       opens globally via `useNet.getState().openManager()` — the toolbar is always

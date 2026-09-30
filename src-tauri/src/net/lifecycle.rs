@@ -599,6 +599,41 @@ mod tests {
         forget(&p);
     }
 
+    /// The point of TICKET-397: a cancel that arrives while the attempt is
+    /// still running in its worker reaches it. What used to make this
+    /// unreachable was not the lifecycle but the IPC — `net_connect` was a
+    /// synchronous command and occupied the dispatch thread for the whole
+    /// attempt, so `net_cancel_connect` was never delivered to get here.
+    #[test]
+    fn a_cancel_reaches_an_attempt_that_is_still_running() {
+        let p = id("cancel-running");
+        let attempt = match begin(&p) {
+            Start::Started(a) => a,
+            _ => panic!(),
+        };
+        let running = attempt.clone();
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            // What `run_attempt` does between its phases.
+            loop {
+                if let Err(failure) = running.check() {
+                    return failure;
+                }
+                std::thread::yield_now();
+            }
+        });
+        started_rx.recv().unwrap();
+        assert_eq!(cancel(&attempt.id).as_deref(), Some(p.as_str()));
+        let failure = worker.join().unwrap();
+        assert_eq!(failure.kind, FailureKind::Cancelled);
+        assert!(!settle(&attempt, Err(failure), || panic!(
+            "must not install"
+        )));
+        assert_eq!(snapshot(&p).0, Phase::Disconnected);
+        forget(&p);
+    }
+
     #[test]
     fn a_late_success_for_a_cancelled_attempt_is_discarded() {
         let p = id("late-cancel");

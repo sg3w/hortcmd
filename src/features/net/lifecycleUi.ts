@@ -48,7 +48,17 @@ export function phaseLabel(phase: Phase): TransKey {
  * failure is rendered as such, which is what keeps a reopened dialog
  * from resetting itself.
  */
-export function rowControls(status: ConnectionStatus | null): RowControls {
+export function rowControls(
+  status: ConnectionStatus | null,
+  /**
+   * The user has already asked for this attempt to be stopped
+   * (TICKET-397). The backend moves the phase only once the worker
+   * actually settles — claiming "disconnected" while its sockets are
+   * still open would be a lie — so without this the row would keep
+   * offering the same Cancel button and look as if nothing had happened.
+   */
+  cancelling = false,
+): RowControls {
   const phase: Phase = status?.phase ?? "disconnected";
   const recovering = status?.monitor === "interrupted" || status?.monitor === "reconnecting";
   const connecting = phase === "connecting";
@@ -56,7 +66,7 @@ export function rowControls(status: ConnectionStatus | null): RowControls {
   const busy = connecting || disconnecting || recovering;
 
   const action: RowAction = recovering ? "disconnect" : connecting
-    ? "cancel"
+    ? cancelling ? "waiting" : "cancel"
     : disconnecting
       ? "waiting"
       : phase === "connected"
@@ -68,6 +78,8 @@ export function rowControls(status: ConnectionStatus | null): RowControls {
   // nothing to add.
   const statusLine = status?.monitor === "unsupported" ? { key: "net.monitor.unsupported" as const }
     : recovering ? { key: status?.monitor === "reconnecting" ? "net.monitor.reconnecting" as const : "net.monitor.interrupted" as const }
+    : connecting && cancelling
+    ? { key: "net.cancelling" as const }
     : busy
     ? { key: PHASE_LABEL[phase] }
     : status?.error

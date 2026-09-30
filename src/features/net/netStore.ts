@@ -62,6 +62,20 @@ function replaceStatus(
   return copy;
 }
 
+/**
+ * Keeps only the cancel marks whose attempt is still running (TICKET-397).
+ * Once the backend reports the profile as anything but `connecting`, the
+ * attempt has settled and the row goes back to its normal controls.
+ */
+function stillCancelling(
+  cancelling: string[],
+  connections: ConnectionStatus[],
+): string[] {
+  return cancelling.filter(
+    (id) => connections.find((c) => c.id === id)?.phase === "connecting",
+  );
+}
+
 /** Which connections are live — the part a capability answer depends on. */
 function liveSignature(connections: ConnectionStatus[]): string {
   return connections
@@ -85,6 +99,13 @@ interface NetState {
   /** Profile currently being edited in the form, or null for the list view. */
   editing: Profile | null;
   error: string | null;
+  /**
+   * Profiles whose running attempt the user has asked to stop
+   * (TICKET-397). The backend only moves the phase once the attempt's
+   * worker settles, so this is what lets the row say "cancelling" instead
+   * of offering the same button again.
+   */
+  cancelling: string[];
 
   // ----- Credential backend (ticket 027) -----
   /** Backend choice + lock state; null until the first refresh. */
@@ -143,6 +164,7 @@ export const useNet = create<NetState>((set, get) => ({
   managerOpen: false,
   editing: null,
   error: null,
+  cancelling: [],
   cred: null,
   panel: "list",
   pending: null,
@@ -164,7 +186,12 @@ export const useNet = create<NetState>((set, get) => ({
       if (liveSignature(connections) !== liveSignature(get().connections)) {
         useCaps.getState().invalidateRemote();
       }
-      set({ profiles, connections, error: null });
+      set({
+        profiles,
+        connections,
+        cancelling: stillCancelling(get().cancelling, connections),
+        error: null,
+      });
     } catch (e) {
       set({ error: describeErrorFull(e) });
     }
@@ -261,10 +288,19 @@ export const useNet = create<NetState>((set, get) => ({
   },
 
   cancelConnect: async (id) => {
-    const attempt = get().connections.find((c) => c.id === id)?.attempt;
-    if (!attempt) return;
+    const status = get().connections.find((c) => c.id === id);
+    // Only a running attempt can be cancelled. A connected profile is
+    // disconnected, never cancelled — that is a different button.
+    if (status?.phase !== "connecting") return;
+    set({ cancelling: [...new Set([...get().cancelling, id])] });
     try {
-      await netCancelConnect(attempt);
+      // An attempt id is the precise handle. Without one the row is stuck
+      // in `connecting` on an attempt the backend no longer knows, and
+      // this used to return silently — a Cancel button that did nothing.
+      // A disconnect stops whatever is running for the profile and puts it
+      // back into a state the user can act on (TICKET-397).
+      if (status.attempt) await netCancelConnect(status.attempt);
+      else await netDisconnect(id);
       await get().refresh();
     } catch (e) {
       // Cancelling is idempotent in the backend, so a failure here means
@@ -278,7 +314,7 @@ export const useNet = create<NetState>((set, get) => ({
     if (liveSignature(states) !== liveSignature(get().connections)) {
       useCaps.getState().invalidateRemote();
     }
-    set({ connections: states });
+    set({ connections: states, cancelling: stillCancelling(get().cancelling, states) });
     for (const side of ["left", "right"] as const) {
       const panes = usePanes.getState();
       const pane = panes[side];
