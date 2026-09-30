@@ -129,6 +129,10 @@ export const settings = ns(
     "Zeichnet Umbenennen, Ordner erstellen, Rechte-, Besitzer- und Tag-Änderungen sowie Übertragungen auf, damit sie einzeln zurückgenommen werden können (⌘⌥Z). Beta: derzeit nur lokal unter macOS und stets nur bedingt rückgängig machbar. Eingeschaltet wird für jede Aktion ein Journaleintrag geschrieben, und die Rücknahme einer Kopie löscht die Daten nicht, sondern legt sie als .hortcmd-undo-Eintrag neben dem Ziel ab.",
   "settings.undo.warning":
     "Eingeschaltet: Jede Dateiaktion schreibt einen Journaleintrag, und zurückgenommene Kopien bleiben als Sicherung neben dem Ziel liegen, bis du sie selbst entfernst.",
+  "settings.recovery.hint":
+    "Zeichnet Kopieren, Verschieben, Entpacken und Packen auf, damit ein Abbruch – Absturz, Stromausfall, verlorene Verbindung – fortgesetzt, wiederholt oder bereinigt werden kann. Beta: derzeit nur unter macOS.",
+  "settings.recovery.warning":
+    "Eingeschaltet: Jede Übertragung schreibt einen Journaleintrag, und ein Abbruch bleibt offen, bis du ihn im Dialog beantwortest.",
   "settings.checkTransferSpace": "Speicherplatz und Quota prüfen",
   "settings.checkTransferSpace.hint": "Vor Kopieren und Verschieben auf ausreichenden Platz prüfen. Ausgeschaltet entfällt diese Prüfung; tatsächliche Schreibfehler werden weiterhin sicher behandelt.",
 
@@ -315,6 +319,10 @@ export const settings = ns(
     "Records renames, directory creation, permission, owner and tag changes and transfers so they can be taken back one by one (⌘⌥Z). Beta: local macOS only for now, and always conditionally reversible. While on, every operation writes a journal entry, and undoing a copy does not delete the data — it keeps it as a .hortcmd-undo entry next to the destination.",
   "settings.undo.warning":
     "On: every file operation writes a journal entry, and undone copies stay next to the destination as a retained backup until you remove them yourself.",
+  "settings.recovery.hint":
+    "Records copying, moving, extraction and packing so an interruption — a crash, a power cut, a lost connection — can be resumed, retried or cleaned up. Beta: macOS only for now.",
+  "settings.recovery.warning":
+    "On: every transfer writes a journal record, and an interruption stays open until you answer it in the dialog.",
   "settings.checkTransferSpace": "Check available space and quota",
   "settings.checkTransferSpace.hint": "Check space before copying and moving. Disabling skips this check; actual write errors are still handled safely.",
 

@@ -146,6 +146,15 @@ describe("settings fixtures", () => {
     expect(load({ ...V0, undoEnabled: true }, SETTINGS_VERSION).value.undoEnabled).toBe(true);
   });
 
+  it("ships transfer recovery off, for existing installations too", async () => {
+    const { useSettings } = await import("@/store/settingsStore");
+    expect(useSettings.getState().recoveryEnabled).toBe(false);
+    expect(load({}, SETTINGS_VERSION).value.recoveryEnabled).toBe(false);
+    expect(load(V0, 0).value.recoveryEnabled).toBe(false);
+    expect(load({ ...V0, recoveryEnabled: "yes" }, SETTINGS_VERSION).value.recoveryEnabled).toBe(false);
+    expect(load({ ...V0, recoveryEnabled: true }, SETTINGS_VERSION).value.recoveryEnabled).toBe(true);
+  });
+
   it("leaves an explicit choice alone once the schema is current", () => {
     expect(load({ ...V0, safeTransfers: false }, 1).value.safeTransfers).toBe(false);
     expect(load({ ...V0, safeTransfers: true }, 1).value.safeTransfers).toBe(true);

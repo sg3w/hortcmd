@@ -17,3 +17,7 @@ export const cleanupRecovery = (id: string): Promise<void> => invoke("recovery_c
 export const discardRecovery = (id: string): Promise<void> => hasTauri() ? invoke("recovery_discard", { id }) : Promise.resolve();
 export const acknowledgeRecovery = (id: string): Promise<void> => hasTauri() ? invoke("recovery_acknowledge", { id }) : Promise.resolve();
 export const recoveryDestination = (id: string): Promise<string> => invoke("recovery_destination", { id });
+
+/** Pushes the beta setting to the backend, which holds its own copy (TICKET-396). */
+export const setRecoveryEnabled = (enabled: boolean): Promise<void> =>
+  hasTauri() ? invoke("recovery_set_enabled", { enabled }) : Promise.resolve();

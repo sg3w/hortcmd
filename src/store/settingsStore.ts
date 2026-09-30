@@ -49,6 +49,7 @@ interface SettingsStore extends PersistedSettings {
   setGitEnabled: (v: boolean) => void;
   setUseTrash: (v: boolean) => void;
   setUndoEnabled: (v: boolean) => void;
+  setRecoveryEnabled: (v: boolean) => void;
   setVerifyCopies: (v: boolean) => void;
   setSpeedLimit: (v: number) => void;
   setQueueTransfers: (v: boolean) => void;
@@ -109,6 +110,7 @@ export const useSettings = create<SettingsStore>()(
       copyThreads: 1,
       safeTransfers: true,
       checkTransferSpace: true,
+      recoveryEnabled: false,
       reportPersistRecovery: true,
       // Spelled out rather than imported from `archiveName`: this store is
       // eager and the pack dialog is not, and one value import would pull the
@@ -149,6 +151,7 @@ export const useSettings = create<SettingsStore>()(
       setGitEnabled: (gitEnabled) => set({ gitEnabled }),
       setUseTrash: (useTrash) => set({ useTrash }),
       setUndoEnabled: (undoEnabled) => set({ undoEnabled }),
+      setRecoveryEnabled: (recoveryEnabled) => set({ recoveryEnabled }),
       setVerifyCopies: (verifyCopies) => set({ verifyCopies }),
       setSpeedLimit: (speedLimit) => set({ speedLimit: Math.max(0, speedLimit) }),
       setQueueTransfers: (queueTransfers) => set({ queueTransfers }),

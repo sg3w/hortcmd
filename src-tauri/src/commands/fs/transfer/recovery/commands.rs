@@ -29,6 +29,12 @@ pub async fn recovery_queue_transfer(
         if let Some(review) = review {
             plan.matches_review(&review)?;
         }
+        // Beta and off by default (TICKET-396). The preflight above is a
+        // safety check on the transfer itself and runs either way; only the
+        // journal — the part that outlives the operation — is withheld.
+        if !super::enabled() {
+            return Ok(());
+        }
         let journal = journal()?;
         journal.enqueue(
             &id,
@@ -42,7 +48,7 @@ pub async fn recovery_queue_transfer(
 
 #[tauri::command]
 pub async fn recovery_list() -> AppResult<Vec<RecoveryEntry>> {
-    if !super::supported() {
+    if !super::supported() || !super::enabled() {
         return Ok(Vec::new());
     }
     tauri::async_runtime::spawn_blocking(move || {
@@ -60,6 +66,13 @@ pub async fn recovery_list() -> AppResult<Vec<RecoveryEntry>> {
 
 #[tauri::command]
 pub async fn recovery_prepare(id: String, resume: bool) -> AppResult<RecoveryLaunch> {
+    // Restarting a journaled job is the one mutating step behind the switch:
+    // a window left open across a settings change, or any non-UI caller, is
+    // turned away rather than trusted (TICKET-396). Cleanup, discard and
+    // acknowledge keep working — they only ever remove a record.
+    if !super::enabled() {
+        return Err(AppError::new(code::VALIDATION_BAD_INPUT).op("transfer-recovery"));
+    }
     tauri::async_runtime::spawn_blocking(move || {
         let journal = journal()?;
         let record = journal

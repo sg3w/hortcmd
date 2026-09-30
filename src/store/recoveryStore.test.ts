@@ -1,8 +1,13 @@
-import { expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import { useTauri } from "@/test/tauri";
 import { useRecovery } from "./recoveryStore";
+import { useSettings } from "./settingsStore";
 import { useTransfers } from "./transfersStore";
 import type { RecoveryEntry } from "@/ipc/bindings/RecoveryEntry";
+
+// The feature is beta and off by default (TICKET-396); these two tests are
+// about what it does once it is on.
+beforeEach(() => useSettings.setState({ recoveryEnabled: true }));
 
 vi.mock("@/ipc/invoke", async original => ({ ...await original<typeof import("@/ipc/invoke")>(), hasTauri: () => true }));
 const entry: RecoveryEntry = { id: "job", kind: "copy", state: "completed", order: 1,

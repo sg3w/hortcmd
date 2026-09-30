@@ -9,6 +9,7 @@ pub mod types;
 use crate::errors::{code, AppError, AppResult};
 use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use storage::{Storage, MAX_ITEMS, MAX_RECORDS};
@@ -466,16 +467,61 @@ pub(crate) fn fault(_point: &str) {
 #[cfg(test)]
 mod tests;
 
+/// The beta gate (TICKET-396). One test, because the flag is process-wide.
+#[cfg(test)]
+mod gate_tests {
+    use super::*;
+
+    #[test]
+    fn recording_is_off_until_the_switch_is_pushed() {
+        assert!(!enabled(), "transfer recovery must start off");
+        let intent = || Err::<Intent, AppError>(AppError::new(code::VALIDATION_BAD_INPUT));
+        // Off, the intent is never even built: nothing is enqueued and no
+        // journal file is opened.
+        assert!(optional_begin("gate-off", intent).unwrap().is_none());
+
+        recovery_set_enabled(true);
+        assert!(enabled());
+        recovery_set_enabled(false);
+        assert!(!enabled());
+    }
+}
+
 /// This iteration is enabled on macOS. Windows/Linux adapters and native
 /// durability checks are explicitly deferred; their existing transfer paths remain.
 pub fn supported() -> bool {
     cfg!(target_os = "macos")
 }
+
+/// Transfer recovery is a beta feature and is off until it is switched on
+/// (TICKET-396).
+///
+/// The backend keeps its own copy of the setting rather than trusting a
+/// per-call flag, because recording happens from three places that carry no
+/// settings of their own — the transfer engine, extraction and packing — and
+/// because recording is the part that costs the user something: a journal
+/// record per operation, a preflight plan beside it, and an interruption that
+/// then asks to be resolved before anything else can run. Off is therefore
+/// also the backend's default, so a browser build, a renderer that died before
+/// it could speak, a plugin or an MCP client driving a transfer all record
+/// nothing until someone says otherwise.
+static ENABLED: AtomicBool = AtomicBool::new(false);
+
+pub fn enabled() -> bool {
+    ENABLED.load(Ordering::Relaxed)
+}
+
+/// Pushed by the frontend at startup and on every change of the setting.
+#[tauri::command]
+pub fn recovery_set_enabled(enabled: bool) {
+    ENABLED.store(enabled, Ordering::Relaxed);
+}
+
 pub fn optional_begin(
     id: &str,
     intent: impl FnOnce() -> AppResult<Intent>,
 ) -> AppResult<Option<Run>> {
-    if supported() {
+    if supported() && enabled() {
         begin(id, intent()?).map(Some)
     } else {
         Ok(None)

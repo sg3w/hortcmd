@@ -18,6 +18,7 @@ import {
   ListOrdered,
   Cpu,
   Undo2,
+  History,
 } from "lucide-react";
 
 export function OperationsForm() {
@@ -41,6 +42,8 @@ export function OperationsForm() {
   const setCheckSpace = useSettings(s => s.setCheckTransferSpace);
   const undoEnabled = useSettings((s) => s.undoEnabled);
   const setUndoEnabled = useSettings((s) => s.setUndoEnabled);
+  const recoveryEnabled = useSettings((s) => s.recoveryEnabled);
+  const setRecoveryEnabled = useSettings((s) => s.setRecoveryEnabled);
 
   return (
     <div className="flex flex-col gap-4">
@@ -106,6 +109,28 @@ export function OperationsForm() {
           <div className="ml-[27px] flex items-start gap-2 rounded border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-400">
             <ShieldAlert size={14} className="mt-px shrink-0" />
             <span>{t("settings.undo.warning")}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Transfer recovery (TICKET-396). Beta and off by default: while it is
+          on, every transfer writes a journal record and an interruption stays
+          on the list until it is answered, so — as with file undo — the state
+          that costs the user something is the one that explains itself. */}
+      <div className="flex flex-col gap-2">
+        <Toggle
+          checked={recoveryEnabled}
+          onChange={setRecoveryEnabled}
+          icon={History}
+          // The dialog's own title: one name for the feature, in one place.
+          label={t("recovery.title")}
+          hint={t("settings.recovery.hint")}
+          badge={<Beta />}
+        />
+        {recoveryEnabled && (
+          <div className="ml-[27px] flex items-start gap-2 rounded border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-400">
+            <ShieldAlert size={14} className="mt-px shrink-0" />
+            <span>{t("settings.recovery.warning")}</span>
           </div>
         )}
       </div>
