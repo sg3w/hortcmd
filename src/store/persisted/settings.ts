@@ -211,6 +211,8 @@ export function validateSettings(
     copyThreads: num(s.copyThreads, 1, "copyThreads", r, { min: 1, max: 16, int: true }),
     safeTransfers: bool(s.safeTransfers, true, "safeTransfers", r),
     checkTransferSpace: bool(s.checkTransferSpace, true, "checkTransferSpace", r),
+    // Beta, off by default (TICKET-396), like the file-undo switch above.
+    recoveryEnabled: bool(s.recoveryEnabled, false, "recoveryEnabled", r),
     reportPersistRecovery: bool(
       s.reportPersistRecovery,
       true,

@@ -98,6 +98,7 @@ pub fn run() {
             commands::fs::file::rename_batch,
             commands::fs::file::copy_entries,
             commands::fs::file::move_entries,
+            commands::fs::transfer::recovery::recovery_set_enabled,
             commands::fs::transfer::recovery::commands::recovery_queue_transfer,
             commands::fs::transfer::recovery::commands::recovery_list,
             commands::fs::transfer::recovery::commands::recovery_prepare,

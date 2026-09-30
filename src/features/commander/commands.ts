@@ -49,7 +49,7 @@ import { openFileCompare } from "@/store/fileCompareStore";
 import { openProps } from "@/store/propsStore";
 import { openRename } from "@/store/renameStore";
 import { openUndo, undoAvailable } from "@/store/undoStore";
-import { openRecovery } from "@/store/recoveryStore";
+import { openRecovery, recoveryAvailable } from "@/store/recoveryStore";
 import { openSearch } from "@/store/searchStore";
 import { openAbout, openSettings, openShortcuts } from "@/store/uiStore";
 import { runAction } from "./actions";
@@ -473,7 +473,9 @@ export const COMMANDS = {
   // Beta and off by default (TICKET-391): hidden, not disabled — a
   // feature nobody switched on has no reason to occupy a menu line.
   "file.undo": { label: "undo.title", dialog: true, shortcut: { key: "Z", mods: ["Mod", "Alt"] }, run: openUndo, state: () => ({ hidden: !undoAvailable() }) },
-  "cmd.recovery": { label: "recovery.title", dialog: true, run: openRecovery },
+  // Beta and off by default (TICKET-396), hidden for the same reason as
+  // `file.undo` above: a feature nobody switched on has no menu line.
+  "cmd.recovery": { label: "recovery.title", dialog: true, run: openRecovery, state: () => ({ hidden: !recoveryAvailable() }) },
   "mark.selectGroup": {
     label: "menu.mark.selectGroup",
     dialog: true,

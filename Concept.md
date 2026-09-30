@@ -1085,6 +1085,21 @@ The *design* those changes settled is described where it belongs, in §3–§9.
       retained copy is written, the menu command and ⌘⌥Z are hidden, and the
       operation dialogs print no reversibility sentence. Turning it off never
       deletes an existing journal or retained copy.
+      **Recovery of interrupted transfers** (TICKET-044) — the durable
+      journal that lets a copy, move, extraction or packing run survive a
+      crash, a power cut or a lost connection and be resumed, retried or
+      cleaned up afterwards — is **beta and off by default** for the same
+      reasons (TICKET-396): its adapter is macOS-only so far (TICKET-116
+      holds the Windows/Linux half), and while it is on every job writes a
+      journal record plus its preflight plan and an interruption stays on
+      the list until it is answered. The switch sits beside the undo one in
+      Settings ▸ File operations with a BETA badge; the backend holds the
+      same state and also defaults to off (`recovery_set_enabled`). While it
+      is off nothing is journaled, the list answers empty, `recovery_prepare`
+      refuses, and the `Commands ▸ Interrupted transfers` entry and the
+      startup dialog are gone. The **preflight check in front of a transfer
+      runs either way** — it protects the operation, not its recovery — and
+      turning the switch off deletes no record and no staged data.
       **Failure-safe transfers** (TICKET-029) close the engine's remaining
       data-safety hole: a resolved overwrite used to delete the destination
       *before* copying, so any failure in between lost it. With the opt-in

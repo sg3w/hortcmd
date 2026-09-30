@@ -21,8 +21,8 @@ import {
 import { panelOf, usePanes } from "@/store/panesStore";
 import { useNet } from "@/features/net/netStore";
 import { useSession } from "@/store/sessionStore";
-import { useRecovery } from "@/store/recoveryStore";
 import { acknowledgeRecovery } from "@/ipc/client";
+import { recoveryAvailable } from "@/store/recoveryStore";
 import { useTransfers } from "@/store/transfersStore";
 import { useOps } from "@/store/opsStore";
 import { useSettings, useT } from "@/store/settingsStore";
@@ -55,6 +55,7 @@ import { OperationDialogs } from "@/components/ui/OperationDialogs";
 import { ConnectionAnnouncements } from "@/features/net/ConnectionAnnouncements";
 import { TransferTray, TransferWindow } from "@/components/ui/TransferView";
 import { LazyDialogs } from "@/features/LazyDialogs";
+import { useRecoveryGate } from "@/features/settings/useRecoveryGate";
 import { useUndoGate } from "@/features/settings/useUndoGate";
 import { useFileColorVars } from "@/store/fileColorRules";
 
@@ -122,6 +123,10 @@ export default function App() {
   // File undo is beta and off by default; the backend holds the same
   // switch and has to be told about it (TICKET-391).
   useUndoGate();
+  // The same for transfer recovery (TICKET-396). The gate also owns the
+  // startup look at the journal: asking before the backend knows the
+  // switch is on would always answer "nothing pending".
+  useRecoveryGate();
 
   // Forward transfer events from the backend to the transfers store.
   useEffect(() => {
@@ -139,7 +144,10 @@ export default function App() {
       startNextQueued();
       // Remove successful/cancelled operations after showing them briefly.
       if (d.errors.length === 0) {
-        void acknowledgeRecovery(d.id).catch(() => { /* Remains visible for explicit recovery review. */ });
+        // Nothing is journaled while transfer recovery is off (TICKET-396),
+        // so there is nothing to acknowledge either.
+        if (recoveryAvailable())
+          void acknowledgeRecovery(d.id).catch(() => { /* Remains visible for explicit recovery review. */ });
         setTimeout(() => useTransfers.getState().remove(d.id), 900);
       }
     });
@@ -153,8 +161,6 @@ export default function App() {
       offLeftovers();
     };
   }, []);
-
-  useEffect(() => { void useRecovery.getState().refresh(true); }, []);
 
   // One notice for everything the persistence gate had to recover at
   // startup (TICKET-039). It runs after the first render, because the

@@ -131,13 +131,30 @@ describe("File operations", () => {
     const user = userEvent.setup();
     expect(useSettings.getState().undoEnabled).toBe(false);
     render(<OperationsForm />);
-    expect(screen.getByText(translate("settings.beta"))).toBeInTheDocument();
     expect(screen.queryByText(translate("settings.undo.warning"))).toBeNull();
     const undo = screen.getByRole("switch", { name: translate("settings.undo") });
+    // The badge sits beside the label, so it is asserted on the row rather
+    // than globally — the page carries more than one beta switch.
+    expect(undo.closest("label")).toHaveTextContent(translate("settings.beta"));
     expect(undo).toHaveAttribute("aria-checked", "false");
     await user.click(undo);
     expect(useSettings.getState().undoEnabled).toBe(true);
     expect(screen.getByText(translate("settings.undo.warning"))).toBeInTheDocument();
+  });
+
+  // Transfer recovery is beta and off by default (TICKET-396), and — like
+  // file undo — the warning belongs to the on state.
+  it("offers transfer recovery off, marked BETA, and warns once it is on", async () => {
+    const user = userEvent.setup();
+    expect(useSettings.getState().recoveryEnabled).toBe(false);
+    render(<OperationsForm />);
+    expect(screen.queryByText(translate("settings.recovery.warning"))).toBeNull();
+    const recovery = screen.getByRole("switch", { name: translate("recovery.title") });
+    expect(recovery.closest("label")).toHaveTextContent(translate("settings.beta"));
+    expect(recovery).toHaveAttribute("aria-checked", "false");
+    await user.click(recovery);
+    expect(useSettings.getState().recoveryEnabled).toBe(true);
+    expect(screen.getByText(translate("settings.recovery.warning"))).toBeInTheDocument();
   });
 
   it("accepts a speed limit", async () => {

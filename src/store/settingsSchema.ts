@@ -119,6 +119,25 @@ export interface PersistedSettings {
   checkTransferSpace: boolean;
 
   /**
+   * Transfer recovery (TICKET-396), a **beta** feature and therefore off by
+   * default — for new installations and for every existing one.
+   *
+   * While on, every copy, move, extraction and packing run writes a durable
+   * journal record plus its preflight plan, and an interrupted run stays on
+   * the list until it is resumed, cleaned up or discarded: the dialog opens by
+   * itself at the next start and asks. That is the right trade once a user
+   * wants it, and the wrong one to enter silently — the more so as the
+   * adapter is macOS-only for now (TICKET-116 holds the Windows/Linux half).
+   *
+   * Off hides the command and the startup dialog and — pushed through to the
+   * backend — stops the journal being written at all. The preflight check in
+   * front of a transfer is unaffected: it protects the operation itself, not
+   * its recovery. Nothing already journaled is deleted; records and staged
+   * data come back when the switch does.
+   */
+  recoveryEnabled: boolean;
+
+  /**
    * What the pack dialog composes the archive name from: the base, and
    * whether the date and the time come along (TICKET-394).
    *
