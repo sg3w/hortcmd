@@ -196,8 +196,10 @@ function ConnectionRow({
 
   // The backend is the authority on the phase (TICKET-032); what the
   // row makes of it is decided once, in `rowControls`.
+  // Whether this row's attempt is already being stopped (TICKET-397).
+  const cancelling = useNet((s) => s.cancelling.includes(profile.id));
   const { phase, action, busy, secondaryDisabled, status: line } =
-    rowControls(status);
+    rowControls(status, cancelling);
 
   const doConnect = async () => {
     const address = await connect(profile.id);
@@ -252,7 +254,7 @@ function ConnectionRow({
           </button>
         ) : action === "waiting" ? (
           <span
-            title={t("net.disconnecting")}
+            title={line && "key" in line ? t(line.key) : t("net.disconnecting")}
             className="flex items-center rounded border border-transparent p-1 text-dim"
           >
             <Loader2 size={14} className="animate-spin" aria-hidden />

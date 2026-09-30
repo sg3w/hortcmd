@@ -33,6 +33,7 @@ export const net = ns(
 
   "net.connecting": "Verbindung wird aufgebaut …",
   "net.disconnecting": "Verbindung wird getrennt …",
+  "net.cancelling": "Abbruch läuft – warte, bis die Verbindung aufgibt …",
   "net.failed": "Verbindung fehlgeschlagen",
   "net.disconnected": "Verbindung getrennt",
   "net.cancelConnect": "Verbindungsaufbau abbrechen",
@@ -185,6 +186,7 @@ export const net = ns(
 
   "net.connecting": "Connecting …",
   "net.disconnecting": "Disconnecting …",
+  "net.cancelling": "Cancelling — waiting for the attempt to give up …",
   "net.failed": "Connection failed",
   "net.disconnected": "Disconnected",
   "net.cancelConnect": "Cancel the connection attempt",

@@ -600,9 +600,36 @@ fn run_attempt(attempt: &Attempt, profile: &Profile) -> Result<Opened, ConnFailu
 /// An SSH host whose key is unknown or has changed stops with a host-key
 /// challenge instead; nothing has been authenticated at that point
 /// (ticket 028).
+/// The command runs on a blocking worker, not on the thread that dispatches
+/// IPC: the attempt occupies its caller for up to [`OVERALL_TIMEOUT`], and a
+/// synchronous command would hold the whole IPC channel for that long — which
+/// is what used to make `net_cancel_connect` unreachable while there was
+/// anything to cancel (TICKET-397).
 #[tauri::command]
-pub fn net_connect(app: AppHandle, id: String) -> AppResult<ConnectOutcome> {
-    connect_inner(app, id, None)
+pub async fn net_connect(app: AppHandle, id: String) -> AppResult<ConnectOutcome> {
+    off_thread("connect", move || connect_inner(app, id, None)).await
+}
+
+/// Runs a blocking net command on a worker thread. The whole point is that
+/// the IPC dispatch thread stays free, so the controls a running operation
+/// offers — cancel above all — are still delivered while it runs.
+///
+/// The correlation id travels with the work: it lives in a thread-local that
+/// the IPC middleware set on the dispatch thread, so without this the
+/// lifecycle events of a connect would no longer be matched to the request
+/// that asked for it (ticket 045).
+async fn off_thread<T, F>(op: &'static str, work: F) -> AppResult<T>
+where
+    F: FnOnce() -> AppResult<T> + Send + 'static,
+    T: Send + 'static,
+{
+    let correlation = crate::diagnostics::current();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _scope = correlation.map(crate::diagnostics::Scope::enter);
+        work()
+    })
+    .await
+    .map_err(|_| AppError::new(crate::errors::code::INTERNAL_UNEXPECTED).op(op))?
 }
 
 fn connect_inner(
@@ -796,18 +823,25 @@ fn connect_inner(
 /// or already-cancelled id is a no-op and never an error, so a second
 /// click on "cancel" cannot fail (ticket 032).
 #[tauri::command]
-pub fn net_cancel_connect(app: AppHandle, attempt: String) {
-    {
-        let _gate = session_gate().lock().unwrap();
-        let profiles = registry().lock().unwrap().profiles.clone();
-        for profile in profiles {
-            if lifecycle::snapshot(&profile.id).1.as_deref() == Some(&attempt) {
-                monitor::stop_profile(&profile.id);
+pub async fn net_cancel_connect(app: AppHandle, attempt: String) {
+    // Off the dispatch thread like the rest: the gate this takes can be held
+    // by a teardown doing network I/O, and waiting for it must not stall
+    // every other command (TICKET-397).
+    let _ = off_thread("cancel-connect", move || {
+        {
+            let _gate = session_gate().lock().unwrap();
+            let profiles = registry().lock().unwrap().profiles.clone();
+            for profile in profiles {
+                if lifecycle::snapshot(&profile.id).1.as_deref() == Some(&attempt) {
+                    monitor::stop_profile(&profile.id);
+                }
             }
+            lifecycle::cancel(&attempt);
         }
-        lifecycle::cancel(&attempt);
-    }
-    emit_states(&app);
+        emit_states(&app);
+        Ok(())
+    })
+    .await;
 }
 
 /// Persists the host key the user just confirmed and retries the
@@ -815,9 +849,17 @@ pub fn net_cancel_connect(app: AppHandle, attempt: String) {
 /// the key hortcmd actually displayed can be trusted; a failed write
 /// aborts before any authentication is attempted (ticket 028).
 #[tauri::command]
-pub fn net_trust_host_key(app: AppHandle, id: String, token: String) -> AppResult<ConnectOutcome> {
-    hostkey::trust(&token)?;
-    net_connect(app, id)
+pub async fn net_trust_host_key(
+    app: AppHandle,
+    id: String,
+    token: String,
+) -> AppResult<ConnectOutcome> {
+    // The retry is a full attempt, so it goes off the dispatch thread too.
+    off_thread("connect", move || {
+        hostkey::trust(&token)?;
+        connect_inner(app, id, None)
+    })
+    .await
 }
 
 /// Drops the host keys hortcmd stores for a profile's endpoint. The
@@ -835,7 +877,12 @@ pub fn net_forget_host_key(id: String) -> AppResult<ForgetResult> {
 /// Open shell sessions on that connection are closed with it (026), so
 /// no channel outlives the connection it rides on.
 #[tauri::command]
-pub fn net_disconnect(app: AppHandle, id: String) -> AppResult<()> {
+pub async fn net_disconnect(app: AppHandle, id: String) -> AppResult<()> {
+    // Teardown closes shell channels, which is network I/O (TICKET-397).
+    off_thread("disconnect", move || disconnect_inner(app, id)).await
+}
+
+fn disconnect_inner(app: AppHandle, id: String) -> AppResult<()> {
     crate::commands::fs::cache::invalidate();
     // A second disconnect while the first is still tearing down would
     // race it; the request is simply dropped (ticket 032).

@@ -93,7 +93,7 @@ beforeEach(() => {
   calls.length = 0;
   listed = [];
   useSettings.setState({ language: "de" });
-  useNet.setState({ connections: [], error: null });
+  useNet.setState({ connections: [], error: null, cancelling: [] });
 });
 
 describe("what a row offers per phase", () => {
@@ -112,6 +112,16 @@ describe("what a row offers per phase", () => {
     // Edit, delete and the host-key action would race the attempt.
     expect(r.secondaryDisabled).toBe(true);
     expect(r.status).toEqual({ key: "net.connecting" });
+  });
+
+  // TICKET-397: the backend moves the phase only once the attempt's worker
+  // settles, so the row has to show that the cancel was taken rather than
+  // offer the same button again.
+  it("waits, and says so, once the cancel has been asked for", () => {
+    const r = rowControls(status({ phase: "connecting", attempt: "conn-1" }), true);
+    expect(r.action).toBe("waiting");
+    expect(r.busy).toBe(true);
+    expect(r.status).toEqual({ key: "net.cancelling" });
   });
 
   it("shows a spinner and no second disconnect while tearing down", () => {
@@ -299,6 +309,30 @@ describe("the store's connect path", () => {
     useNet.setState({ connections: [status({ phase: "connected" })] });
     await useNet.getState().cancelConnect("p1");
     expect(calls).toHaveLength(0);
+    expect(useNet.getState().cancelling).toEqual([]);
+  });
+
+  // TICKET-397: a row can sit in `connecting` on an attempt the backend no
+  // longer names. Cancel used to return silently there — a button that did
+  // nothing at all. A disconnect stops whatever is running for the profile.
+  it("falls back to a disconnect for a connecting row without an attempt id", async () => {
+    listed = [status({ phase: "disconnected" })];
+    useNet.setState({ connections: [status({ phase: "connecting", attempt: null })] });
+    await useNet.getState().cancelConnect("p1");
+    expect(calls).toContain("disconnect:p1");
+    // The attempt settled, so the row stops claiming to be cancelling.
+    expect(useNet.getState().cancelling).toEqual([]);
+  });
+
+  it("marks the row as cancelling until the attempt has settled", async () => {
+    listed = [status({ phase: "connecting", attempt: "conn-9" })];
+    useNet.setState({ connections: listed });
+    await useNet.getState().cancelConnect("p1");
+    expect(calls).toEqual(["cancel:conn-9"]);
+    expect(useNet.getState().cancelling).toEqual(["p1"]);
+    // The backend's own push is what ends it.
+    useNet.getState().applyStates([status({ phase: "disconnected" })]);
+    expect(useNet.getState().cancelling).toEqual([]);
   });
 
   it("adopts a pushed snapshot, so a lost connection reaches every view", () => {
